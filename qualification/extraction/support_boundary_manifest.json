@@ -1738,8 +1738,8 @@
     },
     {
       "path": "tests/models/llama33_70b/test_t3k_batched_prefill_correctness.py",
-      "sha256": "fe0a5f185518fbb109aff7cf8b0105df2562c59ffad9bafb229964c6fff4aea8",
-      "size": 29084
+      "sha256": "3ea8dbac8bec8eae19a7abd69f1c309deed4f4400f0a59cd40bc65a65241c769",
+      "size": 28666
     },
     {
       "path": "tests/models/llama3_8b/demo_utils.py",
