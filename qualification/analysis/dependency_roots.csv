@@ -1,0 +1,36 @@
+root,classifications,imported_symbol_count,statement_site_count,file_count,layers,policy_bucket,proposed_treatment
+__future__,stdlib,82,82,82,llm_runtime|models|modules,base-allowed,Python standard library; no declaration required.
+atexit,stdlib,1,1,1,models,base-allowed,Python standard library; no declaration required.
+collections,stdlib,19,16,16,llm_runtime|models|modules,base-allowed,Python standard library; no declaration required.
+concurrent,stdlib,3,1,1,llm_runtime,base-allowed,Python standard library; no declaration required.
+contextlib,stdlib,3,3,3,llm_runtime,base-allowed,Python standard library; no declaration required.
+copy,stdlib,2,2,2,llm_runtime|modules,base-allowed,Python standard library; no declaration required.
+csv,stdlib,2,2,2,models,base-allowed,Python standard library; no declaration required.
+ctypes,stdlib,1,1,1,llm_runtime,base-allowed,Python standard library; no declaration required.
+dataclasses,stdlib,142,78,75,llm_runtime|models|modules,base-allowed,Python standard library; no declaration required.
+enum,stdlib,1,1,1,llm_runtime,base-allowed,Python standard library; no declaration required.
+errno,stdlib,1,1,1,models,base-allowed,Python standard library; no declaration required.
+functools,stdlib,6,6,6,llm_runtime|models|modules,base-allowed,Python standard library; no declaration required.
+gc,stdlib,2,2,2,models,base-allowed,Python standard library; no declaration required.
+hashlib,stdlib,2,2,2,llm_runtime|modules,base-allowed,Python standard library; no declaration required.
+inspect,stdlib,1,1,1,modules,base-allowed,Python standard library; no declaration required.
+itertools,stdlib,1,1,1,llm_runtime,base-allowed,Python standard library; no declaration required.
+json,stdlib,2,2,2,llm_runtime,base-allowed,Python standard library; no declaration required.
+loguru,third_party_base,17,17,17,llm_runtime|models|modules,base-dependency,Declare a directly qualified base dependency bound.
+math,stdlib,33,33,33,llm_runtime|models|modules,base-allowed,Python standard library; no declaration required.
+models,external_models_test|external_models_tt_metal|external_models_tttv1|internal_models_namespace,1150,534,107,llm_runtime|models|modules,boundary-closure,Rewrite internal edges to tt_transformers and close every external models.* edge using external_models_dependencies.csv.
+numbers,stdlib,1,1,1,modules,base-allowed,Python standard library; no declaration required.
+os,stdlib,25,25,25,llm_runtime|models,base-allowed,Python standard library; no declaration required.
+pathlib,stdlib,42,42,41,llm_runtime|models|modules,base-allowed,Python standard library; no declaration required.
+pytest,third_party_test,2,2,2,models,test-only,Remove from production demo modules; declare only in the test extra.
+random,stdlib,1,1,1,modules,base-allowed,Python standard library; no declaration required.
+re,stdlib,1,1,1,models,base-allowed,Python standard library; no declaration required.
+secrets,stdlib,1,1,1,modules,base-allowed,Python standard library; no declaration required.
+sys,stdlib,1,1,1,modules,base-allowed,Python standard library; no declaration required.
+threading,stdlib,2,2,2,llm_runtime,base-allowed,Python standard library; no declaration required.
+torch,third_party_base,82,82,76,llm_runtime|models|modules,base-dependency,"Declare a directly qualified base dependency bound; runtime use is hard, not incidental."
+tqdm,third_party_optional,9,9,9,models,examples/model-provider extra,Keep optional; lazy exports must allow base-package import without this dependency.
+transformers,third_party_optional,41,15,15,models,examples/model-provider extra,Keep optional; lazy exports must allow base-package import without this dependency.
+ttnn,third_party_base,74,74,74,llm_runtime|models|modules,base-dependency,Declare exact qualified TTNN version; separately qualify all experimental/private sites.
+types,stdlib,1,1,1,models,base-allowed,Python standard library; no declaration required.
+typing,stdlib,137,88,88,llm_runtime|models|modules,base-allowed,Python standard library; no declaration required.

@@ -1,0 +1,85 @@
+- name: Sampling module sweep (common)
+  cmd: 'unset TT_METAL_WATCHER  # blocked by #50886
+
+    pytest --timeout 600 tests/modules/sampling/test_tt_sampling.py
+
+    # Complements the above: SeedManager slot/salt state machine, params broadcast/scatter,
+
+    # host-level trace bookkeeping. -k drops the log-probs tests, the only ones needing >1 device.
+
+    pytest --timeout 600 tests/modules/sampling/test_legacy_sampling.py -k "not log_probs and not logprobs"
+
+    '
+  model: sampling-common
+  skus:
+    wh_n150:
+      timeout: 12
+      tier: 1
+    bh_p150:
+      timeout: 10
+      tier: 1
+  owner_id: U03PUAKE719
+  team: models
+- name: TT-Transformers MLP module sweep
+  cmd: HF_HUB_OFFLINE=1 HF_HOME=/mnt/MLPerf/huggingface HF_MODEL=meta-llama/Llama-3.1-8B-Instruct pytest --tb=short tests/modules/mlp
+  model: tt-transformers-common
+  model_family: TTTv2
+  skus:
+    wh_llmbox:
+      timeout: 24
+      tier: 1
+  owner_id: U08JFM3CFA4
+  team: models
+- name: TT-Transformers RoPE module sweep
+  cmd: HF_HUB_OFFLINE=1 HF_HOME=/mnt/MLPerf/huggingface HF_MODEL=meta-llama/Llama-3.1-8B-Instruct pytest --tb=short tests/modules/rope
+  model: tt-transformers-common
+  model_family: TTTv2
+  skus:
+    wh_llmbox:
+      timeout: 4
+      tier: 1
+  owner_id: U08JFM3CFA4
+  team: models
+- name: TT-Transformers RMSNorm module sweep
+  cmd: HF_HUB_OFFLINE=1 HF_HOME=/mnt/MLPerf/huggingface HF_MODEL=meta-llama/Llama-3.1-8B-Instruct pytest --tb=short tests/modules/rmsnorm
+  model: tt-transformers-common
+  model_family: TTTv2
+  skus:
+    wh_llmbox:
+      timeout: 10
+      tier: 1
+  owner_id: U08JFM3CFA4
+  team: models
+- name: TT-Transformers attention module sweep
+  cmd: HF_HUB_OFFLINE=1 HF_HOME=/mnt/MLPerf/huggingface TT_CACHE_PATH=/mnt/MLPerf/huggingface/tt_cache/tttv2/attention_1d
+    pytest --tb=short tests/modules/attention
+  model: tt-transformers-common
+  model_family: TTTv2
+  skus:
+    wh_llmbox:
+      timeout: 65
+      tier: 1
+  owner_id: U08JFM3CFA4
+  team: models
+- name: TT-Transformers embedding module sweep
+  cmd: HF_HUB_OFFLINE=1 HF_HOME=/mnt/MLPerf/huggingface HF_MODEL=meta-llama/Llama-3.1-8B-Instruct TT_CACHE_PATH=/mnt/MLPerf/huggingface/tt_cache/tttv2/embedding_1d
+    pytest --tb=short tests/modules/embedding
+  model: tt-transformers-common
+  model_family: TTTv2
+  skus:
+    wh_llmbox:
+      timeout: 18
+      tier: 1
+  owner_id: U08JFM3CFA4
+  team: models
+- name: TT-Transformers LM head module sweep
+  cmd: HF_HUB_OFFLINE=1 HF_HOME=/mnt/MLPerf/huggingface HF_MODEL=meta-llama/Llama-3.1-8B-Instruct TT_CACHE_PATH=/mnt/MLPerf/huggingface/tt_cache/tttv2/lm_head_1d
+    pytest --tb=short tests/modules/lm_head
+  model: tt-transformers-common
+  model_family: TTTv2
+  skus:
+    wh_llmbox:
+      timeout: 10
+      tier: 1
+  owner_id: U08JFM3CFA4
+  team: models

@@ -1,0 +1,121 @@
+{
+  "environment": {
+    "access_occurrences": 108,
+    "resolved_keys": [
+      "CI",
+      "DISABLE_BATCHED_EXTRACT",
+      "DISABLE_BATCHED_PREFILL",
+      "DISABLE_MINIMAL_MATMUL",
+      "DISABLE_PREFILL_AG_BF8",
+      "DISABLE_PREFILL_REDUCE_BF8",
+      "HF_HUB_OFFLINE",
+      "HF_MODEL",
+      "MAX_PREFILL_CHUNK_SIZE",
+      "MESH_DEVICE",
+      "QWEN25_CODER_32B_DEMO_NUM_LAYERS",
+      "QWEN25_CODER_32B_NUMDIV_LAYERS",
+      "QWEN25_CODER_32B_NUMDIV_OUT",
+      "QWEN25_CODER_32B_NUMDIV_SEQ",
+      "QWEN3_32B_DEMO_NUM_LAYERS",
+      "QWEN3_32B_NUMDIV_LAYERS",
+      "QWEN3_32B_NUMDIV_OUT",
+      "QWEN3_32B_NUMDIV_SEQ",
+      "TRANSFORMERS_OFFLINE",
+      "TT_CACHE_FALLBACK_PATH",
+      "TT_CACHE_PATH"
+    ]
+  },
+  "imports": {
+    "classifications": {
+      "external_models_test": 4,
+      "external_models_tt_metal": 94,
+      "external_models_tttv1": 21,
+      "internal_models_namespace": 1031,
+      "stdlib": 516,
+      "third_party_base": 173,
+      "third_party_optional": 50,
+      "third_party_test": 2
+    },
+    "edge_rows": 1113,
+    "external_models_modules": [
+      "models.common.device_utils",
+      "models.common.lightweightmodule",
+      "models.common.sampling",
+      "models.common.sampling.sampling_params",
+      "models.common.sampling.vocab_padding",
+      "models.common.tensor_utils",
+      "models.common.tests.demos.cleanup_utils",
+      "models.common.tests.demos.run_helpers",
+      "models.common.utility_functions",
+      "models.common.utils",
+      "models.tt_transformers.tt.common",
+      "models.tt_transformers.tt.generator",
+      "models.tt_transformers.tt.model_config",
+      "models.tt_transformers.tt.rope"
+    ],
+    "external_models_rows": 119,
+    "production_test_import_rows": 6,
+    "rows": 1891
+  },
+  "public_symbols": {
+    "by_kind": {
+      "class": 296,
+      "constant_or_value": 62,
+      "explicit_export": 156,
+      "function": 252,
+      "method": 994
+    },
+    "files_with_explicit___all__": 18,
+    "rows": 1760
+  },
+  "revision": "00748e6ac7b65f50e5c2af07f6e7c1c535c7f4c0",
+  "runtime_assumptions": {
+    "by_category": {
+      "cache_io": 4,
+      "checkpoint_io": 47,
+      "cwd_relative_path": 12,
+      "filesystem": 20,
+      "global_device": 48
+    },
+    "rows": 131
+  },
+  "scope": {
+    "layers": {
+      "llm_runtime": 21,
+      "models": 76,
+      "modules": 16
+    },
+    "moe_excluded": true,
+    "python_files": 113,
+    "total_lines": 52645
+  },
+  "source_repo": "/localdev/gwang/tt-metal",
+  "ttnn_unstable": {
+    "by_api": {
+      "ttnn._ttnn.tensor.dump_tensor_flatbuffer": 1,
+      "ttnn.experimental.all_gather_async": 31,
+      "ttnn.experimental.all_gather_matmul_async": 1,
+      "ttnn.experimental.minimal_matmul": 3,
+      "ttnn.experimental.nlp_concat_heads": 1,
+      "ttnn.experimental.nlp_concat_heads_decode": 1,
+      "ttnn.experimental.nlp_create_qkv_heads": 1,
+      "ttnn.experimental.nlp_create_qkv_heads_decode": 1,
+      "ttnn.experimental.paged_fill_cache": 6,
+      "ttnn.experimental.paged_fused_update_cache": 1,
+      "ttnn.experimental.paged_update_cache": 2,
+      "ttnn.experimental.reduce_scatter_minimal_async": 6,
+      "ttnn.experimental.rotary_embedding_llama": 4,
+      "ttnn.experimental.rotary_embedding_llama_fused_qk": 1
+    },
+    "occurrences": 60,
+    "unique_apis": 14
+  },
+  "tttv1_bridges": {
+    "by_kind": {
+      "from_model_args_factory": 10,
+      "legacy_dispatch_or_adapter": 3,
+      "tttv1_namespace_import": 21
+    },
+    "rows": 34
+  }
+}

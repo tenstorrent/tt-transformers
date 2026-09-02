@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "source_tree_sha256": "3814705a56bcf5bdd3ed88578e203d6d9e428f329289facb9bc2215366fb4e5f",
+  "source_python_files": 132,
+  "tools": {
+    "ruff": "0.11.0",
+    "black": "25.1.0",
+    "mypy": "1.15.0"
+  },
+  "ruff_check": {
+    "status": "failing_baseline",
+    "findings": 2148,
+    "fixable": 626,
+    "by_code": {
+      "E501": 1440,
+      "I001": 224,
+      "UP038": 132,
+      "UP007": 98,
+      "UP006": 88,
+      "UP035": 55,
+      "F401": 22,
+      "UP037": 20,
+      "F821": 17,
+      "F841": 16,
+      "E714": 10,
+      "E402": 9,
+      "E731": 6,
+      "F541": 3,
+      "E711": 2,
+      "UP015": 2,
+      "UP034": 2,
+      "E721": 1,
+      "UP031": 1
+    }
+  },
+  "ruff_format": {
+    "status": "failing_baseline",
+    "would_reformat": 163,
+    "already_formatted": 200
+  },
+  "mypy": {
+    "status": "failing_baseline",
+    "errors": 489,
+    "files_with_errors": 99,
+    "files_checked": 132,
+    "python_executable": "qualified CPython 3.10 host dependency environment",
+    "external_typing_gap": "ttnn 0.77.0 has no py.typed marker or complete stubs"
+  },
+  "black": {
+    "status": "timed_out",
+    "timeout_seconds": 30,
+    "scope": "src/tt_transformers",
+    "authoritative_formatter_pending": true
+  }
+}

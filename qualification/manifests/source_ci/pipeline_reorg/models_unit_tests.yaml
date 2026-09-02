@@ -1,0 +1,153 @@
+- name: On-device sampling unit tests
+  cmd: 'pytest --timeout 300 tests/modules/sampling/test_legacy_sampling.py -k "ttsampling or num_single_device_vocab_splits
+    or untilize_chunk_count or seed or slot_remap or topk_route_mirror_parity"
+
+    '
+  model: tt-model-sampling
+  skus:
+    wh_n150:
+      timeout: 10
+      tier: 3
+    bh_p150:
+      timeout: 10
+      tier: 3
+  owner_id: U03PUAKE719
+  team: models
+- name: TT-Transformers common unit tests
+  cmd: 'unset TT_METAL_WATCHER
+
+    export HF_HOME=/mnt/MLPerf/huggingface
+
+    pytest --tb=short --ignore=tests/modules tests
+
+    '
+  model: tt-transformers-common
+  model_family: TTTv2
+  skus:
+    wh_llmbox:
+      timeout: 23
+      tier: 1
+  owner_id: U08JFM3CFA4
+  team: models
+- name: TT-Transformers MLP module unit tests
+  cmd: "unset TT_METAL_WATCHER\nexport HF_HOME=/mnt/MLPerf/huggingface\nHF_MODEL=meta-llama/Llama-3.1-8B-Instruct \\\nTT_CACHE_PATH=/mnt/MLPerf/huggingface/tt_cache/tttv2/mlp_1d\
+    \ \\\npytest tests/modules/mlp/test_mlp_1d.py \\\n  -m \"not slow\" \\\n  --tb=short \\\n  --durations=10 \\\n  --cov=tt_transformers.modules.mlp.mlp_1d\
+    \ \\\n  --cov-report=term-missing \\\n  --cov-config=pyproject.toml\n"
+  model: tt-transformers-common
+  model_family: TTTv2
+  skus:
+    wh_llmbox:
+      timeout: 6
+      tier: 1
+  owner_id: U08JFM3CFA4
+  team: models
+- name: TT-Transformers RMSNorm module unit tests
+  cmd: "unset TT_METAL_WATCHER\nexport HF_HOME=/mnt/MLPerf/huggingface\nHF_MODEL=meta-llama/Llama-3.1-8B-Instruct \\\nTT_CACHE_PATH=/mnt/MLPerf/huggingface/tt_cache/tttv2/rmsnorm_1d\
+    \ \\\npytest tests/modules/rmsnorm/test_rmsnorm_1d.py \\\n  -m \"not slow\" \\\n  --tb=short \\\n  --durations=10 \\\n\
+    \  --cov=tt_transformers.modules.rmsnorm.rmsnorm_1d \\\n  --cov-report=term-missing \\\n  --cov-config=pyproject.toml\n"
+  model: tt-transformers-common
+  model_family: TTTv2
+  skus:
+    wh_llmbox:
+      timeout: 3
+      tier: 1
+  owner_id: U08JFM3CFA4
+  team: models
+- name: TT-Transformers RoPE module unit tests
+  cmd: "unset TT_METAL_WATCHER\nexport HF_HOME=/mnt/MLPerf/huggingface\nHF_MODEL=meta-llama/Llama-3.1-8B-Instruct \\\nTT_CACHE_PATH=/mnt/MLPerf/huggingface/tt_cache/tttv2/rope_1d\
+    \ \\\npytest tests/modules/rope/test_rope_1d.py \\\n  -m \"not slow\" \\\n  --tb=short \\\n  --durations=10 \\\n  --cov=tt_transformers.modules.rope.rope_1d\
+    \ \\\n  --cov-report=term-missing \\\n  --cov-config=pyproject.toml\n"
+  model: tt-transformers-common
+  model_family: TTTv2
+  skus:
+    wh_llmbox:
+      timeout: 2
+      tier: 1
+  owner_id: U08JFM3CFA4
+  team: models
+- name: TT-Transformers LM head module unit tests
+  cmd: "unset TT_METAL_WATCHER\nexport HF_HOME=/mnt/MLPerf/huggingface\nHF_MODEL=meta-llama/Llama-3.1-8B-Instruct \\\nTT_CACHE_PATH=/mnt/MLPerf/huggingface/tt_cache/tttv2/lm_head_1d\
+    \ \\\npytest tests/modules/lm_head/test_lm_head_1d.py \\\n  -m \"not slow\" \\\n  --tb=short \\\n  --durations=10 \\\n\
+    \  --cov=tt_transformers.modules.lm_head.lm_head_1d \\\n  --cov-report=term-missing \\\n  --cov-config=pyproject.toml\n"
+  model: tt-transformers-common
+  model_family: TTTv2
+  skus:
+    wh_llmbox:
+      timeout: 4
+      tier: 1
+  owner_id: U08JFM3CFA4
+  team: models
+- name: TT-Transformers attention module unit tests
+  cmd: "unset TT_METAL_WATCHER\nexport HF_HOME=/mnt/MLPerf/huggingface\nTT_CACHE_PATH=/mnt/MLPerf/huggingface/tt_cache/tttv2/attention_1d\
+    \ \\\npytest tests/modules/attention/test_attention_1d.py \\\n  -m \"not slow\" \\\n  --tb=short \\\n  --durations=10\
+    \ \\\n  --cov=tt_transformers.modules.attention.attention_1d \\\n  --cov-report=term-missing \\\n  --cov-config=pyproject.toml\n"
+  model: tt-transformers-common
+  model_family: TTTv2
+  skus:
+    wh_llmbox:
+      timeout: 6
+      tier: 1
+  owner_id: U08JFM3CFA4
+  team: models
+- name: TT-Transformers embedding module unit tests
+  cmd: "unset TT_METAL_WATCHER\nexport HF_HOME=/mnt/MLPerf/huggingface\nHF_MODEL=meta-llama/Llama-3.1-8B-Instruct \\\nTT_CACHE_PATH=/mnt/MLPerf/huggingface/tt_cache/tttv2/embedding_1d\
+    \ \\\npytest tests/modules/embedding/test_embedding_1d.py \\\n  -m \"not slow\" \\\n  --tb=short \\\n  --durations=10\
+    \ \\\n  --cov=tt_transformers.modules.embedding.embedding_1d \\\n  --cov-report=term-missing \\\n  --cov-config=pyproject.toml\n"
+  model: tt-transformers-common
+  model_family: TTTv2
+  skus:
+    wh_llmbox:
+      timeout: 5
+      tier: 1
+  owner_id: U08JFM3CFA4
+  team: models
+- name: TT-Transformers sampling module unit tests
+  cmd: "unset TT_METAL_WATCHER\nexport HF_HOME=/mnt/MLPerf/huggingface\nfail=0\npytest tests/modules/sampling/test_penalties_1d.py\
+    \ \\\n  -m \"not slow\" \\\n  --tb=short \\\n  --durations=10 \\\n  --cov=tt_transformers.modules.sampling.penalties_1d\
+    \ \\\n  --cov-report=term-missing \\\n  --cov-config=pyproject.toml || fail=1\npytest tests/modules/sampling/test_sampling_1d.py\
+    \ \\\n  -m \"not slow\" \\\n  --tb=short \\\n  --durations=10 \\\n  --cov=tt_transformers.modules.sampling.sampling_1d\
+    \ \\\n  --cov-report=term-missing \\\n  --cov-config=pyproject.toml || fail=1\nexit $fail\n"
+  model: tt-transformers-common
+  model_family: TTTv2
+  skus:
+    wh_llmbox:
+      timeout: 4
+      tier: 1
+  owner_id: U08JFM3CFA4
+  team: models
+- name: TT-Transformers RMSNorm 2D module unit tests
+  cmd: "unset TT_METAL_WATCHER\nexport HF_HOME=/mnt/MLPerf/huggingface\nHF_MODEL=meta-llama/Llama-3.1-8B-Instruct \\\npytest\
+    \ tests/modules/rmsnorm/test_rmsnorm_2d.py \\\n  -m \"not slow\" \\\n  --tb=short \\\n  --durations-min=3.0 \\\n  --cov=tt_transformers.modules.rmsnorm.rmsnorm_2d\
+    \ \\\n  --cov-report=term-missing \\\n  --cov-config=pyproject.toml\n"
+  model: tt-transformers-common
+  model_family: TTTv2
+  skus:
+    wh_galaxy_perf:
+      timeout: 5
+      tier: 1
+  owner_id: U08JFM3CFA4
+  team: models
+- name: TT-Transformers MLP 2D module unit tests
+  cmd: "unset TT_METAL_WATCHER\nexport HF_HOME=/mnt/MLPerf/huggingface\nHF_MODEL=meta-llama/Llama-3.1-8B-Instruct \\\npytest\
+    \ tests/modules/mlp/test_mlp_2d.py \\\n  -m \"not slow\" \\\n  --tb=short \\\n  --durations-min=3.0 \\\n  --cov=tt_transformers.modules.mlp.mlp_2d\
+    \ \\\n  --cov-report=term-missing \\\n  --cov-config=pyproject.toml\n"
+  model: tt-transformers-common
+  model_family: TTTv2
+  skus:
+    wh_galaxy_perf:
+      timeout: 5
+      tier: 1
+  owner_id: U08JFM3CFA4
+  team: models
+- name: TT-Transformers auto-compose 2D unit tests
+  cmd: "unset TT_METAL_WATCHER\nexport HF_HOME=/mnt/MLPerf/huggingface\nHF_MODEL=meta-llama/Llama-3.1-8B-Instruct \\\npytest\
+    \ tests/support/test_auto_compose.py \\\n  --tb=short \\\n  --durations-min=3.0 \\\n  --cov=qualification.tools.auto_compose\
+    \ \\\n  --cov-report=term-missing \\\n  --cov-config=pyproject.toml\n"
+  model: tt-transformers-common
+  model_family: TTTv2
+  skus:
+    wh_galaxy_perf:
+      timeout: 5
+      tier: 1
+  owner_id: U08JFM3CFA4
+  team: models

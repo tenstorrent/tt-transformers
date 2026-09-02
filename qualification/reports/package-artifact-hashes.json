@@ -1,0 +1,23 @@
+{
+  "artifacts": [
+    {
+      "entry_count": 138,
+      "filename": "tt_transformers-0.1.0.dev0-py3-none-any.whl",
+      "sha256": "a8837a3803930b97d527ef569190ec69b9dddc7b0c7537d183c1ad1268a0ae51",
+      "size": 596432
+    },
+    {
+      "entry_count": 143,
+      "filename": "tt_transformers-0.1.0.dev0.tar.gz",
+      "sha256": "4f62cb8df64da31af6076d86bbb4fb7528de4ae8ff5eddeab0f14170e40dc407",
+      "size": 497211
+    }
+  ],
+  "pyproject_sha256": "cc6442ca297411f6faffd72e90bab4a05fdc8af5f558f2d5d423684bec63f98c",
+  "schema_version": 1,
+  "source_tree": {
+    "algorithm": "sha256(path + NUL + content + NUL, sorted by path)",
+    "python_files": 132,
+    "sha256": "3814705a56bcf5bdd3ed88578e203d6d9e428f329289facb9bc2215366fb4e5f"
+  }
+}

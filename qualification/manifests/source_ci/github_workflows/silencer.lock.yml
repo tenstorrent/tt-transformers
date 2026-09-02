@@ -1,0 +1,7 @@
+schema_version: 1
+source_path: .github/workflows/silencer.lock.yml
+source_revision: 00748e6ac7b65f50e5c2af07f6e7c1c535c7f4c0
+evidence_kind: tttv2_matching_source_lines
+matches:
+- line: 1602
+  text: '                          "tttv2 modules",'

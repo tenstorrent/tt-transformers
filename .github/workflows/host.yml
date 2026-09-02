@@ -1,0 +1,102 @@
+name: Host, package, and policy gates
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  host:
+    name: CPython ${{ matrix.python }} full host
+    runs-on: ubuntu-24.04
+    env:
+      PIP_INDEX_URL: https://pypi.org/simple
+      PIP_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
+      TT_TRANSFORMERS_OFFLINE: "1"
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      SOURCE_DATE_EPOCH: "1788213269"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python: "3.10.19"
+            tag: "310"
+          - python: "3.12.13"
+            tag: "312"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install hash-locked host dependencies and build tools
+        run: |
+          python -m pip install --require-hashes -r "constraints/locks/host-py${{ matrix.tag }}.txt"
+          python -m pip check
+          python -m venv "${RUNNER_TEMP}/build-tools"
+          "${RUNNER_TEMP}/build-tools/bin/python" -m pip install \
+            --require-hashes -r "constraints/locks/build-dev-py${{ matrix.tag }}.txt"
+          "${RUNNER_TEMP}/build-tools/bin/python" -m pip check
+      - name: Validate source policy
+        run: |
+          python -B qualification/tools/validate_constraints.py
+          python -B qualification/tools/validate_dependency_locks.py
+          python -B qualification/tools/validate_static_quality_baseline.py
+          python -B qualification/tools/audit_test_taxonomy.py --collect-host
+          python -B tools/check_import_boundaries.py
+          python -B qualification/tools/validate_support_docs.py
+          python -B qualification/analysis/check_public_api_policy.py
+          python -B qualification/extraction/normalize_host_support_tests.py --check
+          python -B qualification/extraction/extract_production_documentation.py
+          python -B qualification/extraction/apply_example_runtime_policy.py
+          python -B qualification/tools/validate_bh_required_capabilities.py
+          python -B qualification/tools/run_hardware_matrix.py --validate
+          python -B qualification/tools/validate_ttnn_077_compatibility.py
+      - name: Build and audit distributions
+        run: |
+          "${RUNNER_TEMP}/build-tools/bin/python" -m build --no-isolation --outdir dist
+          python -B tools/normalize_sdist.py \
+            dist/tt_transformers-0.1.0.dev0.tar.gz
+          mkdir -p "${RUNNER_TEMP}/artifact-audit"
+          python -B tools/audit_package_artifacts.py \
+            dist/tt_transformers-0.1.0.dev0-py3-none-any.whl \
+            dist/tt_transformers-0.1.0.dev0.tar.gz \
+            --source-root src \
+            --output-dir "${RUNNER_TEMP}/artifact-audit"
+          "${RUNNER_TEMP}/build-tools/bin/python" -m twine check --strict \
+            dist/tt_transformers-0.1.0.dev0-py3-none-any.whl \
+            dist/tt_transformers-0.1.0.dev0.tar.gz
+          python -B qualification/tools/validate_release_readiness.py
+      - name: Install final wheel non-editably
+        run: |
+          python -m pip install --force-reinstall --no-deps dist/tt_transformers-0.1.0.dev0-py3-none-any.whl
+          python -m pip check
+      - name: Run the complete host selector
+        run: python -m pytest -q -m host
+      - name: Prove base-only installed imports
+        run: |
+          python -m venv "${RUNNER_TEMP}/base-only"
+          "${RUNNER_TEMP}/base-only/bin/python" -m pip install \
+            --require-hashes -r "constraints/locks/base-py${{ matrix.tag }}.txt"
+          "${RUNNER_TEMP}/base-only/bin/python" -m pip install \
+            --no-deps dist/tt_transformers-0.1.0.dev0-py3-none-any.whl
+          cp tools/probe_installed_package.py "${RUNNER_TEMP}/probe_installed_package.py"
+          cd "${RUNNER_TEMP}"
+          base-only/bin/python -I probe_installed_package.py
+
+  device-policy:
+    name: Device suites remain serialized and unexecuted
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10.19"
+      - name: Validate scheduling policy without importing TTNN
+        run: |
+          python -B qualification/tools/audit_test_taxonomy.py
+          python -B qualification/tools/run_hardware_matrix.py --validate
+          echo "Host CI never executes device-marked tests; hardware runs one node and process at a time."

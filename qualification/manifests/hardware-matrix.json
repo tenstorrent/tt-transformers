@@ -1,0 +1,2962 @@
+{
+  "schema_version": 1,
+  "generated_utc": "2026-09-02T00:00:00Z",
+  "status": "readiness_only_no_hardware_executed",
+  "authoritative_sources": {
+    "hardware_manual": {
+      "path": "/localdev/gwang/tt-metal/models/docs/tttv2/TTTV2_HARDWARE_INSTRUCTION_MANUAL.md",
+      "role": "authoritative lifecycle/machine/physical-SKU procedure"
+    },
+    "support_manifests": "examples/*/support.json",
+    "marker_inventory": "qualification/analysis/support/marker_inventory.csv",
+    "hardware_coverage": "qualification/analysis/support/hardware_coverage.csv"
+  },
+  "serialization": {
+    "max_concurrent_processes": 1,
+    "lock_file_default": "/tmp/tt-transformers-hardware.lock",
+    "external_reservation_and_synchronization_required": true,
+    "runner_reads_reservations": false,
+    "runner_uses_ssh": false,
+    "automatic_reset": false,
+    "reset_policy": "external operator only after confirmed hardware/lifecycle fault and after test process exits"
+  },
+  "external_synchronization_gate": {
+    "required_branch": "caller-provided and common across participating checkouts",
+    "required_full_sha": "40 lowercase hexadecimal characters, common across participating checkouts",
+    "caller_attestation_flag": "--sync-gate-passed",
+    "runner_does_not_fetch_pull_push_copy_switch_stash_commit_reset_or_clean": true
+  },
+  "required_evidence_fields": [
+    "started_utc",
+    "finished_utc",
+    "branch",
+    "full_sha",
+    "caller_machine_identity",
+    "actual_fqdn",
+    "architecture",
+    "physical_inventory",
+    "mesh_device",
+    "tt_visible_devices",
+    "selector",
+    "environment",
+    "cache_paths",
+    "exit_code",
+    "failure_classification",
+    "acceptance_types",
+    "metrics",
+    "teardown_status",
+    "reset",
+    "stdout_log_path",
+    "evidence_json_path"
+  ],
+  "failure_classifications": [
+    "passed",
+    "functional_failure",
+    "hardware_lifecycle_failure",
+    "missing_acceptance_data",
+    "unimplemented_gate",
+    "different_hardware_deferred",
+    "preflight_refusal",
+    "not_executed_dry_run"
+  ],
+  "machines": {
+    "wh-lb-42": {
+      "architecture": "wormhole",
+      "allowed_identities": [
+        "wh-lb-42",
+        "wh-lb-42.yyz2.tenstorrent.com"
+      ],
+      "physical_role": "8-device T3K; four physical N300 left/right board pairs",
+      "expected_inventory": {
+        "device_count": 8,
+        "board_types": [
+          "n300 L",
+          "n300 R"
+        ],
+        "cluster_type": "T3K"
+      },
+      "supported_mesh_devices": [
+        "N150",
+        "N300",
+        "T3K"
+      ],
+      "tt_visible_devices_policy": "unset; fixture selects documented logical submesh"
+    },
+    "bh-lb-11": {
+      "architecture": "blackhole",
+      "allowed_identities": [
+        "bh-lb-11",
+        "bh-lb-11.yyz2.tenstorrent.com"
+      ],
+      "physical_role": "8-P150 development loudbox; subsets require explicit provenance",
+      "expected_inventory": {
+        "device_count": 8,
+        "board_types": [
+          "P150"
+        ],
+        "cluster_type": "development loudbox"
+      },
+      "supported_mesh_devices": [
+        "P150",
+        "P150x4"
+      ],
+      "tt_visible_devices_policy": "P150x4 requires revalidated four-BDF physical Ring selection"
+    },
+    "bh-qb-05": {
+      "architecture": "blackhole",
+      "allowed_identities": [
+        "bh-qb-05",
+        "bh-qb-05.yyz2.tenstorrent.com",
+        "bh-qb-05-special-gwang-for-reservation-196606"
+      ],
+      "physical_role": "four physical P150B boards; full-host P150_X4 quietbox",
+      "expected_inventory": {
+        "device_count": 4,
+        "board_types": [
+          "p150b"
+        ],
+        "cluster_type": "P150_X4",
+        "system_mesh": "2x2"
+      },
+      "supported_mesh_devices": [
+        "P150x4"
+      ],
+      "tt_visible_devices_policy": "must be unset; use full host"
+    },
+    "bh-qbge-15": {
+      "architecture": "blackhole",
+      "allowed_identities": [
+        "bh-qbge-15",
+        "bh-qbge-15.bgd1.tenstorrent.com"
+      ],
+      "physical_role": "four visible p300c dies; physical P300_X2 provenance",
+      "expected_inventory": {
+        "device_count": 4,
+        "board_types": [
+          "p300c"
+        ],
+        "cluster_type": "P300_X2"
+      },
+      "supported_mesh_devices": [
+        "P150x4"
+      ],
+      "tt_visible_devices_policy": "must be unset; logical P150x4 model profile with physical P300_X2 evidence"
+    }
+  },
+  "nodes": [
+    {
+      "id": "wh-n150-rmsnorm-prefill",
+      "priority": 1,
+      "stage": "module",
+      "architecture": "wormhole",
+      "mesh_device": "N150",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/modules/rmsnorm/test_rmsnorm_1d.py::test_rmsnorm_1d_wormhole_common_config_correctness_cache_and_timing[n150-local-prefill]"
+      },
+      "timeout_seconds": 900,
+      "environment": {
+        "MESH_DEVICE": "N150"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "logical N150 submesh regression on physical T3K host; not standalone N150 product provenance",
+        "required_host_role": "8-device T3K"
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "wh-n150-rmsnorm-decode",
+      "priority": 2,
+      "stage": "module",
+      "architecture": "wormhole",
+      "mesh_device": "N150",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/modules/rmsnorm/test_rmsnorm_1d.py::test_rmsnorm_1d_wormhole_common_config_correctness_cache_and_timing[n150-local-decode]"
+      },
+      "timeout_seconds": 900,
+      "environment": {
+        "MESH_DEVICE": "N150"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "logical N150 submesh regression on physical T3K host; not standalone N150 product provenance",
+        "required_host_role": "8-device T3K"
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "wh-n150-lm-head",
+      "priority": 3,
+      "stage": "module",
+      "architecture": "wormhole",
+      "mesh_device": "N150",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/modules/lm_head/test_lm_head_1d.py::test_lm_head_1d_wormhole_common_config_correctness_cache_and_timing[n150-single-split]"
+      },
+      "timeout_seconds": 900,
+      "environment": {
+        "MESH_DEVICE": "N150"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "logical N150 submesh regression on physical T3K host; not standalone N150 product provenance",
+        "required_host_role": "8-device T3K"
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "wh-n150-mlp-prefill",
+      "priority": 4,
+      "stage": "module",
+      "architecture": "wormhole",
+      "mesh_device": "N150",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/modules/mlp/test_mlp_1d.py::test_mlp_1d_wormhole_common_config_correctness_cache_and_timing[n150-1x1-prefill-seq512-minimal-ff2]"
+      },
+      "timeout_seconds": 900,
+      "environment": {
+        "MESH_DEVICE": "N150"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "logical N150 submesh regression on physical T3K host; not standalone N150 product provenance",
+        "required_host_role": "8-device T3K"
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "wh-n150-mlp-decode",
+      "priority": 5,
+      "stage": "module",
+      "architecture": "wormhole",
+      "mesh_device": "N150",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/modules/mlp/test_mlp_1d.py::test_mlp_1d_wormhole_common_config_correctness_cache_and_timing[n150-1x1-decode-batch32]"
+      },
+      "timeout_seconds": 900,
+      "environment": {
+        "MESH_DEVICE": "N150"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "logical N150 submesh regression on physical T3K host; not standalone N150 product provenance",
+        "required_host_role": "8-device T3K"
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "wh-n150-attention-prefill",
+      "priority": 6,
+      "stage": "module",
+      "architecture": "wormhole",
+      "mesh_device": "N150",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/modules/attention/test_attention_1d.py::test_attention_1d_wormhole_common_config_correctness_cache_and_timing[prefill-n150-1x1]"
+      },
+      "timeout_seconds": 900,
+      "environment": {
+        "MESH_DEVICE": "N150"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "logical N150 submesh regression on physical T3K host; not standalone N150 product provenance",
+        "required_host_role": "8-device T3K"
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "wh-n150-attention-decode",
+      "priority": 7,
+      "stage": "module",
+      "architecture": "wormhole",
+      "mesh_device": "N150",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/modules/attention/test_attention_1d.py::test_attention_1d_wormhole_common_config_correctness_cache_and_timing[decode-n150-1x1]"
+      },
+      "timeout_seconds": 900,
+      "environment": {
+        "MESH_DEVICE": "N150"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "logical N150 submesh regression on physical T3K host; not standalone N150 product provenance",
+        "required_host_role": "8-device T3K"
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "wh-n150-attention-paged-transition",
+      "priority": 8,
+      "stage": "module",
+      "architecture": "wormhole",
+      "mesh_device": "N150",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/modules/attention/test_attention_1d.py::test_attention_1d_wormhole_common_config_paged_prefill_decode_transition_cache_and_timing[n150-1x1]"
+      },
+      "timeout_seconds": 900,
+      "environment": {
+        "MESH_DEVICE": "N150"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "logical N150 submesh regression on physical T3K host; not standalone N150 product provenance",
+        "required_host_role": "8-device T3K"
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "wh-n300-rmsnorm",
+      "priority": 9,
+      "stage": "module",
+      "architecture": "wormhole",
+      "mesh_device": "N300",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/modules/rmsnorm/test_rmsnorm_1d.py::test_rmsnorm_1d_vs_reference",
+        "keyword": "1x2"
+      },
+      "timeout_seconds": 1200,
+      "environment": {
+        "MESH_DEVICE": "N300"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "physical N300 left/right board-pair selection within T3K host",
+        "required_host_role": "T3K with recorded N300 pair"
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "support manifests",
+        "hardware coverage inventory",
+        "parameterized module tests"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "wh-n300-lm-head",
+      "priority": 10,
+      "stage": "module",
+      "architecture": "wormhole",
+      "mesh_device": "N300",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/modules/lm_head/test_lm_head_1d.py::test_lm_head_1d_vs_reference",
+        "keyword": "1x2"
+      },
+      "timeout_seconds": 1200,
+      "environment": {
+        "MESH_DEVICE": "N300"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "physical N300 left/right board-pair selection within T3K host",
+        "required_host_role": "T3K with recorded N300 pair"
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "support manifests",
+        "hardware coverage inventory",
+        "parameterized module tests"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "wh-n300-mlp",
+      "priority": 11,
+      "stage": "module",
+      "architecture": "wormhole",
+      "mesh_device": "N300",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/modules/mlp/test_mlp_1d.py::test_mlp_1d_vs_reference",
+        "keyword": "1x2"
+      },
+      "timeout_seconds": 1200,
+      "environment": {
+        "MESH_DEVICE": "N300"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "physical N300 left/right board-pair selection within T3K host",
+        "required_host_role": "T3K with recorded N300 pair"
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "support manifests",
+        "hardware coverage inventory",
+        "parameterized module tests"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "wh-n300-attention",
+      "priority": 12,
+      "stage": "module",
+      "architecture": "wormhole",
+      "mesh_device": "N300",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/modules/attention/test_attention_1d.py::test_attention_1d_vs_reference",
+        "keyword": "1x2"
+      },
+      "timeout_seconds": 1200,
+      "environment": {
+        "MESH_DEVICE": "N300"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "physical N300 left/right board-pair selection within T3K host",
+        "required_host_role": "T3K with recorded N300 pair"
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "support manifests",
+        "hardware coverage inventory",
+        "parameterized module tests"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "wh-t3k-rmsnorm",
+      "priority": 13,
+      "stage": "module",
+      "architecture": "wormhole",
+      "mesh_device": "T3K",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/modules/rmsnorm/test_rmsnorm_1d.py::test_rmsnorm_1d_vs_reference",
+        "keyword": "1x8"
+      },
+      "timeout_seconds": 1200,
+      "environment": {
+        "MESH_DEVICE": "T3K"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "full physical T3K regression",
+        "required_host_role": "8-device T3K"
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "support manifests",
+        "hardware coverage inventory",
+        "parameterized module tests"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "wh-t3k-lm-head",
+      "priority": 14,
+      "stage": "module",
+      "architecture": "wormhole",
+      "mesh_device": "T3K",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/modules/lm_head/test_lm_head_1d.py::test_lm_head_1d_vs_reference",
+        "keyword": "1x8"
+      },
+      "timeout_seconds": 1200,
+      "environment": {
+        "MESH_DEVICE": "T3K"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "full physical T3K regression",
+        "required_host_role": "8-device T3K"
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "support manifests",
+        "hardware coverage inventory",
+        "parameterized module tests"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "wh-t3k-mlp",
+      "priority": 15,
+      "stage": "module",
+      "architecture": "wormhole",
+      "mesh_device": "T3K",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/modules/mlp/test_mlp_1d.py::test_mlp_1d_vs_reference",
+        "keyword": "1x8"
+      },
+      "timeout_seconds": 1200,
+      "environment": {
+        "MESH_DEVICE": "T3K"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "full physical T3K regression",
+        "required_host_role": "8-device T3K"
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "support manifests",
+        "hardware coverage inventory",
+        "parameterized module tests"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "wh-t3k-attention",
+      "priority": 16,
+      "stage": "module",
+      "architecture": "wormhole",
+      "mesh_device": "T3K",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/modules/attention/test_attention_1d.py::test_attention_1d_vs_reference",
+        "keyword": "1x8"
+      },
+      "timeout_seconds": 1200,
+      "environment": {
+        "MESH_DEVICE": "T3K"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "full physical T3K regression",
+        "required_host_role": "8-device T3K"
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "support manifests",
+        "hardware coverage inventory",
+        "parameterized module tests"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "wh-t3k-runtime-trace-order",
+      "priority": 17,
+      "stage": "runtime",
+      "architecture": "wormhole",
+      "mesh_device": "T3K",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/models/llama33_70b/test_t3k_batched_prefill_correctness.py::test_w6_active15_padded16_trace_correctness"
+      },
+      "timeout_seconds": 1800,
+      "environment": {
+        "MESH_DEVICE": "T3K"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "full physical T3K regression",
+        "required_host_role": "8-device T3K"
+      },
+      "acceptance_types": [
+        "trace_correctness",
+        "cross_order_consistency",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual deferred same-SHA T3K trace regression",
+        "explicit wormhole/t3k markers"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "wh-t3k-qwen25-coder-smoke",
+      "priority": 18,
+      "stage": "smoke",
+      "architecture": "wormhole",
+      "mesh_device": "T3K",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/hardware/models/qwen25_coder_32b/test_smoke.py::test_qwen25_coder_32b_prefill_smoke"
+      },
+      "timeout_seconds": 1800,
+      "environment": {
+        "MESH_DEVICE": "T3K",
+        "HF_MODEL": "Qwen/Qwen2.5-Coder-32B-Instruct",
+        "HF_HOME": "/proj_sw/user_dev/huggingface",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TT_CACHE_PATH": "{checkout}/model_cache"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "established_warm_model_cache",
+        "model": "qwen25_coder_32b",
+        "root_semantics": "topology directory; inspect before run",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "full physical T3K regression",
+        "required_host_role": "8-device T3K"
+      },
+      "acceptance_types": [
+        "prefill_smoke",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "wh-n150-llama32-1b-token-accuracy",
+      "priority": 19,
+      "stage": "e2e",
+      "architecture": "wormhole",
+      "mesh_device": "N150",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/hardware/models/llama32_1b/test_demo.py::test_llama32_1b",
+        "keyword": "token-accuracy and accuracy"
+      },
+      "timeout_seconds": 2400,
+      "environment": {
+        "MESH_DEVICE": "N150",
+        "HF_MODEL": "meta-llama/Llama-3.2-1B-Instruct",
+        "HF_HOME": "/proj_sw/user_dev/huggingface",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TT_CACHE_PATH": "{checkout}/model_cache"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "established_warm_model_cache",
+        "model": "llama32_1b",
+        "root_semantics": "inspect model-specific first records; reject duplicate topology suffix",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "logical N150 submesh regression on physical T3K host; not standalone N150 product provenance",
+        "required_host_role": "8-device T3K"
+      },
+      "acceptance_types": [
+        "token_accuracy_threshold",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "wh-n300-llama32-1b-token-accuracy",
+      "priority": 20,
+      "stage": "e2e",
+      "architecture": "wormhole",
+      "mesh_device": "N300",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/hardware/models/llama32_1b/test_demo.py::test_llama32_1b",
+        "keyword": "token-accuracy and accuracy"
+      },
+      "timeout_seconds": 2400,
+      "environment": {
+        "MESH_DEVICE": "N300",
+        "HF_MODEL": "meta-llama/Llama-3.2-1B-Instruct",
+        "HF_HOME": "/proj_sw/user_dev/huggingface",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TT_CACHE_PATH": "{checkout}/model_cache"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "established_warm_model_cache",
+        "model": "llama32_1b",
+        "root_semantics": "inspect model-specific first records; reject duplicate topology suffix",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "physical N300 left/right board-pair selection within T3K host",
+        "required_host_role": "T3K with recorded N300 pair"
+      },
+      "acceptance_types": [
+        "token_accuracy_threshold",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "wh-n300-qwen25-7b-token-accuracy",
+      "priority": 21,
+      "stage": "e2e",
+      "architecture": "wormhole",
+      "mesh_device": "N300",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/hardware/models/qwen25_7b/test_demo.py::test_qwen25_7b",
+        "keyword": "token-accuracy and accuracy"
+      },
+      "timeout_seconds": 3600,
+      "environment": {
+        "MESH_DEVICE": "N300",
+        "HF_MODEL": "Qwen/Qwen2.5-7B-Instruct",
+        "HF_HOME": "/proj_sw/user_dev/huggingface",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TT_CACHE_PATH": "{checkout}/model_cache"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "established_warm_model_cache",
+        "model": "qwen25_7b",
+        "root_semantics": "inspect model-specific first records; reject duplicate topology suffix",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "physical N300 left/right board-pair selection within T3K host",
+        "required_host_role": "T3K with recorded N300 pair"
+      },
+      "acceptance_types": [
+        "token_accuracy_threshold",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "wh-t3k-qwen3-token-accuracy",
+      "priority": 22,
+      "stage": "e2e",
+      "architecture": "wormhole",
+      "mesh_device": "T3K",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/hardware/models/qwen3_32b/test_demo.py::test_qwen3_32b",
+        "keyword": "token-accuracy and accuracy"
+      },
+      "timeout_seconds": 5400,
+      "environment": {
+        "MESH_DEVICE": "T3K",
+        "HF_MODEL": "Qwen/Qwen3-32B",
+        "HF_HOME": "/proj_sw/user_dev/huggingface",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TT_CACHE_PATH": "{checkout}/model_cache",
+        "SAMPLING_MODE": "on_device_topk"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "established_warm_model_cache",
+        "model": "qwen3_32b",
+        "root_semantics": "topology directory itself",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "full physical T3K regression",
+        "required_host_role": "8-device T3K"
+      },
+      "acceptance_types": [
+        "token_accuracy_threshold",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "wh-t3k-llama33-token-accuracy",
+      "priority": 23,
+      "stage": "e2e",
+      "architecture": "wormhole",
+      "mesh_device": "T3K",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/hardware/models/llama33_70b/test_demo.py::test_llama33_70b",
+        "keyword": "token-accuracy and accuracy"
+      },
+      "timeout_seconds": 5400,
+      "environment": {
+        "MESH_DEVICE": "T3K",
+        "HF_MODEL": "meta-llama/Llama-3.3-70B-Instruct",
+        "HF_HOME": "/proj_sw/user_dev/huggingface",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TT_CACHE_PATH": "{checkout}/model_cache",
+        "SAMPLING_MODE": "on_device_topk"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "established_warm_model_cache",
+        "model": "llama33_70b",
+        "root_semantics": "topology directory itself",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "full physical T3K regression",
+        "required_host_role": "8-device T3K"
+      },
+      "acceptance_types": [
+        "token_accuracy_threshold",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "bh-p150-rmsnorm-decode",
+      "priority": 24,
+      "stage": "module",
+      "architecture": "blackhole",
+      "mesh_device": "P150",
+      "machine_pool": [
+        "bh-lb-11"
+      ],
+      "selector": {
+        "target": "tests/modules/rmsnorm/test_rmsnorm_1d.py::test_rmsnorm_1d_blackhole_common_config_correctness_cache_and_timing[p150-local-decode]"
+      },
+      "timeout_seconds": 900,
+      "environment": {
+        "MESH_DEVICE": "P150"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "single P150 die selected on development loudbox",
+        "required_host_role": "8-P150 development loudbox"
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "bh-p150-lm-head",
+      "priority": 25,
+      "stage": "module",
+      "architecture": "blackhole",
+      "mesh_device": "P150",
+      "machine_pool": [
+        "bh-lb-11"
+      ],
+      "selector": {
+        "target": "tests/modules/lm_head/test_lm_head_1d.py::test_lm_head_1d_blackhole_common_config_correctness_cache_and_timing[p150-single-split]"
+      },
+      "timeout_seconds": 900,
+      "environment": {
+        "MESH_DEVICE": "P150"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "single P150 die selected on development loudbox",
+        "required_host_role": "8-P150 development loudbox"
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "bh-p150-mlp-decode",
+      "priority": 26,
+      "stage": "module",
+      "architecture": "blackhole",
+      "mesh_device": "P150",
+      "machine_pool": [
+        "bh-lb-11"
+      ],
+      "selector": {
+        "target": "tests/modules/mlp/test_mlp_1d.py::test_mlp_1d_blackhole_common_config_correctness_cache_and_timing[p150-1x1-decode-batch32]"
+      },
+      "timeout_seconds": 900,
+      "environment": {
+        "MESH_DEVICE": "P150"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "single P150 die selected on development loudbox",
+        "required_host_role": "8-P150 development loudbox"
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "bh-p150-mlp-prefill",
+      "priority": 27,
+      "stage": "module",
+      "architecture": "blackhole",
+      "mesh_device": "P150",
+      "machine_pool": [
+        "bh-lb-11"
+      ],
+      "selector": {
+        "target": "tests/modules/mlp/test_mlp_1d.py::test_mlp_1d_blackhole_common_config_correctness_cache_and_timing[p150-1x1-prefill-seq512-minimal-ff2]"
+      },
+      "timeout_seconds": 900,
+      "environment": {
+        "MESH_DEVICE": "P150"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "single P150 die selected on development loudbox",
+        "required_host_role": "8-P150 development loudbox"
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "bh-p150-attention-prefill",
+      "priority": 28,
+      "stage": "module",
+      "architecture": "blackhole",
+      "mesh_device": "P150",
+      "machine_pool": [
+        "bh-lb-11"
+      ],
+      "selector": {
+        "target": "tests/modules/attention/test_attention_1d.py::test_attention_1d_blackhole_common_config_standard_correctness_cache_and_timing[prefill-p150-1x1]"
+      },
+      "timeout_seconds": 900,
+      "environment": {
+        "MESH_DEVICE": "P150"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "single P150 die selected on development loudbox",
+        "required_host_role": "8-P150 development loudbox"
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "bh-p150-attention-decode",
+      "priority": 29,
+      "stage": "module",
+      "architecture": "blackhole",
+      "mesh_device": "P150",
+      "machine_pool": [
+        "bh-lb-11"
+      ],
+      "selector": {
+        "target": "tests/modules/attention/test_attention_1d.py::test_attention_1d_blackhole_common_config_standard_correctness_cache_and_timing[decode-p150-1x1]"
+      },
+      "timeout_seconds": 900,
+      "environment": {
+        "MESH_DEVICE": "P150"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "single P150 die selected on development loudbox",
+        "required_host_role": "8-P150 development loudbox"
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "bh-p150-attention-paged-transition",
+      "priority": 30,
+      "stage": "module",
+      "architecture": "blackhole",
+      "mesh_device": "P150",
+      "machine_pool": [
+        "bh-lb-11"
+      ],
+      "selector": {
+        "target": "tests/modules/attention/test_attention_1d.py::test_attention_1d_blackhole_common_config_paged_prefill_decode_transition_cache_and_timing[p150-1x1]"
+      },
+      "timeout_seconds": 900,
+      "environment": {
+        "MESH_DEVICE": "P150"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "single P150 die selected on development loudbox",
+        "required_host_role": "8-P150 development loudbox"
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "bh-p150x4-rmsnorm",
+      "priority": 31,
+      "stage": "module",
+      "architecture": "blackhole",
+      "mesh_device": "P150x4",
+      "machine_pool": [
+        "bh-lb-11",
+        "bh-qb-05",
+        "bh-qbge-15"
+      ],
+      "selector": {
+        "target": "tests/modules/rmsnorm/test_rmsnorm_1d.py::test_rmsnorm_1d_blackhole_common_config_correctness_cache_and_timing[p150x4-distributed-prefill-dim8192]"
+      },
+      "timeout_seconds": 900,
+      "environment": {
+        "MESH_DEVICE": "P150x4"
+      },
+      "machine_environment_overrides": {
+        "bh-lb-11": {
+          "TT_VISIBLE_DEVICES": "0000:01:00.0,0000:41:00.0,0000:81:00.0,0000:c1:00.0"
+        },
+        "bh-qb-05": {
+          "TT_VISIBLE_DEVICES": null
+        },
+        "bh-qbge-15": {
+          "TT_VISIBLE_DEVICES": null
+        }
+      },
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "physical four-die Ring; record P150_X4 versus P300_X2 without relabeling",
+        "required_cluster_types": [
+          "P150_X4",
+          "P300_X2"
+        ],
+        "reject_arbitrary_submesh": true
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "bh-p150x4-lm-head",
+      "priority": 32,
+      "stage": "module",
+      "architecture": "blackhole",
+      "mesh_device": "P150x4",
+      "machine_pool": [
+        "bh-lb-11",
+        "bh-qb-05",
+        "bh-qbge-15"
+      ],
+      "selector": {
+        "target": "tests/modules/lm_head/test_lm_head_1d.py::test_lm_head_1d_blackhole_common_config_correctness_cache_and_timing[p150x4-4008-column-splits]"
+      },
+      "timeout_seconds": 900,
+      "environment": {
+        "MESH_DEVICE": "P150x4"
+      },
+      "machine_environment_overrides": {
+        "bh-lb-11": {
+          "TT_VISIBLE_DEVICES": "0000:01:00.0,0000:41:00.0,0000:81:00.0,0000:c1:00.0"
+        },
+        "bh-qb-05": {
+          "TT_VISIBLE_DEVICES": null
+        },
+        "bh-qbge-15": {
+          "TT_VISIBLE_DEVICES": null
+        }
+      },
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "physical four-die Ring; record P150_X4 versus P300_X2 without relabeling",
+        "required_cluster_types": [
+          "P150_X4",
+          "P300_X2"
+        ],
+        "reject_arbitrary_submesh": true
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "bh-p150x4-mlp-decode",
+      "priority": 33,
+      "stage": "module",
+      "architecture": "blackhole",
+      "mesh_device": "P150x4",
+      "machine_pool": [
+        "bh-lb-11",
+        "bh-qb-05",
+        "bh-qbge-15"
+      ],
+      "selector": {
+        "target": "tests/modules/mlp/test_mlp_1d.py::test_mlp_1d_blackhole_common_config_correctness_cache_and_timing[p150x4-1x4-ring-decode-batch32]"
+      },
+      "timeout_seconds": 900,
+      "environment": {
+        "MESH_DEVICE": "P150x4"
+      },
+      "machine_environment_overrides": {
+        "bh-lb-11": {
+          "TT_VISIBLE_DEVICES": "0000:01:00.0,0000:41:00.0,0000:81:00.0,0000:c1:00.0"
+        },
+        "bh-qb-05": {
+          "TT_VISIBLE_DEVICES": null
+        },
+        "bh-qbge-15": {
+          "TT_VISIBLE_DEVICES": null
+        }
+      },
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "physical four-die Ring; record P150_X4 versus P300_X2 without relabeling",
+        "required_cluster_types": [
+          "P150_X4",
+          "P300_X2"
+        ],
+        "reject_arbitrary_submesh": true
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "bh-p150x4-mlp-prefill",
+      "priority": 34,
+      "stage": "module",
+      "architecture": "blackhole",
+      "mesh_device": "P150x4",
+      "machine_pool": [
+        "bh-lb-11",
+        "bh-qb-05",
+        "bh-qbge-15"
+      ],
+      "selector": {
+        "target": "tests/modules/mlp/test_mlp_1d.py::test_mlp_1d_blackhole_common_config_correctness_cache_and_timing[p150x4-1x4-ring-prefill-seq512-minimal-ff2]"
+      },
+      "timeout_seconds": 900,
+      "environment": {
+        "MESH_DEVICE": "P150x4"
+      },
+      "machine_environment_overrides": {
+        "bh-lb-11": {
+          "TT_VISIBLE_DEVICES": "0000:01:00.0,0000:41:00.0,0000:81:00.0,0000:c1:00.0"
+        },
+        "bh-qb-05": {
+          "TT_VISIBLE_DEVICES": null
+        },
+        "bh-qbge-15": {
+          "TT_VISIBLE_DEVICES": null
+        }
+      },
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "physical four-die Ring; record P150_X4 versus P300_X2 without relabeling",
+        "required_cluster_types": [
+          "P150_X4",
+          "P300_X2"
+        ],
+        "reject_arbitrary_submesh": true
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "bh-p150x4-attention-prefill",
+      "priority": 35,
+      "stage": "module",
+      "architecture": "blackhole",
+      "mesh_device": "P150x4",
+      "machine_pool": [
+        "bh-lb-11",
+        "bh-qb-05",
+        "bh-qbge-15"
+      ],
+      "selector": {
+        "target": "tests/modules/attention/test_attention_1d.py::test_attention_1d_blackhole_common_config_standard_correctness_cache_and_timing[prefill-p150x4-1x4]"
+      },
+      "timeout_seconds": 900,
+      "environment": {
+        "MESH_DEVICE": "P150x4"
+      },
+      "machine_environment_overrides": {
+        "bh-lb-11": {
+          "TT_VISIBLE_DEVICES": "0000:01:00.0,0000:41:00.0,0000:81:00.0,0000:c1:00.0"
+        },
+        "bh-qb-05": {
+          "TT_VISIBLE_DEVICES": null
+        },
+        "bh-qbge-15": {
+          "TT_VISIBLE_DEVICES": null
+        }
+      },
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "physical four-die Ring; record P150_X4 versus P300_X2 without relabeling",
+        "required_cluster_types": [
+          "P150_X4",
+          "P300_X2"
+        ],
+        "reject_arbitrary_submesh": true
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "bh-p150x4-attention-decode",
+      "priority": 36,
+      "stage": "module",
+      "architecture": "blackhole",
+      "mesh_device": "P150x4",
+      "machine_pool": [
+        "bh-lb-11",
+        "bh-qb-05",
+        "bh-qbge-15"
+      ],
+      "selector": {
+        "target": "tests/modules/attention/test_attention_1d.py::test_attention_1d_blackhole_common_config_standard_correctness_cache_and_timing[decode-p150x4-1x4]"
+      },
+      "timeout_seconds": 900,
+      "environment": {
+        "MESH_DEVICE": "P150x4"
+      },
+      "machine_environment_overrides": {
+        "bh-lb-11": {
+          "TT_VISIBLE_DEVICES": "0000:01:00.0,0000:41:00.0,0000:81:00.0,0000:c1:00.0"
+        },
+        "bh-qb-05": {
+          "TT_VISIBLE_DEVICES": null
+        },
+        "bh-qbge-15": {
+          "TT_VISIBLE_DEVICES": null
+        }
+      },
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "physical four-die Ring; record P150_X4 versus P300_X2 without relabeling",
+        "required_cluster_types": [
+          "P150_X4",
+          "P300_X2"
+        ],
+        "reject_arbitrary_submesh": true
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "bh-p150x4-attention-paged-transition",
+      "priority": 37,
+      "stage": "module",
+      "architecture": "blackhole",
+      "mesh_device": "P150x4",
+      "machine_pool": [
+        "bh-lb-11",
+        "bh-qb-05",
+        "bh-qbge-15"
+      ],
+      "selector": {
+        "target": "tests/modules/attention/test_attention_1d.py::test_attention_1d_blackhole_common_config_paged_prefill_decode_transition_cache_and_timing[p150x4-1x4]"
+      },
+      "timeout_seconds": 900,
+      "environment": {
+        "MESH_DEVICE": "P150x4"
+      },
+      "machine_environment_overrides": {
+        "bh-lb-11": {
+          "TT_VISIBLE_DEVICES": "0000:01:00.0,0000:41:00.0,0000:81:00.0,0000:c1:00.0"
+        },
+        "bh-qb-05": {
+          "TT_VISIBLE_DEVICES": null
+        },
+        "bh-qbge-15": {
+          "TT_VISIBLE_DEVICES": null
+        }
+      },
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "physical four-die Ring; record P150_X4 versus P300_X2 without relabeling",
+        "required_cluster_types": [
+          "P150_X4",
+          "P300_X2"
+        ],
+        "reject_arbitrary_submesh": true
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "bh-p150-llama3-8b-token-accuracy",
+      "priority": 38,
+      "stage": "e2e",
+      "architecture": "blackhole",
+      "mesh_device": "P150",
+      "machine_pool": [
+        "bh-lb-11"
+      ],
+      "selector": {
+        "target": "tests/hardware/models/llama3_8b/test_demo.py::test_llama3_8b",
+        "keyword": "token-accuracy-repeat_batch-1-prefetcher-off and performance"
+      },
+      "timeout_seconds": 3600,
+      "environment": {
+        "MESH_DEVICE": "P150",
+        "HF_MODEL": "meta-llama/Llama-3.1-8B-Instruct",
+        "HF_HOME": "/proj_sw/user_dev/huggingface",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TT_CACHE_PATH": "{checkout}/model_cache"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "established_warm_model_cache",
+        "model": "llama3_8b",
+        "root_semantics": "model root; model appends topology exactly once",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "single P150 die selected on development loudbox",
+        "required_host_role": "8-P150 development loudbox"
+      },
+      "acceptance_types": [
+        "token_accuracy_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "bh-p150x4-qwen3-one-layer-smoke",
+      "priority": 39,
+      "stage": "smoke",
+      "architecture": "blackhole",
+      "mesh_device": "P150x4",
+      "machine_pool": [
+        "bh-lb-11",
+        "bh-qb-05",
+        "bh-qbge-15"
+      ],
+      "selector": {
+        "target": "tests/models/qwen3_32b/test_p150x4_smoke.py::test_qwen3_32b_one_layer_prefill_decode_smoke[physical-P150x4-ring]"
+      },
+      "timeout_seconds": 1800,
+      "environment": {
+        "MESH_DEVICE": "P150x4",
+        "HF_MODEL": "Qwen/Qwen3-32B",
+        "HF_HOME": "/proj_sw/user_dev/huggingface",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TT_CACHE_PATH": "{checkout}/model_cache"
+      },
+      "machine_environment_overrides": {
+        "bh-lb-11": {
+          "TT_VISIBLE_DEVICES": "0000:01:00.0,0000:41:00.0,0000:81:00.0,0000:c1:00.0"
+        },
+        "bh-qb-05": {
+          "TT_VISIBLE_DEVICES": null
+        },
+        "bh-qbge-15": {
+          "TT_VISIBLE_DEVICES": null
+        }
+      },
+      "cache_requirement": {
+        "kind": "established_warm_model_cache",
+        "model": "qwen3_32b",
+        "root_semantics": "topology directory itself",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "physical four-die Ring; record P150_X4 versus P300_X2 without relabeling",
+        "required_cluster_types": [
+          "P150_X4",
+          "P300_X2"
+        ],
+        "reject_arbitrary_submesh": true
+      },
+      "acceptance_types": [
+        "prefill_decode_smoke",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "bh-p150x4-llama33-one-layer-smoke",
+      "priority": 40,
+      "stage": "smoke",
+      "architecture": "blackhole",
+      "mesh_device": "P150x4",
+      "machine_pool": [
+        "bh-lb-11",
+        "bh-qb-05",
+        "bh-qbge-15"
+      ],
+      "selector": {
+        "target": "tests/models/llama33_70b/test_p150x4_smoke.py::test_llama33_70b_one_layer_prefill_decode_smoke[physical-P150x4-ring]"
+      },
+      "timeout_seconds": 1800,
+      "environment": {
+        "MESH_DEVICE": "P150x4",
+        "HF_MODEL": "meta-llama/Llama-3.3-70B-Instruct",
+        "HF_HOME": "/proj_sw/user_dev/huggingface",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TT_CACHE_PATH": "{checkout}/model_cache"
+      },
+      "machine_environment_overrides": {
+        "bh-lb-11": {
+          "TT_VISIBLE_DEVICES": "0000:01:00.0,0000:41:00.0,0000:81:00.0,0000:c1:00.0"
+        },
+        "bh-qb-05": {
+          "TT_VISIBLE_DEVICES": null
+        },
+        "bh-qbge-15": {
+          "TT_VISIBLE_DEVICES": null
+        }
+      },
+      "cache_requirement": {
+        "kind": "established_warm_model_cache",
+        "model": "llama33_70b",
+        "root_semantics": "topology directory itself",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "physical four-die Ring; record P150_X4 versus P300_X2 without relabeling",
+        "required_cluster_types": [
+          "P150_X4",
+          "P300_X2"
+        ],
+        "reject_arbitrary_submesh": true
+      },
+      "acceptance_types": [
+        "prefill_decode_smoke",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "bh-p150x4-qwen3-token-accuracy",
+      "priority": 41,
+      "stage": "e2e",
+      "architecture": "blackhole",
+      "mesh_device": "P150x4",
+      "machine_pool": [
+        "bh-lb-11",
+        "bh-qb-05",
+        "bh-qbge-15"
+      ],
+      "selector": {
+        "target": "tests/hardware/models/qwen3_32b/test_demo.py::test_qwen3_32b",
+        "keyword": "token-accuracy and accuracy"
+      },
+      "timeout_seconds": 5400,
+      "environment": {
+        "MESH_DEVICE": "P150x4",
+        "HF_MODEL": "Qwen/Qwen3-32B",
+        "HF_HOME": "/proj_sw/user_dev/huggingface",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TT_CACHE_PATH": "{checkout}/model_cache",
+        "SAMPLING_MODE": "on_device_topk"
+      },
+      "machine_environment_overrides": {
+        "bh-lb-11": {
+          "TT_VISIBLE_DEVICES": "0000:01:00.0,0000:41:00.0,0000:81:00.0,0000:c1:00.0"
+        },
+        "bh-qb-05": {
+          "TT_VISIBLE_DEVICES": null
+        },
+        "bh-qbge-15": {
+          "TT_VISIBLE_DEVICES": null
+        }
+      },
+      "cache_requirement": {
+        "kind": "established_warm_model_cache",
+        "model": "qwen3_32b",
+        "root_semantics": "topology directory itself",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "physical four-die Ring; record P150_X4 versus P300_X2 without relabeling",
+        "required_cluster_types": [
+          "P150_X4",
+          "P300_X2"
+        ],
+        "reject_arbitrary_submesh": true
+      },
+      "acceptance_types": [
+        "token_accuracy_threshold",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "bh-p150x4-llama33-token-accuracy",
+      "priority": 42,
+      "stage": "e2e",
+      "architecture": "blackhole",
+      "mesh_device": "P150x4",
+      "machine_pool": [
+        "bh-lb-11",
+        "bh-qb-05",
+        "bh-qbge-15"
+      ],
+      "selector": {
+        "target": "tests/hardware/models/llama33_70b/test_demo.py::test_llama33_70b",
+        "keyword": "token-accuracy and accuracy"
+      },
+      "timeout_seconds": 5400,
+      "environment": {
+        "MESH_DEVICE": "P150x4",
+        "HF_MODEL": "meta-llama/Llama-3.3-70B-Instruct",
+        "HF_HOME": "/proj_sw/user_dev/huggingface",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TT_CACHE_PATH": "{checkout}/model_cache",
+        "SAMPLING_MODE": "on_device_topk"
+      },
+      "machine_environment_overrides": {
+        "bh-lb-11": {
+          "TT_VISIBLE_DEVICES": "0000:01:00.0,0000:41:00.0,0000:81:00.0,0000:c1:00.0"
+        },
+        "bh-qb-05": {
+          "TT_VISIBLE_DEVICES": null
+        },
+        "bh-qbge-15": {
+          "TT_VISIBLE_DEVICES": null
+        }
+      },
+      "cache_requirement": {
+        "kind": "established_warm_model_cache",
+        "model": "llama33_70b",
+        "root_semantics": "topology directory itself",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "physical four-die Ring; record P150_X4 versus P300_X2 without relabeling",
+        "required_cluster_types": [
+          "P150_X4",
+          "P300_X2"
+        ],
+        "reject_arbitrary_submesh": true
+      },
+      "acceptance_types": [
+        "observational_token_accuracy",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "hardware manual",
+        "extracted pytest markers/parameters"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    }
+  ]
+}

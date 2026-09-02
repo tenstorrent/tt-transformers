@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "model": {
+    "package": "mistral_7b",
+    "hf_id": "mistralai/Mistral-7B-Instruct-v0.3",
+    "hf_revision": "c170c708c41dac9275d15a8fff4eca08d52bab71"
+  },
+  "status": "experimental",
+  "software": {
+    "tt_transformers": "0.1.0.dev0",
+    "ttnn": "0.77.0",
+    "python": [
+      "3.10",
+      "3.12"
+    ],
+    "torch": "2.11.0",
+    "transformers": "5.12.1"
+  },
+  "hardware": [
+    {
+      "architecture": "wormhole",
+      "sku": "N150",
+      "mesh": "1x1",
+      "tp": 1,
+      "dp": 1
+    },
+    {
+      "architecture": "wormhole",
+      "sku": "N300",
+      "mesh": "1x2",
+      "tp": 2,
+      "dp": 1
+    },
+    {
+      "architecture": "wormhole",
+      "sku": "N300",
+      "mesh": "1x2",
+      "tp": 1,
+      "dp": 2
+    },
+    {
+      "architecture": "wormhole",
+      "sku": "T3K",
+      "mesh": "1x8",
+      "tp": 8,
+      "dp": 1
+    },
+    {
+      "architecture": "wormhole",
+      "sku": "T3K",
+      "mesh": "1x8",
+      "tp": 1,
+      "dp": 8
+    }
+  ],
+  "assets": {
+    "reference_root": "qualification/assets/reference_outputs/mistral_7b",
+    "hf_assets_external": true,
+    "offline_environment": [
+      "HF_HOME",
+      "HF_HUB_OFFLINE=1",
+      "TRANSFORMERS_OFFLINE=1"
+    ],
+    "tt_cache_writable": true,
+    "remote_code_default": false,
+    "cwd_relative_cache_default": false,
+    "cache_resolver": "tt_transformers.cache_environment.resolve_model_cache_path",
+    "tt_cache_path_semantics": "append topology exactly once"
+  },
+  "known_gaps": [
+    "No hardware evidence is attributable to the pinned extraction revision",
+    "DP layouts other than the declared one-device lanes",
+    "any geometry not declared in support.json"
+  ],
+  "validation": {
+    "date": null,
+    "git_sha": null,
+    "evidence": []
+  },
+  "limits": {
+    "source_proven": [
+      "Demo cases cover active batch 1 or 32",
+      "standard/CI budgets are 1024/2048; retained DP smokes reach 4096",
+      "N300 DP2 and T3K DP8 use one-device lanes; other retained DP factors skip"
+    ]
+  },
+  "features": {
+    "device_sampling": "Host and on-device top-k paths exist; the demo default is host sampling.",
+    "trace": "case_and_topology_specific"
+  }
+}

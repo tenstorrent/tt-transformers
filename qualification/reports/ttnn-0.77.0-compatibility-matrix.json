@@ -1,0 +1,1393 @@
+{
+  "api_availability": {
+    "available": {
+      "3.10.19": 160,
+      "3.12.13": 160
+    },
+    "evidence": [
+      {
+        "path": "qualification/reports/ttnn-0.77.0-api-availability.md"
+      },
+      {
+        "path": "qualification/reports/ttnn-0.77.0-api-availability.json"
+      }
+    ],
+    "missing": {
+      "3.10.19": 0,
+      "3.12.13": 0
+    },
+    "occurrences": 4393,
+    "signature_evidence": {
+      "3.10.19": {
+        "generic_wrapper": 72,
+        "informative": 15,
+        "not_inspectable": 73
+      },
+      "3.12.13": {
+        "generic_wrapper": 103,
+        "informative": 15,
+        "not_inspectable": 42
+      },
+      "cross_interpreter_differences": 35
+    },
+    "tiers": {
+      "experimental": 13,
+      "private": 1,
+      "public": 146
+    },
+    "unique_module_paths": 160,
+    "unstable_paths": [
+      {
+        "api": "ttnn._ttnn.tensor.dump_tensor_flatbuffer",
+        "py310_available": true,
+        "py312_available": true
+      },
+      {
+        "api": "ttnn.experimental.all_gather_async",
+        "py310_available": true,
+        "py312_available": true
+      },
+      {
+        "api": "ttnn.experimental.all_gather_matmul_async",
+        "py310_available": true,
+        "py312_available": true
+      },
+      {
+        "api": "ttnn.experimental.minimal_matmul",
+        "py310_available": true,
+        "py312_available": true
+      },
+      {
+        "api": "ttnn.experimental.nlp_concat_heads",
+        "py310_available": true,
+        "py312_available": true
+      },
+      {
+        "api": "ttnn.experimental.nlp_concat_heads_decode",
+        "py310_available": true,
+        "py312_available": true
+      },
+      {
+        "api": "ttnn.experimental.nlp_create_qkv_heads",
+        "py310_available": true,
+        "py312_available": true
+      },
+      {
+        "api": "ttnn.experimental.nlp_create_qkv_heads_decode",
+        "py310_available": true,
+        "py312_available": true
+      },
+      {
+        "api": "ttnn.experimental.paged_fill_cache",
+        "py310_available": true,
+        "py312_available": true
+      },
+      {
+        "api": "ttnn.experimental.paged_fused_update_cache",
+        "py310_available": true,
+        "py312_available": true
+      },
+      {
+        "api": "ttnn.experimental.paged_update_cache",
+        "py310_available": true,
+        "py312_available": true
+      },
+      {
+        "api": "ttnn.experimental.reduce_scatter_minimal_async",
+        "py310_available": true,
+        "py312_available": true
+      },
+      {
+        "api": "ttnn.experimental.rotary_embedding_llama",
+        "py310_available": true,
+        "py312_available": true
+      },
+      {
+        "api": "ttnn.experimental.rotary_embedding_llama_fused_qk",
+        "py310_available": true,
+        "py312_available": true
+      }
+    ],
+    "unstable_presence_verdict": "14_of_14_present_both_pythons_semantics_unqualified"
+  },
+  "authoritative_inputs": [
+    {
+      "path": "qualification/reports/dependencies-py310.json"
+    },
+    {
+      "path": "qualification/reports/dependencies-py312.json"
+    },
+    {
+      "path": "qualification/reports/ttnn-0.77.0-api-availability.json"
+    },
+    {
+      "path": "qualification/reports/package-artifact-hashes.json"
+    },
+    {
+      "path": "qualification/reports/package-wheel.md"
+    },
+    {
+      "path": "qualification/reports/ttnn-0.77.0-host-triage.md"
+    },
+    {
+      "path": "qualification/reports/host-ttnn-0.77.md"
+    }
+  ],
+  "closed_findings": [
+    {
+      "classification": "tttv2_packaging_defect",
+      "evidence": [
+        {
+          "path": "qualification/reports/package-wheel.md"
+        }
+      ],
+      "finding": "missing pinned LMHead _nearest_32 alias",
+      "status": "fixed"
+    },
+    {
+      "classification": "tttv2_packaging_defect",
+      "evidence": [
+        {
+          "path": "qualification/reports/package-wheel.md"
+        }
+      ],
+      "finding": "guarded PyYAML feature lacked a declared optional extra",
+      "status": "fixed"
+    },
+    {
+      "classification": "semantic_or_signature_difference",
+      "evidence": [
+        {
+          "path": "qualification/reports/ttnn-0.77.0-host-triage.md"
+        }
+      ],
+      "finding": "TTNN 0.77 constructor lacks later num_workers_per_dram_bank argument",
+      "status": "test_expectation_corrected_no_production_usage"
+    },
+    {
+      "classification": "tttv2_implementation_defect",
+      "evidence": [
+        {
+          "path": "qualification/reports/ttnn-0.77.0-host-triage.md"
+        }
+      ],
+      "finding": "repr-only fallback failed for TTNN 0.77 SDPAProgramConfig binding",
+      "status": "fixed_using_supported_public_attributes"
+    },
+    {
+      "classification": "obsolete_characterization",
+      "evidence": [
+        {
+          "path": "qualification/reports/host-ttnn-0.77.md"
+        }
+      ],
+      "finding": "stale old-namespace/model_params and retired TTTv1 expectations",
+      "status": "migrated_or_explicitly_retired"
+    }
+  ],
+  "host_semantics_exercised": [
+    "dependency resolution, metadata, wheel installation, and import isolation",
+    "public TTNN symbol/descriptor presence on both interpreters",
+    "host-safe TTNN config constructors and program-config serialization",
+    "pure configuration, profile, topology, planning, signature, and cache-geometry logic",
+    "runtime ownership, cleanup, trace/program identity, and adapter behavior through fakes/mocks",
+    "optional dependency laziness and secret-redacted cache/device preflight",
+    "all twelve model package/core imports and host-only model configuration/contracts"
+  ],
+  "host_suites": [
+    {
+      "deselected": 6791,
+      "errors": 0,
+      "evidence": [
+        {
+          "path": "qualification/reports/host-ttnn-0.77.md"
+        },
+        {
+          "path": "qualification/reports/ttnn-0.77.0-host-triage.md"
+        }
+      ],
+      "failures": 0,
+      "passed": 2115,
+      "process_exit": 0,
+      "python": "3.10.19",
+      "shutdown_diagnostics": null,
+      "skipped": 28,
+      "subtests_passed": 81,
+      "warnings": 5
+    },
+    {
+      "deselected": 6791,
+      "errors": 0,
+      "evidence": [
+        {
+          "path": "qualification/reports/host-ttnn-0.77.md"
+        },
+        {
+          "path": "qualification/reports/ttnn-0.77.0-host-triage.md"
+        }
+      ],
+      "failures": 0,
+      "passed": 2115,
+      "process_exit": 0,
+      "python": "3.12.13",
+      "shutdown_diagnostics": {
+        "classification": "ttnn_nanobind_binding_lifecycle_feedback",
+        "leaked_functions": 330,
+        "leaked_instances": 8,
+        "leaked_types": 36,
+        "message": "this is likely caused by a reference counting issue in the binding code.",
+        "phase": "interpreter_shutdown_after_pytest_success",
+        "retained_output": "/tmp/gwang/tttv2-py312-host-final.log",
+        "test_failure": false
+      },
+      "skipped": 28,
+      "subtests_passed": 81,
+      "warnings": 5
+    }
+  ],
+  "models": [
+    {
+      "declared_hardware_targets": [
+        {
+          "architecture": "wormhole",
+          "dp": 1,
+          "mesh": "1x2",
+          "sku": "N300",
+          "tp": 2
+        },
+        {
+          "architecture": "wormhole",
+          "dp": 1,
+          "mesh": "1x8",
+          "sku": "T3K",
+          "tp": 8
+        },
+        {
+          "architecture": "wormhole",
+          "dp": 2,
+          "mesh": "1x8",
+          "sku": "T3K",
+          "tp": 4
+        },
+        {
+          "architecture": "wormhole",
+          "dp": 4,
+          "mesh": "1x8",
+          "sku": "T3K",
+          "tp": 2
+        }
+      ],
+      "evidence": [
+        {
+          "path": "examples/deepseek_r1_distill_qwen_14b/support.json"
+        },
+        {
+          "path": "qualification/reports/package-wheel.md"
+        },
+        {
+          "path": "qualification/reports/host-ttnn-0.77.md"
+        }
+      ],
+      "firmware_driver_verdict": "not_evaluated",
+      "geometry_verdict": "source_declared_not_hardware_validated",
+      "hardware_verdict": "not_qualified",
+      "hf_id": "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B",
+      "hf_revision": "1df8507178afcc1bef68cd8c393f61a886323761",
+      "host_import_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_semantics_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_verdict": "pass_import_py310_py312_and_host_contracts_py310_py312",
+      "known_gaps": [
+        "No hardware evidence is attributable to the pinned extraction revision",
+        "N150/TP1",
+        "N300 accuracy eval-32 and batch-32-ci",
+        "any geometry not declared in support.json"
+      ],
+      "lifecycle_status": "experimental",
+      "manifest_validation": {
+        "date": null,
+        "evidence": [],
+        "git_sha": null
+      },
+      "package": "deepseek_r1_distill_qwen_14b"
+    },
+    {
+      "declared_hardware_targets": [
+        {
+          "architecture": "wormhole",
+          "dp": 1,
+          "mesh": "1x1",
+          "sku": "N150",
+          "tp": 1
+        },
+        {
+          "architecture": "wormhole",
+          "dp": 1,
+          "mesh": "1x2",
+          "sku": "N300",
+          "tp": 2
+        },
+        {
+          "architecture": "wormhole",
+          "dp": 2,
+          "mesh": "1x2",
+          "sku": "N300",
+          "tp": 1
+        },
+        {
+          "architecture": "wormhole",
+          "dp": 1,
+          "mesh": "1x8",
+          "sku": "T3K",
+          "tp": 8
+        },
+        {
+          "architecture": "wormhole",
+          "dp": 4,
+          "mesh": "1x8",
+          "sku": "T3K",
+          "tp": 2
+        },
+        {
+          "architecture": "wormhole",
+          "dp": 8,
+          "mesh": "1x8",
+          "sku": "T3K",
+          "tp": 1
+        }
+      ],
+      "evidence": [
+        {
+          "path": "examples/llama32_1b/support.json"
+        },
+        {
+          "path": "qualification/reports/package-wheel.md"
+        },
+        {
+          "path": "qualification/reports/host-ttnn-0.77.md"
+        }
+      ],
+      "firmware_driver_verdict": "not_evaluated",
+      "geometry_verdict": "source_declared_not_hardware_validated",
+      "hardware_verdict": "not_qualified",
+      "hf_id": "meta-llama/Llama-3.2-1B-Instruct",
+      "hf_revision": "9213176726f574b556790deb65791e0c5aa438b6",
+      "host_import_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_semantics_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_verdict": "pass_import_py310_py312_and_host_contracts_py310_py312",
+      "known_gaps": [
+        "No hardware evidence is attributable to the pinned extraction revision",
+        "TP4 lanes",
+        "N150 batch-32-ci sequence 2048",
+        "any geometry not declared in support.json"
+      ],
+      "lifecycle_status": "experimental",
+      "manifest_validation": {
+        "date": null,
+        "evidence": [],
+        "git_sha": null
+      },
+      "package": "llama32_1b"
+    },
+    {
+      "declared_hardware_targets": [
+        {
+          "architecture": "wormhole",
+          "dp": 1,
+          "mesh": "1x1",
+          "sku": "N150",
+          "tp": 1
+        },
+        {
+          "architecture": "wormhole",
+          "dp": 1,
+          "mesh": "1x2",
+          "sku": "N300",
+          "tp": 2
+        },
+        {
+          "architecture": "wormhole",
+          "dp": 2,
+          "mesh": "1x2",
+          "sku": "N300",
+          "tp": 1
+        },
+        {
+          "architecture": "wormhole",
+          "dp": 1,
+          "mesh": "1x8",
+          "sku": "T3K",
+          "tp": 8
+        },
+        {
+          "architecture": "wormhole",
+          "dp": 4,
+          "mesh": "1x8",
+          "sku": "T3K",
+          "tp": 2
+        },
+        {
+          "architecture": "wormhole",
+          "dp": 8,
+          "mesh": "1x8",
+          "sku": "T3K",
+          "tp": 1
+        }
+      ],
+      "evidence": [
+        {
+          "path": "examples/llama32_3b/support.json"
+        },
+        {
+          "path": "qualification/reports/package-wheel.md"
+        },
+        {
+          "path": "qualification/reports/host-ttnn-0.77.md"
+        }
+      ],
+      "firmware_driver_verdict": "not_evaluated",
+      "geometry_verdict": "source_declared_not_hardware_validated",
+      "hardware_verdict": "not_qualified",
+      "hf_id": "meta-llama/Llama-3.2-3B-Instruct",
+      "hf_revision": "0cb88a4f764b7a12671c53f0838cd831a0843b95",
+      "host_import_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_semantics_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_verdict": "pass_import_py310_py312_and_host_contracts_py310_py312",
+      "known_gaps": [
+        "No hardware evidence is attributable to the pinned extraction revision",
+        "TP4 lanes",
+        "traced prefill on N150",
+        "any geometry not declared in support.json"
+      ],
+      "lifecycle_status": "experimental",
+      "manifest_validation": {
+        "date": null,
+        "evidence": [],
+        "git_sha": null
+      },
+      "package": "llama32_3b"
+    },
+    {
+      "declared_hardware_targets": [
+        {
+          "architecture": "wormhole",
+          "dp": 1,
+          "mesh": "1x8",
+          "sku": "T3K",
+          "tp": 8
+        },
+        {
+          "architecture": "blackhole",
+          "dp": 1,
+          "mesh": "1x4",
+          "sku": "P150_X4 required logical target; code accepts physical P300_X2 alias with distinct provenance",
+          "tp": 4
+        }
+      ],
+      "evidence": [
+        {
+          "path": "examples/llama33_70b/support.json"
+        },
+        {
+          "path": "qualification/reports/package-wheel.md"
+        },
+        {
+          "path": "qualification/reports/host-ttnn-0.77.md"
+        }
+      ],
+      "firmware_driver_verdict": "not_evaluated",
+      "geometry_verdict": "source_declared_not_hardware_validated",
+      "hardware_verdict": "not_qualified",
+      "hf_id": "meta-llama/Llama-3.3-70B-Instruct",
+      "hf_revision": "6f6073b423013f6a7d4d9f39144961bfbfbc386b",
+      "host_import_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_semantics_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_verdict": "pass_import_py310_py312_and_host_contracts_py310_py312",
+      "known_gaps": [
+        "No hardware evidence is attributable to the pinned extraction revision",
+        "DP greater than 1",
+        "noncanonical P150x4 orientations",
+        "unproven 32K context",
+        "any geometry not declared in support.json"
+      ],
+      "lifecycle_status": "experimental",
+      "manifest_validation": {
+        "date": null,
+        "evidence": [],
+        "git_sha": null
+      },
+      "package": "llama33_70b"
+    },
+    {
+      "declared_hardware_targets": [
+        {
+          "architecture": "wormhole",
+          "dp": 1,
+          "mesh": "1x1",
+          "sku": "N150",
+          "tp": 1
+        },
+        {
+          "architecture": "wormhole",
+          "dp": 1,
+          "mesh": "1x2",
+          "sku": "N300",
+          "tp": 2
+        },
+        {
+          "architecture": "wormhole",
+          "dp": 2,
+          "mesh": "1x2",
+          "sku": "N300",
+          "tp": 1
+        },
+        {
+          "architecture": "wormhole",
+          "dp": 1,
+          "mesh": "1x8",
+          "sku": "T3K",
+          "tp": 8
+        },
+        {
+          "architecture": "wormhole",
+          "dp": 2,
+          "mesh": "1x8",
+          "sku": "T3K",
+          "tp": 4
+        },
+        {
+          "architecture": "wormhole",
+          "dp": 4,
+          "mesh": "1x8",
+          "sku": "T3K",
+          "tp": 2
+        },
+        {
+          "architecture": "wormhole",
+          "dp": 8,
+          "mesh": "1x8",
+          "sku": "T3K",
+          "tp": 1
+        },
+        {
+          "architecture": "blackhole",
+          "dp": 1,
+          "mesh": "1x1",
+          "sku": "P150",
+          "tp": 1
+        },
+        {
+          "architecture": "blackhole",
+          "dp": 1,
+          "mesh": "1x4",
+          "sku": "P150_X4",
+          "tp": 4
+        },
+        {
+          "architecture": "blackhole",
+          "dp": 4,
+          "mesh": "1x4",
+          "sku": "P150_X4",
+          "tp": 1
+        },
+        {
+          "architecture": "blackhole",
+          "dp": 2,
+          "mesh": "1x2",
+          "sku": "physical_P300",
+          "tp": 1
+        }
+      ],
+      "evidence": [
+        {
+          "path": "examples/llama3_8b/support.json"
+        },
+        {
+          "path": "qualification/reports/package-wheel.md"
+        },
+        {
+          "path": "qualification/reports/host-ttnn-0.77.md"
+        }
+      ],
+      "firmware_driver_verdict": "not_evaluated",
+      "geometry_verdict": "source_declared_not_hardware_validated",
+      "hardware_verdict": "not_qualified",
+      "hf_id": "meta-llama/Llama-3.1-8B-Instruct",
+      "hf_revision": "0e9e39f249a16976918f6564b8830bc894c89659",
+      "host_import_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_semantics_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_verdict": "pass_import_py310_py312_and_host_contracts_py310_py312",
+      "known_gaps": [
+        "No hardware evidence is attributable to the pinned extraction revision",
+        "TTTv1 DRAM prefetcher",
+        "P100 and 128K P300 acceptance",
+        "development two-P150 stand-in as real-P300 evidence",
+        "any geometry not declared in support.json"
+      ],
+      "lifecycle_status": "experimental",
+      "manifest_validation": {
+        "date": null,
+        "evidence": [],
+        "git_sha": null
+      },
+      "package": "llama3_8b"
+    },
+    {
+      "declared_hardware_targets": [
+        {
+          "architecture": "wormhole",
+          "dp": 1,
+          "mesh": "1x1",
+          "sku": "N150",
+          "tp": 1
+        },
+        {
+          "architecture": "wormhole",
+          "dp": 1,
+          "mesh": "1x2",
+          "sku": "N300",
+          "tp": 2
+        },
+        {
+          "architecture": "wormhole",
+          "dp": 2,
+          "mesh": "1x2",
+          "sku": "N300",
+          "tp": 1
+        },
+        {
+          "architecture": "wormhole",
+          "dp": 1,
+          "mesh": "1x8",
+          "sku": "T3K",
+          "tp": 8
+        },
+        {
+          "architecture": "wormhole",
+          "dp": 8,
+          "mesh": "1x8",
+          "sku": "T3K",
+          "tp": 1
+        }
+      ],
+      "evidence": [
+        {
+          "path": "examples/mistral_7b/support.json"
+        },
+        {
+          "path": "qualification/reports/package-wheel.md"
+        },
+        {
+          "path": "qualification/reports/host-ttnn-0.77.md"
+        }
+      ],
+      "firmware_driver_verdict": "not_evaluated",
+      "geometry_verdict": "source_declared_not_hardware_validated",
+      "hardware_verdict": "not_qualified",
+      "hf_id": "mistralai/Mistral-7B-Instruct-v0.3",
+      "hf_revision": "c170c708c41dac9275d15a8fff4eca08d52bab71",
+      "host_import_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_semantics_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_verdict": "pass_import_py310_py312_and_host_contracts_py310_py312",
+      "known_gaps": [
+        "No hardware evidence is attributable to the pinned extraction revision",
+        "DP layouts other than the declared one-device lanes",
+        "any geometry not declared in support.json"
+      ],
+      "lifecycle_status": "experimental",
+      "manifest_validation": {
+        "date": null,
+        "evidence": [],
+        "git_sha": null
+      },
+      "package": "mistral_7b"
+    },
+    {
+      "declared_hardware_targets": [
+        {
+          "architecture": "wormhole",
+          "dp": 1,
+          "mesh": "1x2",
+          "sku": "N300",
+          "tp": 2
+        },
+        {
+          "architecture": "wormhole",
+          "dp": 4,
+          "mesh": "1x8",
+          "sku": "T3K",
+          "tp": 2
+        }
+      ],
+      "evidence": [
+        {
+          "path": "examples/phi4/support.json"
+        },
+        {
+          "path": "qualification/reports/package-wheel.md"
+        },
+        {
+          "path": "qualification/reports/host-ttnn-0.77.md"
+        }
+      ],
+      "firmware_driver_verdict": "not_evaluated",
+      "geometry_verdict": "source_declared_not_hardware_validated",
+      "hardware_verdict": "not_qualified",
+      "hf_id": "microsoft/phi-4",
+      "hf_revision": "187ef0342fff0eb3333be9f00389385e95ef0b61",
+      "host_import_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_semantics_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_verdict": "pass_import_py310_py312_and_host_contracts_py310_py312",
+      "known_gaps": [
+        "No hardware evidence is attributable to the pinned extraction revision",
+        "N150",
+        "ordinary T3K/TG tensor parallelism",
+        "DP layouts other than T3K DP4/TP2",
+        "any geometry not declared in support.json"
+      ],
+      "lifecycle_status": "experimental",
+      "manifest_validation": {
+        "date": null,
+        "evidence": [],
+        "git_sha": null
+      },
+      "package": "phi4"
+    },
+    {
+      "declared_hardware_targets": [
+        {
+          "architecture": "wormhole",
+          "dp": 1,
+          "mesh": "1x8",
+          "sku": "T3K",
+          "tp": 8
+        }
+      ],
+      "evidence": [
+        {
+          "path": "examples/qwen25_72b/support.json"
+        },
+        {
+          "path": "qualification/reports/package-wheel.md"
+        },
+        {
+          "path": "qualification/reports/host-ttnn-0.77.md"
+        }
+      ],
+      "firmware_driver_verdict": "not_evaluated",
+      "geometry_verdict": "source_declared_not_hardware_validated",
+      "hardware_verdict": "not_qualified",
+      "hf_id": "Qwen/Qwen2.5-72B-Instruct",
+      "hf_revision": "495f39366efef23836d0cfae4fbe635880d2be31",
+      "host_import_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_semantics_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_verdict": "pass_import_py310_py312_and_host_contracts_py310_py312",
+      "known_gaps": [
+        "No hardware evidence is attributable to the pinned extraction revision",
+        "non-T3K meshes",
+        "DP greater than 1",
+        "any geometry not declared in support.json"
+      ],
+      "lifecycle_status": "experimental",
+      "manifest_validation": {
+        "date": null,
+        "evidence": [],
+        "git_sha": null
+      },
+      "package": "qwen25_72b"
+    },
+    {
+      "declared_hardware_targets": [
+        {
+          "architecture": "wormhole",
+          "dp": 1,
+          "mesh": "1x2",
+          "sku": "N300",
+          "tp": 2
+        },
+        {
+          "architecture": "wormhole",
+          "dp": 4,
+          "mesh": "1x8",
+          "sku": "T3K",
+          "tp": 2
+        }
+      ],
+      "evidence": [
+        {
+          "path": "examples/qwen25_7b/support.json"
+        },
+        {
+          "path": "qualification/reports/package-wheel.md"
+        },
+        {
+          "path": "qualification/reports/host-ttnn-0.77.md"
+        }
+      ],
+      "firmware_driver_verdict": "not_evaluated",
+      "geometry_verdict": "source_declared_not_hardware_validated",
+      "hardware_verdict": "not_qualified",
+      "hf_id": "Qwen/Qwen2.5-7B-Instruct",
+      "hf_revision": "a09a35458c702b33eeacc393d103063234e8bc28",
+      "host_import_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_semantics_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_verdict": "pass_import_py310_py312_and_host_contracts_py310_py312",
+      "known_gaps": [
+        "No hardware evidence is attributable to the pinned extraction revision",
+        "N150",
+        "ordinary T3K/TG TP",
+        "DP factors other than T3K DP4",
+        "any geometry not declared in support.json"
+      ],
+      "lifecycle_status": "experimental",
+      "manifest_validation": {
+        "date": null,
+        "evidence": [],
+        "git_sha": null
+      },
+      "package": "qwen25_7b"
+    },
+    {
+      "declared_hardware_targets": [
+        {
+          "architecture": "wormhole",
+          "dp": 1,
+          "mesh": "1x8",
+          "sku": "T3K",
+          "tp": 8
+        }
+      ],
+      "evidence": [
+        {
+          "path": "examples/qwen25_coder_32b/support.json"
+        },
+        {
+          "path": "qualification/reports/package-wheel.md"
+        },
+        {
+          "path": "qualification/reports/host-ttnn-0.77.md"
+        }
+      ],
+      "firmware_driver_verdict": "not_evaluated",
+      "geometry_verdict": "source_declared_not_hardware_validated",
+      "hardware_verdict": "not_qualified",
+      "hf_id": "Qwen/Qwen2.5-Coder-32B-Instruct",
+      "hf_revision": "381fc969f78efac66bc87ff7ddeadb7e73c218a7",
+      "host_import_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_semantics_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_verdict": "pass_import_py310_py312_and_host_contracts_py310_py312",
+      "known_gaps": [
+        "No hardware evidence is attributable to the pinned extraction revision",
+        "non-T3K meshes",
+        "DP greater than 1",
+        "any geometry not declared in support.json"
+      ],
+      "lifecycle_status": "experimental",
+      "manifest_validation": {
+        "date": null,
+        "evidence": [],
+        "git_sha": null
+      },
+      "package": "qwen25_coder_32b"
+    },
+    {
+      "declared_hardware_targets": [
+        {
+          "architecture": "wormhole",
+          "dp": 1,
+          "mesh": "1x2",
+          "sku": "N300",
+          "tp": 2
+        },
+        {
+          "architecture": "wormhole",
+          "dp": 4,
+          "mesh": "1x8",
+          "sku": "T3K",
+          "tp": 2
+        }
+      ],
+      "evidence": [
+        {
+          "path": "examples/qwen2_7b/support.json"
+        },
+        {
+          "path": "qualification/reports/package-wheel.md"
+        },
+        {
+          "path": "qualification/reports/host-ttnn-0.77.md"
+        }
+      ],
+      "firmware_driver_verdict": "not_evaluated",
+      "geometry_verdict": "source_declared_not_hardware_validated",
+      "hardware_verdict": "not_qualified",
+      "hf_id": "Qwen/Qwen2-7B-Instruct",
+      "hf_revision": "f2826a00ceef68f0f2b946d945ecc0477ce4450c",
+      "host_import_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_semantics_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_verdict": "pass_import_py310_py312_and_host_contracts_py310_py312",
+      "known_gaps": [
+        "No hardware evidence is attributable to the pinned extraction revision",
+        "N150",
+        "ordinary T3K/TG TP",
+        "DP factors other than T3K DP4",
+        "any geometry not declared in support.json"
+      ],
+      "lifecycle_status": "experimental",
+      "manifest_validation": {
+        "date": null,
+        "evidence": [],
+        "git_sha": null
+      },
+      "package": "qwen2_7b"
+    },
+    {
+      "declared_hardware_targets": [
+        {
+          "architecture": "wormhole",
+          "dp": 1,
+          "mesh": "1x8",
+          "sku": "T3K",
+          "tp": 8
+        },
+        {
+          "architecture": "blackhole",
+          "dp": 1,
+          "mesh": "1x4",
+          "sku": "P150_X4 required logical target; code accepts physical P300_X2 alias with distinct provenance",
+          "tp": 4
+        }
+      ],
+      "evidence": [
+        {
+          "path": "examples/qwen3_32b/support.json"
+        },
+        {
+          "path": "qualification/reports/package-wheel.md"
+        },
+        {
+          "path": "qualification/reports/host-ttnn-0.77.md"
+        }
+      ],
+      "firmware_driver_verdict": "not_evaluated",
+      "geometry_verdict": "source_declared_not_hardware_validated",
+      "hardware_verdict": "not_qualified",
+      "hf_id": "Qwen/Qwen3-32B",
+      "hf_revision": "9216db5781bf21249d130ec9da846c4624c16137",
+      "host_import_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_semantics_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_verdict": "pass_import_py310_py312_and_host_contracts_py310_py312",
+      "known_gaps": [
+        "No hardware evidence is attributable to the pinned extraction revision",
+        "P100/P150/P300 single/two-die model paths",
+        "DP greater than 1",
+        "noncanonical P150x4 orientations",
+        "any geometry not declared in support.json"
+      ],
+      "lifecycle_status": "experimental",
+      "manifest_validation": {
+        "date": null,
+        "evidence": [],
+        "git_sha": null
+      },
+      "package": "qwen3_32b"
+    }
+  ],
+  "not_exercised": [
+    "TT tensor kernels or numerical tensor results on a Tenstorrent device",
+    "experimental/private collective, RoPE, paged-cache, minimal-matmul, or flatbuffer operation semantics",
+    "trace capture/replay, command queues, asynchronous reads, or fabric on hardware",
+    "device sampling, paged KV mutation, tensor-cache warm/cold behavior, or cleanup of real TT resources",
+    "HF checkpoint download/load, weight conversion/materialization, token/text correctness, accuracy, or performance",
+    "firmware, driver, architecture, SKU, mesh, TP/DP, batch/context, or geometry compatibility"
+  ],
+  "open_binding_feedback": [
+    {
+      "classification": "ttnn_nanobind_binding_lifecycle_feedback",
+      "evidence": [
+        {
+          "path": "qualification/reports/host-ttnn-0.77.md"
+        }
+      ],
+      "finding": "Python 3.12 reports leaked TTNN nanobind instances, types, and functions during interpreter shutdown",
+      "status": "open_non_failing_upstream_binding_feedback",
+      "test_failure": false
+    }
+  ],
+  "remaining_hardware_gaps": {
+    "evidence": [
+      {
+        "path": "qualification/reports/host-ttnn-0.77.md"
+      },
+      {
+        "path": "qualification/analysis/support/support_baseline.md"
+      }
+    ],
+    "firmware_driver": "versions_and_compatibility_not_evaluated",
+    "model_geometry": "manifest_targets_are_source_declared_only; see each model known_gaps",
+    "overall": "no_hardware_qualification_for_pinned_standalone_revision",
+    "required_next_evidence": [
+      "serialized reusable-module hardware gates on representative Wormhole and Blackhole",
+      "runtime eager/trace/cache/sampling/cleanup gates with real devices",
+      "per-model correctness on each claimed SKU/mesh/TP/DP and context bucket",
+      "recorded firmware/driver/TTNN/wheel/checkpoint/cache identity for every run"
+    ],
+    "unstable_api_semantics": "14_paths_present_but_device_behavior_not_evaluated"
+  },
+  "schema_version": 2,
+  "software_matrix": [
+    {
+      "dependency_group_versions": {
+        "loguru": "0.6.0",
+        "pytest": "9.0.3",
+        "torch": "2.11.0+cpu",
+        "tqdm": "4.66.3",
+        "transformers": "5.12.1",
+        "ttnn": "0.77.0"
+      },
+      "dependency_groups_isolated": true,
+      "dependency_groups_pip_check": true,
+      "direct_host_test_dependencies": {
+        "jsonschema": "4.26.0",
+        "pytz": "2026.3.post1"
+      },
+      "evidence": [
+        {
+          "path": "qualification/reports/dependencies-py310.md"
+        },
+        {
+          "path": "qualification/reports/package-wheel.md"
+        },
+        {
+          "path": "qualification/reports/host-ttnn-0.77.md"
+        }
+      ],
+      "implementation": "CPython",
+      "installed_base_wheel_probe": {
+        "loguru": "0.6.0",
+        "optional_transformers_tqdm_pytest": "absent_and_blocked",
+        "pip_check": "pass",
+        "torch": "2.11.0",
+        "tt_transformers": "0.1.0.dev0",
+        "ttnn": "0.77.0"
+      },
+      "label": "310",
+      "platform": "Linux-4.18.0-553.el8_10.x86_64-x86_64-with-glibc2.35",
+      "python": "3.10.19"
+    },
+    {
+      "dependency_group_versions": {
+        "loguru": "0.6.0",
+        "pytest": "9.0.3",
+        "torch": "2.11.0+cpu",
+        "tqdm": "4.66.3",
+        "transformers": "5.12.1",
+        "ttnn": "0.77.0"
+      },
+      "dependency_groups_isolated": true,
+      "dependency_groups_pip_check": true,
+      "direct_host_test_dependencies": {
+        "jsonschema": "4.26.0",
+        "pytz": "2026.3.post1"
+      },
+      "evidence": [
+        {
+          "path": "qualification/reports/dependencies-py312.md"
+        },
+        {
+          "path": "qualification/reports/package-wheel.md"
+        },
+        {
+          "path": "qualification/reports/host-ttnn-0.77.md"
+        }
+      ],
+      "implementation": "CPython",
+      "installed_base_wheel_probe": {
+        "loguru": "0.6.0",
+        "optional_transformers_tqdm_pytest": "absent_and_blocked",
+        "pip_check": "pass",
+        "torch": "2.11.0",
+        "tt_transformers": "0.1.0.dev0",
+        "ttnn": "0.77.0"
+      },
+      "label": "312",
+      "platform": "Linux-4.18.0-553.el8_10.x86_64-x86_64-with-glibc2.35",
+      "python": "3.12.13"
+    }
+  ],
+  "source_tree": {
+    "algorithm": "sha256(path + NUL + content + NUL, sorted by path)",
+    "python_files": 132,
+    "sha256": "3814705a56bcf5bdd3ed88578e203d6d9e428f329289facb9bc2215366fb4e5f"
+  },
+  "surfaces": [
+    {
+      "category": "base",
+      "evidence": [
+        {
+          "path": "qualification/reports/package-wheel.md"
+        },
+        {
+          "path": "qualification/reports/package-artifact-hashes.json"
+        }
+      ],
+      "hardware_verdict": "not_applicable",
+      "host_import_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_scope": "Built wheel/sdist, exact base metadata, archive policy, non-editable installs, and pip consistency.",
+      "host_semantics_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_verdict": "pass_build_metadata_archive_install_and_pip_check",
+      "id": "package_artifact"
+    },
+    {
+      "category": "base",
+      "evidence": [
+        {
+          "path": "qualification/reports/package-wheel.md"
+        },
+        {
+          "path": "qualification/reports/host-ttnn-0.77.md"
+        }
+      ],
+      "hardware_verdict": "not_applicable",
+      "host_import_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_scope": "Root package imports from site-packages with optional model dependencies absent and blocked.",
+      "host_semantics_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_verdict": "pass_import_py310_py312",
+      "id": "package_root"
+    },
+    {
+      "category": "base",
+      "evidence": [
+        {
+          "path": "qualification/reports/package-wheel.md"
+        },
+        {
+          "path": "qualification/reports/ttnn-0.77.0-host-triage.md"
+        },
+        {
+          "path": "qualification/extraction/cache_environment.md"
+        },
+        {
+          "path": "qualification/extraction/device_ownership.md"
+        }
+      ],
+      "hardware_verdict": "not_qualified",
+      "host_import_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_scope": "Device/tensor/mesh helpers, typed environment/cache policy, program-config serialization, and ownership logic.",
+      "host_semantics_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_verdict": "pass_import_both_and_host_semantics_py310_py312",
+      "id": "foundation_helpers"
+    },
+    {
+      "category": "modules",
+      "evidence": [
+        {
+          "path": "qualification/reports/package-wheel.md"
+        },
+        {
+          "path": "qualification/reports/host-ttnn-0.77.md"
+        }
+      ],
+      "hardware_verdict": "not_qualified",
+      "host_import_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_scope": "Attention, embedding, lazy tensor owners, LM head, MLP, RMSNorm, RoPE, and CCL host contracts.",
+      "host_semantics_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_verdict": "pass_import_both_and_host_semantics_py310_py312",
+      "id": "reusable_modules"
+    },
+    {
+      "category": "modules",
+      "evidence": [
+        {
+          "path": "qualification/reports/package-wheel.md"
+        },
+        {
+          "path": "qualification/reports/host-ttnn-0.77.md"
+        }
+      ],
+      "hardware_verdict": "not_qualified",
+      "host_import_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_scope": "Canonical SamplingParams, preparation, penalties, seed/state, log-probability, and ownership contracts.",
+      "host_semantics_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_verdict": "pass_import_both_and_host_semantics_py310_py312",
+      "id": "sampling_foundation"
+    },
+    {
+      "category": "runtime",
+      "evidence": [
+        {
+          "path": "qualification/reports/package-wheel.md"
+        },
+        {
+          "path": "qualification/reports/host-ttnn-0.77.md"
+        }
+      ],
+      "hardware_verdict": "not_qualified",
+      "host_import_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_scope": "Prefill/decode planning, program/trace identity, tensor cleanup, output reading, cache geometry, and adapters with fakes/mocks.",
+      "host_semantics_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_verdict": "pass_import_both_and_host_semantics_py310_py312",
+      "id": "llm_runtime"
+    },
+    {
+      "category": "runtime",
+      "evidence": [
+        {
+          "path": "qualification/reports/package-wheel.md"
+        },
+        {
+          "path": "qualification/reports/host-ttnn-0.77.md"
+        }
+      ],
+      "hardware_verdict": "not_qualified",
+      "host_import_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_scope": "Family-neutral, Llama-family, and Qwen-family executor configuration/lifecycle contracts.",
+      "host_semantics_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_verdict": "pass_import_both_and_host_semantics_py310_py312",
+      "id": "shared_executors"
+    },
+    {
+      "category": "models",
+      "evidence": [
+        {
+          "path": "qualification/reports/package-wheel.md"
+        },
+        {
+          "path": "qualification/reports/host-ttnn-0.77.md"
+        },
+        {
+          "path": "qualification/reports/ttnn-0.77.0-host-triage.md"
+        }
+      ],
+      "hardware_verdict": "not_qualified",
+      "host_import_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_scope": "All twelve package/core modules and host-only profiles/configuration/contracts pass on both Pythons.",
+      "host_semantics_pythons": [
+        "3.10.19",
+        "3.12.13"
+      ],
+      "host_verdict": "pass_import_both_and_host_config_contracts_py310_py312",
+      "id": "concrete_model_cores"
+    }
+  ],
+  "tt_transformers": "0.1.0.dev0",
+  "ttnn": "0.77.0",
+  "validation_date": "2026-09-02",
+  "verdict": "host_compatible_with_ttnn_0_77_hardware_unqualified"
+}

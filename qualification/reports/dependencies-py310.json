@@ -1,0 +1,796 @@
+{
+  "schema_version": 1,
+  "verdict": "pass_dependency_install_and_import_only",
+  "requested_groups": {
+    "base": [
+      "ttnn==0.77.0",
+      "torch==2.11.0+cpu",
+      "loguru==0.6.0"
+    ],
+    "examples": [
+      "transformers==5.12.1",
+      "tqdm==4.66.3"
+    ],
+    "test": [
+      "pytest==9.0.3",
+      "pytest-cov==7.0.0",
+      "pytest-timeout==2.4.0",
+      "huggingface-hub>=0.30",
+      "jsonschema>=4.23,<5",
+      "pytz>=2024.1",
+      "transformers==5.12.1",
+      "tqdm==4.66.3"
+    ]
+  },
+  "installer_indexes": [
+    "https://pypi.org/simple",
+    "https://download.pytorch.org/whl/cpu"
+  ],
+  "pip_check": {
+    "passed": true,
+    "output": "No broken requirements found."
+  },
+  "import_probe": {
+    "passed": true,
+    "imports": {
+      "huggingface-hub": {
+        "distribution_version": "1.29.0",
+        "module": "huggingface_hub",
+        "module_file": "/tmp/gwang/tttv2-deps-py310.0JvRwC/venv/lib/python3.10/site-packages/huggingface_hub/__init__.py"
+      },
+      "jsonschema": {
+        "distribution_version": "4.26.0",
+        "module": "jsonschema",
+        "module_file": "/tmp/gwang/tttv2-deps-py310.0JvRwC/venv/lib/python3.10/site-packages/jsonschema/__init__.py"
+      },
+      "loguru": {
+        "distribution_version": "0.6.0",
+        "module": "loguru",
+        "module_file": "/tmp/gwang/tttv2-deps-py310.0JvRwC/venv/lib/python3.10/site-packages/loguru/__init__.py"
+      },
+      "pytest": {
+        "distribution_version": "9.0.3",
+        "module": "pytest",
+        "module_file": "/tmp/gwang/tttv2-deps-py310.0JvRwC/venv/lib/python3.10/site-packages/pytest/__init__.py"
+      },
+      "pytest-cov": {
+        "distribution_version": "7.0.0",
+        "module": "pytest_cov",
+        "module_file": "/tmp/gwang/tttv2-deps-py310.0JvRwC/venv/lib/python3.10/site-packages/pytest_cov/__init__.py"
+      },
+      "pytest-timeout": {
+        "distribution_version": "2.4.0",
+        "module": "pytest_timeout",
+        "module_file": "/tmp/gwang/tttv2-deps-py310.0JvRwC/venv/lib/python3.10/site-packages/pytest_timeout.py"
+      },
+      "pytz": {
+        "distribution_version": "2026.3.post1",
+        "module": "pytz",
+        "module_file": "/tmp/gwang/tttv2-deps-py310.0JvRwC/venv/lib/python3.10/site-packages/pytz/__init__.py"
+      },
+      "torch": {
+        "distribution_version": "2.11.0+cpu",
+        "module": "torch",
+        "module_file": "/tmp/gwang/tttv2-deps-py310.0JvRwC/venv/lib/python3.10/site-packages/torch/__init__.py"
+      },
+      "tqdm": {
+        "distribution_version": "4.66.3",
+        "module": "tqdm",
+        "module_file": "/tmp/gwang/tttv2-deps-py310.0JvRwC/venv/lib/python3.10/site-packages/tqdm/__init__.py"
+      },
+      "transformers": {
+        "distribution_version": "5.12.1",
+        "module": "transformers",
+        "module_file": "/tmp/gwang/tttv2-deps-py310.0JvRwC/venv/lib/python3.10/site-packages/transformers/__init__.py"
+      },
+      "ttnn": {
+        "distribution_version": "0.77.0",
+        "module": "ttnn",
+        "module_file": "/tmp/gwang/tttv2-deps-py310.0JvRwC/venv/lib/python3.10/site-packages/ttnn/__init__.py"
+      }
+    }
+  },
+  "isolation": {
+    "working_directory": "/tmp/gwang",
+    "pythonpath_unset": true,
+    "repo_checkout_on_sys_path": false,
+    "tt_transformers_installed": false,
+    "sys_path": [
+      "",
+      "/usr/local/share/uv/cpython-3.10.19-linux-x86_64-gnu/lib/python310.zip",
+      "/usr/local/share/uv/cpython-3.10.19-linux-x86_64-gnu/lib/python3.10",
+      "/usr/local/share/uv/cpython-3.10.19-linux-x86_64-gnu/lib/python3.10/lib-dynload",
+      "/tmp/gwang/tttv2-deps-py310.0JvRwC/venv/lib/python3.10/site-packages"
+    ]
+  },
+  "python": "3.10.19",
+  "python_executable": "/tmp/gwang/tttv2-deps-py310.0JvRwC/venv/bin/python",
+  "implementation": "CPython",
+  "platform": "Linux-4.18.0-553.el8_10.x86_64-x86_64-with-glibc2.35",
+  "freeze": [
+    "annotated-doc==0.0.5",
+    "anyio==4.14.2",
+    "attrs==26.1.0",
+    "certifi==2026.7.22",
+    "click==8.5.0",
+    "contourpy==1.3.2",
+    "coverage==7.16.0",
+    "cycler==0.12.1",
+    "exceptiongroup==1.3.1",
+    "filelock==3.32.5",
+    "fonttools==4.64.0",
+    "fsspec==2026.7.0",
+    "graphviz==0.21",
+    "h11==0.16.0",
+    "hf-xet==1.6.0",
+    "httpcore==1.0.9",
+    "httpx==0.28.1",
+    "huggingface_hub==1.29.0",
+    "idna==3.19",
+    "iniconfig==2.3.0",
+    "Jinja2==3.1.6",
+    "jsonschema==4.26.0",
+    "jsonschema-specifications==2025.9.1",
+    "kiwisolver==1.5.1",
+    "loguru==0.6.0",
+    "markdown-it-py==4.2.0",
+    "MarkupSafe==3.0.3",
+    "matplotlib==3.10.9",
+    "mdurl==0.1.2",
+    "ml_dtypes==0.5.4",
+    "mpmath==1.3.0",
+    "networkx==3.4.2",
+    "numpy==1.26.4",
+    "packaging==26.3",
+    "pandas==2.3.3",
+    "pillow==12.3.0",
+    "pip==23.0.1",
+    "pluggy==1.6.0",
+    "Pygments==2.21.0",
+    "pyparsing==3.3.2",
+    "pytest==9.0.3",
+    "pytest-cov==7.0.0",
+    "pytest-timeout==2.4.0",
+    "python-dateutil==2.9.0.post0",
+    "pytz==2026.3.post1",
+    "PyYAML==6.0.3",
+    "referencing==0.37.0",
+    "regex==2026.9.3",
+    "rich==15.0.0",
+    "rpds-py==0.30.0",
+    "safetensors==0.8.0",
+    "seaborn==0.13.2",
+    "setuptools==79.0.1",
+    "shellingham==1.5.4",
+    "six==1.17.0",
+    "sympy==1.14.0",
+    "tokenizers==0.22.2",
+    "tomli==2.4.1",
+    "torch==2.11.0+cpu",
+    "tqdm==4.66.3",
+    "transformers==5.12.1",
+    "ttnn==0.77.0",
+    "typer==0.27.2",
+    "typing_extensions==4.16.0",
+    "tzdata==2026.3"
+  ],
+  "installed_distributions": [
+    {
+      "name": "annotated-doc",
+      "root_is_purelib": "true",
+      "version": "0.0.5",
+      "wheel_generator": "pdm-backend (2.4.9)",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "anyio",
+      "root_is_purelib": "true",
+      "version": "4.14.2",
+      "wheel_generator": "setuptools (83.0.0)",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "attrs",
+      "root_is_purelib": "true",
+      "version": "26.1.0",
+      "wheel_generator": "hatchling 1.29.0",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "certifi",
+      "root_is_purelib": "true",
+      "version": "2026.7.22",
+      "wheel_generator": "setuptools (83.0.0)",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "click",
+      "root_is_purelib": "true",
+      "version": "8.5.0",
+      "wheel_generator": "flit 3.12.0",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "contourpy",
+      "root_is_purelib": "false",
+      "version": "1.3.2",
+      "wheel_generator": "meson",
+      "wheel_tags": [
+        "cp310-cp310-manylinux_2_17_x86_64",
+        "cp310-cp310-manylinux2014_x86_64"
+      ]
+    },
+    {
+      "name": "coverage",
+      "root_is_purelib": "false",
+      "version": "7.16.0",
+      "wheel_generator": "setuptools (84.0.0)",
+      "wheel_tags": [
+        "cp310-cp310-manylinux_2_5_x86_64",
+        "cp310-cp310-manylinux1_x86_64",
+        "cp310-cp310-manylinux_2_28_x86_64"
+      ]
+    },
+    {
+      "name": "cycler",
+      "root_is_purelib": "true",
+      "version": "0.12.1",
+      "wheel_generator": "bdist_wheel (0.41.2)",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "exceptiongroup",
+      "root_is_purelib": "true",
+      "version": "1.3.1",
+      "wheel_generator": "flit 3.12.0",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "filelock",
+      "root_is_purelib": "true",
+      "version": "3.32.5",
+      "wheel_generator": "hatchling 1.32.0",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "fonttools",
+      "root_is_purelib": "false",
+      "version": "4.64.0",
+      "wheel_generator": "setuptools (84.0.0)",
+      "wheel_tags": [
+        "cp310-cp310-manylinux_2_17_x86_64",
+        "cp310-cp310-manylinux2014_x86_64"
+      ]
+    },
+    {
+      "name": "fsspec",
+      "root_is_purelib": "true",
+      "version": "2026.7.0",
+      "wheel_generator": "hatchling 1.31.0",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "graphviz",
+      "root_is_purelib": "true",
+      "version": "0.21",
+      "wheel_generator": "setuptools (80.9.0)",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "h11",
+      "root_is_purelib": "true",
+      "version": "0.16.0",
+      "wheel_generator": "setuptools (78.1.0)",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "hf-xet",
+      "root_is_purelib": "false",
+      "version": "1.6.0",
+      "wheel_generator": "maturin (1.14.1)",
+      "wheel_tags": [
+        "cp38-abi3-manylinux_2_17_x86_64",
+        "cp38-abi3-manylinux2014_x86_64"
+      ]
+    },
+    {
+      "name": "httpcore",
+      "root_is_purelib": "true",
+      "version": "1.0.9",
+      "wheel_generator": "hatchling 1.27.0",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "httpx",
+      "root_is_purelib": "true",
+      "version": "0.28.1",
+      "wheel_generator": "hatchling 1.26.3",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "huggingface_hub",
+      "root_is_purelib": "true",
+      "version": "1.29.0",
+      "wheel_generator": "setuptools (84.0.0)",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "idna",
+      "root_is_purelib": "true",
+      "version": "3.19",
+      "wheel_generator": "flit 4.0.2",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "iniconfig",
+      "root_is_purelib": "true",
+      "version": "2.3.0",
+      "wheel_generator": "setuptools (80.9.0)",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "Jinja2",
+      "root_is_purelib": "true",
+      "version": "3.1.6",
+      "wheel_generator": "flit 3.11.0",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "jsonschema",
+      "root_is_purelib": "true",
+      "version": "4.26.0",
+      "wheel_generator": "hatchling 1.28.0",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "jsonschema-specifications",
+      "root_is_purelib": "true",
+      "version": "2025.9.1",
+      "wheel_generator": "hatchling 1.27.0",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "kiwisolver",
+      "root_is_purelib": "false",
+      "version": "1.5.1",
+      "wheel_generator": "setuptools (84.0.0)",
+      "wheel_tags": [
+        "cp310-cp310-manylinux_2_12_x86_64",
+        "cp310-cp310-manylinux2010_x86_64"
+      ]
+    },
+    {
+      "name": "loguru",
+      "root_is_purelib": "true",
+      "version": "0.6.0",
+      "wheel_generator": "bdist_wheel (0.37.1)",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "markdown-it-py",
+      "root_is_purelib": "true",
+      "version": "4.2.0",
+      "wheel_generator": "flit 3.12.0",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "MarkupSafe",
+      "root_is_purelib": "false",
+      "version": "3.0.3",
+      "wheel_generator": "setuptools (80.9.0)",
+      "wheel_tags": [
+        "cp310-cp310-manylinux_2_17_x86_64",
+        "cp310-cp310-manylinux2014_x86_64",
+        "cp310-cp310-manylinux_2_28_x86_64"
+      ]
+    },
+    {
+      "name": "matplotlib",
+      "root_is_purelib": "false",
+      "version": "3.10.9",
+      "wheel_generator": "meson",
+      "wheel_tags": [
+        "cp310-cp310-manylinux_2_17_x86_64",
+        "cp310-cp310-manylinux2014_x86_64"
+      ]
+    },
+    {
+      "name": "mdurl",
+      "root_is_purelib": "true",
+      "version": "0.1.2",
+      "wheel_generator": "flit 3.7.1",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "ml_dtypes",
+      "root_is_purelib": "false",
+      "version": "0.5.4",
+      "wheel_generator": "setuptools (80.9.0)",
+      "wheel_tags": [
+        "cp310-cp310-manylinux_2_27_x86_64",
+        "cp310-cp310-manylinux_2_28_x86_64"
+      ]
+    },
+    {
+      "name": "mpmath",
+      "root_is_purelib": "true",
+      "version": "1.3.0",
+      "wheel_generator": "bdist_wheel (0.38.4)",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "networkx",
+      "root_is_purelib": "true",
+      "version": "3.4.2",
+      "wheel_generator": "setuptools (75.2.0)",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "numpy",
+      "root_is_purelib": "false",
+      "version": "1.26.4",
+      "wheel_generator": "meson",
+      "wheel_tags": [
+        "cp310-cp310-manylinux_2_17_x86_64",
+        "cp310-cp310-manylinux2014_x86_64"
+      ]
+    },
+    {
+      "name": "packaging",
+      "root_is_purelib": "true",
+      "version": "26.3",
+      "wheel_generator": "flit 3.12.0",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "pandas",
+      "root_is_purelib": "false",
+      "version": "2.3.3",
+      "wheel_generator": "meson",
+      "wheel_tags": [
+        "cp310-cp310-manylinux_2_24_x86_64",
+        "cp310-cp310-manylinux_2_28_x86_64"
+      ]
+    },
+    {
+      "name": "pillow",
+      "root_is_purelib": "false",
+      "version": "12.3.0",
+      "wheel_generator": "setuptools (82.0.1)",
+      "wheel_tags": [
+        "cp310-cp310-manylinux_2_27_x86_64",
+        "cp310-cp310-manylinux_2_28_x86_64"
+      ]
+    },
+    {
+      "name": "pip",
+      "root_is_purelib": "true",
+      "version": "23.0.1",
+      "wheel_generator": "bdist_wheel (0.38.4)",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "pluggy",
+      "root_is_purelib": "true",
+      "version": "1.6.0",
+      "wheel_generator": "setuptools (80.7.1)",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "Pygments",
+      "root_is_purelib": "true",
+      "version": "2.21.0",
+      "wheel_generator": "hatchling 1.32.0",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "pyparsing",
+      "root_is_purelib": "true",
+      "version": "3.3.2",
+      "wheel_generator": "flit 3.12.0",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "pytest",
+      "root_is_purelib": "true",
+      "version": "9.0.3",
+      "wheel_generator": "setuptools (82.0.1)",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "pytest-cov",
+      "root_is_purelib": "true",
+      "version": "7.0.0",
+      "wheel_generator": "hatchling 1.27.0",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "pytest-timeout",
+      "root_is_purelib": "true",
+      "version": "2.4.0",
+      "wheel_generator": "setuptools (80.3.1)",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "python-dateutil",
+      "root_is_purelib": "true",
+      "version": "2.9.0.post0",
+      "wheel_generator": "bdist_wheel (0.42.0)",
+      "wheel_tags": [
+        "py2-none-any",
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "pytz",
+      "root_is_purelib": "true",
+      "version": "2026.3.post1",
+      "wheel_generator": "bdist_wheel (0.42.0)",
+      "wheel_tags": [
+        "py2-none-any",
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "PyYAML",
+      "root_is_purelib": "false",
+      "version": "6.0.3",
+      "wheel_generator": "setuptools (80.9.0)",
+      "wheel_tags": [
+        "cp310-cp310-manylinux_2_17_x86_64",
+        "cp310-cp310-manylinux2014_x86_64",
+        "cp310-cp310-manylinux_2_28_x86_64"
+      ]
+    },
+    {
+      "name": "referencing",
+      "root_is_purelib": "true",
+      "version": "0.37.0",
+      "wheel_generator": "hatchling 1.27.0",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "regex",
+      "root_is_purelib": "false",
+      "version": "2026.9.3",
+      "wheel_generator": "setuptools (84.0.0)",
+      "wheel_tags": [
+        "cp310-cp310-manylinux_2_17_x86_64",
+        "cp310-cp310-manylinux2014_x86_64",
+        "cp310-cp310-manylinux_2_28_x86_64"
+      ]
+    },
+    {
+      "name": "rich",
+      "root_is_purelib": "true",
+      "version": "15.0.0",
+      "wheel_generator": "poetry-core 2.3.1",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "rpds-py",
+      "root_is_purelib": "false",
+      "version": "0.30.0",
+      "wheel_generator": "maturin (1.10.2)",
+      "wheel_tags": [
+        "cp310-cp310-manylinux_2_17_x86_64",
+        "cp310-cp310-manylinux2014_x86_64"
+      ]
+    },
+    {
+      "name": "safetensors",
+      "root_is_purelib": "false",
+      "version": "0.8.0",
+      "wheel_generator": "maturin (1.13.3)",
+      "wheel_tags": [
+        "cp310-abi3-manylinux_2_17_x86_64",
+        "cp310-abi3-manylinux2014_x86_64"
+      ]
+    },
+    {
+      "name": "seaborn",
+      "root_is_purelib": "true",
+      "version": "0.13.2",
+      "wheel_generator": "flit 3.9.0",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "setuptools",
+      "root_is_purelib": "true",
+      "version": "79.0.1",
+      "wheel_generator": "setuptools (79.0.1)",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "shellingham",
+      "root_is_purelib": "true",
+      "version": "1.5.4",
+      "wheel_generator": "bdist_wheel (0.41.2)",
+      "wheel_tags": [
+        "py2-none-any",
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "six",
+      "root_is_purelib": "true",
+      "version": "1.17.0",
+      "wheel_generator": "setuptools (75.6.0)",
+      "wheel_tags": [
+        "py2-none-any",
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "sympy",
+      "root_is_purelib": "true",
+      "version": "1.14.0",
+      "wheel_generator": "setuptools (79.0.1)",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "tokenizers",
+      "root_is_purelib": "false",
+      "version": "0.22.2",
+      "wheel_generator": "maturin (1.10.2)",
+      "wheel_tags": [
+        "cp39-abi3-manylinux_2_17_x86_64",
+        "cp39-abi3-manylinux2014_x86_64"
+      ]
+    },
+    {
+      "name": "tomli",
+      "root_is_purelib": "true",
+      "version": "2.4.1",
+      "wheel_generator": "flit 3.12.0",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "torch",
+      "root_is_purelib": "false",
+      "version": "2.11.0+cpu",
+      "wheel_generator": "setuptools (81.0.0)",
+      "wheel_tags": [
+        "cp310-cp310-manylinux_2_28_x86_64"
+      ]
+    },
+    {
+      "name": "tqdm",
+      "root_is_purelib": "true",
+      "version": "4.66.3",
+      "wheel_generator": "bdist_wheel (0.43.0)",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "transformers",
+      "root_is_purelib": "true",
+      "version": "5.12.1",
+      "wheel_generator": "setuptools (82.0.1)",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "ttnn",
+      "root_is_purelib": "false",
+      "version": "0.77.0",
+      "wheel_generator": "setuptools (80.10.2)",
+      "wheel_tags": [
+        "cp310-cp310-manylinux_2_34_x86_64"
+      ]
+    },
+    {
+      "name": "typer",
+      "root_is_purelib": "true",
+      "version": "0.27.2",
+      "wheel_generator": "pdm-backend (2.4.9)",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "typing_extensions",
+      "root_is_purelib": "true",
+      "version": "4.16.0",
+      "wheel_generator": "flit 3.12.0",
+      "wheel_tags": [
+        "py3-none-any"
+      ]
+    },
+    {
+      "name": "tzdata",
+      "root_is_purelib": "true",
+      "version": "2026.3",
+      "wheel_generator": "setuptools (83.0.0)",
+      "wheel_tags": [
+        "py2-none-any",
+        "py3-none-any"
+      ]
+    }
+  ],
+  "resolver_conflicts": [],
+  "installation_notes": [
+    "An initial discarded attempt used the PyTorch CPU index as the primary index and failed while resolving Jinja2/typing-extensions build metadata; no final tuple was established by that attempt.",
+    "The final environment uses PyPI as primary and the PyTorch CPU index as supplemental, with torch==2.11.0+cpu selecting the CPU wheel.",
+    "Host collection proved jsonschema and pytz are direct test requirements; the refreshed tuple resolves them to jsonschema==4.26.0 and pytz==2026.3.post1."
+  ],
+  "evidence_scope": "dependency resolution, pip consistency, direct distribution versions, wheel metadata, and import presence only; tt-transformers not built/installed; no hardware"
+}

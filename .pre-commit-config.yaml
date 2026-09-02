@@ -1,0 +1,14 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+  - repo: local
+    hooks:
+      - id: import-boundaries
+        name: standalone import boundaries
+        entry: python tools/check_import_boundaries.py
+        language: system
+        pass_filenames: false

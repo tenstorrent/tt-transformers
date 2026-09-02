@@ -1,0 +1,297 @@
+{
+  "schema_version": 1,
+  "policy": {
+    "forced_trust_remote_code_true": 0,
+    "cwd_relative_model_cache": 0,
+    "unscoped_default_device_access": 0,
+    "scoped_smoke_functions": 12
+  },
+  "files": [
+    {
+      "path": "examples/__init__.py",
+      "sha256": "9a8b50b13fa0aafa976a3d51bc81fbc6ca3a39c7219bab2dd50c71583d2e4ae4",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/common/__init__.py",
+      "sha256": "9a8b50b13fa0aafa976a3d51bc81fbc6ca3a39c7219bab2dd50c71583d2e4ae4",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/common/comparison.py",
+      "sha256": "3e6d6de57d7075e32c4961cf22295a352eb474d0dfbe24bd8c103c285c5b47ad",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/common/greedy.py",
+      "sha256": "14b2276f28295e3d6b1440d933808f8e05d08ed9771861555d531b067c5bd148",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/common/prompting.py",
+      "sha256": "8df8a60e1be2a0a102fd432c5f5308dc27e1fd779e242aea5f1e2922eede8a60",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/common/run_helpers.py",
+      "sha256": "8325d82ee530c0f64de2c0555836db865a1a3d9d0d65d6eecaa08f7679919dca",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/common/runtime.py",
+      "sha256": "502dba469f26af5a2ffcf5e1abe92927dd6f2103a01a32ad36e45c8450fa2147",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/deepseek_r1_distill_qwen_14b/__init__.py",
+      "sha256": "501d5b563ca412fa21db82bf39117b5480ecf99bcaf11996b9c3d5f1093bb9a8",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/deepseek_r1_distill_qwen_14b/demo.py",
+      "sha256": "de51623898aebf6a26dfee1832e3b499caa9591d0dcd18d49022458bb179d2c2",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/llama32_1b/__init__.py",
+      "sha256": "cc2c73418c0211e5db739ce19e47b7c479f507d246e37239d90d0f469d73f1ef",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/llama32_1b/demo.py",
+      "sha256": "bc31d1ad932bbc899e1225a6c4119a2dac4e6963889ef241c26a75c114807b39",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/llama32_3b/__init__.py",
+      "sha256": "cc2c73418c0211e5db739ce19e47b7c479f507d246e37239d90d0f469d73f1ef",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/llama32_3b/demo.py",
+      "sha256": "09e7ae75875f706a4c3ce8def699580d37577b8602059e36794e22c4ecd218e8",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/llama33_70b/__init__.py",
+      "sha256": "cc2c73418c0211e5db739ce19e47b7c479f507d246e37239d90d0f469d73f1ef",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/llama33_70b/demo.py",
+      "sha256": "f15e3259e85a687db12ac2242221d057d92055f41fd3cab88fe83a654ec2865b",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/llama3_8b/__init__.py",
+      "sha256": "9a8b50b13fa0aafa976a3d51bc81fbc6ca3a39c7219bab2dd50c71583d2e4ae4",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/llama3_8b/demo.py",
+      "sha256": "9937b01029f0f8c343e1382a321b2f21ddb7eaeebd94702a69d43c3cc36d19de",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/llama3_8b/demo_utils.py",
+      "sha256": "18e86dee9f4a8cb4a05b6d2c6af745257af7e3c08c28fb698ea447ec3af5cede",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/mistral_7b/__init__.py",
+      "sha256": "9a8b50b13fa0aafa976a3d51bc81fbc6ca3a39c7219bab2dd50c71583d2e4ae4",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/mistral_7b/demo.py",
+      "sha256": "2bc56954d34584ebc0079ac79532e0fed5dcbabd2db1b6ac88635f537ec530a6",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/phi4/__init__.py",
+      "sha256": "501d5b563ca412fa21db82bf39117b5480ecf99bcaf11996b9c3d5f1093bb9a8",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/phi4/demo.py",
+      "sha256": "9c84e705d7f656dbba176735ece7238752c7e7ffcdc1407ba483de746370263e",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/qwen25_72b/__init__.py",
+      "sha256": "9a8b50b13fa0aafa976a3d51bc81fbc6ca3a39c7219bab2dd50c71583d2e4ae4",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/qwen25_72b/demo.py",
+      "sha256": "4e06173c89442a16b920f7488d339c9fe11b0fa3bb23f79a5ab1a11863ee23d6",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/qwen25_7b/__init__.py",
+      "sha256": "9a8b50b13fa0aafa976a3d51bc81fbc6ca3a39c7219bab2dd50c71583d2e4ae4",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/qwen25_7b/demo.py",
+      "sha256": "8f85ed123c4fe77c91545a11ee00b01a575fe0d5091263a9ea7671a272ada3ea",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/qwen25_coder_32b/__init__.py",
+      "sha256": "9a8b50b13fa0aafa976a3d51bc81fbc6ca3a39c7219bab2dd50c71583d2e4ae4",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/qwen25_coder_32b/demo.py",
+      "sha256": "e7e00bb57405717e9c3ba9100d3c1a2adc6c3f88c70ee1aea8abc3be04c86ade",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/qwen25_coder_32b/smoke.py",
+      "sha256": "7888a88c6f65add44bff7f5ba114ed18cd5c073749f3c5eae2b8ddb553d188b8",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": [
+        "run_qwen25_coder_32b_decode_one_step",
+        "run_qwen25_coder_32b_eager_traced_prefill_logits_match",
+        "run_qwen25_coder_32b_executor_prefill_smoke",
+        "run_qwen25_coder_32b_numerical_divergence_vs_hf",
+        "run_qwen25_coder_32b_prefill_smoke",
+        "run_qwen25_coder_32b_teacher_forcing_prefill_vs_hf"
+      ]
+    },
+    {
+      "path": "examples/qwen2_7b/__init__.py",
+      "sha256": "cc2c73418c0211e5db739ce19e47b7c479f507d246e37239d90d0f469d73f1ef",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/qwen2_7b/demo.py",
+      "sha256": "87a27e7ba75370a0092ee616f45cad0746bcf28cd78f1783a92d00bd38fe6de2",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/qwen3_32b/__init__.py",
+      "sha256": "9a8b50b13fa0aafa976a3d51bc81fbc6ca3a39c7219bab2dd50c71583d2e4ae4",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/qwen3_32b/demo.py",
+      "sha256": "c40d409cc00d549e46181bd830c75ad6b73f81b9cb7d421ad0356d5048d45323",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": []
+    },
+    {
+      "path": "examples/qwen3_32b/smoke.py",
+      "sha256": "ab40a5f33e86397ccd51a152e6c857db5af0a06bd43f7b8f977d1b4a5b4e2792",
+      "forced_trust_remote_code_true_lines": [],
+      "cwd_model_cache_lines": [],
+      "unscoped_default_device_lines": [],
+      "scoped_smoke_functions": [
+        "run_qwen3_32b_decode_one_step",
+        "run_qwen3_32b_eager_traced_prefill_logits_match",
+        "run_qwen3_32b_executor_prefill_smoke",
+        "run_qwen3_32b_numerical_divergence_vs_hf",
+        "run_qwen3_32b_prefill_smoke",
+        "run_qwen3_32b_teacher_forcing_prefill_vs_hf"
+      ]
+    }
+  ]
+}
