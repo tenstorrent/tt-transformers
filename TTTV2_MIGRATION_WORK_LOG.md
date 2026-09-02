@@ -800,3 +800,17 @@ This log records milestones and evidence for the standalone migration defined in
   file has no staged entry; it remains preserved as an untracked user file.
 - Next: commit and push this exact staged candidate, then begin the reservation
   and participating-checkout same-SHA gate before any TT process.
+
+## 2026-09-02T15:39:06Z — Release-candidate branch published
+
+- Committed 549 migration files as
+  `02290fb` (`Migrate TTTv2 to standalone package`); the migration plan remained
+  untracked and was not included.
+- The initial HTTPS push failed without remote mutation because the unavailable
+  VS Code credential socket could not authenticate. Verified GitHub CLI access,
+  repository identity, write permission, and SSH authentication, then changed
+  this checkout's `origin` URL to the authenticated SSH form.
+- Pushed `tttv2-standalone-migration` to
+  `git@github.com:tenstorrent/tt_transformers.git` and established upstream
+  tracking. Next: commit this log checkpoint, push it, then use the resulting
+  common full SHA for all local/remote synchronization and hardware evidence.
