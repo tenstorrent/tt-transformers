@@ -33,7 +33,7 @@ This is a repository and host-evidence audit. It did not contact remote machines
 
 ## What is complete on the host
 
-- The provenance inventory classifies 365 pinned rows. All 26 exclusions are under `models/common/modules/moe`; there is no second excluded subsystem.
+- The provenance inventory classifies 366 pinned rows. All 26 exclusions are under `models/common/modules/moe`; there is no second excluded subsystem.
 - All twelve concrete model packages, reusable Python modules, runtime components, and shared executors are installed under `tt_transformers`.
 - Source and installed-wheel import-boundary checks pass. The base wheel imports without `transformers`, `tqdm`, `pytest`, a legacy `models.*` namespace, or a `tt-metal` checkout.
 - The current audited wheel is SHA-256 `a8837a3803930b97d527ef569190ec69b9dddc7b0c7537d183c1ad1268a0ae51`; the normalized sdist is `4f62cb8df64da31af6076d86bbb4fb7528de4ae8ff5eddeab0f14170e40dc407`. Two `SOURCE_DATE_EPOCH` builds are byte-identical, and their recorded pyproject and 132-file source identities match the current tree.
@@ -73,7 +73,7 @@ This is a repository and host-evidence audit. It did not contact remote machines
 |---|---|---|---|
 | 0 — freeze and characterize | pass | Scope, symbols, dependencies, tests, hardware intent, assumptions, and exclusions are characterized at the pinned source SHA. | Re-run deterministic provenance checks at release freeze. |
 | 1 — scaffold | partial | Metadata, package layout, all eight hash-complete locks, current wheel matrix, and one consolidated CI workflow exist; host/base/build-dev locks are consumed, but the workflow is unobserved and static-quality cleanup is deferred. | Observe the workflow and reduce the explicit quality baseline in Phase 9. |
-| 2 — extraction | pass | Python and support products are extracted and syntax-valid; all 365 provenance rows resolve through a destination or MoE-only exclusion. | Re-run all extractors and the five-document verifier at release freeze. |
+| 2 — extraction | pass | Python and support products are extracted and syntax-valid; all 366 provenance rows resolve through a destination or MoE-only exclusion. | Re-run all extractors and the five-document verifier at release freeze. |
 | 3 — boundary closure | partial | Import, optional-dependency, cache, device ownership, and TTTv1 bridge policies pass statically and on host. Hardware execution parity is unknown. | Run module/runtime/model device characterization. |
 | 4 — TTNN 0.77 qualification | partial | Both wheel matrices, all symbols, and full host semantics pass on both Pythons. The 3.12 shutdown leak is recorded; all device semantics remain open. | Triage the binding leak, execute serialized WH/BH matrix, and extend the verdict. |
 | 5 — test/CI pyramid | partial | Taxonomy and local two-Python non-editable-wheel host evidence pass; consolidated CI and scheduled/release hardware execution remain unobserved. | Require a passing host workflow and implement serialized hardware jobs. |
@@ -107,7 +107,7 @@ The three Blackhole capability contracts are pre-acceptance requirements, not re
 
 | Plan criterion | Status | Reason |
 |---|---|---|
-| All agreed code/tests except MoE | pass | All 365 rows resolve through an existing destination or one of 26 MoE-only exclusions. |
+| All agreed code/tests except MoE | pass | All 366 rows resolve through an existing destination or one of 26 MoE-only exclusions. |
 | Wheel install without tt-metal | pass | Proven on CPython 3.10 and 3.12 from site-packages. |
 | Production import boundary | pass | Source and installed wheel checks pass. |
 | Reviewed TTNN 0.77 verdict | partial | Deterministic host verdict exists; hardware/model semantics remain unqualified. |

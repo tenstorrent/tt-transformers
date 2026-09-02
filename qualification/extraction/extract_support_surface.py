@@ -65,10 +65,10 @@ def target_destinations(row: dict[str, str]) -> list[str]:
 def load_rows() -> list[dict[str, str]]:
     with INVENTORY.open(newline="") as stream:
         rows = list(csv.DictReader(stream))
-    assert len(rows) == 364
+    assert len(rows) == 366
     selected = [row for row in rows if row["disposition"] != "excluded" and target_destinations(row)]
-    assert len(selected) == 204
-    assert sum(len(target_destinations(row)) for row in selected) == 221
+    assert len(selected) == 206
+    assert sum(len(target_destinations(row)) for row in selected) == 223
     return rows
 
 
@@ -87,6 +87,7 @@ def build_import_map(rows: list[dict[str, str]]) -> dict[str, str]:
         "models.common.tests.utils": "tests.support.helpers",
         "models.common.utility_functions": "tests.support.comparison",
         "models.tt_transformers.tt.generator": "tt_transformers.mesh_utils",
+        "tests.tests_common.cache_entries_counter": "tests.support.cache_entries_counter",
     }
     for row in rows:
         # These sources are explicitly split by symbol/ownership.  Only the
@@ -213,7 +214,7 @@ def main() -> None:
     # Existing scaffold content is intentionally outside the extraction target.
     assert "examples/README.md" not in by_destination
     assert "qualification/schemas/support-manifest.schema.json" not in by_destination
-    assert len(by_destination) == 218
+    assert len(by_destination) == 220
 
     manifest_rows: list[dict[str, str]] = []
     for destination, source_rows in sorted(by_destination.items()):

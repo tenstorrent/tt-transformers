@@ -105,7 +105,7 @@ The checked-in JSON combines the two compact JSON reports, cross-interpreter sig
 
 A host test also proved one missing source asset dependency: `models/tt_transformers/model_params/Qwen3-32B/config.json` (blob `12ea4a36c6ac093af8d8dbc3bd435ae8b67067d6`) is now assigned to `qualification/model_params/Qwen3-32B/config.json`. The full pinned common-test audit found no other `model_params` path reference. This is qualification data; production runtime does not load it. The support extraction lane was notified.
 
-The corrected provenance inventory contains 365 rows with the original 26
+The corrected provenance inventory contains 366 rows with the original 26
 MoE-only exclusions unchanged.
 
 ## Evidence boundary

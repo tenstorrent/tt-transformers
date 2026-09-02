@@ -638,8 +638,8 @@
     },
     {
       "path": "qualification/analysis/support/generate_test_inventory.py",
-      "sha256": "a34c19a1f3173f9fc63a24ca80ea1a7c71d3b7de9e9d1554673d5f3b10aa4ce5",
-      "size": 16057
+      "sha256": "f0e3e12f99e2dbff880a1ad5bcc53de64802fa4e78d71eab643c215541fc0d96",
+      "size": 16220
     },
     {
       "path": "qualification/analysis/support/hardware_coverage.csv",
@@ -663,13 +663,13 @@
     },
     {
       "path": "qualification/analysis/support/support_asset_inventory.csv",
-      "sha256": "b73e1afa37e008b47c9660c6bc2555fe5b6188aa14fd8f98ffe6a778f8005e05",
-      "size": 7828
+      "sha256": "78e5d5387e3a02e86993a00f9bf4ac400209b8a2e35dde033a16ccd4e92240ab",
+      "size": 7929
     },
     {
       "path": "qualification/analysis/support/support_baseline.md",
-      "sha256": "44d12f3c5e64339a89744d71aa845cd5e91e368ccc40be05b5cc316a412f3eb3",
-      "size": 9510
+      "sha256": "bab79014852b4de992e17b02d7914210c882fd87ee58cf467bf4b17883d7d85e",
+      "size": 9578
     },
     {
       "path": "qualification/analysis/support/test_file_inventory.csv",
@@ -803,8 +803,8 @@
     },
     {
       "path": "qualification/extraction/extract_support_surface.py",
-      "sha256": "52e86eacaf9c1266d364bed6760f116d1a8d8b0c25a855c02a8241f0d859cf21",
-      "size": 14476
+      "sha256": "586dbdfe0d271f73a164ea9e7ad0141ce1f783ba63248d2839253b8da5b0c326",
+      "size": 14567
     },
     {
       "path": "qualification/extraction/foundation.md",
@@ -848,18 +848,18 @@
     },
     {
       "path": "qualification/extraction/support.md",
-      "sha256": "10a4ed28edceb6aebe48b5577aa818bdde94e279fb1af116dca1bb6050a21623",
+      "sha256": "a62ed0a531df13762986ffffdab5fe553ff303a82e5a67deeba634436a91d50e",
       "size": 8318
     },
     {
       "path": "qualification/extraction/support_boundary.md",
-      "sha256": "1a01cd1b3ebc22bb98aac6073cef0e4bba098e3c9569622c6677043c5d9cb15d",
-      "size": 8861
+      "sha256": "aca0a48a69ab25e67a9bea343cca827571dc03660f3dd42c22d19f71cfa3c826",
+      "size": 9003
     },
     {
       "path": "qualification/extraction/support_copy_manifest.csv",
-      "sha256": "e54f78ea02a1741f9fdfbfff040252bb87701b041d49345432e953812b595da5",
-      "size": 69666
+      "sha256": "1f69950e1fcb3a1c1578303adf6f6aa1c72e2e143664e2667e18f11451857268",
+      "size": 69935
     },
     {
       "path": "qualification/manifests/hardware-matrix.json",
@@ -928,13 +928,13 @@
     },
     {
       "path": "qualification/provenance/README.md",
-      "sha256": "8833b9b553115d7706a8030d0ba7eb746ec19b7c3f865af1d4a30ed981510767",
-      "size": 14893
+      "sha256": "84ddbd461bc2ddea635cb165cde64b8c0cbeaf394df5818a29dada28966aba53",
+      "size": 15358
     },
     {
       "path": "qualification/provenance/source_inventory.csv",
-      "sha256": "0bf65818f1c653d1ce274a864dee9036d9c1a18c524efd50d63d41f441dc9ac7",
-      "size": 100573
+      "sha256": "d8c0a7daee8361c2d49049abb53b495776395b588d6b91be13633ff9ac4d5999",
+      "size": 100851
     },
     {
       "path": "qualification/readiness/__init__.py",
@@ -1083,12 +1083,12 @@
     },
     {
       "path": "qualification/reports/release-readiness-checklist.csv",
-      "sha256": "62b656ce975cde1c3688767a37b92639e68523729bffccf636672459b40f0ec9",
-      "size": 33778
+      "sha256": "14230bbb145ca7a80f60b69624c2ca3fb7fa631311b6b2c4547816f0c84156ca",
+      "size": 33837
     },
     {
       "path": "qualification/reports/release-readiness.md",
-      "sha256": "80f796dc30e3ce47ca9aba30309b0f4850bdd82cd1e0cef40248b731d2f9d341",
+      "sha256": "c329bb159006da0183837e58a25578c1bd2b9d664095415bc42c80316c12516a",
       "size": 16765
     },
     {
@@ -1128,7 +1128,7 @@
     },
     {
       "path": "qualification/reports/ttnn-0.77.0-api-availability.md",
-      "sha256": "f0e26752a9bcd19d896fd5ebfb6e539b6533bb2c10a26a7b20a91a4b9e7708f1",
+      "sha256": "b4ff6361524cf95a7122ed967e5e6dfbaa8ed4c49fff5687c6a045cf8e37f69b",
       "size": 7323
     },
     {
@@ -1323,7 +1323,7 @@
     },
     {
       "path": "qualification/tools/validate_release_readiness.py",
-      "sha256": "1b81d5c8ababa34f26817b5ee31d0f5e9a23dda733d6e251d5d287a1cb7c8726",
+      "sha256": "52125274d997af4f5e74155376be34eb2644eb1347932964e77d297b2be53496",
       "size": 13084
     },
     {
@@ -1363,8 +1363,8 @@
     },
     {
       "path": "tests/conftest.py",
-      "sha256": "449851143af72c68ec32a8fc511a79d2cb1eeb059fb7b327ef13d1bec5f3aa1c",
-      "size": 69279
+      "sha256": "03fe7c0a50e1cd24062e5caff5ecc53d1c2711654656f85f1ed0fae070a9910f",
+      "size": 69269
     },
     {
       "path": "tests/hardware/models/deepseek_r1_distill_qwen_14b/test_demo.py",
@@ -1445,6 +1445,11 @@
       "path": "tests/hardware/test_mesh_fixture_policy.py",
       "sha256": "d046e03ebc1ad976571432453c2dc67933baa6f4032402f8acd81f39572016f1",
       "size": 2799
+    },
+    {
+      "path": "tests/host/test_cache_entries_counter.py",
+      "sha256": "356864bde566f99e051e880131d28b689379c58bfc77c075f5e3448cea1dd5d8",
+      "size": 3668
     },
     {
       "path": "tests/host/test_cache_environment.py",
@@ -2090,6 +2095,11 @@
       "path": "tests/support/__init__.py",
       "sha256": "9a8b50b13fa0aafa976a3d51bc81fbc6ca3a39c7219bab2dd50c71583d2e4ae4",
       "size": 34
+    },
+    {
+      "path": "tests/support/cache_entries_counter.py",
+      "sha256": "3253dd1321693cb9714b3da9e68a5836294fc542abc2f42d9f90dbb19cc419c9",
+      "size": 759
     },
     {
       "path": "tests/support/comparison.py",

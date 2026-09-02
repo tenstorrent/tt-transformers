@@ -11,9 +11,11 @@ reset devices, or edit the main migration work log.
 
 ## Provenance and readiness reconciliation
 
-The corrected provenance authority contains 364 source rows. Phase 2 now
-extracts 204 support-side source rows through 221 source/destination
-assignments into 218 distinct destinations.
+The corrected provenance authority contains 366 source rows. Phase 2 now
+extracts 206 support-side source rows through 223 source/destination
+assignments into 220 distinct destinations. This includes the pinned
+cache-entry counter required by the retained device fixtures, now owned by
+`tests/support/cache_entries_counter.py`.
 
 All 21 files formerly listed as unassigned readiness assets now have explicit
 provenance destinations:

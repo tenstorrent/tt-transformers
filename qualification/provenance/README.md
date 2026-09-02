@@ -4,10 +4,10 @@ This directory freezes the source-to-destination classification for the standalo
 
 - Source repository: `/localdev/gwang/tt-metal`
 - Source revision: `00748e6ac7b65f50e5c2af07f6e7c1c535c7f4c0`
-- Inventory rows: **365**
-- Rows assigned a destination: **339**
+- Inventory rows: **366**
+- Rows assigned a destination: **340**
 - Explicitly excluded rows: **26**
-- Boundary-cleanup rows: **86**
+- Boundary-cleanup rows: **92**
 - Generated: 2026-09-02 (UTC)
 
 `source_inventory.csv` is the machine-readable authority. Its columns are:
@@ -29,7 +29,7 @@ Disposition counts:
 | Disposition | Count |
 |---|---:|
 | `excluded` | 26 |
-| `renamed` | 292 |
+| `renamed` | 293 |
 | `replaced` | 5 |
 | `split` | 42 |
 
@@ -59,7 +59,7 @@ Category counts:
 | `test_config` | 2 |
 | `test_fixture` | 3 |
 | `test_hybrid_demo` | 12 |
-| `test_support` | 1 |
+| `test_support` | 2 |
 
 The explicit production roots are complete at the pinned tree:
 
@@ -69,7 +69,7 @@ The explicit production roots are complete at the pinned tree:
 - `models/common/tests/`: 124 retained files and 3 MoE tests excluded with MoE.
 - `models/common/sampling/`: 9 files.
 - `models/common/readiness_check/`: 15 qualification tools/assets and 6 readiness tests.
-- Narrow production/validation support, fixtures, qualification manifests/tools, model reference artifacts, prompt/corpus/model-parameter assets, and source-CI evidence: 77 files.
+- Narrow production/validation support, fixtures, qualification manifests/tools, model reference artifacts, prompt/corpus/model-parameter assets, source-CI evidence, and transitive fixture support: 78 files.
 
 Per-model production and directly owned test/demo source counts:
 
@@ -107,6 +107,12 @@ A transitive owner audit also includes `models/common/utils.py`. TTTv2 imports
 only its `LogProbsCalculator` compatibility export, so that row is split to the
 narrow `tt_transformers.sampling.logprobs` owner; the unrelated legacy
 top-k/top-p filtering function is not part of the reusable foundation.
+
+The standalone device fixtures also depend on
+`tests/tests_common/cache_entries_counter.py`. That pinned helper is tracked as
+a transitive test-support owner and moves byte-for-byte to
+`tests/support/cache_entries_counter.py`; fixture imports are rewritten to the
+standalone namespace.
 
 ## Mapping rules
 
@@ -192,6 +198,7 @@ git -C "$SOURCE_REPO" ls-tree -r "$SOURCE_COMMIT" -- \
   'tests/pipeline_reorg/models_sweep_tests.yaml' \
   'tests/pipeline_reorg/models_unit_tests.yaml' \
   'tests/scripts/t3000/run_t3000_unit_tests.sh' \
+  'tests/tests_common/cache_entries_counter.py' \
   'models/tt_transformers/tt/common.py' \
   'models/tt_transformers/tt/generator.py' \
   'models/tt_transformers/tt/model_config.py' \
@@ -217,7 +224,7 @@ git -C "$SOURCE_REPO" ls-tree -r "$SOURCE_COMMIT" -- \
   'models/tt_transformers/tests/reference_outputs/Qwen3-32B.refpt'
 ```
 
-It must print 365 rows. The pathspec deliberately includes the entire module, readiness, and common-test roots so the MoE exclusion and qualification coverage are auditable, while model products and old TTTv1 assets are selected narrowly.
+It must print 366 rows. The pathspec deliberately includes the entire module, readiness, and common-test roots plus the transitive cache-counter fixture helper so the MoE exclusion and qualification coverage are auditable, while model products and old TTTv1 assets are selected narrowly.
 
 ## Verification commands
 
@@ -246,11 +253,11 @@ assert list(rows[0]) == [
     "source_path", "destination_path", "git_blob_sha", "disposition",
     "reason", "category", "boundary_cleanup",
 ]
-assert len(rows) == 365
+assert len(rows) == 366
 paths = [row["source_path"] for row in rows]
 assert len(paths) == len(set(paths))
-assert Counter(row["disposition"] for row in rows) == {"excluded":26,"renamed":292,"replaced":5,"split":42}
-assert sum(row["boundary_cleanup"] == "true" for row in rows) == 86
+assert Counter(row["disposition"] for row in rows) == {"excluded":26,"renamed":293,"replaced":5,"split":42}
+assert sum(row["boundary_cleanup"] == "true" for row in rows) == 92
 
 for row in rows:
     actual = subprocess.check_output(
@@ -282,6 +289,7 @@ for prefix in (
     "models/common/llm_runtime",
     "models/common/readiness_check",
     "models/common/tests",
+    "tests/tests_common/cache_entries_counter.py",
 ):
     missing = source_paths(prefix) - inventory
     assert not missing, (prefix, sorted(missing))

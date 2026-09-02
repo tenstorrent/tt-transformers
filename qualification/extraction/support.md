@@ -10,9 +10,9 @@ support were mechanically extracted from pinned `tt-metal` revision
 hardware.
 
 The corrected authority in `qualification/provenance/source_inventory.csv`
-has 364 rows. Exactly 204 source rows assign at least one
+has 366 rows. Exactly 206 source rows assign at least one
 `tests/`, `examples/`, or `qualification/` destination. Semicolon expansion
-produces 221 source/destination assignments and 218 distinct destinations.
+produces 223 source/destination assignments and 220 distinct destinations.
 
 | Source category | Rows |
 | --- | ---: |
@@ -28,10 +28,10 @@ produces 221 source/destination assignments and 218 distinct destinations.
 | test fixture | 3 |
 | hybrid model demo | 2 |
 | qualification documentation | 1 |
-| test support | 1 |
+| test support | 2 |
 | qualification schema | 1 |
 
-The destinations comprise 134 distinct test paths, 35 example paths, and 49
+The destinations comprise 135 distinct test paths, 35 example paths, and 50
 qualification paths. Existing `tests/host` scaffold tests were preserved.
 Existing `examples/README.md` was extended rather than replaced, and the
 newer `qualification/schemas/support-manifest.schema.json` was preserved next
@@ -63,7 +63,7 @@ assignment with:
 - whether the destination is still an exact raw blob copy; and
 - every mechanical transformation or deferred split.
 
-At extraction time, 75 assignments remained byte-for-byte raw copies. The
+At extraction time, 98 assignments remained byte-for-byte raw copies. The
 other 125 received only deterministic import rewrites, fixture concatenation,
 or both. Reference `.refpt` files and the compressed corpus are unchanged
 binary blob copies. Both inventory rows targeting the Llama-3.1-8B test
@@ -71,7 +71,7 @@ reference resolve to the same source blob, so the destination collision is
 lossless. The three source-executable shell tools retain mode `0755`; regular
 files are recreated as `0644`.
 
-The extraction is reproducible: rerunning the script recreates the same 218
+The extraction is reproducible: rerunning the script recreates the same 220
 destinations and verification manifest. It does not own or rewrite
 `examples/README.md`, the standalone support-manifest schema, provenance,
 analysis, reports, or production package files.
@@ -180,5 +180,5 @@ python qualification/extraction/extract_support_surface.py
 This performs no imports from the extracted code and no test or hardware
 execution. Independent verification should parse the manifest, recompute each
 destination SHA-256, resolve every source blob at the pinned revision, assert
-all 204 authority rows and 221 assignments are covered, and parse all Python
+all 206 authority rows and 223 assignments are covered, and parse all Python
 files without importing them.

@@ -90,7 +90,7 @@ def main() -> int:
     with (ROOT / "qualification/provenance/source_inventory.csv").open(newline="", encoding="utf-8") as stream:
         inventory = list(csv.DictReader(stream))
     excluded = [row for row in inventory if row["disposition"] == "excluded"]
-    require(len(inventory) == 365, f"expected 365 provenance rows; got {len(inventory)}", errors)
+    require(len(inventory) == 366, f"expected 366 provenance rows; got {len(inventory)}", errors)
     require(len(excluded) == 26 and all("/moe/" in row["source_path"] for row in excluded), "MoE-only exclusion invariant failed", errors)
     missing = {
         destination

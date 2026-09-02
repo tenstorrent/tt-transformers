@@ -106,6 +106,7 @@ def support_asset_files() -> list[Path]:
             if path.is_file():
                 paths.add(path.relative_to(SOURCE_ROOT))
     paths.add(Path("models/common/llm_runtime/tttv2_demo_to_vllm_integration_skill.md"))
+    paths.add(Path("tests/tests_common/cache_entries_counter.py"))
     tracked = set(git("ls-tree", "-r", "--name-only", PINNED_SHA).splitlines())
     return sorted((path for path in paths if path.as_posix() in tracked), key=lambda item: item.as_posix())
 
@@ -124,6 +125,8 @@ def support_asset_role(path: Path) -> str:
         return "demo_support"
     if value.startswith("models/common/readiness_check/"):
         return "readiness_test" if path.name.startswith("test_") else "readiness_tool"
+    if value == "tests/tests_common/cache_entries_counter.py":
+        return "fixture_support"
     if value.startswith("models/docs/tttv2/"):
         return "hardware_or_migration_documentation"
     if path.name.endswith("required_capabilities.json"):

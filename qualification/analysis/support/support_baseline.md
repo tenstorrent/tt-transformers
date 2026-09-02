@@ -36,9 +36,10 @@ not expanded, and dynamically generated cases are not guessed. Every test and
 file row carries its Git blob SHA. The reproducible generator refuses a source
 checkout at another SHA or with tracked changes.
 
-The accompanying support-asset census has 71 tracked files spanning runnable
+The accompanying support-asset census has 72 tracked files spanning runnable
 demos, prompt/reference assets, readiness tools, capability manifests,
-validators, hardware-gate tooling, and TTTv2 documentation.
+validators, hardware-gate tooling, TTTv2 documentation, and the transitive
+cache-entry counter required by the device fixtures.
 
 ## Fixtures and markers
 
