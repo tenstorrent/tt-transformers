@@ -1502,6 +1502,11 @@
       "size": 717
     },
     {
+      "path": "tests/host/test_qwen25_coder_internal_kv_mode.py",
+      "sha256": "ba807747e936af8d61daf06d009e639a95900b33c7db5d016016dce098d8084b",
+      "size": 2088
+    },
+    {
       "path": "tests/host/test_remote_code_policy.py",
       "sha256": "1ab21344508ba96ede974fdc3069c34a1ad2ff405d131eaa705da523a0dbd4b3",
       "size": 5588

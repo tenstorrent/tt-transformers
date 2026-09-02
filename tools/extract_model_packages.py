@@ -59,7 +59,7 @@ PHASE3_HF_ADAPTOR_SHA256 = {
     "models/common/models/qwen25_7b/hf_adaptor.py": "ebf725620ae35c2f8ad58098ece22edb874c88550fac04544c60ffa6196709d5",
     (
         "models/common/models/qwen25_coder_32b/hf_adaptor.py"
-    ): "a9b6ac012c728c7417fc6a10975ae1f92ed3ba5536aa94874c05cf2126431648",
+    ): "8a41fad23defbdc95f4a8858a6ca9611ba4178f59160e02156b86449f14f03a2",
     "models/common/models/qwen2_7b/hf_adaptor.py": "a010f3f91a3e47811bdd8b80dbda89e1acbc312907f3a36c985ad8fd49abbfec",
     "models/common/models/qwen3_32b/hf_adaptor.py": "1c2a6d8e280d3045dec2b299e09e163cd17a6e8c7034d3038de916b4e0c60c07",
 }
@@ -230,6 +230,95 @@ def remove_forced_remote_code(text: str, source_path: str) -> str:
     return rewritten
 
 
+def preserve_qwen25_coder_internal_kv_mode(text: str, source_path: str) -> str:
+    """Preserve the adaptor API while restoring the model's internal KV mode."""
+
+    adaptor_path = "models/common/models/qwen25_coder_32b/hf_adaptor.py"
+    model_path = "models/common/models/qwen25_coder_32b/model.py"
+    if source_path not in {adaptor_path, model_path}:
+        return text
+    if source_path == model_path:
+        adaptor_import = "        from tt_transformers.models.qwen25_coder_32b.hf_adaptor import from_pretrained\n"
+        sentinel_import = (
+            "        from tt_transformers.models.qwen25_coder_32b.hf_adaptor import (\n"
+            "            _INTERNAL_KV_CACHE_CONFIG,\n"
+            "            from_pretrained,\n"
+            "        )\n"
+        )
+        if text.count(adaptor_import) != 1:
+            raise ValueError("expected one Qwen2.5-Coder compatibility adaptor import")
+        text = text.replace(adaptor_import, sentinel_import, 1)
+        internal_branch = "                if executor_mode\n                else None\n"
+        sentinel_branch = "                if executor_mode\n                else _INTERNAL_KV_CACHE_CONFIG\n"
+        if text.count(internal_branch) != 1:
+            raise ValueError("expected one Qwen2.5-Coder internal KV compatibility branch")
+        rewritten = text.replace(internal_branch, sentinel_branch, 1)
+        ast.parse(rewritten, filename=source_path)
+        return rewritten
+
+    model_marker = 'DEFAULT_HF_MODEL = "Qwen/Qwen2.5-Coder-32B-Instruct"\n'
+    sentinel = (
+        f"{model_marker}\n"
+        "# The model compatibility constructor passes this private sentinel to request\n"
+        "# its legacy internal KV cache.  ``None`` retains the adaptor's historical\n"
+        "# engine-facing paged-KV default and public signature.\n"
+        "_INTERNAL_KV_CACHE_CONFIG: Any = object()\n"
+    )
+    if text.count(model_marker) != 1:
+        raise ValueError("expected one Qwen2.5-Coder default-model marker")
+    text = text.replace(model_marker, sentinel, 1)
+
+    validation_marker = (
+        '    if bool(getattr(hf_config, "tie_word_embeddings", False)):\n'
+        '        raise ValueError("Qwen2.5-Coder-32B requires an untied LM head")\n'
+    )
+    resolver = (
+        f"{validation_marker}\n\n"
+        "def _resolve_paged_attention_config(\n"
+        "    paged_attention_config: Qwen25Coder32BPagedAttentionConfig | None,\n"
+        "    *,\n"
+        "    max_batch_size: int,\n"
+        "    max_seq_len: int,\n"
+        ") -> Qwen25Coder32BPagedAttentionConfig | None:\n"
+        '    """Preserve explicit internal-KV mode while defaulting adaptor users to paged KV."""\n\n'
+        "    if paged_attention_config is _INTERNAL_KV_CACHE_CONFIG:\n"
+        "        return None\n"
+        "    if paged_attention_config is not None:\n"
+        "        return paged_attention_config\n"
+        "    block_size = 32\n"
+        "    blocks_per_user = (max_seq_len + block_size - 1) // block_size\n"
+        "    return Qwen25Coder32BPagedAttentionConfig(\n"
+        "        block_size=block_size,\n"
+        "        max_num_blocks=blocks_per_user * max_batch_size,\n"
+        "    )\n"
+    )
+    if text.count(validation_marker) != 1:
+        raise ValueError("expected one Qwen2.5-Coder checkpoint-validation marker")
+    text = text.replace(validation_marker, resolver, 1)
+
+    defaulting = (
+        "    if paged_attention_config is None:\n"
+        "        block_size = 32\n"
+        "        blocks_per_user = (max_seq_len + block_size - 1) // block_size\n"
+        "        paged_attention_config = Qwen25Coder32BPagedAttentionConfig(\n"
+        "            block_size=block_size,\n"
+        "            max_num_blocks=blocks_per_user * max_batch_size,\n"
+        "        )\n"
+    )
+    resolved = (
+        "    paged_attention_config = _resolve_paged_attention_config(\n"
+        "        paged_attention_config,\n"
+        "        max_batch_size=max_batch_size,\n"
+        "        max_seq_len=max_seq_len,\n"
+        "    )\n"
+    )
+    if text.count(defaulting) != 1:
+        raise ValueError("expected one Qwen2.5-Coder paged-attention defaulting block")
+    rewritten = text.replace(defaulting, resolved, 1)
+    ast.parse(rewritten, filename=source_path)
+    return rewritten
+
+
 def ordered_explicit_all(tree: ast.Module) -> list[str]:
     for node in tree.body:
         if not isinstance(node, (ast.Assign, ast.AnnAssign)):
@@ -377,6 +466,7 @@ def expected_content(row: InventoryRow) -> bytes:
     text = close_qwen3_optional_import(text, row.source_path)
     text = remove_model_default_device_mutation(text, row.source_path)
     text = remove_forced_remote_code(text, row.source_path)
+    text = preserve_qwen25_coder_internal_kv_mode(text, row.source_path)
     text = lazy_model_initializer(text, row.source_path)
     return text.encode("utf-8")
 

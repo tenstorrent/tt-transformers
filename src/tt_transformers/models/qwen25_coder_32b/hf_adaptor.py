@@ -35,6 +35,11 @@ from tt_transformers.models.qwen25_coder_32b.model import (
 
 DEFAULT_HF_MODEL = "Qwen/Qwen2.5-Coder-32B-Instruct"
 
+# The model compatibility constructor passes this private sentinel to request
+# its legacy internal KV cache.  ``None`` retains the adaptor's historical
+# engine-facing paged-KV default and public signature.
+_INTERNAL_KV_CACHE_CONFIG: Any = object()
+
 
 def _local_files_only() -> bool:
     return offline_mode()
@@ -236,6 +241,26 @@ def _validate_checkpoint_config(hf_config, *, num_devices: int) -> None:
         raise ValueError("Qwen2.5-Coder-32B requires an untied LM head")
 
 
+def _resolve_paged_attention_config(
+    paged_attention_config: Qwen25Coder32BPagedAttentionConfig | None,
+    *,
+    max_batch_size: int,
+    max_seq_len: int,
+) -> Qwen25Coder32BPagedAttentionConfig | None:
+    """Preserve explicit internal-KV mode while defaulting adaptor users to paged KV."""
+
+    if paged_attention_config is _INTERNAL_KV_CACHE_CONFIG:
+        return None
+    if paged_attention_config is not None:
+        return paged_attention_config
+    block_size = 32
+    blocks_per_user = (max_seq_len + block_size - 1) // block_size
+    return Qwen25Coder32BPagedAttentionConfig(
+        block_size=block_size,
+        max_num_blocks=blocks_per_user * max_batch_size,
+    )
+
+
 def convert_hf_model_weights(
     hf,
     hf_config,
@@ -323,13 +348,11 @@ def from_pretrained(
     if not (1 <= resolved_layers <= hf_config.num_hidden_layers):
         raise ValueError(f"n_layers must be in [1, {hf_config.num_hidden_layers}], got {resolved_layers}")
     cache_path = _cache_path(hf_model, mesh_device, cache_dir, hf_revision=hf_revision, dtype=cache_dtype)
-    if paged_attention_config is None:
-        block_size = 32
-        blocks_per_user = (max_seq_len + block_size - 1) // block_size
-        paged_attention_config = Qwen25Coder32BPagedAttentionConfig(
-            block_size=block_size,
-            max_num_blocks=blocks_per_user * max_batch_size,
-        )
+    paged_attention_config = _resolve_paged_attention_config(
+        paged_attention_config,
+        max_batch_size=max_batch_size,
+        max_seq_len=max_seq_len,
+    )
     rope_table_len = max(max_seq_len * 2, 8192)
     rope_table_len = (rope_table_len + 127) // 128 * 128
     head_dim = hf_config.hidden_size // hf_config.num_attention_heads

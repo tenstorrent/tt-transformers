@@ -980,7 +980,10 @@ class Qwen25Coder32B(LightweightModule):
     ) -> Qwen25Coder32B:
         """Compatibility constructor; provider loading lives in ``hf_adaptor``."""
 
-        from tt_transformers.models.qwen25_coder_32b.hf_adaptor import from_pretrained
+        from tt_transformers.models.qwen25_coder_32b.hf_adaptor import (
+            _INTERNAL_KV_CACHE_CONFIG,
+            from_pretrained,
+        )
 
         optimizations: str | Qwen25Coder32BPrecisionConfig
         if precision == QWEN25_CODER_32B_PERFORMANCE:
@@ -1003,7 +1006,7 @@ class Qwen25Coder32B(LightweightModule):
                     max_num_blocks=((max_seq_len + block_size - 1) // block_size) * max_batch_size,
                 )
                 if executor_mode
-                else None
+                else _INTERNAL_KV_CACHE_CONFIG
             ),
             cache_dir=cache_dir,
         )
