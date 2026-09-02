@@ -1,0 +1,73 @@
+{
+  "acceptance_types": [
+    "prefill_decode_smoke",
+    "clean_teardown"
+  ],
+  "actual_fqdn": "bh-qb-05-special-gwang-for-reservation-196606",
+  "architecture": "blackhole",
+  "branch": "tttv2-standalone-migration",
+  "cache_paths": {
+    "TT_CACHE_PATH": "/localdev/gwang/tt_transformers/model_cache/qwen3_32b"
+  },
+  "caller_machine_identity": "bh-qb-05-special-gwang-for-reservation-196606",
+  "command": [
+    "/localdev/gwang/tt_transformers/.venv/bin/python",
+    "-m",
+    "pytest",
+    "-vv",
+    "--color=no",
+    "--timeout=1800",
+    "tests/models/qwen3_32b/test_p150x4_smoke.py::test_qwen3_32b_one_layer_prefill_decode_smoke[physical-P150x4-ring]"
+  ],
+  "environment": {
+    "HF_HOME": "/proj_sw/user_dev/huggingface",
+    "HF_HUB_OFFLINE": "1",
+    "HF_MODEL": "Qwen/Qwen3-32B",
+    "MESH_DEVICE": "P150x4",
+    "TRANSFORMERS_OFFLINE": "1",
+    "TT_CACHE_PATH": "/localdev/gwang/tt_transformers/model_cache/qwen3_32b",
+    "TT_VISIBLE_DEVICES": null
+  },
+  "evidence_json_path": "/localdev/gwang/tt_transformers/hardware-results/ba7abefba4484689c953ac53fe8810322db1d184/bh-qb-05/20260902T200638.380764Z-bh-p150x4-qwen3-one-layer-smoke.json",
+  "exit_code": 0,
+  "failure_classification": "passed",
+  "finished_utc": "2026-09-02T20:13:15.760962Z",
+  "full_sha": "ba7abefba4484689c953ac53fe8810322db1d184",
+  "mesh_device": "P150x4",
+  "metrics": [
+    "cachedir: .pytest_cache",
+    "2026-09-02 20:13:14.952 | info     |    BuildKernels | JIT cache stats: 403/403 hits (100.0%) [403 cached, 227 build-once dedup, 0 merged artifacts, 0 merged genfiles] (build_cache_telemetry.cpp:207)",
+    "2026-09-02 20:13:14.952 | info     |    BuildKernels | JIT telemetry: 3 registered TelemetryTokens (build_cache_telemetry.cpp:230)"
+  ],
+  "node": "bh-p150x4-qwen3-one-layer-smoke",
+  "physical_inventory": {
+    "architecture": "blackhole",
+    "board_types": [
+      "p150b"
+    ],
+    "captured_utc": "2026-09-02T15:43:03Z",
+    "cluster_type": "P150_X4",
+    "device_count": 4,
+    "dram_status": "healthy on all 4 devices",
+    "driver": "TT-KMD 2.9.0",
+    "firmware_bundle": "19.12.0.0",
+    "machine_identity": "bh-qb-05-special-gwang-for-reservation-196606",
+    "physical_sku": "P150_X4 quietbox (four p150b boards)",
+    "source_command": "tt-smi -s",
+    "system_mesh": "2x2",
+    "tt_visible_devices": null
+  },
+  "reset": {
+    "automatic": false,
+    "performed": false,
+    "reason": "runner never resets hardware"
+  },
+  "schema_version": 1,
+  "selector": {
+    "target": "tests/models/qwen3_32b/test_p150x4_smoke.py::test_qwen3_32b_one_layer_prefill_decode_smoke[physical-P150x4-ring]"
+  },
+  "started_utc": "2026-09-02T20:06:38.380764Z",
+  "stdout_log_path": "/localdev/gwang/tt_transformers/hardware-results/ba7abefba4484689c953ac53fe8810322db1d184/bh-qb-05/20260902T200638.380764Z-bh-p150x4-qwen3-one-layer-smoke.log",
+  "teardown_status": "process_exited; fixture teardown not independently hardware-verified",
+  "tt_visible_devices": null
+}

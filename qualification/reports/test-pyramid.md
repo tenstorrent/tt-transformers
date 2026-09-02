@@ -8,9 +8,9 @@ Authority inputs are the pinned Phase 0 `marker_inventory.csv` (23 tokens),
 input counts before grading the expanded standalone tree.
 
 This report defines selection policy; it is not hardware evidence. The static
-taxonomy audit currently covers 1,430 source-level test functions:
+taxonomy audit currently covers 1,452 source-level test functions:
 
-- 1,176 explicitly `host`;
+- 1,198 explicitly `host`;
 - 254 explicitly `device`;
 - 390 concrete `model` surfaces;
 - 27 explicitly `slow` source definitions;

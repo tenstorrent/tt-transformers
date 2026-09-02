@@ -13,6 +13,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CHECKLIST = ROOT / "qualification/reports/release-readiness-checklist.csv"
+HARDWARE_CANDIDATE_SHA = "ba7abefba4484689c953ac53fe8810322db1d184"
+HARDWARE_EVIDENCE_INDEX = ROOT / f"qualification/evidence/hardware/{HARDWARE_CANDIDATE_SHA}/index.json"
 MODELS = {
     "deepseek_r1_distill_qwen_14b",
     "llama32_1b",
@@ -25,6 +27,13 @@ MODELS = {
     "qwen25_7b",
     "qwen25_coder_32b",
     "qwen2_7b",
+    "qwen3_32b",
+}
+PARTIAL_HARDWARE_MODELS = {
+    "llama32_1b",
+    "llama33_70b",
+    "qwen25_7b",
+    "qwen25_coder_32b",
     "qwen3_32b",
 }
 EXPECTED_MISSING_DESTINATIONS: set[str] = set()
@@ -67,12 +76,40 @@ def main() -> int:
         for relative in row["evidence_paths"].split("|"):
             require((ROOT / relative).exists(), f"{row['id']}: missing evidence path {relative}", errors)
     status_counts = Counter(row["status"] for row in rows)
-    require(status_counts == {"pass": 45, "partial": 10, "blocked": 24}, f"unexpected status counts: {dict(status_counts)}", errors)
+    require(status_counts == {"pass": 45, "partial": 18, "blocked": 16}, f"unexpected status counts: {dict(status_counts)}", errors)
     require(any(row["release_blocking"] == "true" and row["status"] != "pass" for row in rows), "checklist has no release blocker", errors)
+    rows_by_id = {row["id"]: row for row in rows}
+    expected_hardware_gate_statuses = {
+        "p3.characterization": "partial",
+        "p4.hardware": "partial",
+        "p4.reviewed-verdict": "partial",
+        "p5.hardware-ci": "blocked",
+        "p5.scheduled-release": "partial",
+        "p7.release-identity": "partial",
+        "overall.qualified": "blocked",
+    }
+    require(
+        all(rows_by_id.get(row_id, {}).get("status") == status for row_id, status in expected_hardware_gate_statuses.items()),
+        "hardware-aware release gate statuses drifted",
+        errors,
+    )
 
     model_rows = {row["id"].removeprefix("model."): row for row in rows if row["id"].startswith("model.")}
     require(set(model_rows) == MODELS, "model checklist does not cover exactly twelve packages", errors)
-    require(all(row["status"] == "blocked" for row in model_rows.values()), "a model is incorrectly release-ready", errors)
+    require(
+        {model for model, row in model_rows.items() if row["status"] == "partial"} == PARTIAL_HARDWARE_MODELS,
+        "model partial-hardware statuses do not match final-SHA evidence",
+        errors,
+    )
+    require(
+        all(
+            row["status"] == ("partial" if model in PARTIAL_HARDWARE_MODELS else "blocked")
+            and row["release_blocking"] == "true"
+            for model, row in model_rows.items()
+        ),
+        "a model is incorrectly release-ready or non-blocking",
+        errors,
+    )
 
     support = {}
     for path in sorted((ROOT / "examples").glob("*/support.json")):
@@ -104,6 +141,51 @@ def main() -> int:
     hardware = json.loads((ROOT / "qualification/manifests/hardware-matrix.json").read_text(encoding="utf-8"))
     require(hardware["status"] == "readiness_only_no_hardware_executed", "hardware matrix status changed; refresh audit", errors)
     require(len(hardware["nodes"]) == 42, "hardware readiness node count changed", errors)
+
+    hardware_evidence = json.loads(HARDWARE_EVIDENCE_INDEX.read_text(encoding="utf-8"))
+    hardware_records = hardware_evidence.get("records", [])
+    require(hardware_evidence.get("candidate_sha") == HARDWARE_CANDIDATE_SHA, "hardware candidate SHA drifted", errors)
+    require(len(hardware_records) == 34, f"expected 34 executed hardware nodes; got {len(hardware_records)}", errors)
+    require(
+        Counter(record.get("outcome") for record in hardware_records) == {"passed": 33, "functional_failure": 1},
+        "hardware outcome counts drifted",
+        errors,
+    )
+    require(
+        Counter(record.get("stage") for record in hardware_records if record.get("outcome") == "passed")
+        == {"module": 23, "smoke": 3, "e2e": 7},
+        "passing hardware stage counts drifted",
+        errors,
+    )
+    failed_hardware = [record for record in hardware_records if record.get("outcome") != "passed"]
+    require(
+        len(failed_hardware) == 1
+        and failed_hardware[0].get("node") == "wh-t3k-runtime-trace-order"
+        and failed_hardware[0].get("stage") == "runtime"
+        and failed_hardware[0].get("runner_classification") == "functional_failure",
+        "W6 runtime functional-blocker evidence drifted",
+        errors,
+    )
+    require(
+        all(
+            record.get("full_sha") == HARDWARE_CANDIDATE_SHA
+            and record.get("teardown_status", "").startswith("process_exited")
+            and record.get("runner_classification") != "hardware_lifecycle_failure"
+            and record.get("reset", {}).get("performed") is False
+            for record in hardware_records
+        ),
+        "hardware SHA, lifecycle, teardown, or reset evidence drifted",
+        errors,
+    )
+    executed_nodes = {record.get("node") for record in hardware_records}
+    deferred_nodes = [node for node in hardware["nodes"] if node["id"] not in executed_nodes]
+    require(
+        len(deferred_nodes) == 8
+        and {node["priority"] for node in deferred_nodes} == {*range(24, 31), 38}
+        and all(node["mesh_device"] == "P150" and node["machine_pool"] == ["bh-lb-11"] for node in deferred_nodes),
+        "the eight different-hardware-deferred P150 nodes drifted",
+        errors,
+    )
 
     with (ROOT / "qualification/reports/consumer_import_sites.csv").open(newline="", encoding="utf-8") as stream:
         consumers = list(csv.DictReader(stream))
@@ -141,13 +223,13 @@ def main() -> int:
             require(sha256(path) == artifact["sha256"], f"artifact hash drift: {path.name}", errors)
     require(
         artifact_data["artifacts"][0]["sha256"]
-        == "a8837a3803930b97d527ef569190ec69b9dddc7b0c7537d183c1ad1268a0ae51",
+        == "18adf91d873ec27501909ab4fc26f1efb6058b9d4a1cd6c3e120f27e1285813c",
         "final wheel identity drifted",
         errors,
     )
     require(
         artifact_data["artifacts"][1]["sha256"]
-        == "4f62cb8df64da31af6076d86bbb4fb7528de4ae8ff5eddeab0f14170e40dc407",
+        == "e26ca18f49d54caeff87f430e4ade3ef7bca8b5f1b0984b46082a80d8d74965f",
         "final sdist identity drifted",
         errors,
     )
@@ -161,7 +243,7 @@ def main() -> int:
         == {
             "algorithm": "sha256(path + NUL + content + NUL, sorted by path)",
             "python_files": 132,
-            "sha256": "3814705a56bcf5bdd3ed88578e203d6d9e428f329289facb9bc2215366fb4e5f",
+            "sha256": "be03de1c59c0b86afcbd45ac7a444a33b67ba33a4e469ccb2ab9607e0eb4ddf1",
         },
         "artifact source identity drifted",
         errors,
@@ -230,10 +312,10 @@ def main() -> int:
     static_quality = json.loads(
         (ROOT / "qualification/reports/static-quality-baseline.json").read_text(encoding="utf-8")
     )
-    require(static_quality["ruff_check"]["findings"] == 2148, "Ruff baseline drifted", errors)
-    require(static_quality["ruff_format"]["would_reformat"] == 163, "Ruff format baseline drifted", errors)
+    require(static_quality["ruff_check"]["findings"] == 2158, "Ruff baseline drifted", errors)
+    require(static_quality["ruff_format"]["would_reformat"] == 166, "Ruff format baseline drifted", errors)
     require(
-        static_quality["mypy"]["errors"] == 489 and static_quality["mypy"]["files_with_errors"] == 99,
+        static_quality["mypy"]["errors"] == 502 and static_quality["mypy"]["files_with_errors"] == 99,
         "mypy baseline drifted",
         errors,
     )
@@ -246,14 +328,14 @@ def main() -> int:
         errors,
     )
     host_report = (ROOT / "qualification/reports/host-ttnn-0.77.md").read_text(encoding="utf-8")
-    require("| 3.10.19 | 2,115 | 28 | 6,791 | 81 | 0 | 0 |" in host_report, "Python 3.10 host result drifted", errors)
-    require("| 3.12.13 | 2,115 | 28 | 6,791 | 81 | 0 | 0 |" in host_report, "Python 3.12 host result drifted", errors)
+    require("| 3.10.19 | 2,153 | 28 | 6,791 | 81 | 0 | 0 |" in host_report, "Python 3.10 host result drifted", errors)
+    require("| 3.12.13 | 2,153 | 28 | 6,791 | 81 | 0 | 0 |" in host_report, "Python 3.12 host result drifted", errors)
     require("nanobind: leaked 8 instances!" in host_report, "Python 3.12 nanobind diagnostic is missing", errors)
 
     pyramid = (ROOT / "qualification/reports/test-pyramid.md").read_text(encoding="utf-8")
-    require("1,430 source-level test functions" in pyramid, "test-pyramid total is stale", errors)
+    require("1,452 source-level test functions" in pyramid, "test-pyramid total is stale", errors)
     require(
-        "1,176 explicitly `host`" in pyramid and "254 explicitly `device`" in pyramid,
+        "1,198 explicitly `host`" in pyramid and "254 explicitly `device`" in pyramid,
         "test-pyramid lanes are stale",
         errors,
     )

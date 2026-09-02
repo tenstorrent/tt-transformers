@@ -29,8 +29,8 @@ Both final commands completed successfully with the same exact test totals:
 
 | Python | Passed | Skipped | Deselected | Passing subtests | Failures/errors | Process exit |
 |---|---:|---:|---:|---:|---:|---:|
-| 3.10.19 | 2,115 | 28 | 6,791 | 81 | 0 | 0 |
-| 3.12.13 | 2,115 | 28 | 6,791 | 81 | 0 | 0 |
+| 3.10.19 | 2,153 | 28 | 6,791 | 81 | 0 | 0 |
+| 3.12.13 | 2,153 | 28 | 6,791 | 81 | 0 | 0 |
 
 The previously recorded five pytest warnings are empty-regex warnings emitted by `pytest.raises` in `tests/llm_runtime/test_config.py`; they do not indicate collection or execution failure.
 
@@ -62,7 +62,7 @@ The 28 skips are accounted for as follows:
 
 The MLP2D 8x4 topology-bug probe is explicitly classified as `device` +
 `wormhole`; it is deselected by the host command and therefore does not probe
-PCI devices. The final taxonomy audit reports 1,430 test functions, 1,176 host,
+PCI devices. The final taxonomy audit reports 1,452 test functions, 1,198 host,
 254 device, and no errors.
 
 ## Defects closed

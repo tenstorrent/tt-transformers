@@ -1,0 +1,76 @@
+{
+  "acceptance_types": [
+    "token_accuracy_threshold",
+    "clean_teardown"
+  ],
+  "actual_fqdn": "wh-lb-42-special-gwang-for-reservation-173014",
+  "architecture": "wormhole",
+  "branch": "tttv2-standalone-migration",
+  "cache_paths": {
+    "TT_CACHE_PATH": "/localdev/gwang/tt_transformers/model_cache/qwen25_7b"
+  },
+  "caller_machine_identity": "wh-lb-42.yyz2.tenstorrent.com",
+  "command": [
+    "/localdev/gwang/tt_transformers/.venv/bin/python",
+    "-m",
+    "pytest",
+    "-vv",
+    "--color=no",
+    "--timeout=3600",
+    "tests/hardware/models/qwen25_7b/test_demo.py::test_qwen25_7b",
+    "-k",
+    "token-accuracy and accuracy"
+  ],
+  "environment": {
+    "HF_HOME": "/proj_sw/user_dev/huggingface",
+    "HF_HUB_OFFLINE": "1",
+    "HF_MODEL": "Qwen/Qwen2.5-7B-Instruct",
+    "MESH_DEVICE": "N300",
+    "TRANSFORMERS_OFFLINE": "1",
+    "TT_CACHE_PATH": "/localdev/gwang/tt_transformers/model_cache/qwen25_7b"
+  },
+  "evidence_json_path": "/localdev/gwang/tt_transformers/hardware-results/ba7abefba4484689c953ac53fe8810322db1d184/wh-lb-42/20260902T210232.400360Z-wh-n300-qwen25-7b-token-accuracy.json",
+  "exit_code": 0,
+  "failure_classification": "passed",
+  "finished_utc": "2026-09-02T21:05:38.538542Z",
+  "full_sha": "ba7abefba4484689c953ac53fe8810322db1d184",
+  "mesh_device": "N300",
+  "metrics": [
+    "cachedir: .pytest_cache",
+    "2026-09-02 21:05:38.033 | info     |    BuildKernels | JIT cache stats: 190/368 hits (51.6%) [190 cached, 111 build-once dedup, 0 merged artifacts, 0 merged genfiles] (build_cache_telemetry.cpp:207)",
+    "2026-09-02 21:05:38.033 | info     |    BuildKernels | JIT telemetry: 3 registered TelemetryTokens (build_cache_telemetry.cpp:230)"
+  ],
+  "node": "wh-n300-qwen25-7b-token-accuracy",
+  "physical_inventory": {
+    "architecture": "wormhole",
+    "board_types": [
+      "n300 L",
+      "n300 R"
+    ],
+    "captured_utc": "2026-09-02T15:42:51Z",
+    "cluster_type": "T3K",
+    "device_count": 8,
+    "dram_status": "healthy on all 8 devices",
+    "driver": "TT-KMD 2.4.1",
+    "firmware_bundle": "18.12.1.0",
+    "machine_identity": "wh-lb-42.yyz2.tenstorrent.com",
+    "physical_sku": "T3K (four N300 left/right pairs)",
+    "source_command": "tt-smi -s",
+    "system_mesh": "1x8",
+    "tt_visible_devices": null
+  },
+  "reset": {
+    "automatic": false,
+    "performed": false,
+    "reason": "runner never resets hardware"
+  },
+  "schema_version": 1,
+  "selector": {
+    "keyword": "token-accuracy and accuracy",
+    "target": "tests/hardware/models/qwen25_7b/test_demo.py::test_qwen25_7b"
+  },
+  "started_utc": "2026-09-02T21:02:32.400360Z",
+  "stdout_log_path": "/localdev/gwang/tt_transformers/hardware-results/ba7abefba4484689c953ac53fe8810322db1d184/wh-lb-42/20260902T210232.400360Z-wh-n300-qwen25-7b-token-accuracy.log",
+  "teardown_status": "process_exited; fixture teardown not independently hardware-verified",
+  "tt_visible_devices": null
+}

@@ -11,7 +11,6 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
-
 ROOT = Path(__file__).resolve().parents[2]
 MODELS = (
     "deepseek_r1_distill_qwen_14b",
@@ -28,6 +27,8 @@ MODELS = (
     "qwen3_32b",
 )
 PINNED_SHA = "00748e6ac7b65f50e5c2af07f6e7c1c535c7f4c0"
+FINAL_HARDWARE_SHA = "ba7abefba4484689c953ac53fe8810322db1d184"
+FINAL_HARDWARE_INDEX = ROOT / "qualification/evidence/hardware" / FINAL_HARDWARE_SHA / "index.json"
 REQUIRED_HEADINGS = (
     "### Purpose",
     "### Status and checkpoint",
@@ -52,6 +53,23 @@ def validate() -> list[str]:
         errors.append(f"support schema is invalid: {error}")
         return errors
     validator = Draft202012Validator(schema)
+
+    if not FINAL_HARDWARE_INDEX.exists():
+        errors.append(f"centralized final-SHA hardware index is missing: {FINAL_HARDWARE_INDEX}")
+    else:
+        hardware_index = json.loads(FINAL_HARDWARE_INDEX.read_text())
+        records = hardware_index.get("records", [])
+        passed = [record for record in records if record.get("outcome") == "passed"]
+        failures = [record for record in records if record.get("outcome") != "passed"]
+        if hardware_index.get("candidate_sha") != FINAL_HARDWARE_SHA:
+            errors.append(f"centralized hardware candidate SHA drifted: {hardware_index.get('candidate_sha')}")
+        if len(passed) != 33 or len(failures) != 1:
+            errors.append(f"centralized hardware outcome count drifted: passed={len(passed)} nonpassed={len(failures)}")
+        elif (
+            failures[0].get("node") != "wh-t3k-runtime-trace-order"
+            or failures[0].get("outcome") != "functional_failure"
+        ):
+            errors.append(f"centralized hardware blocker drifted: {failures[0]}")
 
     manifests = {}
     paths = sorted((ROOT / "examples").glob("*/support.json"))
@@ -98,9 +116,7 @@ def validate() -> list[str]:
 
         readme_path = path.with_name("README.md")
         readme = readme_path.read_text()
-        if readme.count("<!-- BEGIN GENERATED SUPPORT -->") != 1 or readme.count(
-            "<!-- END GENERATED SUPPORT -->"
-        ) != 1:
+        if readme.count("<!-- BEGIN GENERATED SUPPORT -->") != 1 or readme.count("<!-- END GENERATED SUPPORT -->") != 1:
             errors.append(f"{readme_path}: generated support markers must occur exactly once")
         for heading in REQUIRED_HEADINGS:
             if heading not in readme:
@@ -147,12 +163,26 @@ def validate() -> list[str]:
             ROOT / "tests/hardware/models" / model / "test_demo.py",
             ROOT / "qualification/analysis/support/support_baseline.md",
             ROOT / "qualification/analysis/support/hardware_evidence.csv",
+            FINAL_HARDWARE_INDEX,
         ):
             if not target.exists():
                 errors.append(f"{readme_path}: linked target missing: {target}")
 
     root_matrix = (ROOT / "SUPPORT.md").read_text()
     example_matrix = (ROOT / "examples/README.md").read_text()
+    for matrix_name, matrix in (("SUPPORT.md", root_matrix), ("examples/README.md", example_matrix)):
+        for token in (
+            "Centralized final-SHA subset evidence",
+            FINAL_HARDWARE_SHA,
+            "33 passing nodes and one functional failure",
+            "W6 trace-order correctness",
+            "P150_X4 evidence",
+            "do not qualify any model or geometry"
+            if matrix_name == "SUPPORT.md"
+            else "not qualification of an example",
+        ):
+            if token not in matrix:
+                errors.append(f"{matrix_name}: missing centralized evidence token {token!r}")
     for model in MODELS:
         manifest = manifests.get(model)
         if not manifest:

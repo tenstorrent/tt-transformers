@@ -814,3 +814,44 @@ This log records milestones and evidence for the standalone migration defined in
   `git@github.com:tenstorrent/tt_transformers.git` and established upstream
   tracking. Next: commit this log checkpoint, push it, then use the resulting
   common full SHA for all local/remote synchronization and hardware evidence.
+
+## 2026-09-02T22:58:00Z — Final-SHA hardware, host, and artifact qualification
+
+- Published frozen hardware code SHA
+  `ba7abefba4484689c953ac53fe8810322db1d184` after closing four
+  hardware-discovered migration defects: stale Llama helper/selector wiring,
+  cross-model cache-root collision, omitted cache-counter test support, and
+  Qwen2.5-Coder internal-KV ownership. The Llama 3.3 executor's intended
+  batched-prefill policy and all fixes are reproduced by pinned extractors.
+- Executed all 34 matrix nodes supported by the reserved WH T3K and BH
+  P150_X4 hosts. Exact-SHA results are 33 pass and one functional blocker:
+  reusable modules 23/23, model smoke 3/3, end-to-end/token accuracy 7/7, and
+  W6 runtime trace/order 0/1. Eight single-P150 nodes remain explicitly
+  deferred because their required `bh-lb-11` host was unavailable. There were
+  zero hardware-lifecycle failures and zero resets.
+- Preserved the W6 failure rather than weakening its unvalidated thresholds:
+  all four orders report row-0 max-abs 1.5 against 1.0 and top-5 overlap 3
+  against 4. The runner now correctly distinguishes this functional result
+  from lifecycle failures and rejects skip-only pytest runs as passes.
+- Added and validated a canonical hardware-evidence schema/index with one
+  SHA-256-bound JSON/log pair per executed node under
+  `qualification/evidence/hardware/ba7abefba4484689c953ac53fe8810322db1d184`.
+- Rebuilt the final package twice with `SOURCE_DATE_EPOCH=1788213269`; both
+  runs are byte-identical. Wheel SHA256 is
+  `18adf91d873ec27501909ab4fc26f1efb6058b9d4a1cd6c3e120f27e1285813c`
+  (596,738 bytes), and normalized sdist SHA256 is
+  `e26ca18f49d54caeff87f430e4ade3ef7bca8b5f1b0984b46082a80d8d74965f`
+  (497,470 bytes). Archive policy, two base-only 76-surface probes, dependency
+  checks, and Twine strict validation pass.
+- Final non-editable-wheel host suites pass identically on Python 3.10.19 and
+  3.12.13: 2,153 passed, 28 intentional skips, 6,791 deselected, 5 warnings,
+  and 81 passing subtests, with the known Python 3.12 nanobind shutdown
+  diagnostic retained. Taxonomy covers 1,452 functions: 1,198 host and 254
+  device, with zero audit errors.
+- Static debt remains explicit and non-green after the new qualification
+  code: Ruff 2,158 findings (629 fixable), Ruff format 166 files, mypy 502
+  errors across 99 package files, and bounded Black timeout.
+- Release readiness is now 45 pass, 18 partial, and 16 blocked. Five model
+  rows have partial exact-SHA evidence, while every support manifest remains
+  experimental; W6, single-P150 coverage, observed CI, release tagging,
+  complete model contracts, and downstream cutover remain open.

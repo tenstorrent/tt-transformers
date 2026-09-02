@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "source_tree_sha256": "3814705a56bcf5bdd3ed88578e203d6d9e428f329289facb9bc2215366fb4e5f",
+  "source_tree_sha256": "be03de1c59c0b86afcbd45ac7a444a33b67ba33a4e469ccb2ab9607e0eb4ddf1",
   "source_python_files": 132,
   "tools": {
     "ruff": "0.11.0",
@@ -9,11 +9,11 @@
   },
   "ruff_check": {
     "status": "failing_baseline",
-    "findings": 2148,
-    "fixable": 626,
+    "findings": 2158,
+    "fixable": 629,
     "by_code": {
-      "E501": 1440,
-      "I001": 224,
+      "E501": 1446,
+      "I001": 227,
       "UP038": 132,
       "UP007": 98,
       "UP006": 88,
@@ -23,7 +23,7 @@
       "F821": 17,
       "F841": 16,
       "E714": 10,
-      "E402": 9,
+      "E402": 10,
       "E731": 6,
       "F541": 3,
       "E711": 2,
@@ -35,12 +35,12 @@
   },
   "ruff_format": {
     "status": "failing_baseline",
-    "would_reformat": 163,
-    "already_formatted": 200
+    "would_reformat": 166,
+    "already_formatted": 205
   },
   "mypy": {
     "status": "failing_baseline",
-    "errors": 489,
+    "errors": 502,
     "files_with_errors": 99,
     "files_checked": 132,
     "python_executable": "qualified CPython 3.10 host dependency environment",

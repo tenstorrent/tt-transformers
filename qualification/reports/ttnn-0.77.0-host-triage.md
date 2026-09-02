@@ -146,9 +146,9 @@ added the hardware-runner host policies, exact full runs passed on both
 supported interpreters:
 
 ```text
-CPython 3.10.19: 2115 passed, 28 skipped, 6791 deselected,
+CPython 3.10.19: 2153 passed, 28 skipped, 6791 deselected,
                  5 warnings, 81 subtests passed, exit 0
-CPython 3.12.13: 2115 passed, 28 skipped, 6791 deselected,
+CPython 3.12.13: 2153 passed, 28 skipped, 6791 deselected,
                  5 warnings, 81 subtests passed, exit 0
 ```
 

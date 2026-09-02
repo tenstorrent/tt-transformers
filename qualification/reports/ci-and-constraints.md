@@ -68,8 +68,8 @@ passes both final artifacts.
 ## Deferred static-quality gate
 
 A known-failing required lint/type job was not checked in. The exact isolated
-baseline records 2,148 Ruff findings, 163 files needing Ruff formatting, and
-489 mypy errors across 99 package files. TTNN provides no complete typing
+baseline records 2,158 Ruff findings, 166 files needing Ruff formatting, and
+502 mypy errors across 99 package files. TTNN provides no complete typing
 marker/stubs, and the bounded Black check did not complete reliably.
 Phase 9 begins only after hardware parity by plan; it must select one formatter,
 qualify the declared tool versions, establish a reviewed baseline, and then

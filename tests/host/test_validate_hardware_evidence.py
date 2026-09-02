@@ -40,17 +40,12 @@ def _inventory():
 
 
 def _expanded_environment(node, root):
-    return {
-        key: (
-            value.replace("{checkout}", "/qualified/checkout")
-            .replace("{run_root}", str(root))
-            .replace("{node_id}", node["id"])
-            .replace("{mesh_device}", node["mesh_device"])
-            if isinstance(value, str)
-            else None
-        )
-        for key, value in node["environment"].items()
-    }
+    return runner.environment_for(
+        node,
+        "wh-lb-42",
+        checkout=Path("/qualified/checkout"),
+        run_root=root,
+    )
 
 
 def _write_record(
@@ -107,6 +102,7 @@ def _build(root: Path):
     )
 
 
+@pytest.mark.host
 def test_builds_schema_valid_index_with_hash_bound_pair_and_summaries(tmp_path):
     evidence_path, log_path, _ = _write_record(tmp_path)
 
@@ -155,6 +151,7 @@ def test_builds_schema_valid_index_with_hash_bound_pair_and_summaries(tmp_path):
         ),
     ],
 )
+@pytest.mark.host
 def test_distinguishes_pre_device_functional_hardware_and_acceptance_failures(
     tmp_path, classification, exit_code, log_text, expected
 ):
@@ -169,6 +166,7 @@ def test_distinguishes_pre_device_functional_hardware_and_acceptance_failures(
     assert index["summary"]["outcomes"][expected] == 1
 
 
+@pytest.mark.host
 def test_rejects_candidate_sha_and_matrix_binding_mismatches(tmp_path):
     evidence_path, _, evidence = _write_record(tmp_path)
     evidence["full_sha"] = "b" * 40
@@ -183,6 +181,38 @@ def test_rejects_candidate_sha_and_matrix_binding_mismatches(tmp_path):
         _build(tmp_path)
 
 
+@pytest.mark.host
+def test_requires_runner_derived_node_local_cache_path(tmp_path):
+    evidence_path, _, evidence = _write_record(tmp_path)
+    assert evidence["environment"]["TT_CACHE_PATH"] == str(
+        tmp_path / "cache/wh-n150-rmsnorm-prefill"
+    )
+    evidence["environment"].pop("TT_CACHE_PATH")
+    evidence["cache_paths"]["TT_CACHE_PATH"] = None
+    evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+
+    with pytest.raises(
+        evidence_validator.EvidenceError, match="environment keys differ from matrix"
+    ):
+        _build(tmp_path)
+
+
+@pytest.mark.host
+def test_rejects_node_local_cache_path_template_mismatch(tmp_path):
+    evidence_path, _, evidence = _write_record(tmp_path)
+    wrong_cache_path = tmp_path / "cache/not-the-matrix-node"
+    evidence["environment"]["TT_CACHE_PATH"] = str(wrong_cache_path)
+    evidence["cache_paths"]["TT_CACHE_PATH"] = str(wrong_cache_path)
+    evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+
+    with pytest.raises(
+        evidence_validator.EvidenceError,
+        match="environment TT_CACHE_PATH does not match matrix template",
+    ):
+        _build(tmp_path)
+
+
+@pytest.mark.host
 def test_rejects_duplicate_nodes_even_when_records_have_different_names(tmp_path):
     _write_record(tmp_path)
     _write_record(tmp_path, suffix="-retry")
@@ -199,6 +229,7 @@ def test_rejects_duplicate_nodes_even_when_records_have_different_names(tmp_path
         (lambda evidence: evidence.update(teardown_status="not_started"), "teardown_status is missing"),
     ],
 )
+@pytest.mark.host
 def test_rejects_incomplete_runner_records(tmp_path, mutation, match):
     evidence_path, _, evidence = _write_record(tmp_path)
     mutation(evidence)
@@ -207,6 +238,7 @@ def test_rejects_incomplete_runner_records(tmp_path, mutation, match):
         _build(tmp_path)
 
 
+@pytest.mark.host
 def test_rejects_missing_or_mispaired_log(tmp_path):
     evidence_path, log_path, evidence = _write_record(tmp_path)
     log_path.unlink()
@@ -220,12 +252,14 @@ def test_rejects_missing_or_mispaired_log(tmp_path):
         _build(tmp_path)
 
 
+@pytest.mark.host
 def test_rejects_pass_without_positive_pytest_summary(tmp_path):
     _write_record(tmp_path, log_text="================ 1 skipped in 0.01s ================\n")
     with pytest.raises(evidence_validator.EvidenceError, match="no positive pytest pass summary"):
         _build(tmp_path)
 
 
+@pytest.mark.host
 def test_cli_writes_deterministic_index(tmp_path, capsys):
     _write_record(tmp_path)
     output = tmp_path.parent / "index.json"

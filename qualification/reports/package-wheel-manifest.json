@@ -1,7 +1,7 @@
 {
   "artifact": "tt_transformers-0.1.0.dev0-py3-none-any.whl",
-  "artifact_sha256": "a8837a3803930b97d527ef569190ec69b9dddc7b0c7537d183c1ad1268a0ae51",
-  "artifact_size": 596432,
+  "artifact_sha256": "18adf91d873ec27501909ab4fc26f1efb6058b9d4a1cd6c3e120f27e1285813c",
+  "artifact_size": 596738,
   "entries": [
     {
       "path": "tt_transformers-0.1.0.dev0.dist-info/METADATA",
@@ -10,23 +10,23 @@
     },
     {
       "path": "tt_transformers-0.1.0.dev0.dist-info/RECORD",
-      "sha256": "a7a4eb2d82edf2fe2b494390a4788f6a3111f147850f75fe5f95f920ce2f0478",
+      "sha256": "23837b7e6e67f2d00c057ca6039ce662bc8d10213dc711eef5a414273d22a565",
       "size": 13998
     },
     {
       "path": "tt_transformers-0.1.0.dev0.dist-info/WHEEL",
-      "sha256": "724e15ab5fd15f2bd2e09b7a488d15cfa7f256ce065a0ec020dc29b1a18480f1",
+      "sha256": "61532836a2b3111b7ec23519c09df7c41180c27165fb872a6d8913b566b88ad1",
       "size": 91
     },
     {
       "path": "tt_transformers-0.1.0.dev0.dist-info/licenses/LICENSE",
-      "sha256": "69849221bfb90053de2134ef5e6d540287b4b98062326492f1f96f5da685524b",
-      "size": 10174
+      "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9",
+      "size": 10173
     },
     {
       "path": "tt_transformers-0.1.0.dev0.dist-info/licenses/NOTICE",
-      "sha256": "7ff29e74597016fceb495c81c0bf6a1f29602e27be91a0765a082964bb89eebf",
-      "size": 3208
+      "sha256": "387a33040fa411a419e684d93df255822193dbfab5cdbdc88fe6acc9bb1f096d",
+      "size": 3207
     },
     {
       "path": "tt_transformers-0.1.0.dev0.dist-info/top_level.txt",
@@ -325,8 +325,8 @@
     },
     {
       "path": "tt_transformers/models/llama3_executor.py",
-      "sha256": "1b9e11b4281d0a97ebc170f2d6fe06db0a6a7d9021115a459eac83bd170eb387",
-      "size": 18522
+      "sha256": "8b9fc1fc18881882944c1028f83f1a65749f59ff0628c6db9d318e61c9231979",
+      "size": 18488
     },
     {
       "path": "tt_transformers/models/mistral_7b/__init__.py",
@@ -470,13 +470,13 @@
     },
     {
       "path": "tt_transformers/models/qwen25_coder_32b/hf_adaptor.py",
-      "sha256": "a9b6ac012c728c7417fc6a10975ae1f92ed3ba5536aa94874c05cf2126431648",
-      "size": 13910
+      "sha256": "8a41fad23defbdc95f4a8858a6ca9611ba4178f59160e02156b86449f14f03a2",
+      "size": 14715
     },
     {
       "path": "tt_transformers/models/qwen25_coder_32b/model.py",
-      "sha256": "a643b08d2a29f31730c95b8fd42494f60f15ed2f9e37912770b9d7f1ad5a83cd",
-      "size": 57399
+      "sha256": "17d37bd3a008a3f02f189b8d386e2ab2cf4c6f225a41cba1905d16746cd68e24",
+      "size": 57484
     },
     {
       "path": "tt_transformers/models/qwen25_coder_32b/weight_utils.py",
@@ -740,6 +740,6 @@
   "source_tree": {
     "algorithm": "sha256(path + NUL + content + NUL, sorted by path)",
     "python_files": 132,
-    "sha256": "3814705a56bcf5bdd3ed88578e203d6d9e428f329289facb9bc2215366fb4e5f"
+    "sha256": "be03de1c59c0b86afcbd45ac7a444a33b67ba33a4e469ccb2ab9607e0eb4ddf1"
   }
 }

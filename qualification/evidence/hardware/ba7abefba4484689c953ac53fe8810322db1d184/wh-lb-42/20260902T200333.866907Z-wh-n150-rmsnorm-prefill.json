@@ -1,0 +1,71 @@
+{
+  "acceptance_types": [
+    "pcc_threshold",
+    "program_cache_stability",
+    "clean_teardown"
+  ],
+  "actual_fqdn": "wh-lb-42-special-gwang-for-reservation-173014",
+  "architecture": "wormhole",
+  "branch": "tttv2-standalone-migration",
+  "cache_paths": {
+    "TT_CACHE_PATH": "/localdev/gwang/tt_transformers/hardware-results/ba7abefba4484689c953ac53fe8810322db1d184/wh-lb-42/cache/wh-n150-rmsnorm-prefill"
+  },
+  "caller_machine_identity": "wh-lb-42.yyz2.tenstorrent.com",
+  "command": [
+    "/localdev/gwang/tt_transformers/.venv/bin/python",
+    "-m",
+    "pytest",
+    "-vv",
+    "--color=no",
+    "--timeout=900",
+    "tests/modules/rmsnorm/test_rmsnorm_1d.py::test_rmsnorm_1d_wormhole_common_config_correctness_cache_and_timing[n150-local-prefill]"
+  ],
+  "environment": {
+    "MESH_DEVICE": "N150",
+    "TT_CACHE_PATH": "/localdev/gwang/tt_transformers/hardware-results/ba7abefba4484689c953ac53fe8810322db1d184/wh-lb-42/cache/wh-n150-rmsnorm-prefill"
+  },
+  "evidence_json_path": "/localdev/gwang/tt_transformers/hardware-results/ba7abefba4484689c953ac53fe8810322db1d184/wh-lb-42/20260902T200333.866907Z-wh-n150-rmsnorm-prefill.json",
+  "exit_code": 0,
+  "failure_classification": "passed",
+  "finished_utc": "2026-09-02T20:03:38.218977Z",
+  "full_sha": "ba7abefba4484689c953ac53fe8810322db1d184",
+  "mesh_device": "N150",
+  "metrics": [
+    "cachedir: .pytest_cache",
+    "tests/modules/rmsnorm/test_rmsnorm_1d.py::test_rmsnorm_1d_wormhole_common_config_correctness_cache_and_timing[n150-local-prefill] PASSED [100%]",
+    "2026-09-02 20:03:38.068 | info     |    BuildKernels | JIT cache stats: 28/28 hits (100.0%) [28 cached, 44 build-once dedup, 0 merged artifacts, 0 merged genfiles] (build_cache_telemetry.cpp:207)",
+    "2026-09-02 20:03:38.068 | info     |    BuildKernels | JIT telemetry: 3 registered TelemetryTokens (build_cache_telemetry.cpp:230)"
+  ],
+  "node": "wh-n150-rmsnorm-prefill",
+  "physical_inventory": {
+    "architecture": "wormhole",
+    "board_types": [
+      "n300 L",
+      "n300 R"
+    ],
+    "captured_utc": "2026-09-02T15:42:51Z",
+    "cluster_type": "T3K",
+    "device_count": 8,
+    "dram_status": "healthy on all 8 devices",
+    "driver": "TT-KMD 2.4.1",
+    "firmware_bundle": "18.12.1.0",
+    "machine_identity": "wh-lb-42.yyz2.tenstorrent.com",
+    "physical_sku": "T3K (four N300 left/right pairs)",
+    "source_command": "tt-smi -s",
+    "system_mesh": "1x8",
+    "tt_visible_devices": null
+  },
+  "reset": {
+    "automatic": false,
+    "performed": false,
+    "reason": "runner never resets hardware"
+  },
+  "schema_version": 1,
+  "selector": {
+    "target": "tests/modules/rmsnorm/test_rmsnorm_1d.py::test_rmsnorm_1d_wormhole_common_config_correctness_cache_and_timing[n150-local-prefill]"
+  },
+  "started_utc": "2026-09-02T20:03:33.866907Z",
+  "stdout_log_path": "/localdev/gwang/tt_transformers/hardware-results/ba7abefba4484689c953ac53fe8810322db1d184/wh-lb-42/20260902T200333.866907Z-wh-n150-rmsnorm-prefill.log",
+  "teardown_status": "process_exited; fixture teardown not independently hardware-verified",
+  "tt_visible_devices": null
+}

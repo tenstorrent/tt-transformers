@@ -1,177 +1,130 @@
-# Serialized hardware-qualification readiness
+# Hardware qualification evidence
 
-Status: **ready for externally synchronized, serialized execution; no hardware was contacted or run**
+Status: **not fully green — 33 passed, 1 functional blocker, and 8 topology-specific nodes deferred**
 
-Artifacts:
+The attributable release-candidate revision is
+`ba7abefba4484689c953ac53fe8810322db1d184` on branch
+`tttv2-standalone-migration`.
 
-- `qualification/manifests/hardware-matrix.json`
-- `qualification/tools/run_hardware_matrix.py`
-- `tests/host/test_hardware_matrix_runner.py`
+The canonical evidence index is
+`qualification/evidence/hardware/ba7abefba4484689c953ac53fe8810322db1d184/index.json`.
+Its SHA-256 is
+`749b0fe829b9d378b9dc0bd99b45d6dd6dcb77f38cccf16ebb862d5d166cc24b`.
 
-## Matrix summary
+## Final-SHA result
 
-The matrix contains 42 individually executable pytest nodes/processes, ordered by priority:
+The 42-node matrix has 34 same-SHA execution records. Of those, 33 passed and
+one is a Wormhole W6 functional failure. Eight single-P150 nodes were not run
+because their required `bh-lb-11` physical host role was unavailable.
 
-| Surface | Nodes |
-|---|---:|
-| Focused reusable modules | 30 |
-| Runtime trace/order correctness | 1 |
-| One-layer/model smoke | 3 |
-| Token-accuracy/e2e | 8 |
+| Stage | Matrix nodes | Executed | Passed | Functional failure | Deferred |
+|---|---:|---:|---:|---:|---:|
+| Focused reusable modules | 30 | 23 | 23 | 0 | 7 |
+| Runtime trace/order correctness | 1 | 1 | 0 | 1 | 0 |
+| One-layer/model smoke | 3 | 3 | 3 | 0 | 0 |
+| Token-accuracy/e2e | 8 | 7 | 7 | 0 | 1 |
+| **Total** | **42** | **34** | **33** | **1** | **8** |
 
-| `MESH_DEVICE` | Nodes | Physical meaning |
-|---|---:|---|
-| `N150` | 9 | Logical one-chip regression submesh on the physical T3K host; not standalone-N150 product evidence. |
-| `N300` | 6 | A recorded physical N300 left/right board pair within the T3K host. |
-| `T3K` | 8 | Full eight-device Wormhole T3K. |
-| `P150` | 8 | One P150 die selected on the eight-P150 development loudbox. |
-| `P150x4` | 11 | Logical 1x4 Ring requiring physical `P150_X4` or `P300_X2` provenance; arbitrary four-device submeshes are rejected. |
+Thus, all executed reusable-module, smoke, and e2e records passed: modules
+23/23, smoke 3/3, and e2e 7/7. The runtime gate is 0/1.
 
-Each node records an exact test target, optional `-k` selector, timeout, environment, cache rule, allowed machine pool, physical-SKU constraint, acceptance types, source basis, and the complete evidence schema.
+| Architecture / mesh | Executed result | Deferred |
+|---|---:|---:|
+| Wormhole / logical N150 on T3K | 9 passed | 0 |
+| Wormhole / physical N300 pair on T3K | 6 passed | 0 |
+| Wormhole / full T3K | 7 passed, 1 functional failure | 0 |
+| Blackhole / single P150 on development loudbox | 0 | 8 |
+| Blackhole / physical P150_X4 quietbox | 11 passed | 0 |
 
-All support manifests remain `experimental`; appearing in this readiness matrix is not a support or pass claim.
+Across the 34 records there were no hardware-lifecycle failures, pre-device
+failures, missing-acceptance classifications, or resets. Each record reports
+`reset.performed=false` and `reset.automatic=false`.
 
-## Authoritative inputs
+## W6 functional blocker
 
-The matrix reconciles:
+Priority 17, `wh-t3k-runtime-trace-order`, executed all four capture/sampling
+order cases on the full T3K and failed strict logits parity in each case. The
+recorded row-0 maximum absolute difference was 1.5 against a 1.0 limit, and
+top-5 overlap was 3 against a minimum of 4.
 
-- the authoritative `TTTV2_HARDWARE_INSTRUCTION_MANUAL.md` lifecycle, machine, topology, cache, timeout, and evidence rules;
-- all twelve `examples/*/support.json` hardware declarations;
-- `qualification/analysis/support/hardware_coverage.csv` physical/logical geometry inventory;
-- `qualification/analysis/support/marker_inventory.csv` and current explicit pytest markers/parameters.
+The runner classified this as `functional_failure`, not
+`hardware_lifecycle_failure`. The process exited and no reset was performed.
+Its evidence record is:
 
-No reservation file was read. No SSH, `tt-smi`, pytest collection, device test, or hardware process was run.
+`qualification/evidence/hardware/ba7abefba4484689c953ac53fe8810322db1d184/wh-lb-42/20260902T205014.027051Z-wh-t3k-runtime-trace-order.json`
 
-## External gates remain mandatory
+This blocker does not invalidate the separately passing module, smoke, or e2e
+records, but it prevents a fully green hardware-qualification verdict.
 
-The runner deliberately does not reserve machines, read reservations, SSH, fetch, pull, push, copy, switch branches, stash, commit, reset, or clean.
+## Deferred single-P150 scope
 
-Before `--execute`, an operator must independently complete the manual's reservation and participating-checkout synchronization procedure. The runner then requires:
+The following nodes were not executed:
 
-- `--sync-gate-passed` as an explicit caller attestation;
-- `--common-sha` containing the same 40-character lowercase full SHA;
-- `--branch` and `--machine-identity`;
-- a caller-captured physical-inventory JSON from the external `tt-smi -s` step.
+| Priority | Node | Stage |
+|---:|---|---|
+| 24 | `bh-p150-rmsnorm-decode` | module |
+| 25 | `bh-p150-lm-head` | module |
+| 26 | `bh-p150-mlp-decode` | module |
+| 27 | `bh-p150-mlp-prefill` | module |
+| 28 | `bh-p150-attention-prefill` | module |
+| 29 | `bh-p150-attention-decode` | module |
+| 30 | `bh-p150-attention-paged-transition` | module |
+| 38 | `bh-p150-llama3-8b-token-accuracy` | e2e |
 
-Actual execution rechecks the local checkout branch/SHA against the attestation. A mismatch is a preflight refusal, not a test result.
+These are specifically the matrix's `MESH_DEVICE=P150` nodes. They require a
+single P150 die selected on the eight-P150 development loudbox and list only
+`bh-lb-11` in their machine pool. The available `bh-qb-05` machine is a
+physical four-board P150_X4 quietbox; its topology and provenance cannot be
+reinterpreted as the required development-loudbox P150 scope. The eight absent
+records are `deferred_not_run`, neither passes nor failures.
 
-## Physical inventory format
+## Physical evidence boundary
 
-Example only—the operator supplies real values from the selected machine:
+The Wormhole records were produced on `wh-lb-42` with an eight-device T3K
+consisting of four physical N300 left/right pairs. Its inventory recorded a
+1x8 system mesh, healthy DRAM on all eight devices, TT-KMD 2.4.1, firmware
+bundle 18.12.1.0, and `TT_VISIBLE_DEVICES` unset.
 
-```json
-{
-  "captured_utc": "2026-09-02T00:00:00Z",
-  "machine_identity": "bh-qb-05.yyz2.tenstorrent.com",
-  "architecture": "blackhole",
-  "physical_sku": "four physical P150B boards",
-  "device_count": 4,
-  "board_types": ["p150b"],
-  "cluster_type": "P150_X4",
-  "system_mesh": "2x2",
-  "tt_visible_devices": null,
-  "source_command": "tt-smi -s"
-}
-```
+`N150` rows are logical one-chip regression submeshes on that physical T3K;
+they are not standalone-N150 product evidence. `N300` rows select a physical
+left/right N300 board pair within the T3K.
 
-`bh-lb-11` P150x4 additionally requires a revalidated `selected_bdfs` list matching the four documented Ring BDFs. Quietboxes require `TT_VISIBLE_DEVICES` to remain unset. P150_X4 and physical P300_X2 results retain distinct provenance.
+The Blackhole records were produced on `bh-qb-05`, a physical P150_X4
+quietbox with four p150b boards and a 2x2 system mesh. Its inventory recorded
+healthy DRAM on all four devices, TT-KMD 2.9.0, firmware 19.12.0.0, and
+`TT_VISIBLE_DEVICES` unset.
 
-## Serialization and reset policy
+The two independent physical hosts may run one node each concurrently. The
+records overlap in time across Wormhole and Blackhole while remaining
+serialized within each host, consistent with the matrix's host-scoped lock.
 
-The runner starts exactly one selected node with one `python -m pytest` process
-per physical host. Independent reserved WH and BH hosts may each run one node
-concurrently; the lock and serialization limit are host-scoped.
+## Evidence integrity and interpretation
 
-- Matrix validation rejects xdist/parallel arguments.
-- Runtime refuses `PYTEST_XDIST_WORKER` or parallel `PYTEST_ADDOPTS`.
-- An atomic cooperative lock defaults to `/tmp/tt-transformers-hardware.lock`; a second runner refuses before process creation.
-- External reservation/synchronization must also ensure no non-runner TT process shares the cards.
-- The runner never performs hardware reset.
-- Timeouts terminate the pytest process group and classify the result as `hardware_lifecycle_failure`; an operator decides whether a later external reset is justified.
-- Functional PCC/assertion/accuracy failures are not reset reasons.
-- Exit code zero is necessary but not sufficient for a pass. Pytest runs with color disabled for deterministic parsing, and the final terminal summary must report at least one passing test; an all-skipped, all-xfailed, empty, or missing summary is `no_passing_tests`.
+The canonical index contains one entry per executed node with exact branch and
+full SHA, physical inventory, machine, mesh, selector, stage, exit code,
+classification, metric count, teardown status, reset state, and content hashes
+for both the JSON record and stdout log. Its embedded matrix identity is:
 
-## Cache and environment rules
+- path: `qualification/manifests/hardware-matrix.json`
+- schema version: 1
+- node count: 42
+- SHA-256: `e5e54f1a216164c2036913313d0775454357ce5c6a82dc09c61caaba3c890db4`
 
-Every process sets `MESH_DEVICE` exactly. Module nodes receive a writable node-local `TT_CACHE_PATH`. Model nodes require the shared offline HF cache and an established warm model/topology cache.
+Every executed record says `process_exited; fixture teardown not independently
+hardware-verified`. This wording is retained verbatim: process exit is
+recorded, but independent post-fixture hardware verification is not claimed.
 
-The matrix uses a distinct model-family root before appending topology, so
-same-shaped tensors from different checkpoints cannot share a lazy-weight
-cache key. It records model-specific cache semantics:
+`qualification/analysis/support/hardware_evidence.csv` lists all 34 attributable
+records and all eight deferred nodes individually. Same-SHA functional evidence
+is eligible for the pinned baseline even when it records a blocker; eligibility
+means attributable evidence, not a passing result. Deferred nodes have no
+execution evidence and are ineligible.
 
-- Llama 3 8B uses a model root and appends the topology exactly once.
-- Llama 3.3 70B and Qwen3 32B append the topology exactly once beneath their
-  separate model-family roots.
-- A duplicated topology component is a preflight/cache error, not permission to rematerialize another full cache.
+The ledger also preserves earlier revisions
+`00748e6ac7b65f50e5c2af07f6e7c1c535c7f4c0` and
+`b1a75d474ee44f583c32c5e6279c7026907553b9` as historical, ineligible context.
+Their observations do not transfer to the final candidate SHA.
 
-## Commands
-
-Host-safe validation/listing:
-
-```bash
-python3 qualification/tools/run_hardware_matrix.py --validate
-python3 qualification/tools/run_hardware_matrix.py --list
-```
-
-Dry-run after supplying a real external inventory file:
-
-```bash
-python3 qualification/tools/run_hardware_matrix.py --dry-run \
-  --node wh-n150-rmsnorm-prefill \
-  --sync-gate-passed \
-  --common-sha <40_HEX_COMMON_SHA> \
-  --branch <COMMON_BRANCH> \
-  --machine-identity wh-lb-42.yyz2.tenstorrent.com \
-  --physical-inventory /path/to/inventory.json \
-  --checkout /path/to/tt_transformers \
-  --output-dir /path/to/hardware-results
-```
-
-Execution uses the same arguments with `--execute`. It is intentionally not demonstrated or run in this readiness task.
-
-Standalone failure classification for an existing log:
-
-```bash
-python3 qualification/tools/run_hardware_matrix.py \
-  --classify-log /path/to/node.log --exit-code 1
-```
-
-## Evidence output
-
-An executed node writes one complete stdout log and one JSON evidence record containing:
-
-- UTC start/finish;
-- branch and common full SHA;
-- caller identity and actual FQDN;
-- architecture, physical inventory, mesh, and visible devices;
-- exact selector, argv, environment, and cache path;
-- exit code and separate failure classification;
-- extracted PCC/accuracy/cache/timing/throughput metric lines;
-- acceptance types;
-- teardown status;
-- reset record, always `performed=false` and `automatic=false`;
-- stdout and evidence paths.
-
-Result classifications are: `passed`, `functional_failure`, `hardware_lifecycle_failure`, `missing_acceptance_data`, `no_passing_tests`, `unimplemented_gate`, `different_hardware_deferred`, `preflight_refusal`, and `not_executed_dry_run`.
-
-An exit-zero run is classified `no_passing_tests` unless pytest's final terminal summary reports one or more passing tests. Skips, xfails, an empty selection, a missing summary, or a misleading `PASSED` progress line cannot produce passing evidence.
-
-An e2e process that exits zero but emits no recognizable acceptance metric is classified `missing_acceptance_data`, not passed.
-
-## Host validation
-
-```bash
-python3 qualification/tools/run_hardware_matrix.py --validate
-PYTHONPATH=src:. pytest -q --confcutdir=tests/host \
-  tests/host/test_hardware_matrix_runner.py
-env PYTHONPYCACHEPREFIX=/tmp/gwang/tttv2_hw_matrix_pycache \
-  python3 -m compileall -q \
-  qualification/tools/run_hardware_matrix.py \
-  tests/host/test_hardware_matrix_runner.py
-```
-
-The tests cover schema validation, five-mesh coverage, dry-run serialization, synchronization/SHA/machine refusal, lock ownership, parallel-option refusal, physical P150x4 provenance refusal, fail-closed pytest-result classification, evidence completeness, and the no-auto-reset policy.
-
-## Evidence boundary
-
-This deliverable proves readiness logic only. It contains no reservation state and no hardware result. Every future run must still pass the external synchronization and physical-inventory gates and must be reported against its actual common SHA and physical machine.
+This report records qualification evidence only. It does not promote any
+support manifest, change its `experimental` status, or convert deferred scope
+into a support claim.

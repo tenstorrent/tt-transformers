@@ -1191,7 +1191,10 @@ def write_manifest() -> None:
     for root in (ROOT / "tests", ROOT / "examples", ROOT / "qualification"):
         for path in root.rglob("*"):
             if path.is_file() and "__pycache__" not in path.parts and path != BOUNDARY_MANIFEST:
-                files.append({"path": path.relative_to(ROOT).as_posix(), "sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "size": path.stat().st_size})
+                relative = path.relative_to(ROOT)
+                if relative.parts[:2] == ("qualification", "evidence"):
+                    continue
+                files.append({"path": relative.as_posix(), "sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "size": path.stat().st_size})
     with (ROOT / "qualification/extraction/support_copy_manifest.csv").open(newline="") as stream:
         phase2_rows = list(csv.DictReader(stream))
     deferred = sorted(

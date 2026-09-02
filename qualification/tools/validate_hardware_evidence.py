@@ -16,10 +16,13 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from qualification.tools import run_hardware_matrix as runner
 
 
-ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MATRIX = ROOT / "qualification/manifests/hardware-matrix.json"
 DEFAULT_SCHEMA = ROOT / "qualification/schemas/hardware-evidence.schema.json"
 FINAL_CLASSIFICATIONS = {
@@ -166,6 +169,9 @@ def validate_environment(
 ) -> None:
     expected = dict(node.get("environment", {}))
     expected.update(node.get("machine_environment_overrides", {}).get(machine_name, {}))
+    cache = node.get("cache_requirement", {})
+    if cache.get("kind") == "writable_node_local":
+        expected["TT_CACHE_PATH"] = cache.get("path")
     actual = evidence.get("environment")
     if not isinstance(actual, dict) or set(actual) != set(expected):
         actual_keys = sorted(actual) if isinstance(actual, dict) else actual

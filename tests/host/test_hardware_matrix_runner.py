@@ -215,6 +215,7 @@ def test_failure_classification_is_separate(exit_code, output, timed_out, expect
     assert runner.classify_failure(exit_code, output, timed_out) == expected
 
 
+@pytest.mark.host
 def test_unrelated_hardware_terms_across_log_are_a_functional_failure():
     output = "\n".join(
         (
@@ -238,6 +239,7 @@ def test_unrelated_hardware_terms_across_log_are_a_functional_failure():
         "Reset required before the next test",
     ],
 )
+@pytest.mark.host
 def test_local_hardware_fatal_signatures_remain_lifecycle_failures(signature):
     output = f"pytest setup completed\n{signature}\npytest session aborted"
 

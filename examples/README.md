@@ -1,6 +1,6 @@
 # Examples and model support
 
-All twelve examples are concrete and runnable, but **experimental**. No example is qualified and no hardware pass is attributable to the pinned source revision.
+All twelve examples are concrete and runnable, but **experimental**. No example is qualified, every `support.json` retains null validation metadata and an empty evidence list, and no hardware pass is attributable to the pinned source revision.
 
 Install the candidate environment with:
 
@@ -22,6 +22,18 @@ python -m pip install -e '.[examples,test]'
 | [qwen25_coder_32b](qwen25_coder_32b/README.md) | experimental | concrete; runnable CLI | `Qwen/Qwen2.5-Coder-32B-Instruct` | `381fc969f78efac66bc87ff7ddeadb7e73c218a7` | wormhole T3K mesh=1x8 TP8/DP1 | none at pinned SHA |
 | [qwen2_7b](qwen2_7b/README.md) | experimental | concrete; runnable CLI | `Qwen/Qwen2-7B-Instruct` | `f2826a00ceef68f0f2b946d945ecc0477ce4450c` | wormhole N300 mesh=1x2 TP2/DP1; wormhole T3K mesh=1x8 TP2/DP4 | none at pinned SHA |
 | [qwen3_32b](qwen3_32b/README.md) | experimental | concrete; runnable CLI | `Qwen/Qwen3-32B` | `9216db5781bf21249d130ec9da846c4624c16137` | wormhole T3K mesh=1x8 TP8/DP1; blackhole P150_X4 required logical target; code accepts physical P300_X2 alias with distinct provenance mesh=1x4 TP4/DP1 | none at pinned SHA |
+
+## Centralized final-SHA subset evidence
+
+The [centralized hardware ledger](../qualification/evidence/hardware/ba7abefba4484689c953ac53fe8810322db1d184/index.json) records 33 passing nodes and one functional failure at final tested standalone SHA `ba7abefba4484689c953ac53fe8810322db1d184`. It covers reusable modules and narrow subsets of five model families:
+
+- Llama-3.2-1B: Wormhole N150 TP1/DP1 and N300 TP2/DP1 token accuracy passed; its N300 DP and T3K variants were not exercised.
+- Qwen2.5-7B: Wormhole N300 TP2/DP1 token accuracy passed; its T3K variant was not exercised.
+- Qwen2.5-Coder-32B: a Wormhole T3K TP8/DP1 prefill smoke passed; no end-to-end accuracy node was run.
+- Qwen3-32B: Wormhole T3K TP8/DP1 and physical Blackhole P150_X4 TP4/DP1 token accuracy passed, as did the physical P150_X4 one-layer smoke; the accepted P300_X2 code alias was not exercised.
+- Llama-3.3-70B: Wormhole T3K TP8/DP1 and physical Blackhole P150_X4 TP4/DP1 token accuracy passed, as did the physical P150_X4 one-layer smoke; the T3K W6 trace-order correctness node failed and remains a blocker, and the accepted P300_X2 code alias was not exercised.
+
+This is hash-bound diagnostic migration evidence, not qualification of an example or its whole declared geometry. The seven single-card P150 module nodes and Llama-3.1-8B P150 token-accuracy node were not run, and P150_X4 evidence does not cover P150. The other seven model families have no final-SHA model-family node; every geometry, parallelism variant, hardware alias, and workload absent from the ledger remains uncovered and unqualified.
 
 Each model README contains exact run/collection commands, checkpoint/cache requirements, proven source limits, unsupported configurations, and evidence links. Machine-readable truth lives in each `support.json`; validate all documentation with:
 

@@ -1,6 +1,6 @@
 # TT Transformers support matrix
 
-Concrete implementation and a runnable CLI mean the source is present and callable. They do **not** mean qualified. Every current row is experimental because no hardware result is attributable to the pinned extraction SHA.
+Concrete implementation and a runnable CLI mean the source is present and callable. They do **not** mean qualified. Every current row remains **experimental**, and all twelve `support.json` files intentionally retain a null validation date/SHA and an empty evidence list. No hardware result is attributable to the pinned extraction SHA.
 
 Candidate software tuple: `tt-transformers==0.1.0.dev0`, `ttnn==0.77.0`, Python 3.10/3.12, `torch==2.11.0`, `transformers==5.12.1`.
 
@@ -19,11 +19,24 @@ Candidate software tuple: `tt-transformers==0.1.0.dev0`, `ttnn==0.77.0`, Python 
 | [qwen2_7b](examples/qwen2_7b/README.md) | experimental | concrete; runnable CLI | `Qwen/Qwen2-7B-Instruct` | `f2826a00ceef68f0f2b946d945ecc0477ce4450c` | wormhole N300 mesh=1x2 TP2/DP1; wormhole T3K mesh=1x8 TP2/DP4 | none at pinned SHA |
 | [qwen3_32b](examples/qwen3_32b/README.md) | experimental | concrete; runnable CLI | `Qwen/Qwen3-32B` | `9216db5781bf21249d130ec9da846c4624c16137` | wormhole T3K mesh=1x8 TP8/DP1; blackhole P150_X4 required logical target; code accepts physical P300_X2 alias with distinct provenance mesh=1x4 TP4/DP1 | none at pinned SHA |
 
+## Centralized final-SHA subset evidence
+
+The [centralized hardware ledger](qualification/evidence/hardware/ba7abefba4484689c953ac53fe8810322db1d184/index.json) records 33 passing nodes and one functional failure at final tested standalone SHA `ba7abefba4484689c953ac53fe8810322db1d184`. It covers reusable modules and only these five model-family subsets:
+
+- Llama-3.2-1B: token-accuracy nodes passed on Wormhole N150 TP1/DP1 and N300 TP2/DP1. Its N300 DP and T3K variants were not exercised.
+- Qwen2.5-7B: the Wormhole N300 TP2/DP1 token-accuracy node passed. Its T3K variant was not exercised.
+- Qwen2.5-Coder-32B: the Wormhole T3K TP8/DP1 prefill smoke passed. No end-to-end accuracy node was run.
+- Qwen3-32B: token-accuracy nodes passed on Wormhole T3K TP8/DP1 and physical Blackhole P150_X4 TP4/DP1; the physical P150_X4 one-layer smoke also passed. The accepted P300_X2 code alias was not exercised.
+- Llama-3.3-70B: token-accuracy nodes passed on Wormhole T3K TP8/DP1 and physical Blackhole P150_X4 TP4/DP1; the physical P150_X4 one-layer smoke also passed. The T3K W6 trace-order correctness node failed and remains a blocker, and the accepted P300_X2 code alias was not exercised.
+
+These hash-bound diagnostic migration results do not qualify any model or geometry. The seven single-card P150 module nodes and the Llama-3.1-8B P150 token-accuracy node were not run; P150_X4 evidence is not P150 evidence. The other seven model families have no final-SHA model-family node, and every geometry, parallelism variant, hardware alias, or workload absent from the ledger remains uncovered.
+
 Evidence policy and details:
 
 - [Pinned support baseline](qualification/analysis/support/support_baseline.md)
 - [Hardware evidence ledger](qualification/analysis/support/hardware_evidence.csv)
+- [Centralized final-SHA hardware ledger](qualification/evidence/hardware/ba7abefba4484689c953ac53fe8810322db1d184/index.json)
 - [Phase 3 support-boundary report](qualification/extraction/support_boundary.md)
 - [Example overview](examples/README.md)
 
-An empty evidence cell would be ambiguous, so every row explicitly says that pinned-SHA evidence is absent. Historical observations at other SHAs are context only.
+An empty evidence cell would be ambiguous, so every row explicitly says that pinned-source-SHA evidence is absent. The centralized final-SHA ledger is a separate execution record for the narrow subsets above and does not change any row's experimental status.
