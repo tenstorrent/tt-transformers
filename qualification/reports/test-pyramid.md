@@ -132,6 +132,11 @@ inventory attestation before execution, owns a single-process lock, rejects
 parallel pytest options, records acceptance/teardown evidence, and never
 reserves, connects to, or resets hardware itself.
 
+The runner accepts exit code zero as `passed` only when pytest's final terminal
+summary contains at least one passing test. All-skipped/all-xfailed selections,
+empty selections, and missing terminal summaries are `no_passing_tests` and
+cannot become hardware evidence.
+
 Host-safe runner checks are:
 
 ```bash

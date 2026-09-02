@@ -24,8 +24,9 @@ if os.environ.get("MESH_DEVICE", "").strip() != "T3K":
 
 from huggingface_hub import snapshot_download
 
+from tt_transformers.models.llama33_70b.hf_adaptor import DEFAULT_HF_REVISION
 from tt_transformers.sampling import SamplingParams
-from tests.hardware.models.llama33_70b.test_demo import create_executor, create_model, lazy_weight_cache_dir_for_demo
+from examples.llama33_70b.demo import create_executor, create_model, lazy_weight_cache_dir_for_demo
 from tests.models.llama33_70b.logits_oracle import assert_rowwise_logits_parity
 
 _HF_MODEL = "meta-llama/Llama-3.3-70B-Instruct"
@@ -77,7 +78,7 @@ def local_hf_model(model_location_generator) -> str:
     if Path(str(located)).exists():
         return str(located)
     try:
-        return snapshot_download(str(located), local_files_only=True)
+        return snapshot_download(str(located), revision=DEFAULT_HF_REVISION, local_files_only=True)
     except Exception as error:
         pytest.fail(f"MESH_DEVICE=T3K requires local Llama-3.3-70B model assets: {error}", pytrace=False)
 

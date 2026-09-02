@@ -20,6 +20,17 @@ DEFAULT_MATRIX = ROOT / "qualification/manifests/hardware-matrix.json"
 ALLOWED_STAGES = {"module", "runtime", "smoke", "e2e"}
 ALLOWED_ARCHITECTURES = {"wormhole", "blackhole"}
 ALLOWED_MESH_DEVICES = {"N150", "N300", "T3K", "P150", "P150x4"}
+ALLOWED_RESULT_CLASSIFICATIONS = {
+    "passed",
+    "functional_failure",
+    "hardware_lifecycle_failure",
+    "missing_acceptance_data",
+    "no_passing_tests",
+    "unimplemented_gate",
+    "different_hardware_deferred",
+    "preflight_refusal",
+    "not_executed_dry_run",
+}
 PARALLEL_ARGUMENTS = {"-n", "--numprocesses", "--dist", "--tx"}
 HARDWARE_FAILURE_PATTERNS = (
     r"watcher.*(?:error|fatal)",
@@ -32,6 +43,11 @@ METRIC_PATTERN = re.compile(
     r"(?:\bPCC\b|top[- ]?[15]|cache|TTFT|TPOT|tok(?:ens)?/s|throughput)",
     re.IGNORECASE,
 )
+PYTEST_TERMINAL_SUMMARY_PATTERN = re.compile(
+    r"^=+\s+(?P<body>.+?)\s+in\s+\d+(?:\.\d+)?s(?:\s+\([^\n]*\))?\s+=+\s*$",
+    re.MULTILINE,
+)
+PYTEST_PASSED_PATTERN = re.compile(r"(?:^|,\s*)(?P<count>\d+)\s+passed\b")
 
 
 class MatrixError(RuntimeError):
@@ -74,8 +90,19 @@ def validate_matrix(matrix: dict[str, Any], root: Path = ROOT) -> dict[str, int]
     serialization = matrix.get("serialization", {})
     if serialization.get("max_concurrent_processes") != 1:
         raise MatrixError("hardware matrix must allow exactly one concurrent process")
+    if serialization.get("scope") != "physical_host":
+        raise MatrixError("hardware matrix serialization scope must be physical_host")
     if serialization.get("automatic_reset") is not False:
         raise MatrixError("automatic reset must be disabled")
+
+    classifications = matrix.get("failure_classifications")
+    if (
+        not isinstance(classifications, list)
+        or any(not isinstance(item, str) for item in classifications)
+        or len(classifications) != len(set(classifications))
+        or set(classifications) != ALLOWED_RESULT_CLASSIFICATIONS
+    ):
+        raise MatrixError("hardware matrix failure classifications do not match the runner")
 
     required_evidence = matrix.get("required_evidence_fields")
     if not isinstance(required_evidence, list) or not required_evidence:
@@ -281,6 +308,7 @@ def build_command(node: dict[str, Any], python: str) -> list[str]:
         "-m",
         "pytest",
         "-vv",
+        "--color=no",
         f"--timeout={node['timeout_seconds']}",
         *selector_argv(node),
     ]
@@ -319,11 +347,22 @@ class ProcessLock:
             pass
 
 
+def pytest_pass_count(output: str) -> int | None:
+    """Return the pass count from pytest's final terminal summary, if present."""
+
+    summaries = [match.group("body") for match in PYTEST_TERMINAL_SUMMARY_PATTERN.finditer(output)]
+    if not summaries:
+        return None
+    match = PYTEST_PASSED_PATTERN.search(summaries[-1])
+    return int(match.group("count")) if match else 0
+
+
 def classify_failure(exit_code: int | None, output: str, timed_out: bool = False) -> str:
     if timed_out:
         return "hardware_lifecycle_failure"
     if exit_code == 0:
-        return "passed"
+        pass_count = pytest_pass_count(output)
+        return "passed" if pass_count is not None and pass_count > 0 else "no_passing_tests"
     if any(re.search(pattern, output, re.IGNORECASE | re.DOTALL) for pattern in HARDWARE_FAILURE_PATTERNS):
         return "hardware_lifecycle_failure"
     return "functional_failure"

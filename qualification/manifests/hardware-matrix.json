@@ -13,6 +13,7 @@
   },
   "serialization": {
     "max_concurrent_processes": 1,
+    "scope": "physical_host",
     "lock_file_default": "/tmp/tt-transformers-hardware.lock",
     "external_reservation_and_synchronization_required": true,
     "runner_reads_reservations": false,
@@ -54,6 +55,7 @@
     "functional_failure",
     "hardware_lifecycle_failure",
     "missing_acceptance_data",
+    "no_passing_tests",
     "unimplemented_gate",
     "different_hardware_deferred",
     "preflight_refusal",
@@ -1142,12 +1144,18 @@
       },
       "timeout_seconds": 1800,
       "environment": {
-        "MESH_DEVICE": "T3K"
+        "MESH_DEVICE": "T3K",
+        "HF_MODEL": "meta-llama/Llama-3.3-70B-Instruct",
+        "HF_HOME": "/proj_sw/user_dev/huggingface",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TT_CACHE_PATH": "{checkout}/model_cache/llama33_70b"
       },
       "machine_environment_overrides": {},
       "cache_requirement": {
-        "kind": "writable_node_local",
-        "path": "{run_root}/cache/{node_id}",
+        "kind": "established_warm_model_cache",
+        "model": "llama33_70b",
+        "root_semantics": "model-family root; helper appends topology exactly once",
         "writable": true
       },
       "physical_sku_provenance": {
@@ -1208,13 +1216,13 @@
         "HF_HOME": "/proj_sw/user_dev/huggingface",
         "HF_HUB_OFFLINE": "1",
         "TRANSFORMERS_OFFLINE": "1",
-        "TT_CACHE_PATH": "{checkout}/model_cache"
+        "TT_CACHE_PATH": "{checkout}/model_cache/qwen25_coder_32b"
       },
       "machine_environment_overrides": {},
       "cache_requirement": {
         "kind": "established_warm_model_cache",
         "model": "qwen25_coder_32b",
-        "root_semantics": "topology directory; inspect before run",
+        "root_semantics": "model-family root; smoke appends topology exactly once",
         "writable": true
       },
       "physical_sku_provenance": {
@@ -1275,13 +1283,13 @@
         "HF_HOME": "/proj_sw/user_dev/huggingface",
         "HF_HUB_OFFLINE": "1",
         "TRANSFORMERS_OFFLINE": "1",
-        "TT_CACHE_PATH": "{checkout}/model_cache"
+        "TT_CACHE_PATH": "{checkout}/model_cache/llama32_1b"
       },
       "machine_environment_overrides": {},
       "cache_requirement": {
         "kind": "established_warm_model_cache",
         "model": "llama32_1b",
-        "root_semantics": "inspect model-specific first records; reject duplicate topology suffix",
+        "root_semantics": "model-family root; model appends topology exactly once",
         "writable": true
       },
       "physical_sku_provenance": {
@@ -1342,13 +1350,13 @@
         "HF_HOME": "/proj_sw/user_dev/huggingface",
         "HF_HUB_OFFLINE": "1",
         "TRANSFORMERS_OFFLINE": "1",
-        "TT_CACHE_PATH": "{checkout}/model_cache"
+        "TT_CACHE_PATH": "{checkout}/model_cache/llama32_1b"
       },
       "machine_environment_overrides": {},
       "cache_requirement": {
         "kind": "established_warm_model_cache",
         "model": "llama32_1b",
-        "root_semantics": "inspect model-specific first records; reject duplicate topology suffix",
+        "root_semantics": "model-family root; model appends topology exactly once",
         "writable": true
       },
       "physical_sku_provenance": {
@@ -1409,13 +1417,13 @@
         "HF_HOME": "/proj_sw/user_dev/huggingface",
         "HF_HUB_OFFLINE": "1",
         "TRANSFORMERS_OFFLINE": "1",
-        "TT_CACHE_PATH": "{checkout}/model_cache"
+        "TT_CACHE_PATH": "{checkout}/model_cache/qwen25_7b"
       },
       "machine_environment_overrides": {},
       "cache_requirement": {
         "kind": "established_warm_model_cache",
         "model": "qwen25_7b",
-        "root_semantics": "inspect model-specific first records; reject duplicate topology suffix",
+        "root_semantics": "model-family root; model appends topology exactly once",
         "writable": true
       },
       "physical_sku_provenance": {
@@ -1476,14 +1484,14 @@
         "HF_HOME": "/proj_sw/user_dev/huggingface",
         "HF_HUB_OFFLINE": "1",
         "TRANSFORMERS_OFFLINE": "1",
-        "TT_CACHE_PATH": "{checkout}/model_cache",
+        "TT_CACHE_PATH": "{checkout}/model_cache/qwen3_32b",
         "SAMPLING_MODE": "on_device_topk"
       },
       "machine_environment_overrides": {},
       "cache_requirement": {
         "kind": "established_warm_model_cache",
         "model": "qwen3_32b",
-        "root_semantics": "topology directory itself",
+        "root_semantics": "model-family root; helper appends topology exactly once",
         "writable": true
       },
       "physical_sku_provenance": {
@@ -1544,14 +1552,14 @@
         "HF_HOME": "/proj_sw/user_dev/huggingface",
         "HF_HUB_OFFLINE": "1",
         "TRANSFORMERS_OFFLINE": "1",
-        "TT_CACHE_PATH": "{checkout}/model_cache",
+        "TT_CACHE_PATH": "{checkout}/model_cache/llama33_70b",
         "SAMPLING_MODE": "on_device_topk"
       },
       "machine_environment_overrides": {},
       "cache_requirement": {
         "kind": "established_warm_model_cache",
         "model": "llama33_70b",
-        "root_semantics": "topology directory itself",
+        "root_semantics": "model-family root; helper appends topology exactly once",
         "writable": true
       },
       "physical_sku_provenance": {
@@ -2578,7 +2586,7 @@
         "HF_HOME": "/proj_sw/user_dev/huggingface",
         "HF_HUB_OFFLINE": "1",
         "TRANSFORMERS_OFFLINE": "1",
-        "TT_CACHE_PATH": "{checkout}/model_cache"
+        "TT_CACHE_PATH": "{checkout}/model_cache/llama3_8b"
       },
       "machine_environment_overrides": {},
       "cache_requirement": {
@@ -2647,7 +2655,7 @@
         "HF_HOME": "/proj_sw/user_dev/huggingface",
         "HF_HUB_OFFLINE": "1",
         "TRANSFORMERS_OFFLINE": "1",
-        "TT_CACHE_PATH": "{checkout}/model_cache"
+        "TT_CACHE_PATH": "{checkout}/model_cache/qwen3_32b"
       },
       "machine_environment_overrides": {
         "bh-lb-11": {
@@ -2663,7 +2671,7 @@
       "cache_requirement": {
         "kind": "established_warm_model_cache",
         "model": "qwen3_32b",
-        "root_semantics": "topology directory itself",
+        "root_semantics": "model-family root; helper appends topology exactly once",
         "writable": true
       },
       "physical_sku_provenance": {
@@ -2720,7 +2728,7 @@
         "bh-qbge-15"
       ],
       "selector": {
-        "target": "tests/models/llama33_70b/test_p150x4_smoke.py::test_llama33_70b_one_layer_prefill_decode_smoke[physical-P150x4-ring]"
+        "target": "tests/models/llama33_70b/test_p150x4_smoke.py::test_llama33_70b_one_layer_prefill_decode_smoke[physical-BH-TP4-ring]"
       },
       "timeout_seconds": 1800,
       "environment": {
@@ -2729,7 +2737,7 @@
         "HF_HOME": "/proj_sw/user_dev/huggingface",
         "HF_HUB_OFFLINE": "1",
         "TRANSFORMERS_OFFLINE": "1",
-        "TT_CACHE_PATH": "{checkout}/model_cache"
+        "TT_CACHE_PATH": "{checkout}/model_cache/llama33_70b"
       },
       "machine_environment_overrides": {
         "bh-lb-11": {
@@ -2745,7 +2753,7 @@
       "cache_requirement": {
         "kind": "established_warm_model_cache",
         "model": "llama33_70b",
-        "root_semantics": "topology directory itself",
+        "root_semantics": "model-family root; helper appends topology exactly once",
         "writable": true
       },
       "physical_sku_provenance": {
@@ -2812,7 +2820,7 @@
         "HF_HOME": "/proj_sw/user_dev/huggingface",
         "HF_HUB_OFFLINE": "1",
         "TRANSFORMERS_OFFLINE": "1",
-        "TT_CACHE_PATH": "{checkout}/model_cache",
+        "TT_CACHE_PATH": "{checkout}/model_cache/qwen3_32b",
         "SAMPLING_MODE": "on_device_topk"
       },
       "machine_environment_overrides": {
@@ -2829,7 +2837,7 @@
       "cache_requirement": {
         "kind": "established_warm_model_cache",
         "model": "qwen3_32b",
-        "root_semantics": "topology directory itself",
+        "root_semantics": "model-family root; helper appends topology exactly once",
         "writable": true
       },
       "physical_sku_provenance": {
@@ -2896,7 +2904,7 @@
         "HF_HOME": "/proj_sw/user_dev/huggingface",
         "HF_HUB_OFFLINE": "1",
         "TRANSFORMERS_OFFLINE": "1",
-        "TT_CACHE_PATH": "{checkout}/model_cache",
+        "TT_CACHE_PATH": "{checkout}/model_cache/llama33_70b",
         "SAMPLING_MODE": "on_device_topk"
       },
       "machine_environment_overrides": {
@@ -2913,7 +2921,7 @@
       "cache_requirement": {
         "kind": "established_warm_model_cache",
         "model": "llama33_70b",
-        "root_semantics": "topology directory itself",
+        "root_semantics": "model-family root; helper appends topology exactly once",
         "writable": true
       },
       "physical_sku_provenance": {
@@ -2925,7 +2933,7 @@
         "reject_arbitrary_submesh": true
       },
       "acceptance_types": [
-        "observational_token_accuracy",
+        "token_accuracy_threshold",
         "clean_teardown"
       ],
       "required_evidence_fields": [

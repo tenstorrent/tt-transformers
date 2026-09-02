@@ -118,6 +118,45 @@ def assert_replacement(node: ast.Assert, text: str, offsets: list[int]) -> str:
     return f"if not ({condition}):\n{indent}    raise AssertionError({message})"
 
 
+def normalize_qwen25_coder_smoke_runtime(text: str, path: Path) -> str:
+    """Preserve T3K fabric and model-family cache policy in regenerated smoke code."""
+
+    text = text.replace("import os\n", "import os\nfrom pathlib import Path\n", 1)
+    text = text.replace(
+        'ttnn.FabricConfig.FABRIC_1D_RING if galaxy_type == "6U" else ttnn.FabricConfig.FABRIC_1D',
+        'ttnn.FabricConfig.FABRIC_1D_RING\n'
+        '                if galaxy_type == "6U" or os.environ.get("MESH_DEVICE") == "T3K"\n'
+        '                else ttnn.FabricConfig.FABRIC_1D',
+        1,
+    )
+    text = re.sub(
+        r'tmp_path_factory\.mktemp\(("qwen25_coder_32b_[^"]+")\)',
+        r"_weight_cache_dir(tmp_path_factory, \1)",
+        text,
+    )
+
+    tree = ast.parse(text, filename=str(path))
+    function = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "default_hf_model_id"
+    )
+    lines, offsets = line_offsets(text)
+    _start, end = whole_lines(function, lines, offsets)
+    helper = '''
+
+def _weight_cache_dir(tmp_path_factory, name: str) -> Path:
+    """Use the attested model cache when provided, else isolate local smoke runs."""
+
+    if root := os.environ.get("TT_CACHE_PATH"):
+        cache = Path(root) / "T3K"
+        cache.mkdir(parents=True, exist_ok=True)
+        return cache
+    return tmp_path_factory.mktemp(name)
+'''
+    return text[:end] + helper + text[end:]
+
+
 def transform_example(path: Path, *, smoke: bool) -> tuple[str, list[ast.FunctionDef], list[str]]:
     text = path.read_text()
     tree = ast.parse(text, filename=str(path))
@@ -225,6 +264,9 @@ def transform_example(path: Path, *, smoke: bool) -> tuple[str, list[ast.Functio
             "import ttnn\nfrom examples.common.runtime import TemporaryPathFactory, UnsupportedConfiguration, open_mesh_device\n",
             1,
         )
+
+    if smoke and path.as_posix().endswith("examples/qwen25_coder_32b/smoke.py"):
+        transformed = normalize_qwen25_coder_smoke_runtime(transformed, path)
 
     model = path.parent.name
     reference_root = f'Path("qualification/assets/reference_outputs/{model}")'

@@ -29,6 +29,7 @@ from functools import wraps
 import inspect
 
 import os
+from pathlib import Path
 
 import torch
 from transformers import AutoConfig, AutoModelForCausalLM
@@ -74,7 +75,9 @@ def resolve_device_params(request, galaxy_type):
             params["fabric_config"] = None
         elif params["fabric_config"] is True:
             params["fabric_config"] = (
-                ttnn.FabricConfig.FABRIC_1D_RING if galaxy_type == "6U" else ttnn.FabricConfig.FABRIC_1D
+                ttnn.FabricConfig.FABRIC_1D_RING
+                if galaxy_type == "6U" or os.environ.get("MESH_DEVICE") == "T3K"
+                else ttnn.FabricConfig.FABRIC_1D
             )
 
     return params
@@ -84,6 +87,16 @@ def resolve_device_params(request, galaxy_type):
 
 def default_hf_model_id():
     return os.environ.get("HF_MODEL", "Qwen/Qwen2.5-Coder-32B-Instruct")
+
+
+def _weight_cache_dir(tmp_path_factory, name: str) -> Path:
+    """Use the attested model cache when provided, else isolate local smoke runs."""
+
+    if root := os.environ.get("TT_CACHE_PATH"):
+        cache = Path(root) / "T3K"
+        cache.mkdir(parents=True, exist_ok=True)
+        return cache
+    return tmp_path_factory.mktemp(name)
 
 
 
@@ -105,7 +118,7 @@ def run_qwen25_coder_32b_prefill_smoke(mesh_device, hf_model_id, seq_len: int, t
     """One prefill pass (truncated layers via env) and LM head → greedy token (internal KV)."""
     _skip_unless_t3k(mesh_device, hf_model_id)
     num_layers = int(os.environ.get("QWEN25_CODER_32B_DEMO_NUM_LAYERS", "1"))
-    cache = tmp_path_factory.mktemp("qwen25_coder_32b_cache")
+    cache = _weight_cache_dir(tmp_path_factory, "qwen25_coder_32b_cache")
     model = None
     try:
         model = Qwen25Coder32B.from_pretrained(
@@ -147,7 +160,7 @@ def run_qwen25_coder_32b_decode_one_step(mesh_device, hf_model_id, tmp_path_fact
     """
     _skip_unless_t3k(mesh_device, hf_model_id)
     num_layers = int(os.environ.get("QWEN25_CODER_32B_DEMO_NUM_LAYERS", "1"))
-    cache = tmp_path_factory.mktemp("qwen25_coder_32b_decode_cache")
+    cache = _weight_cache_dir(tmp_path_factory, "qwen25_coder_32b_decode_cache")
     seq_len = 128
     model = None
     try:
@@ -184,7 +197,7 @@ def run_qwen25_coder_32b_executor_prefill_smoke(mesh_device, hf_model_id, seq_le
     """``EagerQwen25Coder32BExecutor`` + paged KV: prefill returns host logits."""
     _skip_unless_t3k(mesh_device, hf_model_id)
     num_layers = int(os.environ.get("QWEN25_CODER_32B_DEMO_NUM_LAYERS", "1"))
-    cache = tmp_path_factory.mktemp("qwen25_coder_32b_exec_cache")
+    cache = _weight_cache_dir(tmp_path_factory, "qwen25_coder_32b_exec_cache")
     model = None
     try:
         model = Qwen25Coder32B.from_pretrained(
@@ -241,7 +254,7 @@ def run_qwen25_coder_32b_teacher_forcing_prefill_vs_hf(mesh_device, hf_model_id,
     else:
         num_layers = n_hf
     seq_len = 128
-    cache = tmp_path_factory.mktemp("qwen25_coder_32b_tf")
+    cache = _weight_cache_dir(tmp_path_factory, "qwen25_coder_32b_tf")
     model = None
     try:
         model = Qwen25Coder32B.from_pretrained(
@@ -294,8 +307,8 @@ def run_qwen25_coder_32b_eager_traced_prefill_logits_match(mesh_device, hf_model
     """
     _skip_unless_t3k(mesh_device, hf_model_id)
     num_layers = int(os.environ.get("QWEN25_CODER_32B_DEMO_NUM_LAYERS", "1"))
-    cache_a = tmp_path_factory.mktemp("qwen25_coder_32b_par_e")
-    cache_b = tmp_path_factory.mktemp("qwen25_coder_32b_par_t")
+    cache_a = _weight_cache_dir(tmp_path_factory, "qwen25_coder_32b_par_e")
+    cache_b = _weight_cache_dir(tmp_path_factory, "qwen25_coder_32b_par_t")
     seq_len = 128
     m_e = m_t = None
     try:
@@ -379,7 +392,7 @@ def run_qwen25_coder_32b_numerical_divergence_vs_hf(mesh_device, hf_model_id, tm
         raise AssertionError(f'seq_len must be multiple of 128, got {seq_len}')
 
     out_csv = os.environ.get("QWEN25_CODER_32B_NUMDIV_OUT", "/tmp/qwen25_coder_32b_numdiv.csv")
-    cache = tmp_path_factory.mktemp("qwen25_coder_32b_numdiv")
+    cache = _weight_cache_dir(tmp_path_factory, "qwen25_coder_32b_numdiv")
 
     input_ids = torch.zeros(1, seq_len, dtype=torch.long)
     input_ids[0, :4] = torch.tensor([1, 2, 3, 4], dtype=torch.long)

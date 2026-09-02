@@ -2,6 +2,7 @@
 
 import ast
 import inspect
+import os
 from functools import wraps
 from pathlib import Path
 
@@ -89,6 +90,29 @@ def test_qwen_smoke_runners_are_scoped_and_cli_signature_aware(path):
         for node in runners
     )
     assert "tuple(inspect.signature(runner).parameters)" in path.read_text()
+
+
+@pytest.mark.host
+def test_qwen25_coder_smoke_uses_attested_cache_and_t3k_ring(monkeypatch, tmp_path):
+    path = ROOT / "examples/qwen25_coder_32b/smoke.py"
+    source = path.read_text()
+    tree = ast.parse(source, filename=str(path))
+    helper = next(
+        node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_weight_cache_dir"
+    )
+    namespace = {"os": os, "Path": Path}
+    exec(compile(ast.Module(body=[helper], type_ignores=[]), str(path), "exec"), namespace)
+
+    class RefuseTemporaryCache:
+        def mktemp(self, _name):
+            raise AssertionError("attested TT_CACHE_PATH must win")
+
+    monkeypatch.setenv("TT_CACHE_PATH", str(tmp_path / "qwen25_coder_32b"))
+    cache = namespace["_weight_cache_dir"](RefuseTemporaryCache(), "unused")
+    assert cache == tmp_path / "qwen25_coder_32b" / "T3K"
+    assert cache.is_dir()
+    assert 'os.environ.get("MESH_DEVICE") == "T3K"' in source
+    assert "ttnn.FabricConfig.FABRIC_1D_RING" in source
 
 
 @pytest.mark.host

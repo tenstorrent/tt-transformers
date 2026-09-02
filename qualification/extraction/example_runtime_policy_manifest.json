@@ -233,7 +233,7 @@
     },
     {
       "path": "examples/qwen25_coder_32b/smoke.py",
-      "sha256": "7888a88c6f65add44bff7f5ba114ed18cd5c073749f3c5eae2b8ddb553d188b8",
+      "sha256": "589c4bbcffe1798ccd263fc06179c26ee43d1fbf872c360332492ebdcc830c7a",
       "forced_trust_remote_code_true_lines": [],
       "cwd_model_cache_lines": [],
       "unscoped_default_device_lines": [],

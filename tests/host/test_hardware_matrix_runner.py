@@ -57,6 +57,7 @@ def test_checked_in_matrix_validates_and_covers_every_required_mesh():
 def test_matrix_requires_serial_execution_and_forbids_automatic_reset():
     matrix = _matrix()
     assert matrix["serialization"]["max_concurrent_processes"] == 1
+    assert matrix["serialization"]["scope"] == "physical_host"
     assert matrix["serialization"]["automatic_reset"] is False
     assert "tt-smi -r" not in runner.Path(runner.__file__).read_text()
 
@@ -65,10 +66,39 @@ def test_matrix_requires_serial_execution_and_forbids_automatic_reset():
     with pytest.raises(runner.MatrixError, match="exactly one"):
         runner.validate_matrix(parallel)
 
+    global_scope = copy.deepcopy(matrix)
+    global_scope["serialization"]["scope"] = "global"
+    with pytest.raises(runner.MatrixError, match="physical_host"):
+        runner.validate_matrix(global_scope)
+
     resetting = copy.deepcopy(matrix)
     resetting["serialization"]["automatic_reset"] = True
     with pytest.raises(runner.MatrixError, match="automatic reset"):
         runner.validate_matrix(resetting)
+
+    missing_classification = copy.deepcopy(matrix)
+    missing_classification["failure_classifications"].remove("no_passing_tests")
+    with pytest.raises(runner.MatrixError, match="failure classifications"):
+        runner.validate_matrix(missing_classification)
+
+
+@pytest.mark.host
+def test_model_cache_roots_are_namespaced_by_model_family():
+    seen = {}
+    for node in _matrix()["nodes"]:
+        cache = node["cache_requirement"]
+        if cache["kind"] != "established_warm_model_cache":
+            continue
+        model = cache["model"]
+        root = node["environment"]["TT_CACHE_PATH"]
+        assert root.endswith(f"/{model}"), node["id"]
+        assert seen.setdefault(root, model) == model
+
+
+@pytest.mark.host
+def test_llama_p150x4_smoke_uses_the_collected_parameter_id():
+    node = runner.select_node(_matrix(), "bh-p150x4-llama33-one-layer-smoke")
+    assert node["selector"]["target"].endswith("[physical-BH-TP4-ring]")
 
 
 @pytest.mark.host
@@ -80,6 +110,7 @@ def test_dry_run_serializes_one_exact_node_without_starting_a_process(tmp_path):
     assert result["classification"] == "not_executed_dry_run"
     assert result["node"] == node["id"]
     assert result["command"][-1] == node["selector"]["target"]
+    assert "--color=no" in result["command"]
     assert result["environment"]["MESH_DEVICE"] == "N150"
     assert result["environment"]["TT_CACHE_PATH"].endswith(node["id"])
     assert result["automatic_reset"] is False
@@ -154,7 +185,27 @@ def test_parallel_pytest_arguments_are_refused(argv):
 @pytest.mark.parametrize(
     "exit_code,output,timed_out,expected",
     [
-        (0, "passed", False, "passed"),
+        (0, "===================== 1 passed in 0.12s =====================", False, "passed"),
+        (
+            0,
+            "================ 2 passed, 1 skipped in 0.12s ================",
+            False,
+            "passed",
+        ),
+        (0, "===================== 1 skipped in 0.12s ====================", False, "no_passing_tests"),
+        (0, "==================== no tests ran in 0.12s ==================", False, "no_passing_tests"),
+        (0, "test_gate.py::test_gate PASSED", False, "no_passing_tests"),
+        (
+            0,
+            "\n".join(
+                (
+                    "===================== 1 passed in 0.12s =====================",
+                    "===================== 1 skipped in 0.13s ====================",
+                )
+            ),
+            False,
+            "no_passing_tests",
+        ),
         (1, "assert PCC failed", False, "functional_failure"),
         (1, "device unresponsive; reset required", False, "hardware_lifecycle_failure"),
         (None, "", True, "hardware_lifecycle_failure"),
