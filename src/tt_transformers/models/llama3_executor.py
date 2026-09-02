@@ -394,7 +394,7 @@ class Llama33_70BExecutor:
             config,
             owner_name="Llama33_70BExecutor",
             prefill_sequence_lengths=prefill_sequence_lengths,
-            disable_batched_prefill=bool(runtime_config.disable_batched_prefill) or config.device_sampling_enabled,
+            disable_batched_prefill=bool(runtime_config.disable_batched_prefill),
             sampling_state_controller=sampling_state_controller,
             sampling_state=sampling_state,
             sampling_type=Sampling1D,

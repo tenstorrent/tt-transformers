@@ -838,13 +838,13 @@
     },
     {
       "path": "qualification/extraction/runtime.md",
-      "sha256": "f4f918e083b301b8b22fc53908e2d179443a2458d5ce936da8c6efc9b4f77eaf",
-      "size": 10260
+      "sha256": "995d9c218a07a6e5805794f2a74ba1a5c893954d7185c5822e7a45688fd9848b",
+      "size": 10376
     },
     {
       "path": "qualification/extraction/runtime_boundary.md",
-      "sha256": "5bb47e467a35e9723cf39aa8cadcada320ccb5ba8b79a688d5a89d480dbe92ac",
-      "size": 10683
+      "sha256": "9c6ea120c11c27eda6cf3278170f9af2b65c6b93602f3dfef43338c8b567fefe",
+      "size": 11534
     },
     {
       "path": "qualification/extraction/support.md",
@@ -1283,8 +1283,8 @@
     },
     {
       "path": "qualification/tools/run_hardware_matrix.py",
-      "sha256": "e2fee123b54da1c72f50958cf8ddff92a88a627f134612fbaec360572ac54de6",
-      "size": 23247
+      "sha256": "341356042579ac38a705d5be282ec78e359b77175afd966327404d7bed8f9bb8",
+      "size": 23583
     },
     {
       "path": "qualification/tools/source_ci/run_t3000_unit_tests.sh",
@@ -1473,8 +1473,8 @@
     },
     {
       "path": "tests/host/test_hardware_matrix_runner.py",
-      "sha256": "80eccb22c6edda8f21cefe41adff743c41dcbb0fe099ffcbeb0692beea21d412",
-      "size": 9041
+      "sha256": "fba9ee4660e877384f202fa57840c33d57303441da91f8bcfbbdd3e1a9d5aa5b",
+      "size": 10075
     },
     {
       "path": "tests/host/test_import_boundaries.py",
@@ -1563,8 +1563,8 @@
     },
     {
       "path": "tests/llm_runtime/test_executor_integration.py",
-      "sha256": "8d6c08ededde453b6d4a2b451efc694d6a492c68d46e2e4291e0e9caeda10d62",
-      "size": 72662
+      "sha256": "49d943ed89facaa3a29e1c70b5518a4a0e662873bcf5e47374f348c3ec79aa2f",
+      "size": 72638
     },
     {
       "path": "tests/llm_runtime/test_lane_group.py",

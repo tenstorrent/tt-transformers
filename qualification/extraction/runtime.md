@@ -12,7 +12,7 @@ Out of scope for this checkpoint: concrete model packages, reusable/foundation m
 
 ## Result
 
-The 24 pinned Python files are present at their authoritative `src/tt_transformers` destinations. The checked-in extractor verifies the exact source commit and every Git blob SHA, reads source through Git objects, and performs 95 import-statement namespace rewrites. Phase 3 subsequently added three exact active-caller migrations in `decode.py` after the foundation removed legacy RoPE adapters; those substitutions are asserted by `apply_boundary_closures()` and detailed in `runtime_boundary.md`.
+The 24 pinned Python files are present at their authoritative `src/tt_transformers` destinations. The checked-in extractor verifies the exact source commit and every Git blob SHA, reads source through Git objects, and performs 95 import-statement namespace rewrites. Phase 3 subsequently added three exact active-caller migrations in `decode.py` after the foundation removed legacy RoPE adapters. Hardware qualification added one exact Llama 3.3 executor-policy correction after detecting consolidation drift. All four substitutions are asserted by `apply_boundary_closures()` and detailed in `runtime_boundary.md`.
 
 The Phase 2 snapshot changed no function/class signature, symbol, statement order, expression, default, annotation, comment, or docstring. The later Phase 3 caller migrations are deliberately separated in the extractor. The existing package initializers were retained rather than overwritten:
 

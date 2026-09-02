@@ -363,7 +363,15 @@ def classify_failure(exit_code: int | None, output: str, timed_out: bool = False
     if exit_code == 0:
         pass_count = pytest_pass_count(output)
         return "passed" if pass_count is not None and pass_count > 0 else "no_passing_tests"
-    if any(re.search(pattern, output, re.IGNORECASE | re.DOTALL) for pattern in HARDWARE_FAILURE_PATTERNS):
+    # Fatal signatures describe one diagnostic line.  Searching the complete
+    # pytest transcript with DOTALL lets unrelated messages combine into a
+    # false signature (for example, an early Metal initialization message and
+    # a later functional assertion containing "timeout").
+    if any(
+        re.search(pattern, line, re.IGNORECASE)
+        for line in output.splitlines()
+        for pattern in HARDWARE_FAILURE_PATTERNS
+    ):
         return "hardware_lifecycle_failure"
     return "functional_failure"
 

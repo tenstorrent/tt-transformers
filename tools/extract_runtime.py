@@ -21,7 +21,7 @@ from pathlib import Path
 PINNED_REVISION = "00748e6ac7b65f50e5c2af07f6e7c1c535c7f4c0"
 DEFAULT_SOURCE_REPO = Path("/localdev/gwang/tt-metal")
 DEFAULT_DESTINATION_ROOT = Path(__file__).resolve().parents[1]
-PHASE3_BOUNDARY_CLOSURE_EDITS = 3
+PHASE3_BOUNDARY_CLOSURE_EDITS = 4
 
 
 @dataclass(frozen=True)
@@ -252,9 +252,9 @@ def rewrite_import_namespaces(source: str, filename: str) -> tuple[str, list[tup
 def apply_boundary_closures(source: str, filename: str) -> str:
     """Apply exact active-caller migrations required by removed TTTv1 adapters."""
 
-    if filename != "models/common/llm_runtime/decode.py":
-        return source
-    replacements = (
+    replacements: tuple[tuple[str, str], ...] = ()
+    if filename == "models/common/llm_runtime/decode.py":
+        replacements = (
         (
             "from tt_transformers.modules.sampling.seed_manager_1d import SeedManager1D\n",
             "from tt_transformers.modules.sampling.seed_manager_1d import SeedManager1D\n"
@@ -268,10 +268,20 @@ def apply_boundary_closures(source: str, filename: str) -> str:
             "rot_mats = model.rope_setup.get_rot_mats(inputs.rotary_indices)",
             "rot_mats = model.rope_setup.decode_forward(inputs.rotary_indices)",
         ),
-    )
+        )
+    elif filename == "models/common/models/llama3_executor.py":
+        replacements = (
+            (
+                "disable_batched_prefill=bool(runtime_config.disable_batched_prefill) "
+                "or config.device_sampling_enabled,",
+                "disable_batched_prefill=bool(runtime_config.disable_batched_prefill),",
+            ),
+        )
+    else:
+        return source
     for old, new in replacements:
         if source.count(old) != 1:
-            raise ValueError(f"expected exactly one characterized decode caller pattern: {old!r}")
+            raise ValueError(f"expected exactly one characterized boundary pattern: {old!r}")
         source = source.replace(old, new)
     ast.parse(source, filename=filename)
     return source

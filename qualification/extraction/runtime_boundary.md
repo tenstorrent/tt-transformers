@@ -75,6 +75,21 @@ The concurrent foundation boundary work removed `RotarySetup1D.get_rot_idxs` and
 
 `tools/extract_runtime.py::apply_boundary_closures` asserts and reproduces exactly those three edits (one import and two calls) after namespace rewriting. This lane detected the concurrent drift and retained it rather than overwriting foundation work.
 
+### Restored Llama 3.3 batched-prefill policy
+
+Same-SHA T3K qualification found that all four W6 trace-order cases were forced
+onto sequential prefill whenever device sampling was enabled, despite the
+Llama 3.3 runtime configuration explicitly enabling batched prefill. The
+standalone executor consolidation had accidentally restored the older
+`runtime_config.disable_batched_prefill or config.device_sampling_enabled`
+policy after the W6 path had intentionally removed it.
+
+`Llama33_70BExecutor` now honors its model-owned runtime flag directly. Qwen3
+retains its deliberate sequential-prefill rule, and Llama 3.1 keeps its
+separate qualification-only override. The generic executor integration matrix
+passes on Python 3.10 and 3.12, and `tools/extract_runtime.py` asserts and
+reproduces this fourth boundary correction from the pinned source blob.
+
 ## Strengthened static policy
 
 `tools/check_import_boundaries.py` now enforces the following in addition to the original layer rules:

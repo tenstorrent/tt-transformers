@@ -215,6 +215,35 @@ def test_failure_classification_is_separate(exit_code, output, timed_out, expect
     assert runner.classify_failure(exit_code, output, timed_out) == expected
 
 
+def test_unrelated_hardware_terms_across_log_are_a_functional_failure():
+    output = "\n".join(
+        (
+            "Metal | Initializing Fabric (fabric_firmware_initializer.cpp:296)",
+            "This will become a hard error in a future release",
+            "tests/test_attention.py::test_attention FAILED",
+            "E   AssertionError: timeout value did not meet the expected result",
+            "===================== 1 failed in 2.14s =====================",
+        )
+    )
+
+    assert runner.classify_failure(1, output) == "functional_failure"
+
+
+@pytest.mark.parametrize(
+    "signature",
+    [
+        "Watcher reported a fatal device event",
+        "Device 0 is unresponsive",
+        "Metal fatal: dispatch core halted",
+        "Reset required before the next test",
+    ],
+)
+def test_local_hardware_fatal_signatures_remain_lifecycle_failures(signature):
+    output = f"pytest setup completed\n{signature}\npytest session aborted"
+
+    assert runner.classify_failure(1, output) == "hardware_lifecycle_failure"
+
+
 @pytest.mark.host
 def test_p150x4_inventory_rejects_nonphysical_cluster_and_missing_bdfs():
     matrix = _matrix()

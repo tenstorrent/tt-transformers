@@ -851,7 +851,7 @@ def test_device_sampling_prefill_batch_policy_is_model_owned(
         empty_slots=[0, 1],
     )
 
-    if binding.executor_module in (llama33_70b_executor, qwen3_32b_executor):
+    if binding.executor_module is qwen3_32b_executor:
         expected_kinds = ("single", "single")
     assert tuple(item.request.kind for item in prepared) == expected_kinds
     if expected_kinds == ("batched",):
