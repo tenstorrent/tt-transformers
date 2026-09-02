@@ -583,3 +583,23 @@ checkout's tracked cleanliness during the mandatory synchronized hardware gate.
 - A bounded host-side repair candidate is under test. It does not alter the
   official frozen-SHA result: 33 passed, 1 functional W6 blocker, 0 hardware
   faults, 0 resets, and 8 single-P150 nodes deferred.
+
+## 2026-09-02T23:32:21Z — Candidate W6 downstream-invariant pass
+
+- WH checkout and non-editable install were synchronized to diagnostic code
+  candidate `d7677f822356e839f707a6447fd0abc89e620d56`; all changed package-file
+  hashes match and the 65-package environment passes `uv pip check`.
+- The corrected one-order diagnostic passed the entire W6 body in 176.12s
+  when only the known cross-geometry logits oracle was relaxed. All later
+  trace/KV/decode/sampling/resume/chunk/cache assertions therefore pass for
+  this order on the repaired candidate.
+- Clean device/cluster teardown; no reset. This is deliberately non-qualifying
+  evidence. Strict thresholds remain unchanged, and an exact-SHA matrix rerun
+  is required before the candidate can supersede `ba7abef...`.
+
+## 2026-09-02T23:33:58Z — Candidate host gate before matrix rerun
+
+- Full host suites pass on Python 3.10.19 and 3.12.13: 2,162 passed, 28 skips,
+  6,791 deselected, 5 warnings, and 81 subtests per interpreter.
+- Started exact-`d7677f8...` WH and BH matrix reruns concurrently, with one TT
+  process at a time on each physical host.

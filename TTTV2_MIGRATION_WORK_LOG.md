@@ -881,3 +881,35 @@ This log records milestones and evidence for the standalone migration defined in
   per interpreter. This is not yet a hardware-qualified or published code
   candidate. The external complete-live-set/history limitation remains open;
   this bounded change does not claim general vLLM prefill lifecycle parity.
+
+## 2026-09-02T23:32:21Z — Batched sampling candidate clears masked W6 invariants
+
+- Published diagnostic code candidate
+  `d7677f822356e839f707a6447fd0abc89e620d56`, fast-forwarded the reserved WH
+  checkout, built a wheel outside the repository, and installed it
+  non-editably. The three changed package-file hashes match byte-for-byte
+  between source and site-packages; `uv pip check` validates all 65 installed
+  distributions.
+- Re-ran one W6 capture/sampling order with the same explicit cross-geometry
+  relaxation used only to bypass the known first oracle. The complete test
+  passed in 176.12s. This proves the candidate's later exact trace/eager
+  logits and KV equality, repeat replay, active/resident decode behavior,
+  sampled top-k1/argmax equality, isolated KV preservation, resumed and
+  4096-token chunked traces, 15→16→15 refresh, and no cache/registry growth
+  for that order.
+- Device and cluster teardown completed cleanly. This run is diagnostic and
+  remains outside canonical evidence. It does not change the strict W6 result
+  or justify weakening the cross-geometry logits thresholds.
+- Next checkpoint: rerun all 34 WH/P150_X4-accessible matrix nodes at the
+  exact candidate, using WH and BH concurrently but one TT process per host.
+
+## 2026-09-02T23:33:58Z — Batched sampling candidate full host gate
+
+- Ran the complete host-marked suite from source on both supported locked
+  environments. Python 3.10.19 and 3.12.13 each report **2,162 passed, 28
+  intentional skips, 6,791 deselected, 5 warnings, and 81 passing subtests**.
+- The nine-pass increase over the prior 2,153 baseline is exactly the new
+  sampling/preparation regression coverage. Python 3.12 retains the known
+  nanobind shutdown leak diagnostic after pytest exits successfully.
+- WH and BH exact-SHA matrix sweeps are now running concurrently; each agent
+  owns one physical host and serializes every TT process on that host.

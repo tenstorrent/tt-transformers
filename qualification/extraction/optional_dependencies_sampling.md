@@ -50,7 +50,7 @@ The API signature checker now records 152 model-package rows as `lazy_export_rew
 
 ## Deterministic extractors
 
-`tools/extract_foundation.py` verifies the three pinned canonical-sampling files and reproduces removal of the duplicate dataclass plus the canonical lazy export.
+`tools/extract_foundation.py` verifies the three pinned canonical-sampling files and reproduces removal of the duplicate dataclass plus the canonical lazy export. It also verifies the pinned source blobs and exact final hashes for the three bounded post-extraction sampling adaptations: scalar policy expansion without scalar-seed broadcast, batched prefill admission/request-order seed publication, and conservative survivor-history invalidation.
 
 `tools/extract_model_packages.py` now reproduces:
 
@@ -91,7 +91,7 @@ PYTHONPATH=src pytest -q --confcutdir=tests/host \
 Results:
 
 ```text
-verified 3 pinned canonical-sampling foundation files
+verified 3 pinned canonical-sampling files, 3 exact-hash standalone sampling adaptations, and Phase 4 tensor_utils normalization
 verified 12 pinned optional-dependency transforms plus 1 generated package initializer
 static import-boundary checker: exit 0
 public API policy checker: exit 0

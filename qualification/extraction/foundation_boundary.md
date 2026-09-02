@@ -24,6 +24,27 @@ Status: **complete for the reusable foundation; no hardware used**
 - Added 16 host characterization cases.
 - Did not run or reset hardware.
 
+## Exact post-extraction sampling adaptations
+
+Final-SHA W6 audit exposed three intentional behaviors that postdate the
+pinned reusable-foundation snapshot. They are now part of
+`tools/extract_foundation.py`'s fail-closed provenance gate rather than
+unexplained destination drift. The extractor verifies each pinned source blob,
+the final destination SHA-256, syntax, required semantic anchors, and retired
+behavior absence.
+
+| Pinned source blob | Standalone destination SHA-256 | Bounded adaptation |
+|---|---|---|
+| `models/common/modules/sampling/params.py` @ `f120ff1973fba8a8a643a56a2e4a2da3dd6ce35b` | `src/tt_transformers/modules/sampling/params.py` @ `16dc0f49c838c881e435a62ec63bd45b7b09f8bd3485e79e75ea5eeb7592a593` | A scalar sampling policy is expanded across selected request rows, while a scalar seed remains request-scoped and is not implicitly broadcast. |
+| `models/common/modules/sampling/sampling_state_1d.py` @ `cc9fc31d6045c2dc3973e8cdc6d318e36c320a48` | `src/tt_transformers/modules/sampling/sampling_state_1d.py` @ `5d46e8e4712ed37d8725f4bef83460a3efcde6aa065e63c83d48107efaf5f7ed` | Active-prefix batched prefill admissions retain request order, publish seeds through the request-ordered seed path, and mark penalty history invalid when unmentioned live survivors remain. |
+| `models/common/modules/sampling/seed_manager_1d.py` @ `ce5002a859711e127bdd2d9ac9a8f4bc925ffa32` | `src/tt_transformers/modules/sampling/seed_manager_1d.py` @ `ff09347e2c58c8e77ad43e0ff24e25c49f5cfdbedfd09510ef9f74a77900128e` | Destination-slot RNG streams advance transactionally and their device seeds are republished in physical prefill request order. |
+
+These hashes qualify only reproducibility of the checked-in adaptation. They
+do not broaden device support or close the external complete-live-set and
+history contract. `--write` continues to recreate the three canonical sampling
+files mechanically; the three semantic module adaptations are deliberately
+exact-hash verified.
+
 ## Caller scans before removal
 
 ### Module factories
@@ -158,6 +179,19 @@ python3 tools/check_import_boundaries.py src/tt_transformers
 ```
 
 Result: exit code 0, no output.
+
+### Foundation extractor
+
+```bash
+python -B tools/extract_foundation.py
+python -B tools/extract_foundation.py --write
+```
+
+Both modes report:
+
+```text
+verified 3 pinned canonical-sampling files, 3 exact-hash standalone sampling adaptations, and Phase 4 tensor_utils normalization
+```
 
 ### Syntax
 
