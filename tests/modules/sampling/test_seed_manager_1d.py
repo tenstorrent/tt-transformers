@@ -129,6 +129,37 @@ def test_equal_request_seeds_produce_distinct_salted_streams():
 
 
 @pytest.mark.host
+def test_batched_prefill_refresh_keeps_state_in_slots_and_writes_request_order():
+    manager, state, buffer, defaults = _make_manager()
+    manager.admit(state, [101, 202], [3, 1])
+
+    values = manager.refresh_prefill_request_ordered(state, [3, 1], positions=[12, 27])
+
+    expected_first = _hash_request_seed_to_device_seed(101, 13)
+    expected_second = _hash_request_seed_to_device_seed(202, 28)
+    assert values == (expected_first, expected_second, defaults[2].item(), defaults[3].item())
+    assert buffer.updates[-1].tolist() == list(values)
+    snapshot = state.snapshot()
+    assert snapshot.active_slots == (1, 3)
+    assert snapshot.current_device_seeds[3] == expected_first
+    assert snapshot.current_device_seeds[1] == expected_second
+    assert snapshot.token_counters[3] == 14
+    assert snapshot.token_counters[1] == 29
+
+
+@pytest.mark.host
+def test_batched_prefill_refresh_validates_positions_before_advancing(expect_error):
+    manager, state, _, _ = _make_manager()
+    manager.admit(state, [101, 202], [3, 1])
+    before = state.snapshot()
+
+    with expect_error(ValueError, "expected 2 prefill positions"):
+        manager.refresh_prefill_request_ordered(state, [3, 1], positions=[12])
+
+    assert state.snapshot() == before
+
+
+@pytest.mark.host
 def test_unseeded_rng_state_is_diverse_and_same_position_trace_refresh_does_not_advance_twice():
     manager, state, _, _ = _make_manager()
     manager.admit(state, [None, None], [0, 1])

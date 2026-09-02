@@ -567,3 +567,19 @@ checkout's tracked cleanliness during the mandatory synchronized hardware gate.
 - Index summary: 34 total; 33 passed, 1 functional failure, 0 pre-device,
   0 lifecycle, 0 missing acceptance; module 23/23, smoke 3/3, e2e 7/7,
   runtime 0/1.
+
+## 2026-09-02T23:27:07Z — Non-qualifying W6 deeper-invariant diagnostic
+
+- Ran one direct W6 parameter case at frozen code SHA `ba7abef...`; this was
+  diagnostic only and is excluded from the canonical matrix evidence/index.
+- An initial invalid relaxation (`min_topk_overlap=0`) stopped in oracle
+  argument validation. A corrected relaxation passed the masked prefill
+  logits comparison and reached the later device-sampled replay path.
+- The first deeper failure is at
+  `test_t3k_batched_prefill_correctness.py:566`: the sampling-state controller
+  rejects 15 active prefill requests because the frozen implementation only
+  admits one. Pytest reported one failure in 163.64s with clean device and
+  cluster shutdown; no reset was needed.
+- A bounded host-side repair candidate is under test. It does not alter the
+  official frozen-SHA result: 33 passed, 1 functional W6 blocker, 0 hardware
+  faults, 0 resets, and 8 single-P150 nodes deferred.

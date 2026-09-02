@@ -855,3 +855,29 @@ This log records milestones and evidence for the standalone migration defined in
   rows have partial exact-SHA evidence, while every support manifest remains
   experimental; W6, single-P150 coverage, observed CI, release tagging,
   complete model contracts, and downstream cutover remain open.
+
+## 2026-09-02T23:27:07Z — W6 masked-invariant diagnosis and host repair candidate
+
+- Ran one direct, explicitly non-qualifying W6 order on `wh-lb-42` at the
+  frozen code SHA `ba7abef...`, relaxing only cross-geometry logits criteria
+  to expose assertions masked by the official row-0 numerical failure. The
+  first attempt used an invalid zero top-k overlap and stopped in oracle input
+  validation; the corrected attempt reached the device-sampled prefill at
+  test line 566.
+- The corrected diagnostic exposed a second functional blocker: native
+  `SamplingState1D.admit_prefill` rejected the 15-request batch with
+  `native device-sampled prefill currently requires exactly one active
+  request`. Both attempts completed clean TT device/cluster teardown; no
+  reset was required. Neither result was added to canonical qualification
+  evidence, and the official 33-pass/1-fail result is unchanged.
+- Added a worktree repair candidate that keeps physical prefill parameters,
+  histories, and device seeds in request order while retaining RNG streams in
+  destination decode slots. Scalar public sampling policy now expands to all
+  selected requests without broadcasting a scalar seed. Unmentioned live
+  slots are conservatively preserved as survivors, and their presence forces
+  a complete decode history rebuild rather than claiming an inferred removal.
+- New and existing sampling/runtime host coverage passes on Python 3.10 and
+  3.12: 1,262 passed, 6 intentional skips, 1,332 deselected, and 5 warnings
+  per interpreter. This is not yet a hardware-qualified or published code
+  candidate. The external complete-live-set/history limitation remains open;
+  this bounded change does not claim general vLLM prefill lifecycle parity.

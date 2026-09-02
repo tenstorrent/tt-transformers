@@ -105,6 +105,16 @@ class FakeSeedManager:
         self.events.append(("seed.prefill_replicated", int(slot), position))
         return 123
 
+    def refresh_prefill_request_ordered(self, state, slots, *, positions=None):
+        self.events.append(
+            (
+                "seed.prefill_request_ordered",
+                tuple(int(slot) for slot in slots),
+                None if positions is None else tuple(int(position) for position in positions),
+            )
+        )
+        return tuple(100 + int(slot) for slot in slots)
+
     def restore_defaults(self, state):
         self.events.append(("seed.restore_defaults",))
 
@@ -128,7 +138,6 @@ class FakeSeedManager:
     def get_seed_device_buffer(self):
         self.events.append(("seed.handle",))
         return self.seed_buffer.handle
-
 
 class FakePenalties:
     _BUFFER_NAMES = (
@@ -448,6 +457,201 @@ def test_prefill_admission_keeps_seed_on_decode_slot_and_samples_request_order()
     assert controller.penalties.config.presence_penalties.source.reshape(-1).tolist() == [0.5] * 4
     assert output == ("sampled-tokens", "sampled-logprobs")
     assert state.penalty_history_valid is False
+
+
+@pytest.mark.host
+def test_batched_prefill_admission_preserves_request_order_and_distinct_decode_slots():
+    controller, _, penalties, events = _make_controller()
+    state = controller.create_state()
+    prompt_tokens = torch.tensor([[101, 102, -1], [201, 202, 203]])
+    output_tokens = torch.tensor([[111, -1, -1], [211, 212, -1]])
+    prepared = replace(
+        _prepared(log_probs=True),
+        presence_penalty=(0.25, 0.75, 0.0, 0.0),
+        frequency_penalty=(0.1, 0.2, 0.0, 0.0),
+        repetition_penalty=(1.5, 2.0, 1.0, 1.0),
+        seeds=(77, 88, None, None),
+        enable_log_probs=(True, True, False, False),
+        num_logprobs=(0, 2, 0, 0),
+        logprob_modes=("sampled_token", "top_n", "none", "none"),
+        prompt_tokens=prompt_tokens,
+        output_tokens=output_tokens,
+    )
+    events.clear()
+
+    controller.admit_prefill(state, prepared, slots=(3, 1), positions=(12, 27))
+
+    assert state.active_slots == (1, 3)
+    assert state.seed_state.active == [False, True, False, True]
+    assert state.seed_state.seeds == [None, 88, None, 77]
+    assert state.static_identity.logprob_modes == ("top_n", "sampled_token")
+    assert state.static_identity.penalties_enabled
+    assert state.static_identity.log_probs_enabled
+    assert _event_names(events) == [
+        "seed.admit",
+        "penalty.prompt",
+        "penalty.output_reset",
+        "seed.prefill_request_ordered",
+    ]
+    assert events[0] == ("seed.admit", (77, 88), (3, 1))
+    assert events[-1] == ("seed.prefill_request_ordered", (3, 1), (12, 27))
+    assert torch.allclose(
+        penalties.config.presence_penalties.source.reshape(-1),
+        torch.tensor([0.25, 0.75, 0.0, 0.0]),
+    )
+    assert torch.allclose(
+        penalties.config.frequency_penalties.source.reshape(-1),
+        torch.tensor([0.1, 0.2, 0.0, 0.0]),
+    )
+    assert torch.allclose(
+        penalties.config.inverse_repetition_penalties.source.reshape(-1),
+        torch.tensor([1.0 / 1.5, 0.5, 1.0, 1.0]),
+    )
+    assert torch.equal(events[1][1], prompt_tokens)
+    assert torch.equal(events[2][1], output_tokens)
+    assert state.penalty_history_valid is False
+
+
+@pytest.mark.host
+def test_batched_prefill_positions_must_match_request_order_before_admission(expect_error):
+    controller, _, _, events = _make_controller()
+    state = controller.create_state()
+    prepared = replace(_prepared(), seeds=(77, 88, None, None))
+    events.clear()
+
+    with expect_error(ValueError, "positions"):
+        controller.admit_prefill(state, prepared, slots=(3, 1), positions=(12,))
+
+    assert events == []
+    assert state.seed_state.active == [False, False, False, False]
+    assert state.seed_state.seeds == [None, None, None, None]
+
+
+@pytest.mark.host
+def test_unpenalized_batched_prefill_does_not_validate_a_penalized_survivor_history(expect_error):
+    controller, _, _, events = _make_controller()
+    state = controller.create_state()
+    survivor = replace(
+        _prepared(),
+        active_mask=(True, False, False, False),
+        active_rows=1,
+        row_paths=("topk", "inactive", "inactive", "inactive"),
+        seeds=(77, None, None, None),
+    )
+    controller.admit_prefill(state, survivor, slots=(3,), positions=(12,))
+    controller.prefill_forward(
+        "survivor-logits",
+        state,
+        survivor,
+        k=object(),
+        p=object(),
+        temp=object(),
+    )
+    new_requests = replace(
+        _prepared(penalties=False),
+        seeds=(88, 99, None, None),
+        prompt_tokens=None,
+        output_tokens=None,
+    )
+    events.clear()
+
+    controller.admit_prefill(state, new_requests, slots=(0, 2), positions=(13, 14))
+
+    assert state.active_slots == (0, 2, 3)
+    assert state.seed_state.seeds == [88, None, 99, 77]
+    assert state.penalty_history_valid is False
+    decode_prepared = replace(
+        _prepared(penalties=False),
+        active_mask=(True, False, True, True),
+        active_rows=3,
+        row_paths=("topk", "inactive", "topk", "topk"),
+        seeds=(88, None, 99, 77),
+        prompt_tokens=None,
+        output_tokens=None,
+    )
+    with expect_error(RuntimeError, "requires reset_batch=True"):
+        controller.synchronize_decode(state, decode_prepared, reset_batch=False)
+
+
+@pytest.mark.host
+def test_single_nonprefix_prefill_source_is_rejected_before_mutation(expect_error):
+    controller, _, penalties, events = _make_controller()
+    state = controller.create_state()
+    prepared = replace(
+        _prepared(penalties=False),
+        active_mask=(False, False, True, False),
+        active_rows=1,
+        row_paths=("inactive", "inactive", "topk", "inactive"),
+        seeds=(None, None, 55, None),
+        prompt_tokens=None,
+        output_tokens=None,
+    )
+    penalty_sources = {
+        name: getattr(penalties.config, name).source.clone()
+        for name in (
+            "presence_penalties",
+            "frequency_penalties",
+            "repetition_penalties",
+            "inverse_repetition_penalties",
+        )
+    }
+    events.clear()
+
+    with expect_error(ValueError, "active prefix"):
+        controller.admit_prefill(state, prepared, slots=(1,), positions=(9,))
+
+    assert events == []
+    assert state.seed_state.active == [False, False, False, False]
+    assert state.seed_state.seeds == [None, None, None, None]
+    assert all(
+        torch.equal(getattr(penalties.config, name).source, source)
+        for name, source in penalty_sources.items()
+    )
+
+
+@pytest.mark.host
+def test_batched_prefill_remaps_survivor_before_admitting_new_requests(expect_error):
+    controller, _, _, events = _make_controller()
+    state = controller.create_state()
+    survivor = replace(
+        _prepared(penalties=False),
+        active_mask=(True, False, False, False),
+        active_rows=1,
+        row_paths=("topk", "inactive", "inactive", "inactive"),
+        seeds=(77, None, None, None),
+        prompt_tokens=None,
+        output_tokens=None,
+    )
+    controller.admit_prefill(state, survivor, slots=(3,), positions=(12,))
+    new_requests = replace(
+        _prepared(penalties=False),
+        seeds=(88, 99, None, None),
+        prompt_tokens=None,
+        output_tokens=None,
+        slot_remap=(0, 1, 3, 2),
+    )
+    events.clear()
+
+    controller.admit_prefill(state, new_requests, slots=(0, 1), positions=(13, 14))
+
+    assert _event_names(events)[:2] == ["seed.remap", "seed.admit"]
+    assert events[0] == ("seed.remap", (0, 1, 3, 2))
+    assert events[1] == ("seed.admit", (88, 99), (0, 1))
+    assert state.active_slots == (0, 1, 2)
+    assert state.seed_state.active == [True, True, True, False]
+    assert state.seed_state.seeds == [88, 99, 77, None]
+    assert state.penalty_history_valid is False
+    decode_prepared = replace(
+        _prepared(penalties=False),
+        active_mask=(True, True, True, False),
+        active_rows=3,
+        row_paths=("topk", "topk", "topk", "inactive"),
+        seeds=(88, 99, 77, None),
+        prompt_tokens=None,
+        output_tokens=None,
+    )
+    with expect_error(RuntimeError, "requires reset_batch=True"):
+        controller.synchronize_decode(state, decode_prepared, reset_batch=False)
 
 
 @pytest.mark.host

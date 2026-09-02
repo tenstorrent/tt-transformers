@@ -398,7 +398,9 @@ def slice_sampling_params(sampling_params: SamplingParams, rows: Sequence[int]) 
     def slice_value(value: Any, name: str) -> Any:
         normalized = _host_value(value)
         if not _is_sequence(normalized):
-            return normalized
+            if name == "seed":
+                return normalized
+            return [normalized for _ in selected]
         values = list(normalized)
         if not values:
             raise ValueError(f"sampling_params.{name} cannot be empty")

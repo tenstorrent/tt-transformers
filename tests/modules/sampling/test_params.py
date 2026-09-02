@@ -199,6 +199,27 @@ def test_slice_sampling_params_preserves_field_alignment_without_mutating_input(
 
 
 @pytest.mark.host
+def test_slice_sampling_params_broadcasts_scalar_policy_to_every_selected_request():
+    params = SamplingParams(temperature=0.0, top_k=1, top_p=1.0, seed=211)
+
+    sliced = slice_sampling_params(params, [4, 7, 9])
+    prepared = prepare_sampling_params(
+        sliced,
+        4,
+        max_device_top_k=32,
+        allow_force_argmax=False,
+    )
+
+    assert sliced.temperature == [0.0, 0.0, 0.0]
+    assert sliced.top_k == [1, 1, 1]
+    assert sliced.top_p == [1.0, 1.0, 1.0]
+    assert sliced.seed == 211
+    assert prepared.active_rows == 3
+    assert prepared.active_mask == (True, True, True, False)
+    assert prepared.seeds == (211, None, None, None)
+
+
+@pytest.mark.host
 def test_prepared_slice_preserves_prompt_output_and_slot_remap_alignment():
     prompt_tokens = torch.tensor([[10, 11], [20, 21], [30, 31]])
     output_tokens = [[100], [200, 201], [300]]

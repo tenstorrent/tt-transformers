@@ -315,49 +315,9 @@ class SeedManager1D:
 
         self._validate_state(state)
         active = self._normalize_slots(active_slots, label="active slot")
-        for slot in active:
-            if not state.active[slot]:
-                raise RuntimeError(f"seed slot {slot} must be admitted or synchronized before refresh")
-
-        values = list(self._default_values)
-        for slot in active:
-            position = self._position_for_slot(positions, slot)
-            if positions is not None and position is None:
-                raise ValueError(f"absolute positions do not cover active seed slot {slot}")
-            request_seed = state.request_seeds[slot]
-            if request_seed is not None:
-                if position is None:
-                    counter = state.token_counters[slot]
-                    state.token_counters[slot] = counter + 1
-                    state.last_absolute_positions[slot] = None
-                else:
-                    if position < 0:
-                        raise ValueError("active seed positions must be nonnegative")
-                    counter = position + 1
-                    # Absolute-position refresh is deliberately idempotent.
-                    state.token_counters[slot] = counter + 1
-                    state.last_absolute_positions[slot] = position
-                device_seed = _hash_request_seed_to_device_seed(request_seed, counter, state.salts[slot])
-            else:
-                if position is not None and position < 0:
-                    raise ValueError("active seed positions must be nonnegative")
-                repeated_position = (
-                    position is not None
-                    and state.last_absolute_positions[slot] == position
-                    and state.current_device_seeds[slot] is not None
-                )
-                if repeated_position:
-                    device_seed = state.current_device_seeds[slot]
-                else:
-                    device_seed = state.unseeded_rngs[slot].randint(1, DEVICE_SEED_MAX)
-                    state.token_counters[slot] += 1
-                state.last_absolute_positions[slot] = position
-
-            state.current_device_seeds[slot] = device_seed
-            values[slot] = device_seed
-
+        values = self._advance_seed_values(state, active, positions=positions)
         self._write_values(state, values)
-        return tuple(values)
+        return values
 
     def refresh_prefill_replicated(
         self,
@@ -374,12 +334,45 @@ class SeedManager1D:
         keeping the caller-owned counter attached to its real slot.
         """
 
+        self._validate_state(state)
         slot = self._validate_slot(slot, label="prefill slot")
         positions = None if position is None else {slot: int(position)}
-        values = self.refresh(state, (slot,), positions=positions)
+        values = self._advance_seed_values(state, (slot,), positions=positions)
         device_seed = int(values[slot])
         self._write_values(state, (device_seed,) * self._capacity)
         return device_seed
+
+    def refresh_prefill_request_ordered(
+        self,
+        state: SeedState,
+        slots: Iterable[int],
+        *,
+        positions: Sequence[int] | torch.Tensor | None = None,
+    ) -> tuple[int, ...]:
+        """Advance destination-slot streams and expose them in request order.
+
+        Batched prefill logits occupy physical rows ``0..N-1`` even when the
+        requests will persist in arbitrary decode slots.  Keep each RNG stream
+        attached to its destination slot while writing the corresponding
+        device seed into the matching request-ordered physical row.
+        """
+
+        self._validate_state(state)
+        destinations = self._normalize_slots(slots, label="prefill slot")
+        if not destinations:
+            raise ValueError("prefill slots cannot be empty")
+        normalized_positions = self._request_ordered_positions(positions, len(destinations))
+        position_by_slot = (
+            None
+            if normalized_positions is None
+            else dict(zip(destinations, normalized_positions, strict=True))
+        )
+        slot_values = self._advance_seed_values(state, destinations, positions=position_by_slot)
+        request_values = list(self._default_values)
+        for row, destination in enumerate(destinations):
+            request_values[row] = slot_values[destination]
+        self._write_values(state, request_values)
+        return tuple(request_values)
 
     def apply_slot_remap(self, state: SeedState, remap: Sequence[int] | torch.Tensor) -> None:
         """Move complete seeded and unseeded request state during compaction.
@@ -509,6 +502,26 @@ class SeedManager1D:
             return tuple(self._normalize_seed(seed) for seed in seeds)
         return tuple(self._normalize_seed(seeds) for _ in range(count))
 
+    @staticmethod
+    def _request_ordered_positions(
+        positions: Sequence[int] | torch.Tensor | None,
+        count: int,
+    ) -> tuple[int, ...] | None:
+        if positions is None:
+            return None
+        if isinstance(positions, torch.Tensor):
+            values = positions.reshape(-1).tolist()
+        elif isinstance(positions, Sequence) and not isinstance(positions, str | bytes | bytearray):
+            values = list(positions)
+        else:
+            raise TypeError("prefill positions must be a sequence or torch.Tensor")
+        if len(values) != count:
+            raise ValueError(f"expected {count} prefill positions, got {len(values)}")
+        normalized = tuple(int(position) for position in values)
+        if any(position < 0 for position in normalized):
+            raise ValueError("prefill positions must be nonnegative")
+        return normalized
+
     def _slot_indexed_seed(self, seeds, slot: int) -> int | None:
         if seeds is None:
             return None
@@ -578,6 +591,51 @@ class SeedManager1D:
             state.unseeded_rngs[slot].seed(self._entropy_factory(64))
         state.last_absolute_positions[slot] = None
         state.current_device_seeds[slot] = None
+
+    def _advance_seed_values(self, state: SeedState, active: tuple[int, ...], *, positions) -> tuple[int, ...]:
+        """Advance validated slots without publishing an intermediate layout."""
+
+        for slot in active:
+            if not state.active[slot]:
+                raise RuntimeError(f"seed slot {slot} must be admitted or synchronized before refresh")
+        resolved_positions = tuple(self._position_for_slot(positions, slot) for slot in active)
+        if positions is not None:
+            for slot, position in zip(active, resolved_positions, strict=True):
+                if position is None:
+                    raise ValueError(f"absolute positions do not cover active seed slot {slot}")
+                if position < 0:
+                    raise ValueError("active seed positions must be nonnegative")
+
+        values = list(self._default_values)
+        for slot, position in zip(active, resolved_positions, strict=True):
+            request_seed = state.request_seeds[slot]
+            if request_seed is not None:
+                if position is None:
+                    counter = state.token_counters[slot]
+                    state.token_counters[slot] = counter + 1
+                    state.last_absolute_positions[slot] = None
+                else:
+                    counter = position + 1
+                    # Absolute-position refresh is deliberately idempotent.
+                    state.token_counters[slot] = counter + 1
+                    state.last_absolute_positions[slot] = position
+                device_seed = _hash_request_seed_to_device_seed(request_seed, counter, state.salts[slot])
+            else:
+                repeated_position = (
+                    position is not None
+                    and state.last_absolute_positions[slot] == position
+                    and state.current_device_seeds[slot] is not None
+                )
+                if repeated_position:
+                    device_seed = state.current_device_seeds[slot]
+                else:
+                    device_seed = state.unseeded_rngs[slot].randint(1, DEVICE_SEED_MAX)
+                    state.token_counters[slot] += 1
+                state.last_absolute_positions[slot] = position
+
+            state.current_device_seeds[slot] = device_seed
+            values[slot] = device_seed
+        return tuple(values)
 
     @staticmethod
     def _checkpoint_slot(state: SeedState, slot: int) -> SeedSlotState:

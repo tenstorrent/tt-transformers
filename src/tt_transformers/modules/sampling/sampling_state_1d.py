@@ -210,23 +210,30 @@ class SamplingState1D:
         slots: Iterable[int],
         positions: Sequence[int] | None = None,
     ) -> None:
-        """Admit one request-ordered prefill into its persistent decode slot."""
+        """Admit request-ordered prefills into their persistent decode slots."""
 
         self._require_idle(state)
         self._validate_prepared(prepared)
         self._validate_prepared_history(prepared)
         active_sources = self._active_slots(prepared)
         destination_slots = tuple(int(slot) for slot in slots)
-        if len(active_sources) != 1 or len(destination_slots) != 1:
-            raise ValueError("native device-sampled prefill currently requires exactly one active request")
-        destination = destination_slots[0]
+        if active_sources != tuple(range(len(active_sources))):
+            raise ValueError("prefill sampling rows must be a request-ordered active prefix")
+        placed = place_prepared_sampling_params(prepared, destination_slots)
+        normalized_positions = _normalize_prefill_positions(positions, len(destination_slots))
         if prepared.slot_remap is not None:
             self.seed_manager.apply_slot_remap(state.seed_state, prepared.slot_remap)
-        placed = place_prepared_sampling_params(prepared, destination_slots)
-        execution_prepared = _broadcast_prefill_prepared(prepared, active_sources[0])
+        survivor_slots = tuple(
+            slot
+            for slot, active in enumerate(state.seed_state.active)
+            if active and slot not in destination_slots
+        )
+        execution_prepared = (
+            _broadcast_prefill_prepared(prepared, active_sources[0]) if len(active_sources) == 1 else prepared
+        )
         self.seed_manager.admit(
             state.seed_state,
-            (prepared.seeds[active_sources[0]],),
+            tuple(prepared.seeds[source] for source in active_sources),
             destination_slots,
         )
         self._write_penalty_params(execution_prepared)
@@ -236,18 +243,27 @@ class SamplingState1D:
             output_tokens=execution_prepared.output_tokens,
             active_mask=execution_prepared.active_mask,
         )
-        position = None if positions is None else int(tuple(positions)[0])
         if prepared.sampling_path == "topk":
-            self.seed_manager.refresh_prefill_replicated(
-                state.seed_state,
-                destination,
-                position=position,
-            )
+            if len(destination_slots) == 1:
+                self.seed_manager.refresh_prefill_replicated(
+                    state.seed_state,
+                    destination_slots[0],
+                    position=None if normalized_positions is None else normalized_positions[0],
+                )
+            else:
+                self.seed_manager.refresh_prefill_request_ordered(
+                    state.seed_state,
+                    destination_slots,
+                    positions=normalized_positions,
+                )
         else:
             self.seed_manager.restore_defaults(state.seed_state)
         state.active_mask = tuple(state.seed_state.active)
         state.static_identity = self.static_identity(placed)
-        state.penalty_history_valid = not prepared.penalties_enabled
+        # Rebuilding request-ordered prefill rows overwrites the lane-wide
+        # accumulator. A survivor outside this admission therefore requires a
+        # complete slot-ordered history rebuild at the next decode boundary.
+        state.penalty_history_valid = not prepared.penalties_enabled and not survivor_slots
 
     def prefill_forward(
         self,
@@ -925,3 +941,14 @@ def _broadcast_prefill_history(value, source_row: int, capacity: int):
     row = values[0 if len(values) == 1 else int(source_row)]
     repeated = [row for _ in range(capacity)]
     return tuple(repeated) if isinstance(value, tuple) else repeated
+
+
+def _normalize_prefill_positions(positions: Sequence[int] | None, count: int) -> tuple[int, ...] | None:
+    if positions is None:
+        return None
+    values = tuple(int(position) for position in positions)
+    if len(values) != count:
+        raise ValueError(f"expected {count} prefill positions, got {len(values)}")
+    if any(position < 0 for position in values):
+        raise ValueError("prefill positions must be nonnegative")
+    return values

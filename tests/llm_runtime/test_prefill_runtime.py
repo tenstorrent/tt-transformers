@@ -287,6 +287,55 @@ def test_single_greedy_prefill_uses_argmax_without_changing_batched_sampling():
 
 
 @pytest.mark.host
+def test_scalar_sampling_params_prepare_two_active_rows_and_reach_controller(monkeypatch):
+    base_runtime = _runtime(sampling_batch_size=4)
+    admissions = []
+
+    class RecordingController:
+        def __init__(self, sampling):
+            self.sampling = sampling
+
+        def admit(self, state, prepared):
+            pytest.fail("prefill must use admit_prefill")
+
+        def admit_prefill(self, state, prepared, *, slots, positions):
+            admissions.append((state, prepared, tuple(slots), tuple(positions)))
+
+    sampling_state = object()
+    controller = RecordingController(base_runtime.config.model.sampling)
+    runtime = PrefillRuntime(
+        dataclasses.replace(
+            base_runtime.config,
+            sampling_state_controller=controller,
+            sampling_state=sampling_state,
+        )
+    )
+    tokens, page_table, prompt_lens, start_pos = _inputs(prompt_length=80, rows=2)
+    prepared = runtime.prepare(
+        tokens=tokens,
+        page_table=page_table,
+        prompt_lens=prompt_lens,
+        empty_slots=(3, 1),
+        start_pos=start_pos,
+        sampling_params=SamplingParams(temperature=1.0, top_k=32, top_p=0.08),
+    )[0]
+    expected = InvocationResult("value", ())
+    monkeypatch.setattr(runtime.sequence_runner, "run", lambda prepared, *, count_tokens: expected)
+
+    result = runtime.invoke(prepared)
+
+    assert result is expected
+    assert prepared.prepared_sampling.active_rows == 2
+    assert prepared.prepared_sampling.active_mask == (True, True, False, False)
+    assert len(admissions) == 1
+    state, admitted, destinations, positions = admissions[0]
+    assert state is sampling_state
+    assert admitted is prepared.prepared_sampling
+    assert destinations == (3, 1)
+    assert positions == (79, 79)
+
+
+@pytest.mark.host
 def test_trace_finish_reuses_trace_owned_sample_output(monkeypatch):
     runtime = _runtime()
     request = _plan(prompt_length=80)[0]
