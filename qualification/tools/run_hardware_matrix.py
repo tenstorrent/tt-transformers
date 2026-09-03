@@ -145,6 +145,15 @@ def validate_matrix(matrix: dict[str, Any], root: Path = ROOT) -> dict[str, int]
             raise MatrixError(f"invalid machine pool for {node_id}")
         if any(machines[machine]["architecture"] != node["architecture"] for machine in pools):
             raise MatrixError(f"machine architecture mismatch for {node_id}")
+        unsupported_machines = [
+            machine
+            for machine in pools
+            if mesh not in machines[machine].get("supported_mesh_devices", [])
+        ]
+        if unsupported_machines:
+            raise MatrixError(
+                f"machine mesh support mismatch for {node_id}: {unsupported_machines}"
+            )
         argv = selector_argv(node)
         if contains_parallel_pytest_args(argv):
             raise MatrixError(f"parallel pytest option forbidden for {node_id}")
@@ -254,6 +263,26 @@ def validate_physical_inventory(
         raise MatrixError(
             f"physical board types mismatch: missing {sorted(expected_boards - observed_boards)}"
         )
+    for field in ("system_mesh",):
+        expected_value = expected_inventory.get(field)
+        if expected_value is not None and inventory[field] != expected_value:
+            raise MatrixError(
+                f"physical {field} mismatch: {inventory[field]!r} != {expected_value!r}"
+            )
+    if node["mesh_device"] == "P150":
+        allowed_clusters = node["physical_sku_provenance"][
+            "allowed_physical_cluster_types"
+        ]
+        if inventory["cluster_type"] not in allowed_clusters:
+            raise MatrixError(f"P150 requires physical cluster provenance in {allowed_clusters}")
+        if machine_name == "bh-qb-05" and inventory["tt_visible_devices"] not in {
+            None,
+            "",
+        }:
+            raise MatrixError(
+                "bh-qb-05 P150 requires TT_VISIBLE_DEVICES unset; "
+                "MESH_DEVICE=P150 is the sole topology selector"
+            )
     if node["mesh_device"] == "P150x4":
         allowed_clusters = node["physical_sku_provenance"]["required_cluster_types"]
         if inventory["cluster_type"] not in allowed_clusters:

@@ -711,3 +711,14 @@ checkout's tracked cleanliness during the mandatory synchronized hardware gate.
 - Both processes exited with throughput-only assertions, clean teardown,
   healthy/fault-free devices, and no reset. Artifacts are diagnostic-only;
   canonical hardware remains 34/34 pass.
+
+## 2026-09-03T12:05:58Z — P150 quietbox matrix correction validated
+
+- `bh-qb-05` is now a valid host for priorities 24–30 and 38. Its physical
+  inventory remains four P150B boards, `ClusterType.P150_X4`, and system mesh
+  2x2; `MESH_DEVICE=P150` selects the test's logical 1x1 submesh.
+- No BDF mask is used. The runner removes inherited `TT_VISIBLE_DEVICES`, so
+  `MESH_DEVICE=P150` is the only topology-selection environment variable.
+- Matrix validation reports 42 nodes with P150 8/8, and focused runner/evidence
+  tests pass 49/49 on both supported Python versions. A new exact-SHA 42-node
+  run is required; prior 34-node evidence is not spliced or relabeled.

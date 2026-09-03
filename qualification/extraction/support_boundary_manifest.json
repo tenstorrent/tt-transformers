@@ -863,8 +863,8 @@
     },
     {
       "path": "qualification/manifests/hardware-matrix.json",
-      "sha256": "e5e54f1a216164c2036913313d0775454357ce5c6a82dc09c61caaba3c890db4",
-      "size": 83809
+      "sha256": "1d04716dd79cf3c5ab6a7a2ac251224fe326ad64ef19fa440c06187118b9d7de",
+      "size": 85800
     },
     {
       "path": "qualification/manifests/llama33_70b/bh_required_capabilities.json",
@@ -1283,8 +1283,8 @@
     },
     {
       "path": "qualification/tools/run_hardware_matrix.py",
-      "sha256": "341356042579ac38a705d5be282ec78e359b77175afd966327404d7bed8f9bb8",
-      "size": 23583
+      "sha256": "eb87da785bd70e79f4d0bc97ffbf4ea8bb458669d511227a666ba52ea8ce43d5",
+      "size": 24844
     },
     {
       "path": "qualification/tools/source_ci/run_t3000_unit_tests.sh",
@@ -1478,8 +1478,8 @@
     },
     {
       "path": "tests/host/test_hardware_matrix_runner.py",
-      "sha256": "41759560794a53ee44ff9b180665cc35a24823b178f52c53539fc8aa1362d6b2",
-      "size": 10111
+      "sha256": "dd3451039dcb6dd42ce85aef0c1f3e7352f8248e1dbd2e0b893c3e7810f8ef0c",
+      "size": 12944
     },
     {
       "path": "tests/host/test_import_boundaries.py",

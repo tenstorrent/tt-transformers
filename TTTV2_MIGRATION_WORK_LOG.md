@@ -1133,3 +1133,22 @@ This log records milestones and evidence for the standalone migration defined in
   recovery. That is an external dependency/build expansion and requires
   explicit authority; no additional standalone code change is justified by
   current evidence.
+
+## 2026-09-03T12:05:58Z — Single-P150 quietbox scheduling correction
+
+- Corrected the earlier matrix assumption that single-P150 priorities 24–30
+  and 38 required `bh-lb-11`. On `bh-qb-05`, `MESH_DEVICE=P150` is sufficient:
+  the shared fixture opens a logical 1x1 submesh from the physical P150_X4
+  quietbox's 2x2 system mesh. No BDF selector is required.
+- Added `P150` to the quietbox's supported mesh devices and admitted
+  `bh-qb-05` to all eight P150 machine pools. The child environment explicitly
+  removes any inherited `TT_VISIBLE_DEVICES`, leaving `MESH_DEVICE=P150` as the
+  sole topology selector.
+- Added fail-closed validation for machine/mesh compatibility and for the
+  quietbox's four-P150B, P150_X4, 2x2, unmasked physical provenance. Focused
+  runner/evidence tests pass 49/49 on CPython 3.10.19 and 3.12.13; both matrix
+  validators report the intended 42 nodes, including P150 8/8.
+- Historical 34-node evidence remains immutable and accurately records what
+  ran at its SHA. Because the matrix and full commit identity change, the next
+  canonical publication requires a fresh exact-SHA run of all 42 nodes, with
+  WH and BH hosts concurrent but each physical host strictly serial.

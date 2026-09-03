@@ -34,6 +34,21 @@ def _wh_inventory():
     }
 
 
+def _bh_qb_inventory():
+    return {
+        "captured_utc": "2026-09-03T00:00:00Z",
+        "machine_identity": "bh-qb-05-special-gwang-for-reservation-196606",
+        "architecture": "blackhole",
+        "physical_sku": "P150_X4 quietbox (four physical P150B boards)",
+        "device_count": 4,
+        "board_types": ["p150b"],
+        "cluster_type": "P150_X4",
+        "system_mesh": "2x2",
+        "tt_visible_devices": None,
+        "source_command": "tt-smi -s",
+    }
+
+
 def _dry_args(tmp_path):
     return SimpleNamespace(
         common_sha="a" * 40,
@@ -51,6 +66,74 @@ def test_checked_in_matrix_validates_and_covers_every_required_mesh():
     counts = runner.validate_matrix(_matrix())
     assert counts == {"N150": 9, "N300": 6, "T3K": 8, "P150": 8, "P150x4": 11}
     assert sum(counts.values()) == 42
+
+
+@pytest.mark.host
+def test_all_single_p150_nodes_admit_bh_qb_05_with_only_mesh_selection(tmp_path):
+    matrix = _matrix()
+    machine = matrix["machines"]["bh-qb-05"]
+    assert "P150" in machine["supported_mesh_devices"]
+
+    nodes = [node for node in matrix["nodes"] if node["mesh_device"] == "P150"]
+    assert {node["priority"] for node in nodes} == {*range(24, 31), 38}
+    for node in nodes:
+        assert node["machine_pool"] == ["bh-lb-11", "bh-qb-05"]
+        assert node["environment"]["MESH_DEVICE"] == "P150"
+        assert node["machine_environment_overrides"]["bh-qb-05"] == {
+            "TT_VISIBLE_DEVICES": None
+        }
+        assert node["physical_sku_provenance"]["selection_environment"] == {
+            "MESH_DEVICE": "P150"
+        }
+
+    node = runner.select_node(matrix, "bh-p150-rmsnorm-decode")
+    args = _dry_args(tmp_path)
+    args.machine_identity = "bh-qb-05-special-gwang-for-reservation-196606"
+    result = runner.preview(matrix, node, args, _bh_qb_inventory())
+
+    assert result["machine_pool_entry"] == "bh-qb-05"
+    assert result["environment"]["MESH_DEVICE"] == "P150"
+    assert result["environment"]["TT_VISIBLE_DEVICES"] is None
+
+
+@pytest.mark.host
+def test_matrix_refuses_a_pool_entry_that_does_not_support_the_requested_mesh():
+    matrix = copy.deepcopy(_matrix())
+    matrix["machines"]["bh-qb-05"]["supported_mesh_devices"].remove("P150")
+
+    with pytest.raises(runner.MatrixError, match="machine mesh support mismatch"):
+        runner.validate_matrix(matrix)
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("cluster_type", "CUSTOM", "physical cluster provenance"),
+        ("system_mesh", "1x1", "physical system_mesh mismatch"),
+        (
+            "tt_visible_devices",
+            "0000:01:00.0",
+            "sole topology selector",
+        ),
+    ],
+)
+def test_bh_qb_single_p150_rejects_wrong_physical_provenance(
+    field, value, message
+):
+    matrix = _matrix()
+    node = runner.select_node(matrix, "bh-p150-rmsnorm-decode")
+    inventory = _bh_qb_inventory()
+    inventory[field] = value
+
+    with pytest.raises(runner.MatrixError, match=message):
+        runner.validate_physical_inventory(
+            matrix,
+            node,
+            "bh-qb-05",
+            inventory["machine_identity"],
+            inventory,
+        )
 
 
 @pytest.mark.host
