@@ -1,7 +1,7 @@
 {
   "artifact": "tt_transformers-0.1.0.dev0-py3-none-any.whl",
-  "artifact_sha256": "012b58b9c8b773eb4a2a4a2d247d752572652ede81944ac91608aaa3b6e4ff1b",
-  "artifact_size": 597486,
+  "artifact_sha256": "8c55fac0a764fb9ae4d6ca514062ef2cb6cfe3097306a2f877bcad41269c50c2",
+  "artifact_size": 597778,
   "entries": [
     {
       "path": "tt_transformers-0.1.0.dev0.dist-info/METADATA",
@@ -10,7 +10,7 @@
     },
     {
       "path": "tt_transformers-0.1.0.dev0.dist-info/RECORD",
-      "sha256": "6a579f2792cbffa8c498abfc77998ca3748a37aa7a64f5686073ebcda957063c",
+      "sha256": "c84c55dad3698f68fec8dd3d983c5a977741f8f680b5c36b8ee9cfd493f17528",
       "size": 13998
     },
     {
@@ -290,8 +290,8 @@
     },
     {
       "path": "tt_transformers/models/llama33_70b/model.py",
-      "sha256": "f443cb7c3183285fc48af11870f169f53f39b0b08dd3100f26556b122dccaa69",
-      "size": 52801
+      "sha256": "fab0a25b92668abb7bd027513a3ca61587c7673fc222a6b48ae3ce3905a85e49",
+      "size": 53549
     },
     {
       "path": "tt_transformers/models/llama33_70b/weight_utils.py",
@@ -740,6 +740,6 @@
   "source_tree": {
     "algorithm": "sha256(path + NUL + content + NUL, sorted by path)",
     "python_files": 132,
-    "sha256": "11f65588f13055117316d808fece794759929196e82031f24a6add1b0a51149f"
+    "sha256": "7b03baf498e2a2252759d89813fcb898dd88daf573fb46f0e77e5c2cc6abad97"
   }
 }

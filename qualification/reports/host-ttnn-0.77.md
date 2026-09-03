@@ -2,7 +2,7 @@
 
 Validation date: 2026-09-03 (UTC)
 
-Candidate SHA: `b24eabe35c8f2c73f45493da40e5a6351eb0ec2d`
+Candidate SHA: `2883a949860d749adc2ed1af5525b27a9a547505`
 
 This report records host-only validation of the extracted standalone support and test surface. No TT device, remote machine, server, or hardware test was used.
 
@@ -31,8 +31,8 @@ Both final commands completed successfully with the same exact test totals:
 
 | Python | Passed | Skipped | Deselected | Passing subtests | Failures/errors | Process exit |
 |---|---:|---:|---:|---:|---:|---:|
-| 3.10.19 | 2,162 | 28 | 6,791 | 81 | 0 | 0 |
-| 3.12.13 | 2,162 | 28 | 6,791 | 81 | 0 | 0 |
+| 3.10.19 | 2,165 | 28 | 6,791 | 81 | 0 | 0 |
+| 3.12.13 | 2,165 | 28 | 6,791 | 81 | 0 | 0 |
 
 The previously recorded five pytest warnings are empty-regex warnings emitted by `pytest.raises` in `tests/llm_runtime/test_config.py`; they do not indicate collection or execution failure.
 
@@ -64,8 +64,8 @@ The 28 skips are accounted for as follows:
 
 The MLP2D 8x4 topology-bug probe is explicitly classified as `device` +
 `wormhole`; it is deselected by the host command and therefore does not probe
-PCI devices. The final taxonomy audit reports 1,461 test functions, 1,207 host,
-254 device, and no errors.
+PCI devices. The final taxonomy audit reports 1,462 test functions, 1,208 host,
+254 device, 393 model surfaces, and no errors.
 
 ## Defects closed
 

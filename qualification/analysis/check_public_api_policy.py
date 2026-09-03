@@ -76,6 +76,19 @@ IMMUTABLE_HF_REVISION_VALUES = {
     ),
 }
 
+# The standalone Llama 3.3 accuracy/performance split makes the folded-prefill
+# operator policy explicit in the immutable performance recipe.  Keep this
+# exception scoped to the one exported source value and require the complete
+# destination expression so unrelated constant drift still fails closed.
+LLAMA33_PERFORMANCE_PROFILE_VALUES = {
+    ("models/common/models/llama33_70b/model.py", "LLAMA33_70B_PERFORMANCE"): (
+        " = Llama33_70BPrecisionConfig(mlp_w1_w3_dtype=ttnn.bfloat4_b, "
+        "mlp_ff1_3_compute_kernel_cfg=_LOFI_COMPUTE_KERNEL_CFG, "
+        "mlp_ff2_compute_kernel_cfg=_HIFI2_FP16_COMPUTE_KERNEL_CFG, "
+        "prefill_minimal_matmul=True)"
+    ),
+}
+
 POLICY_FIELDS = [
     "policy_id",
     "layer",
@@ -257,6 +270,10 @@ def match_destination(
         for row in identity:
             if row["signature"] == IMMUTABLE_HF_REVISION_VALUES[key]:
                 return row, "immutable_default_hf_revision"
+    if key in LLAMA33_PERFORMANCE_PROFILE_VALUES:
+        for row in identity:
+            if row["signature"] == LLAMA33_PERFORMANCE_PROFILE_VALUES[key]:
+                return row, "compatible_llama33_performance_profile"
     return None, ""
 
 

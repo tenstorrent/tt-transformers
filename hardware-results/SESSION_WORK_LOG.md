@@ -659,3 +659,31 @@ checkout's tracked cleanliness during the mandatory synchronized hardware gate.
 - Hardware remains idle and no reset occurred. Next gate is a clean published
   SHA followed by complete WH/P150_X4 matrix reruns; W6 and both Llama accuracy
   nodes are directly affected.
+
+## 2026-09-03T04:08:00Z — `2883a94` full matrix green and TTFT feedback
+
+- Exact-SHA canonical result: **34/34 pass** on the reserved hosts. WH is
+  23/23 and BH P150_X4 is 11/11; modules 23/23, runtime 1/1, smokes 3/3,
+  e2e 7/7. Zero failures, lifecycle issues, missing acceptance, or resets.
+- Strict W6 passed all four orders under default thresholds/profile policy in
+  343.05s with no diagnostic overrides. Both WH/BH Llama accuracy gates pass.
+- Eight P150-only nodes remain deferred for `bh-lb-11`; they are not executed
+  or substituted by the P150_X4 quietbox.
+- Canonical index for 34 JSON/log pairs has SHA-256
+  `ec9a540a8f31762078b592909e02cdb03e99384f9ddf8f955966fa41e42af07b`.
+- Non-canonical accuracy TTFT diagnostics pass latency 4/4 at 86.7–87.2 ms
+  against 105 ms but fail decode throughput 4/4 (7.9/12.2/7.7/11.9 tok/s/u
+  for batch-32 host/device and batch-32-ci host/device). All failures are
+  performance-floor assertions with clean teardown and zero resets.
+- Final hardware inventories are healthy/fault-free and no TT process remains.
+
+## 2026-09-03T04:28:59Z — Final evidence/report publication gate
+
+- All current authorities consume candidate `2883a94...`, canonical index
+  `ec9a540a...`, and the separate hash-checked TTFT diagnostic bundle.
+- Canonical hardware remains 34/34 pass with zero failures/resets; TTFT remains
+  4/4 latency pass and 0/4 throughput-floor pass outside the canonical ledger.
+- Support, TTNN, release, static, taxonomy, extractor, API/import/example,
+  dependency, package, JSON, compile, and focused host validators pass.
+- Release readiness remains 45 pass / 18 partial / 16 blocked; all twelve
+  manifests remain experimental and unpromoted.

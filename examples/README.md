@@ -25,24 +25,19 @@ python -m pip install -e '.[examples,test]'
 
 ## Current final-SHA subset evidence
 
-The [centralized hardware ledger](../qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/index.json) records 33 passing nodes and one functional failure at final tested standalone SHA `b24eabe35c8f2c73f45493da40e5a6351eb0ec2d`. All 23 executed module nodes, all three smoke nodes, and all seven end-to-end/token-accuracy nodes passed; the official strict W6 runtime node is 0/1. It covers reusable modules and narrow subsets of five model families:
+The [centralized hardware ledger](../qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json) records 34 passing nodes at final tested standalone SHA `2883a949860d749adc2ed1af5525b27a9a547505`. All 23 executed module nodes, the official strict W6 runtime node, all three smoke nodes, and all seven end-to-end/token-accuracy nodes passed. It covers reusable modules and narrow subsets of five model families:
 
 - Llama-3.2-1B: Wormhole N150 TP1/DP1 and N300 TP2/DP1 token accuracy passed; its N300 DP and T3K variants were not exercised.
 - Qwen2.5-7B: Wormhole N300 TP2/DP1 token accuracy passed; its T3K variant was not exercised.
 - Qwen2.5-Coder-32B: a Wormhole T3K TP8/DP1 prefill smoke passed; no end-to-end accuracy node was run.
 - Qwen3-32B: Wormhole T3K TP8/DP1 and physical Blackhole P150_X4 TP4/DP1 token accuracy passed, as did the physical P150_X4 one-layer smoke; the accepted P300_X2 code alias was not exercised.
-- Llama-3.3-70B: Wormhole T3K TP8/DP1 and physical Blackhole P150_X4 TP4/DP1 token accuracy passed, as did the physical P150_X4 one-layer smoke; the T3K W6 trace-order correctness node failed and remains a blocker, and the accepted P300_X2 code alias was not exercised.
+- Llama-3.3-70B: Wormhole T3K TP8/DP1 and physical Blackhole P150_X4 TP4/DP1 token accuracy passed, as did the physical P150_X4 one-layer smoke; the strict T3K W6 trace-order node passed all four orders at unchanged thresholds. The accepted P300_X2 code alias was not exercised.
 
 This is hash-bound diagnostic migration evidence, not qualification of an example or its whole declared geometry. The seven single-card P150 module nodes and Llama-3.1-8B P150 token-accuracy node were not run, and P150_X4 evidence does not cover P150. The other seven model families have no final-SHA model-family node; every geometry, parallelism variant, hardware alias, and workload absent from the ledger remains uncovered and unqualified.
 
-A one-order run at `d7677f822356e839f707a6447fd0abc89e620d56`
-passed later W6 trace/KV/replay/sampling invariants in 176.12 seconds only after
-the known cross-geometry logits oracle was relaxed. It is non-qualifying
-diagnostic context, is excluded from the canonical pass count, and does not
-weaken the strict W6 failure. The earlier
-[`ba7abefba4484689c953ac53fe8810322db1d184` bundle](../qualification/evidence/hardware/ba7abefba4484689c953ac53fe8810322db1d184/index.json)
-remains preserved as historical evidence and does not transfer to the current
-candidate.
+The separate [accuracy-TTFT diagnostic](../qualification/evidence/diagnostics/2883a949860d749adc2ed1af5525b27a9a547505/accuracy-ttft/summary.json) is noncanonical: TTFT passed 4/4 at 86.7–87.2 ms, while throughput produced `performance_floor_failure` in all 4/4 cells. It is excluded from the canonical pass count and does not change the correctness ledger or any example's experimental status.
+
+The superseded [`b24eabe35c8f2c73f45493da40e5a6351eb0ec2d` bundle](../qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/index.json) and earlier [`ba7abefba4484689c953ac53fe8810322db1d184` bundle](../qualification/evidence/hardware/ba7abefba4484689c953ac53fe8810322db1d184/index.json) remain preserved as historical evidence and do not transfer to the current candidate. The relaxed one-order W6 run at `d7677f822356e839f707a6447fd0abc89e620d56` remains non-qualifying history associated with the superseded strict failure.
 
 Each model README contains exact run/collection commands, checkpoint/cache requirements, proven source limits, unsupported configurations, and evidence links. Machine-readable truth lives in each `support.json`; validate all documentation with:
 

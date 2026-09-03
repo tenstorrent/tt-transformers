@@ -2,7 +2,7 @@
 
 Status: substantive production failure fixed; final full-host suite passes.
 
-Final candidate SHA: `b24eabe35c8f2c73f45493da40e5a6351eb0ec2d`
+Final candidate SHA: `2883a949860d749adc2ed1af5525b27a9a547505`
 
 Environment:
 
@@ -148,9 +148,9 @@ added the hardware-runner host policies, exact full runs passed on both
 supported interpreters:
 
 ```text
-CPython 3.10.19: 2162 passed, 28 skipped, 6791 deselected,
+CPython 3.10.19: 2165 passed, 28 skipped, 6791 deselected,
                  5 warnings, 81 subtests passed, exit 0
-CPython 3.12.13: 2162 passed, 28 skipped, 6791 deselected,
+CPython 3.12.13: 2165 passed, 28 skipped, 6791 deselected,
                  5 warnings, 81 subtests passed, exit 0
 ```
 

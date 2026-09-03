@@ -60,11 +60,22 @@ The checker accounts for every source row exactly once:
 
 | Result | Count | Meaning |
 |---|---:|---|
-| `exact` | 1,576 | Extracted AST signature is byte-identical to the source inventory signature. |
+| `exact` | 1,563 | Extracted AST signature is byte-identical to the source inventory signature. |
 | `namespace_rewrite` | 1 | Explicit re-export contract is unchanged after the mechanical namespace owner rewrite. |
 | `lazy_export_rewrite` | 152 | Model-package `__all__` identity is preserved through a lazy export map rather than an eager import. |
+| `compatible_optional_hf_revision` | 9 | A reviewed HF adaptor adds only an optional `hf_revision=None` keyword. |
+| `compatible_hf_revision_default` | 2 | A reviewed Mistral adaptor changes the optional revision default to `None`, preventing a custom model ID from inheriting the default model's pin. |
+| `immutable_default_hf_revision` | 1 | The Mistral default revision value is pinned to the reviewed immutable commit. |
+| `compatible_llama33_performance_profile` | 1 | The Llama 3.3 performance value adds exactly `prefill_minimal_matmul=True`, preserving its minimal-matmul TTFT policy while accuracy remains linear. |
 | `approved_removal` | 31 | Source production identity is absent only through the reviewed removal/relocation ledger. |
 | **Total** | **1,760** | No unexplained absence or signature mismatch. |
+
+The Llama 3.3 compatibility rule is fail-closed: it matches only
+`models/common/models/llama33_70b/model.py::LLAMA33_70B_PERFORMANCE` and only
+the complete expected destination constructor expression. Any other path,
+qualname, or value still fails as unapproved signature drift. The extraction
+rationale and deterministic transform are recorded in
+`qualification/extraction/models.md`.
 
 `public_api_removals.csv` contains:
 
@@ -113,7 +124,7 @@ Expected output:
 ```text
 verified 1760 unique policy rows
 status {'compatibility_only': 13, 'model_local_public': 950, 'private_by_policy': 430, 'supported_public': 367}
-signature {'approved_removal': 31, 'exact': 1576, 'lazy_export_rewrite': 152, 'namespace_rewrite': 1}
+signature {'approved_removal': 31, 'compatible_hf_revision_default': 2, 'compatible_llama33_performance_profile': 1, 'compatible_optional_hf_revision': 9, 'exact': 1563, 'immutable_default_hf_revision': 1, 'lazy_export_rewrite': 152, 'namespace_rewrite': 1}
 removals {'compatibility_removed': 13, 'relocated_nonpackage': 18}
 human_review 34
 root_exports ['__version__']

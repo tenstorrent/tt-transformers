@@ -8,11 +8,11 @@ Authority inputs are the pinned Phase 0 `marker_inventory.csv` (23 tokens),
 input counts before grading the expanded standalone tree.
 
 This report defines selection policy; it is not hardware evidence. The static
-taxonomy audit currently covers 1,461 source-level test functions:
+taxonomy audit currently covers 1,462 source-level test functions:
 
-- 1,207 explicitly `host`;
+- 1,208 explicitly `host`;
 - 254 explicitly `device`;
-- 392 concrete `model` surfaces;
+- 393 concrete `model` surfaces;
 - 27 explicitly `slow` source definitions;
 - exact static topology marks where a node name/path proves a SKU, plus
   collection-time topology marks when `MESH_DEVICE` proves the selected
@@ -150,10 +150,17 @@ The exact execution and physical-inventory contract is documented in
 `qualification/reports/hardware-readiness.md`. Matrix presence and dry-run
 success alone are readiness evidence only, never a device-support claim.
 Separate SHA-bound evidence at final candidate
-`b24eabe35c8f2c73f45493da40e5a6351eb0ec2d` records 34 executed nodes:
-33 passed, the W6 runtime trace/order node failed functionally, and eight
-single-P150 nodes remain different-hardware deferred. The canonical index is
-`qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/index.json`.
+`2883a949860d749adc2ed1af5525b27a9a547505` records 34 executed nodes and all
+34 pass, including the strict W6 runtime trace/order node. Eight single-P150
+nodes remain different-hardware deferred. The canonical index is
+`qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json`
+(SHA-256 `ec9a540a8f31762078b592909e02cdb03e99384f9ddf8f955966fa41e42af07b`).
+
+An explicitly noncanonical four-cell T3K accuracy/TTFT diagnostic at that SHA
+passes the TTFT ceiling in all four cells but misses the adjusted throughput
+floor in all four. It is performance-triage evidence, not part of the 34-node
+canonical result, and is retained at
+`qualification/evidence/diagnostics/2883a949860d749adc2ed1af5525b27a9a547505/accuracy-ttft/summary.json`.
 
 ## Evidence rule
 

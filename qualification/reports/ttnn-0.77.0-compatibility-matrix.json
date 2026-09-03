@@ -136,7 +136,7 @@
       "path": "qualification/reports/test-pyramid.md"
     },
     {
-      "path": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/index.json"
+      "path": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json"
     },
     {
       "path": "qualification/manifests/hardware-matrix.json"
@@ -199,11 +199,11 @@
       {
         "deferred": 0,
         "executed": 23,
-        "functional_failure": 1,
+        "functional_failure": 0,
         "hardware_lifecycle_failure": 0,
         "matrix_total": 23,
         "name": "wormhole",
-        "passed": 22
+        "passed": 23
       },
       {
         "deferred": 8,
@@ -215,22 +215,13 @@
         "passed": 11
       }
     ],
-    "blocking_records": [
-      {
-        "classification": "functional_failure",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260903T001610.842135Z-wh-t3k-runtime-trace-order.json",
-        "failed_cases": 4,
-        "node": "wh-t3k-runtime-trace-order",
-        "observation": "logits parity failed; row max-abs above 1.0: row 0: 1.50000000; top-5 overlap below 4: row 0: 3",
-        "priority": 17
-      }
-    ],
+    "blocking_records": [],
     "branch": "tttv2-standalone-migration",
-    "candidate_sha": "b24eabe35c8f2c73f45493da40e5a6351eb0ec2d",
+    "candidate_sha": "2883a949860d749adc2ed1af5525b27a9a547505",
     "canonical_index": {
-      "path": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/index.json",
+      "path": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json",
       "record_count": 34,
-      "sha256": "8bbf3e6340d4015753a24d5107ae4183f9de57c931ed6d4eb111af769e9c040c"
+      "sha256": "ec9a540a8f31762078b592909e02cdb03e99384f9ddf8f955966fa41e42af07b"
     },
     "deferred": {
       "classification": "deferred_not_run",
@@ -330,7 +321,7 @@
     },
     "evidence": [
       {
-        "path": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/index.json"
+        "path": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json"
       },
       {
         "path": "qualification/manifests/hardware-matrix.json"
@@ -339,7 +330,7 @@
     "executed_records": [
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T234216.791206Z-wh-n150-rmsnorm-prefill.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023401.813663Z-wh-n150-rmsnorm-prefill.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N150",
         "metrics_count": 4,
@@ -348,12 +339,12 @@
         "priority": 1,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T234216.791206Z-wh-n150-rmsnorm-prefill.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023401.813663Z-wh-n150-rmsnorm-prefill.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T234221.189076Z-wh-n150-rmsnorm-decode.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023406.557742Z-wh-n150-rmsnorm-decode.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N150",
         "metrics_count": 4,
@@ -362,12 +353,12 @@
         "priority": 2,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T234221.189076Z-wh-n150-rmsnorm-decode.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023406.557742Z-wh-n150-rmsnorm-decode.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T234225.516311Z-wh-n150-lm-head.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023411.028244Z-wh-n150-lm-head.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N150",
         "metrics_count": 4,
@@ -376,12 +367,12 @@
         "priority": 3,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T234225.516311Z-wh-n150-lm-head.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023411.028244Z-wh-n150-lm-head.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T234227.934487Z-wh-n150-mlp-prefill.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023413.654989Z-wh-n150-mlp-prefill.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N150",
         "metrics_count": 4,
@@ -390,12 +381,12 @@
         "priority": 4,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T234227.934487Z-wh-n150-mlp-prefill.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023413.654989Z-wh-n150-mlp-prefill.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T234233.194986Z-wh-n150-mlp-decode.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023418.922771Z-wh-n150-mlp-decode.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N150",
         "metrics_count": 4,
@@ -404,12 +395,12 @@
         "priority": 5,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T234233.194986Z-wh-n150-mlp-decode.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023418.922771Z-wh-n150-mlp-decode.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T234238.356569Z-wh-n150-attention-prefill.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023424.395573Z-wh-n150-attention-prefill.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N150",
         "metrics_count": 4,
@@ -418,12 +409,12 @@
         "priority": 6,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T234238.356569Z-wh-n150-attention-prefill.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023424.395573Z-wh-n150-attention-prefill.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T234244.065973Z-wh-n150-attention-decode.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023430.117582Z-wh-n150-attention-decode.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N150",
         "metrics_count": 4,
@@ -432,12 +423,12 @@
         "priority": 7,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T234244.065973Z-wh-n150-attention-decode.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023430.117582Z-wh-n150-attention-decode.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T234249.496752Z-wh-n150-attention-paged-transition.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023435.487532Z-wh-n150-attention-paged-transition.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N150",
         "metrics_count": 4,
@@ -446,12 +437,12 @@
         "priority": 8,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T234249.496752Z-wh-n150-attention-paged-transition.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023435.487532Z-wh-n150-attention-paged-transition.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T234312.611208Z-wh-n300-rmsnorm.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023441.018846Z-wh-n300-rmsnorm.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N300",
         "metrics_count": 3,
@@ -460,12 +451,12 @@
         "priority": 9,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T234312.611208Z-wh-n300-rmsnorm.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023441.018846Z-wh-n300-rmsnorm.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T234435.219562Z-wh-n300-lm-head.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023602.773598Z-wh-n300-lm-head.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N300",
         "metrics_count": 3,
@@ -474,12 +465,12 @@
         "priority": 10,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T234435.219562Z-wh-n300-lm-head.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023602.773598Z-wh-n300-lm-head.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T234649.731017Z-wh-n300-mlp.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023816.856646Z-wh-n300-mlp.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N300",
         "metrics_count": 3,
@@ -488,12 +479,12 @@
         "priority": 11,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T234649.731017Z-wh-n300-mlp.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023816.856646Z-wh-n300-mlp.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T234844.810832Z-wh-n300-attention.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T024010.853055Z-wh-n300-attention.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N300",
         "metrics_count": 3,
@@ -502,12 +493,12 @@
         "priority": 12,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T234844.810832Z-wh-n300-attention.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T024010.853055Z-wh-n300-attention.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T235708.807907Z-wh-t3k-rmsnorm.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T024804.366297Z-wh-t3k-rmsnorm.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "T3K",
         "metrics_count": 3,
@@ -516,12 +507,12 @@
         "priority": 13,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T235708.807907Z-wh-t3k-rmsnorm.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T024804.366297Z-wh-t3k-rmsnorm.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T235844.955433Z-wh-t3k-lm-head.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T024939.872592Z-wh-t3k-lm-head.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "T3K",
         "metrics_count": 3,
@@ -530,12 +521,12 @@
         "priority": 14,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260902T235844.955433Z-wh-t3k-lm-head.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T024939.872592Z-wh-t3k-lm-head.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260903T000209.303371Z-wh-t3k-mlp.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T025304.716151Z-wh-t3k-mlp.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "T3K",
         "metrics_count": 3,
@@ -544,12 +535,12 @@
         "priority": 15,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260903T000209.303371Z-wh-t3k-mlp.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T025304.716151Z-wh-t3k-mlp.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260903T000553.973314Z-wh-t3k-attention.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T025643.955155Z-wh-t3k-attention.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "T3K",
         "metrics_count": 3,
@@ -558,26 +549,26 @@
         "priority": 16,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260903T000553.973314Z-wh-t3k-attention.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T025643.955155Z-wh-t3k-attention.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260903T001610.842135Z-wh-t3k-runtime-trace-order.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T030639.828366Z-wh-t3k-runtime-trace-order.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "T3K",
-        "metrics_count": 200,
+        "metrics_count": 3,
         "node": "wh-t3k-runtime-trace-order",
-        "outcome": "functional_failure",
+        "outcome": "passed",
         "priority": 17,
         "reset_performed": false,
         "stage": "runtime",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260903T001610.842135Z-wh-t3k-runtime-trace-order.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T030639.828366Z-wh-t3k-runtime-trace-order.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260903T002116.399710Z-wh-t3k-qwen25-coder-smoke.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T031233.697885Z-wh-t3k-qwen25-coder-smoke.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "T3K",
         "metrics_count": 3,
@@ -586,12 +577,12 @@
         "priority": 18,
         "reset_performed": false,
         "stage": "smoke",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260903T002116.399710Z-wh-t3k-qwen25-coder-smoke.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T031233.697885Z-wh-t3k-qwen25-coder-smoke.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260903T002151.839912Z-wh-n150-llama32-1b-token-accuracy.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T031308.896136Z-wh-n150-llama32-1b-token-accuracy.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N150",
         "metrics_count": 3,
@@ -600,12 +591,12 @@
         "priority": 19,
         "reset_performed": false,
         "stage": "e2e",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260903T002151.839912Z-wh-n150-llama32-1b-token-accuracy.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T031308.896136Z-wh-n150-llama32-1b-token-accuracy.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260903T002237.362324Z-wh-n300-llama32-1b-token-accuracy.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T031354.919124Z-wh-n300-llama32-1b-token-accuracy.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N300",
         "metrics_count": 3,
@@ -614,12 +605,12 @@
         "priority": 20,
         "reset_performed": false,
         "stage": "e2e",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260903T002237.362324Z-wh-n300-llama32-1b-token-accuracy.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T031354.919124Z-wh-n300-llama32-1b-token-accuracy.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260903T002333.296079Z-wh-n300-qwen25-7b-token-accuracy.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T031449.844864Z-wh-n300-qwen25-7b-token-accuracy.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N300",
         "metrics_count": 3,
@@ -628,12 +619,12 @@
         "priority": 21,
         "reset_performed": false,
         "stage": "e2e",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260903T002333.296079Z-wh-n300-qwen25-7b-token-accuracy.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T031449.844864Z-wh-n300-qwen25-7b-token-accuracy.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260903T002528.438398Z-wh-t3k-qwen3-token-accuracy.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T031646.711908Z-wh-t3k-qwen3-token-accuracy.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "T3K",
         "metrics_count": 3,
@@ -642,12 +633,12 @@
         "priority": 22,
         "reset_performed": false,
         "stage": "e2e",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260903T002528.438398Z-wh-t3k-qwen3-token-accuracy.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T031646.711908Z-wh-t3k-qwen3-token-accuracy.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260903T003251.420730Z-wh-t3k-llama33-token-accuracy.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T032407.555450Z-wh-t3k-llama33-token-accuracy.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "T3K",
         "metrics_count": 3,
@@ -656,12 +647,12 @@
         "priority": 23,
         "reset_performed": false,
         "stage": "e2e",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260903T003251.420730Z-wh-t3k-llama33-token-accuracy.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T032407.555450Z-wh-t3k-llama33-token-accuracy.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "blackhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/bh-qb-05/20260902T234157.704372Z-bh-p150x4-rmsnorm.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023112.388384Z-bh-p150x4-rmsnorm.json",
         "machine_pool_entry": "bh-qb-05",
         "mesh_device": "P150x4",
         "metrics_count": 4,
@@ -670,12 +661,12 @@
         "priority": 31,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/bh-qb-05/20260902T234157.704372Z-bh-p150x4-rmsnorm.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023112.388384Z-bh-p150x4-rmsnorm.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "blackhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/bh-qb-05/20260902T234205.672680Z-bh-p150x4-lm-head.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023120.627021Z-bh-p150x4-lm-head.json",
         "machine_pool_entry": "bh-qb-05",
         "mesh_device": "P150x4",
         "metrics_count": 4,
@@ -684,12 +675,12 @@
         "priority": 32,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/bh-qb-05/20260902T234205.672680Z-bh-p150x4-lm-head.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023120.627021Z-bh-p150x4-lm-head.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "blackhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/bh-qb-05/20260902T234211.761565Z-bh-p150x4-mlp-decode.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023126.915918Z-bh-p150x4-mlp-decode.json",
         "machine_pool_entry": "bh-qb-05",
         "mesh_device": "P150x4",
         "metrics_count": 4,
@@ -698,12 +689,12 @@
         "priority": 33,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/bh-qb-05/20260902T234211.761565Z-bh-p150x4-mlp-decode.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023126.915918Z-bh-p150x4-mlp-decode.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "blackhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/bh-qb-05/20260902T234219.575817Z-bh-p150x4-mlp-prefill.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023134.925320Z-bh-p150x4-mlp-prefill.json",
         "machine_pool_entry": "bh-qb-05",
         "mesh_device": "P150x4",
         "metrics_count": 4,
@@ -712,12 +703,12 @@
         "priority": 34,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/bh-qb-05/20260902T234219.575817Z-bh-p150x4-mlp-prefill.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023134.925320Z-bh-p150x4-mlp-prefill.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "blackhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/bh-qb-05/20260902T234227.474662Z-bh-p150x4-attention-prefill.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023143.028311Z-bh-p150x4-attention-prefill.json",
         "machine_pool_entry": "bh-qb-05",
         "mesh_device": "P150x4",
         "metrics_count": 4,
@@ -726,12 +717,12 @@
         "priority": 35,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/bh-qb-05/20260902T234227.474662Z-bh-p150x4-attention-prefill.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023143.028311Z-bh-p150x4-attention-prefill.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "blackhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/bh-qb-05/20260902T234235.884100Z-bh-p150x4-attention-decode.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023151.635227Z-bh-p150x4-attention-decode.json",
         "machine_pool_entry": "bh-qb-05",
         "mesh_device": "P150x4",
         "metrics_count": 4,
@@ -740,12 +731,12 @@
         "priority": 36,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/bh-qb-05/20260902T234235.884100Z-bh-p150x4-attention-decode.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023151.635227Z-bh-p150x4-attention-decode.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "blackhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/bh-qb-05/20260902T234243.982605Z-bh-p150x4-attention-paged-transition.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023200.133721Z-bh-p150x4-attention-paged-transition.json",
         "machine_pool_entry": "bh-qb-05",
         "mesh_device": "P150x4",
         "metrics_count": 4,
@@ -754,12 +745,12 @@
         "priority": 37,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/bh-qb-05/20260902T234243.982605Z-bh-p150x4-attention-paged-transition.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023200.133721Z-bh-p150x4-attention-paged-transition.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "blackhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/bh-qb-05/20260902T234308.735115Z-bh-p150x4-qwen3-one-layer-smoke.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023228.461383Z-bh-p150x4-qwen3-one-layer-smoke.json",
         "machine_pool_entry": "bh-qb-05",
         "mesh_device": "P150x4",
         "metrics_count": 3,
@@ -768,12 +759,12 @@
         "priority": 39,
         "reset_performed": false,
         "stage": "smoke",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/bh-qb-05/20260902T234308.735115Z-bh-p150x4-qwen3-one-layer-smoke.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023228.461383Z-bh-p150x4-qwen3-one-layer-smoke.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "blackhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/bh-qb-05/20260902T234942.539048Z-bh-p150x4-llama33-one-layer-smoke.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023913.393685Z-bh-p150x4-llama33-one-layer-smoke.json",
         "machine_pool_entry": "bh-qb-05",
         "mesh_device": "P150x4",
         "metrics_count": 3,
@@ -782,12 +773,12 @@
         "priority": 40,
         "reset_performed": false,
         "stage": "smoke",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/bh-qb-05/20260902T234942.539048Z-bh-p150x4-llama33-one-layer-smoke.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023913.393685Z-bh-p150x4-llama33-one-layer-smoke.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "blackhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/bh-qb-05/20260902T235935.908755Z-bh-p150x4-qwen3-token-accuracy.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T024915.494735Z-bh-p150x4-qwen3-token-accuracy.json",
         "machine_pool_entry": "bh-qb-05",
         "mesh_device": "P150x4",
         "metrics_count": 3,
@@ -796,12 +787,12 @@
         "priority": 41,
         "reset_performed": false,
         "stage": "e2e",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/bh-qb-05/20260902T235935.908755Z-bh-p150x4-qwen3-token-accuracy.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T024915.494735Z-bh-p150x4-qwen3-token-accuracy.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "blackhole",
-        "evidence_json": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/bh-qb-05/20260903T001818.772817Z-bh-p150x4-llama33-token-accuracy.json",
+        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T030805.335398Z-bh-p150x4-llama33-token-accuracy.json",
         "machine_pool_entry": "bh-qb-05",
         "mesh_device": "P150x4",
         "metrics_count": 3,
@@ -810,7 +801,7 @@
         "priority": 42,
         "reset_performed": false,
         "stage": "e2e",
-        "stdout_log": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/bh-qb-05/20260903T001818.772817Z-bh-p150x4-llama33-token-accuracy.log",
+        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T030805.335398Z-bh-p150x4-llama33-token-accuracy.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       }
     ],
@@ -848,11 +839,11 @@
       {
         "deferred": 0,
         "executed": 8,
-        "functional_failure": 1,
+        "functional_failure": 0,
         "hardware_lifecycle_failure": 0,
         "matrix_total": 8,
         "name": "T3K",
-        "passed": 7
+        "passed": 8
       },
       {
         "deferred": 8,
@@ -874,10 +865,10 @@
       }
     ],
     "outcomes": {
-      "functional_failure": 1,
+      "functional_failure": 0,
       "hardware_lifecycle_failure": 0,
       "missing_acceptance_data": 0,
-      "passed": 33,
+      "passed": 34,
       "pre_device_failure": 0
     },
     "stage_coverage": [
@@ -893,11 +884,11 @@
       {
         "deferred": 0,
         "executed": 1,
-        "functional_failure": 1,
+        "functional_failure": 0,
         "hardware_lifecycle_failure": 0,
         "matrix_total": 1,
         "name": "runtime",
-        "passed": 0
+        "passed": 1
       },
       {
         "deferred": 0,
@@ -918,7 +909,7 @@
         "passed": 7
       }
     ],
-    "verdict": "partial_33_pass_1_w6_functional_failure_8_p150_deferred"
+    "verdict": "partial_34_pass_8_p150_deferred"
   },
   "host_semantics_exercised": [
     "dependency resolution, metadata, wheel installation, and import isolation",
@@ -942,7 +933,7 @@
         }
       ],
       "failures": 0,
-      "passed": 2162,
+      "passed": 2165,
       "process_exit": 0,
       "python": "3.10.19",
       "shutdown_diagnostics": null,
@@ -962,7 +953,7 @@
         }
       ],
       "failures": 0,
-      "passed": 2162,
+      "passed": 2165,
       "process_exit": 0,
       "python": "3.12.13",
       "shutdown_diagnostics": {
@@ -1799,11 +1790,114 @@
       "package": "qwen3_32b"
     }
   ],
+  "noncanonical_performance_feedback": {
+    "candidate_sha": "2883a949860d749adc2ed1af5525b27a9a547505",
+    "canonical_hardware_record_count_impact": 0,
+    "cells": [
+      {
+        "log": "qualification/evidence/diagnostics/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/accuracy-ttft/accuracy-batch-32-T3K--host.log",
+        "overall_target_passed": false,
+        "parameter_id": "accuracy-batch-32-T3K",
+        "pytest_exit_code": 1,
+        "reset_performed": false,
+        "sampling_mode": "host",
+        "teardown_status": "clean: device and cluster close completed; no post-run device owner",
+        "throughput_target_passed": false,
+        "tok_s_u": 7.9,
+        "tok_s_u_adjusted_min": 8.835,
+        "tok_s_u_target": 9.3,
+        "ttft_adjusted_max_ms": 105.0,
+        "ttft_ms": 87.1,
+        "ttft_target_ms": 100.0,
+        "ttft_target_passed": true
+      },
+      {
+        "log": "qualification/evidence/diagnostics/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/accuracy-ttft/accuracy-batch-32-T3K--on_device_topk.log",
+        "overall_target_passed": false,
+        "parameter_id": "accuracy-batch-32-T3K",
+        "pytest_exit_code": 1,
+        "reset_performed": false,
+        "sampling_mode": "on_device_topk",
+        "teardown_status": "clean: device and cluster close completed; no post-run device owner",
+        "throughput_target_passed": false,
+        "tok_s_u": 12.2,
+        "tok_s_u_adjusted_min": 13.68,
+        "tok_s_u_target": 14.4,
+        "ttft_adjusted_max_ms": 105.0,
+        "ttft_ms": 86.7,
+        "ttft_target_ms": 100.0,
+        "ttft_target_passed": true
+      },
+      {
+        "log": "qualification/evidence/diagnostics/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/accuracy-ttft/accuracy-batch-32-ci-T3K--host.log",
+        "overall_target_passed": false,
+        "parameter_id": "accuracy-batch-32-ci-T3K",
+        "pytest_exit_code": 1,
+        "reset_performed": false,
+        "sampling_mode": "host",
+        "teardown_status": "clean: device and cluster close completed; no post-run device owner",
+        "throughput_target_passed": false,
+        "tok_s_u": 7.7,
+        "tok_s_u_adjusted_min": 8.455,
+        "tok_s_u_target": 8.9,
+        "ttft_adjusted_max_ms": 105.0,
+        "ttft_ms": 86.9,
+        "ttft_target_ms": 100.0,
+        "ttft_target_passed": true
+      },
+      {
+        "log": "qualification/evidence/diagnostics/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/accuracy-ttft/accuracy-batch-32-ci-T3K--on_device_topk.log",
+        "overall_target_passed": false,
+        "parameter_id": "accuracy-batch-32-ci-T3K",
+        "pytest_exit_code": 1,
+        "reset_performed": false,
+        "sampling_mode": "on_device_topk",
+        "teardown_status": "clean: device and cluster close completed; no post-run device owner",
+        "throughput_target_passed": false,
+        "tok_s_u": 11.9,
+        "tok_s_u_adjusted_min": 13.489999999999998,
+        "tok_s_u_target": 14.2,
+        "ttft_adjusted_max_ms": 105.0,
+        "ttft_ms": 87.2,
+        "ttft_target_ms": 100.0,
+        "ttft_target_passed": true
+      }
+    ],
+    "classification": "non_canonical_performance_diagnostic",
+    "evidence": [
+      {
+        "path": "qualification/evidence/diagnostics/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/accuracy-ttft/summary.json"
+      },
+      {
+        "path": "qualification/evidence/diagnostics/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/accuracy-ttft/accuracy-batch-32-T3K--host.log"
+      },
+      {
+        "path": "qualification/evidence/diagnostics/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/accuracy-ttft/accuracy-batch-32-T3K--on_device_topk.log"
+      },
+      {
+        "path": "qualification/evidence/diagnostics/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/accuracy-ttft/accuracy-batch-32-ci-T3K--host.log"
+      },
+      {
+        "path": "qualification/evidence/diagnostics/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/accuracy-ttft/accuracy-batch-32-ci-T3K--on_device_topk.log"
+      }
+    ],
+    "summary": {
+      "cells": 4,
+      "hardware_lifecycle_failures": 0,
+      "overall_target_passed": 0,
+      "pytest_failed": 4,
+      "pytest_passed": 0,
+      "resets": 0,
+      "throughput_target_passed": 0,
+      "ttft_target_passed": 4
+    },
+    "verdict": "ttft_4_of_4_pass_throughput_0_of_4_pass_overall_0_of_4"
+  },
   "not_exercised": [
     "single-P150 execution on the required bh-lb-11 development loudbox",
     "experimental/private TTNN operations not selected by the 34 executed matrix records",
     "hardware behavior outside the exact recorded N150, N300, T3K, and P150x4 selectors",
-    "performance qualification beyond the recorded correctness and token-accuracy acceptance data",
+    "performance qualification beyond the recorded correctness and token-accuracy acceptance data; four Llama33 accuracy TTFT diagnostics are noncanonical feedback only",
     "complete model-manifest geometry, TP/DP, batch/context, and lifecycle qualification",
     "independent post-fixture hardware teardown verification"
   ],
@@ -1824,14 +1918,14 @@
     {
       "entry_count": 138,
       "filename": "tt_transformers-0.1.0.dev0-py3-none-any.whl",
-      "sha256": "012b58b9c8b773eb4a2a4a2d247d752572652ede81944ac91608aaa3b6e4ff1b",
-      "size": 597486
+      "sha256": "8c55fac0a764fb9ae4d6ca514062ef2cb6cfe3097306a2f877bcad41269c50c2",
+      "size": 597778
     },
     {
       "entry_count": 143,
       "filename": "tt_transformers-0.1.0.dev0.tar.gz",
-      "sha256": "abd1bcc097596c5d992750c3ef10a668799f3342390f8179f1c39ec39344693b",
-      "size": 498224
+      "sha256": "f161e13dedc5ce076d9553b677f0a1a4785996f932316f2325de9217376da644",
+      "size": 498499
     }
   ],
   "remaining_hardware_gaps": {
@@ -1840,7 +1934,7 @@
         "path": "qualification/reports/host-ttnn-0.77.md"
       },
       {
-        "path": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/index.json"
+        "path": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json"
       },
       {
         "path": "qualification/manifests/hardware-matrix.json"
@@ -1848,9 +1942,8 @@
     ],
     "firmware_driver": "exact stacks recorded for executed wh-lb-42 and bh-qb-05 evidence; not qualified beyond those records",
     "model_geometry": "partial exact-SHA matrix evidence exists; manifests remain experimental and unpromoted",
-    "overall": "33_of_34_executed_pass; W6 functional blocker; 8 P150 nodes deferred",
+    "overall": "34_of_34_executed_pass; 8 P150 nodes deferred",
     "required_next_evidence": [
-      "resolve and rerun the W6 T3K trace-order correctness gate",
       "run priorities 24-30 and 38 on the required bh-lb-11 P150 development loudbox",
       "extend exact-SHA evidence to remaining model-manifest geometry and context buckets",
       "independently verify post-fixture hardware teardown where a clean-teardown claim is required"
@@ -1941,7 +2034,7 @@
   "source_tree": {
     "algorithm": "sha256(path + NUL + content + NUL, sorted by path)",
     "python_files": 132,
-    "sha256": "11f65588f13055117316d808fece794759929196e82031f24a6add1b0a51149f"
+    "sha256": "7b03baf498e2a2252759d89813fcb898dd88daf573fb46f0e77e5c2cc6abad97"
   },
   "surfaces": [
     {
@@ -2006,7 +2099,7 @@
           "path": "qualification/extraction/device_ownership.md"
         },
         {
-          "path": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/index.json"
+          "path": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json"
         },
         {
           "path": "qualification/manifests/hardware-matrix.json"
@@ -2035,7 +2128,7 @@
           "path": "qualification/reports/host-ttnn-0.77.md"
         },
         {
-          "path": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/index.json"
+          "path": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json"
         },
         {
           "path": "qualification/manifests/hardware-matrix.json"
@@ -2064,7 +2157,7 @@
           "path": "qualification/reports/host-ttnn-0.77.md"
         },
         {
-          "path": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/index.json"
+          "path": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json"
         },
         {
           "path": "qualification/manifests/hardware-matrix.json"
@@ -2093,13 +2186,13 @@
           "path": "qualification/reports/host-ttnn-0.77.md"
         },
         {
-          "path": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/index.json"
+          "path": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json"
         },
         {
           "path": "qualification/manifests/hardware-matrix.json"
         }
       ],
-      "hardware_verdict": "functional_failure_w6_trace_order",
+      "hardware_verdict": "pass_executed_w6_trace_order_scope_not_runtime_complete",
       "host_import_pythons": [
         "3.10.19",
         "3.12.13"
@@ -2122,13 +2215,13 @@
           "path": "qualification/reports/host-ttnn-0.77.md"
         },
         {
-          "path": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/index.json"
+          "path": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json"
         },
         {
           "path": "qualification/manifests/hardware-matrix.json"
         }
       ],
-      "hardware_verdict": "partial_exact_sha_smoke_and_e2e_pass_with_w6_blocker",
+      "hardware_verdict": "partial_exact_sha_runtime_smoke_and_e2e_pass",
       "host_import_pythons": [
         "3.10.19",
         "3.12.13"
@@ -2154,7 +2247,7 @@
           "path": "qualification/reports/ttnn-0.77.0-host-triage.md"
         },
         {
-          "path": "qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/index.json"
+          "path": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json"
         },
         {
           "path": "qualification/manifests/hardware-matrix.json"
@@ -2181,8 +2274,9 @@
         "path": "qualification/reports/test-pyramid.md"
       }
     ],
-    "host": 1207,
-    "source_level_test_functions": 1461
+    "host": 1208,
+    "model": 393,
+    "source_level_test_functions": 1462
   },
   "tt_transformers": "0.1.0.dev0",
   "ttnn": "0.77.0",

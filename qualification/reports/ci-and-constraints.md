@@ -61,7 +61,7 @@ imports TTNN or runs device tests, and preserves the one-node/one-process
 hardware boundary.
 
 The final local non-editable-wheel host selector passes identically on both
-supported interpreters: 2,162 passed, 28 skipped, 6,791 deselected, 5 warnings,
+supported interpreters: 2,165 passed, 28 skipped, 6,791 deselected, 5 warnings,
 and 81 passing subtests, with zero failures or errors. This is local evidence;
 it does not convert the still-unobserved GitHub workflow into a CI pass.
 
@@ -73,9 +73,11 @@ passes both final artifacts.
 ## Deferred static-quality gate
 
 A known-failing required lint/type job was not checked in. The exact isolated
-baseline records 2,158 Ruff findings, 165 files needing Ruff formatting, and
-489 mypy errors across 99 package files. TTNN provides no complete typing
-marker/stubs, and the bounded Black check did not complete reliably.
+baseline records 2,158 Ruff findings (628 legacy CLI-comparable fixable; JSON
+classifies 505 safe and 154 unsafe fix applications), 167 files needing Ruff
+formatting with 204 already formatted, and 489 mypy errors across 99 package
+files. TTNN provides no complete typing marker/stubs, and the bounded Black
+check did not complete reliably.
 Phase 9 begins only after hardware parity by plan; it must select one formatter,
 qualify the declared tool versions, establish a reviewed baseline, and then
 make Ruff/format/mypy regressions required without masking real defects.

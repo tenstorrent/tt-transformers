@@ -1019,3 +1019,70 @@ This log records milestones and evidence for the standalone migration defined in
   genuinely change at Q512; four folded batch-32 accuracy TTFT cells also need
   fresh measurement because their 100 ms targets were calibrated with the
   former minimal path.
+
+## 2026-09-03T04:08:00Z — Final `2883a94` correctness and performance evidence
+
+- Published and synchronized candidate
+  `2883a949860d749adc2ed1af5525b27a9a547505`. Local, WH, and BH tracked
+  checkouts were clean/upstream-aligned at the gate; remote non-editable
+  installs matched all 132 package Python files and passed dependency checks.
+- Re-executed the complete matrix available on reserved T3K and P150_X4 hosts:
+  **34/34 passed**. Stages are modules 23/23, runtime 1/1, smokes 3/3, and e2e
+  7/7. Meshes are N150 9/9, N300 6/6, T3K 8/8, and P150x4 11/11. There were
+  zero functional, lifecycle, pre-device, or missing-acceptance outcomes and
+  zero resets. The eight single-P150 priorities 24–30 and 38 remain deferred
+  for unavailable `bh-lb-11` and are not failures.
+- Official strict W6 passed all four capture/sampling permutations in 343.05s
+  with default thresholds, no `DISABLE_MINIMAL_MATMUL`, no W6 overrides, and
+  1,056/1,056 JIT hits. The WH and BH Llama 3.3 token-accuracy nodes also pass,
+  exercising both the new accuracy-linear path and retained
+  performance-minimal path on their selectors.
+- Post-run audits found no runner/device owners, clean checkouts, and healthy
+  fault-free hardware across all eight WH and four BH devices. Canonical
+  evidence contains exactly 34 JSON/log pairs under
+  `qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505`.
+  Generated index SHA-256 is
+  `ec9a540a8f31762078b592909e02cdb03e99384f9ddf8f955966fa41e42af07b`.
+- Four separate, non-canonical T3K accuracy-performance cells all met the
+  changed prefill latency gate: TTFT 86.7–87.2 ms versus adjusted maximum
+  105 ms. All four failed only their decode-throughput floors: batch-32 host
+  7.9, batch-32 device 12.2, batch-32-ci host 7.7, and batch-32-ci device 11.9
+  tok/s/u. These are explicit `performance_floor_failure` diagnostics, not
+  canonical correctness or lifecycle failures. Summary SHA-256 is
+  `1f093791caef895c3a97b038fe63cc3396a0f4f9d4048f9bf50ef06f100d10b9`.
+- Rebuilt the wheel and normalized sdist twice sequentially with byte-identical
+  results. Wheel SHA-256 is
+  `8c55fac0a764fb9ae4d6ca514062ef2cb6cfe3097306a2f877bcad41269c50c2`
+  (597,778 bytes), sdist SHA-256 is
+  `f161e13dedc5ce076d9553b677f0a1a4785996f932316f2325de9217376da644`
+  (498,499 bytes), and source digest is
+  `7b03baf498e2a2252759d89813fcb898dd88daf573fb46f0e77e5c2cc6abad97`.
+  Twine strict, archive audit, isolated 76-surface base probes, and final
+  non-editable host suites pass. Host totals are 2,165 passed, 28 skipped,
+  6,791 deselected, 5 warnings, and 81 subtests on each supported Python.
+
+## 2026-09-03T04:28:59Z — `2883a94` final authority convergence
+
+- Hardware/support, package/TTNN, and release/host/static authorities now bind
+  the 34/34 canonical index and separate four-cell performance diagnostic.
+  Prior `b24eabe...` and `ba7abef...` ledger rows remain preserved as
+  superseded history; all twelve model manifests remain unchanged,
+  experimental, null-validated, and evidence-empty.
+- Release readiness remains **45 pass, 18 partial, 16 blocked** across 79
+  criteria. Strict W6 is no longer a blocker; the current partial hardware and
+  scheduled-release verdict instead records eight deferred single-P150 nodes
+  and four explicit throughput-floor failures, alongside unobserved CI,
+  release tagging, incomplete promoted contracts, and downstream cutover.
+- Final taxonomy is 1,462 functions = 1,208 host + 254 device, including 393
+  model surfaces. Static debt remains non-green: Ruff 2,158 with 628 legacy
+  CLI-comparable fixable findings (505 safe + 154 unsafe per JSON), Ruff format
+  167/204, mypy 489 errors in 99/132 files, and bounded Black timeout.
+- The public-API ledger explicitly approves the exact Llama 3.3 performance
+  profile expression change as `compatible_llama33_performance_profile` while
+  retaining fail-closed matching; all 1,760 policy rows verify.
+- Final integrated validation passes hardware evidence, support docs, TTNN
+  compatibility, release readiness, static baseline, taxonomy, all pinned
+  extractors, example/import/API policies, eight dependency locks, constraints,
+  Twine, compilation, 133 JSON parses, four diagnostic log hashes, and 59
+  focused host tests on each Python. The support-boundary manifest was
+  regenerated last and contains 386 files with zero mismatches/evidence rows.

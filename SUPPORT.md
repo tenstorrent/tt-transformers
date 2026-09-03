@@ -21,30 +21,25 @@ Candidate software tuple: `tt-transformers==0.1.0.dev0`, `ttnn==0.77.0`, Python 
 
 ## Current final-SHA subset evidence
 
-The [centralized hardware ledger](qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/index.json) records 33 passing nodes and one functional failure at final tested standalone SHA `b24eabe35c8f2c73f45493da40e5a6351eb0ec2d`. All 23 executed module nodes, all three smoke nodes, and all seven end-to-end/token-accuracy nodes passed; the official strict W6 runtime node is 0/1. It covers reusable modules and only these five model-family subsets:
+The [centralized hardware ledger](qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json) records 34 passing nodes at final tested standalone SHA `2883a949860d749adc2ed1af5525b27a9a547505`. All 23 executed module nodes, the official strict W6 runtime node, all three smoke nodes, and all seven end-to-end/token-accuracy nodes passed. It covers reusable modules and only these five model-family subsets:
 
 - Llama-3.2-1B: token-accuracy nodes passed on Wormhole N150 TP1/DP1 and N300 TP2/DP1. Its N300 DP and T3K variants were not exercised.
 - Qwen2.5-7B: the Wormhole N300 TP2/DP1 token-accuracy node passed. Its T3K variant was not exercised.
 - Qwen2.5-Coder-32B: the Wormhole T3K TP8/DP1 prefill smoke passed. No end-to-end accuracy node was run.
 - Qwen3-32B: token-accuracy nodes passed on Wormhole T3K TP8/DP1 and physical Blackhole P150_X4 TP4/DP1; the physical P150_X4 one-layer smoke also passed. The accepted P300_X2 code alias was not exercised.
-- Llama-3.3-70B: token-accuracy nodes passed on Wormhole T3K TP8/DP1 and physical Blackhole P150_X4 TP4/DP1; the physical P150_X4 one-layer smoke also passed. The T3K W6 trace-order correctness node failed and remains a blocker, and the accepted P300_X2 code alias was not exercised.
+- Llama-3.3-70B: token-accuracy nodes passed on Wormhole T3K TP8/DP1 and physical Blackhole P150_X4 TP4/DP1; the physical P150_X4 one-layer smoke also passed. The strict T3K W6 trace-order node passed all four orders at unchanged thresholds. The accepted P300_X2 code alias was not exercised.
 
 These hash-bound diagnostic migration results do not qualify any model or geometry. The seven single-card P150 module nodes and the Llama-3.1-8B P150 token-accuracy node were not run; P150_X4 evidence is not P150 evidence. The other seven model families have no final-SHA model-family node, and every geometry, parallelism variant, hardware alias, or workload absent from the ledger remains uncovered.
 
-A one-order run at `d7677f822356e839f707a6447fd0abc89e620d56`
-passed later W6 trace/KV/replay/sampling invariants in 176.12 seconds only after
-the known cross-geometry logits oracle was relaxed. It is non-qualifying
-diagnostic context, is excluded from the canonical pass count, and does not
-weaken the strict W6 failure. The earlier
-[`ba7abefba4484689c953ac53fe8810322db1d184` bundle](qualification/evidence/hardware/ba7abefba4484689c953ac53fe8810322db1d184/index.json)
-remains preserved as historical evidence and does not transfer to the current
-candidate.
+The separate [accuracy-TTFT diagnostic](qualification/evidence/diagnostics/2883a949860d749adc2ed1af5525b27a9a547505/accuracy-ttft/summary.json) is noncanonical: TTFT passed 4/4 at 86.7–87.2 ms, while throughput produced `performance_floor_failure` in all 4/4 cells. It is excluded from the canonical pass count and does not change the correctness ledger or any support status.
+
+The superseded [`b24eabe35c8f2c73f45493da40e5a6351eb0ec2d` bundle](qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/index.json) and earlier [`ba7abefba4484689c953ac53fe8810322db1d184` bundle](qualification/evidence/hardware/ba7abefba4484689c953ac53fe8810322db1d184/index.json) remain preserved as historical evidence and do not transfer to the current candidate. The relaxed one-order W6 run at `d7677f822356e839f707a6447fd0abc89e620d56` remains non-qualifying history associated with the superseded strict failure.
 
 Evidence policy and details:
 
 - [Pinned support baseline](qualification/analysis/support/support_baseline.md)
 - [Hardware evidence ledger](qualification/analysis/support/hardware_evidence.csv)
-- [Current final-SHA hardware ledger](qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/index.json)
+- [Current final-SHA hardware ledger](qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json)
 - [Phase 3 support-boundary report](qualification/extraction/support_boundary.md)
 - [Example overview](examples/README.md)
 

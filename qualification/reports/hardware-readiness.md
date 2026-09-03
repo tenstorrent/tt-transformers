@@ -1,70 +1,79 @@
 # Hardware qualification evidence
 
-Status: **not fully green — 33 passed, 1 functional blocker, and 8 topology-specific nodes deferred**
+Status: **all accessible nodes green — 34 passed and 8 topology-specific nodes deferred**
 
 The attributable release-candidate revision is
-`b24eabe35c8f2c73f45493da40e5a6351eb0ec2d` on branch
+`2883a949860d749adc2ed1af5525b27a9a547505` on branch
 `tttv2-standalone-migration`.
 
 The canonical evidence index is
-`qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/index.json`.
+`qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json`.
 Its SHA-256 is
-`8bbf3e6340d4015753a24d5107ae4183f9de57c931ed6d4eb111af769e9c040c`.
+`ec9a540a8f31762078b592909e02cdb03e99384f9ddf8f955966fa41e42af07b`.
 
 ## Final-SHA result
 
-The 42-node matrix has 34 same-SHA execution records. Of those, 33 passed and
-one is a Wormhole W6 functional failure. Eight single-P150 nodes were not run
-because their required `bh-lb-11` physical host role was unavailable.
+The 42-node matrix has 34 same-SHA execution records, and all 34 passed. Eight
+single-P150 nodes were not run because their required `bh-lb-11` physical host
+role was unavailable.
 
-| Stage | Matrix nodes | Executed | Passed | Functional failure | Deferred |
+| Stage | Matrix nodes | Executed | Passed | Failed | Deferred |
 |---|---:|---:|---:|---:|---:|
 | Focused reusable modules | 30 | 23 | 23 | 0 | 7 |
-| Runtime trace/order correctness | 1 | 1 | 0 | 1 | 0 |
+| Runtime trace/order correctness | 1 | 1 | 1 | 0 | 0 |
 | One-layer/model smoke | 3 | 3 | 3 | 0 | 0 |
 | Token-accuracy/e2e | 8 | 7 | 7 | 0 | 1 |
-| **Total** | **42** | **34** | **33** | **1** | **8** |
+| **Total** | **42** | **34** | **34** | **0** | **8** |
 
-Thus, all executed reusable-module, smoke, and e2e records passed: modules
-23/23, smoke 3/3, and e2e 7/7. The runtime gate is 0/1.
+All executed stage groups passed: modules 23/23, runtime 1/1, smoke 3/3, and
+e2e 7/7.
 
 | Architecture / mesh | Executed result | Deferred |
 |---|---:|---:|
 | Wormhole / logical N150 on T3K | 9 passed | 0 |
 | Wormhole / physical N300 pair on T3K | 6 passed | 0 |
-| Wormhole / full T3K | 7 passed, 1 functional failure | 0 |
+| Wormhole / full T3K | 8 passed | 0 |
 | Blackhole / single P150 on development loudbox | 0 | 8 |
 | Blackhole / physical P150_X4 quietbox | 11 passed | 0 |
 
-Across the 34 records there were no hardware-lifecycle failures, pre-device
-failures, missing-acceptance classifications, or resets. Each record reports
-`reset.performed=false` and `reset.automatic=false`.
+Across the 34 records there were no functional, hardware-lifecycle,
+pre-device, or missing-acceptance classifications and no resets. Each record
+reports `reset.performed=false` and `reset.automatic=false`.
 
-## W6 functional blocker
+## Strict W6 pass
 
 Priority 17, `wh-t3k-runtime-trace-order`, executed all four capture/sampling
-order cases on the full T3K and failed strict logits parity in each case. The
-recorded row-0 maximum absolute difference was 1.5 against a 1.0 limit, and
-top-5 overlap was 3 against a minimum of 4.
+order cases on the full T3K and passed the unchanged strict logits, trace, KV,
+replay, sampling, resume, chunk, and cache assertions. The accuracy profile
+kept folded QKV/W2 prefill on `ttnn.linear`; the runner environment contains no
+`DISABLE_MINIMAL_MATMUL` or W6 threshold override. Pytest reported four passes
+in 343.05 seconds, and the runner classified the node `passed` with exit 0.
+The evidence record is:
 
-The runner classified this as `functional_failure`, not
-`hardware_lifecycle_failure`. The process exited and no reset was performed.
-Its evidence record is:
+`qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T030639.828366Z-wh-t3k-runtime-trace-order.json`
 
-`qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260903T001610.842135Z-wh-t3k-runtime-trace-order.json`
+## Noncanonical accuracy-TTFT diagnostic
 
-This blocker does not invalidate the separately passing module, smoke, or e2e
-records, but it prevents a fully green hardware-qualification verdict.
+Four separate Llama-3.3-70B accuracy-profile performance cells ran after the
+canonical sweep. Their compact summary is
+`qualification/evidence/diagnostics/2883a949860d749adc2ed1af5525b27a9a547505/accuracy-ttft/summary.json`.
 
-### Non-qualifying relaxed diagnostic
+- TTFT passed 4/4, ranging from 86.7 to 87.2 ms against the
+  tolerance-adjusted 105 ms ceiling.
+- Throughput produced `performance_floor_failure` in 4/4 cells: host
+  batch-32 7.9 tok/s/u, on-device-top-k batch-32 12.2 tok/s/u, host
+  batch-32-ci 7.7 tok/s/u, and on-device-top-k batch-32-ci 11.9 tok/s/u.
+- Every process and fixture teardown completed cleanly; there were zero
+  hardware-lifecycle failures and zero resets.
 
-One order was also run at diagnostic candidate
-`d7677f822356e839f707a6447fd0abc89e620d56` with only the known
-cross-geometry logits oracle relaxed. It passed the later trace, KV, replay,
-sampling, resume, chunk, and cache invariants in 176.12 seconds. This result is
-diagnostic context only: it is excluded from the canonical index and pass count,
-does not qualify W6, and does not supersede or weaken the official
-strict functional failure above.
+These four cells are noncanonical performance diagnostics. They are excluded
+from the 34-record index and do not change its all-pass correctness result.
+
+The earlier relaxed one-order W6 run at
+`d7677f822356e839f707a6447fd0abc89e620d56` remains non-qualifying history
+associated with the superseded b24 strict failure. It is excluded from the
+current canonical index and pass count and does not qualify the current W6
+result.
 
 ## Deferred single-P150 scope
 
@@ -126,12 +135,12 @@ recorded, but independent post-fixture hardware verification is not claimed.
 
 `qualification/analysis/support/hardware_evidence.csv` lists all 34 attributable
 current-candidate records and all eight deferred nodes individually. Current
-same-SHA functional evidence is eligible for the pinned baseline even when it
-records a blocker; eligibility means attributable evidence, not a passing
-result. Deferred and superseded-candidate rows are ineligible.
+same-SHA passing evidence is eligible for the pinned baseline. Deferred and
+superseded-candidate rows are ineligible.
 
-The ledger also preserves the earlier exact-SHA candidate
-`ba7abefba4484689c953ac53fe8810322db1d184` and older revisions
+The ledger also preserves the superseded exact-SHA candidates
+`b24eabe35c8f2c73f45493da40e5a6351eb0ec2d` and
+`ba7abefba4484689c953ac53fe8810322db1d184`, plus older revisions
 `00748e6ac7b65f50e5c2af07f6e7c1c535c7f4c0` and
 `b1a75d474ee44f583c32c5e6279c7026907553b9` as historical, ineligible context.
 Their observations do not transfer to the final candidate SHA.

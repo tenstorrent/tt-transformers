@@ -1,0 +1,76 @@
+{
+  "candidate_sha": "2883a949860d749adc2ed1af5525b27a9a547505",
+  "canonical_hardware_evidence": false,
+  "cells": [
+    {
+      "adjusted_throughput_floor_tok_s_u": 8.835,
+      "adjusted_ttft_ceiling_ms": 105.0,
+      "node": "accuracy-batch-32-T3K",
+      "pytest_exit_code": 1,
+      "sampling_mode": "host",
+      "throughput_result": "performance_floor_failure",
+      "throughput_tok_s": 253.8,
+      "tok_s_u": 7.9,
+      "ttft_ms": 87.1,
+      "ttft_result": "passed"
+    },
+    {
+      "adjusted_throughput_floor_tok_s_u": 13.68,
+      "adjusted_ttft_ceiling_ms": 105.0,
+      "node": "accuracy-batch-32-T3K",
+      "pytest_exit_code": 1,
+      "sampling_mode": "on_device_topk",
+      "throughput_result": "performance_floor_failure",
+      "throughput_tok_s": 389.2,
+      "tok_s_u": 12.2,
+      "ttft_ms": 86.7,
+      "ttft_result": "passed"
+    },
+    {
+      "adjusted_throughput_floor_tok_s_u": 8.455,
+      "adjusted_ttft_ceiling_ms": 105.0,
+      "node": "accuracy-batch-32-ci-T3K",
+      "pytest_exit_code": 1,
+      "sampling_mode": "host",
+      "throughput_result": "performance_floor_failure",
+      "throughput_tok_s": 245.4,
+      "tok_s_u": 7.7,
+      "ttft_ms": 86.9,
+      "ttft_result": "passed"
+    },
+    {
+      "adjusted_throughput_floor_tok_s_u": 13.49,
+      "adjusted_ttft_ceiling_ms": 105.0,
+      "node": "accuracy-batch-32-ci-T3K",
+      "pytest_exit_code": 1,
+      "sampling_mode": "on_device_topk",
+      "throughput_result": "performance_floor_failure",
+      "throughput_tok_s": 380.8,
+      "tok_s_u": 11.9,
+      "ttft_ms": 87.2,
+      "ttft_result": "passed"
+    }
+  ],
+  "classification": "noncanonical_performance_diagnostic",
+  "hardware_lifecycle_failures": 0,
+  "machine": "wh-lb-42.yyz2.tenstorrent.com",
+  "resets": 0,
+  "schema_version": 1,
+  "summary": {
+    "cell_count": 4,
+    "throughput": {
+      "failed": 4,
+      "passed": 0,
+      "result": "performance_floor_failure"
+    },
+    "ttft": {
+      "failed": 0,
+      "passed": 4,
+      "range_ms": [
+        86.7,
+        87.2
+      ],
+      "result": "passed"
+    }
+  }
+}

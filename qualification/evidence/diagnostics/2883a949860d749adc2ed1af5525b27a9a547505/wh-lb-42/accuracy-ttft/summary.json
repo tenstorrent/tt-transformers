@@ -1,0 +1,272 @@
+{
+  "branch": "tttv2-standalone-migration",
+  "candidate_sha": "2883a949860d749adc2ed1af5525b27a9a547505",
+  "canonical_hardware_evidence_modified": false,
+  "cells": [
+    {
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "-vv",
+        "-s",
+        "--color=no",
+        "--timeout=5400",
+        "tests/hardware/models/llama33_70b/test_demo.py::test_llama33_70b[accuracy-batch-32-T3K]"
+      ],
+      "environment": {
+        "HF_HOME": "/proj_sw/user_dev/huggingface",
+        "HF_HUB_OFFLINE": "1",
+        "HF_MODEL": "meta-llama/Llama-3.3-70B-Instruct",
+        "MESH_DEVICE": "T3K",
+        "PERF_NUM_DECODE_TOKENS": "200",
+        "PIPELINE_READBACK": "1",
+        "SAMPLING_MODE": "host",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TT_CACHE_PATH": "/localdev/gwang/tt_transformers/model_cache/llama33_70b",
+        "TT_TRANSFORMERS_OFFLINE": "1"
+      },
+      "explicitly_unset": [
+        "CI",
+        "TT_VISIBLE_DEVICES",
+        "PYTEST_ADDOPTS",
+        "DISABLE_BATCHED_PREFILL",
+        "DISABLE_MINIMAL_MATMUL"
+      ],
+      "finished_utc": "2026-09-03T03:43:45Z",
+      "log_path": "/localdev/gwang/tt_transformers/hardware-results/2883a949860d749adc2ed1af5525b27a9a547505/diagnostics/accuracy-ttft/accuracy-batch-32-T3K--host.log",
+      "log_sha256": "672801d10a57bdcfa63b700bc8aea2b0e7f879a158c0127854c1eb769f3f35d6",
+      "log_size_bytes": 367028,
+      "node_id": "tests/hardware/models/llama33_70b/test_demo.py::test_llama33_70b[accuracy-batch-32-T3K]",
+      "printed_metrics": {
+        "decode_latency_ms": 126.09,
+        "throughput_tok_s": 253.8,
+        "tok_s_u": 7.9,
+        "ttft_ms": 87.1
+      },
+      "pytest_exit_code": 1,
+      "pytest_result": "failed: throughput target assertion",
+      "reset_performed": false,
+      "sampling_mode": "host",
+      "started_utc": "2026-09-03T03:39:09Z",
+      "target_adjusted": {
+        "overall": false,
+        "tok_s_u": false,
+        "ttft": true
+      },
+      "targets": {
+        "adjusted_tok_s_u_min": 8.835,
+        "adjusted_ttft_max_ms": 105.0,
+        "tok_s_u": 9.3,
+        "tolerance_fraction": 0.05,
+        "ttft_ms": 100.0
+      },
+      "teardown_status": "clean: device and cluster close completed; no post-run device owner"
+    },
+    {
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "-vv",
+        "-s",
+        "--color=no",
+        "--timeout=5400",
+        "tests/hardware/models/llama33_70b/test_demo.py::test_llama33_70b[accuracy-batch-32-T3K]"
+      ],
+      "environment": {
+        "HF_HOME": "/proj_sw/user_dev/huggingface",
+        "HF_HUB_OFFLINE": "1",
+        "HF_MODEL": "meta-llama/Llama-3.3-70B-Instruct",
+        "MESH_DEVICE": "T3K",
+        "PERF_NUM_DECODE_TOKENS": "200",
+        "PIPELINE_READBACK": "1",
+        "SAMPLING_MODE": "on_device_topk",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TT_CACHE_PATH": "/localdev/gwang/tt_transformers/model_cache/llama33_70b",
+        "TT_TRANSFORMERS_OFFLINE": "1"
+      },
+      "explicitly_unset": [
+        "CI",
+        "TT_VISIBLE_DEVICES",
+        "PYTEST_ADDOPTS",
+        "DISABLE_BATCHED_PREFILL",
+        "DISABLE_MINIMAL_MATMUL"
+      ],
+      "finished_utc": "2026-09-03T03:47:10Z",
+      "log_path": "/localdev/gwang/tt_transformers/hardware-results/2883a949860d749adc2ed1af5525b27a9a547505/diagnostics/accuracy-ttft/accuracy-batch-32-T3K--on_device_topk.log",
+      "log_sha256": "3573121685def74223f19facc7c97608cb1935aec581b74d278598f746105f08",
+      "log_size_bytes": 380384,
+      "node_id": "tests/hardware/models/llama33_70b/test_demo.py::test_llama33_70b[accuracy-batch-32-T3K]",
+      "printed_metrics": {
+        "decode_latency_ms": 82.22,
+        "throughput_tok_s": 389.2,
+        "tok_s_u": 12.2,
+        "ttft_ms": 86.7
+      },
+      "pytest_exit_code": 1,
+      "pytest_result": "failed: throughput target assertion",
+      "reset_performed": false,
+      "sampling_mode": "on_device_topk",
+      "started_utc": "2026-09-03T03:44:17Z",
+      "target_adjusted": {
+        "overall": false,
+        "tok_s_u": false,
+        "ttft": true
+      },
+      "targets": {
+        "adjusted_tok_s_u_min": 13.68,
+        "adjusted_ttft_max_ms": 105.0,
+        "tok_s_u": 14.4,
+        "tolerance_fraction": 0.05,
+        "ttft_ms": 100.0
+      },
+      "teardown_status": "clean: device and cluster close completed; no post-run device owner"
+    },
+    {
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "-vv",
+        "-s",
+        "--color=no",
+        "--timeout=5400",
+        "tests/hardware/models/llama33_70b/test_demo.py::test_llama33_70b[accuracy-batch-32-ci-T3K]"
+      ],
+      "environment": {
+        "HF_HOME": "/proj_sw/user_dev/huggingface",
+        "HF_HUB_OFFLINE": "1",
+        "HF_MODEL": "meta-llama/Llama-3.3-70B-Instruct",
+        "MESH_DEVICE": "T3K",
+        "PERF_NUM_DECODE_TOKENS": "200",
+        "PIPELINE_READBACK": "1",
+        "SAMPLING_MODE": "host",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TT_CACHE_PATH": "/localdev/gwang/tt_transformers/model_cache/llama33_70b",
+        "TT_TRANSFORMERS_OFFLINE": "1"
+      },
+      "explicitly_unset": [
+        "CI",
+        "TT_VISIBLE_DEVICES",
+        "PYTEST_ADDOPTS",
+        "DISABLE_BATCHED_PREFILL",
+        "DISABLE_MINIMAL_MATMUL"
+      ],
+      "finished_utc": "2026-09-03T03:52:02Z",
+      "log_path": "/localdev/gwang/tt_transformers/hardware-results/2883a949860d749adc2ed1af5525b27a9a547505/diagnostics/accuracy-ttft/accuracy-batch-32-ci-T3K--host.log",
+      "log_sha256": "991fb732496a98743471aaa30e0fb09fc579e52c58c5461cbec2889ce116a93d",
+      "log_size_bytes": 471304,
+      "node_id": "tests/hardware/models/llama33_70b/test_demo.py::test_llama33_70b[accuracy-batch-32-ci-T3K]",
+      "printed_metrics": {
+        "decode_latency_ms": 130.4,
+        "throughput_tok_s": 245.4,
+        "tok_s_u": 7.7,
+        "ttft_ms": 86.9
+      },
+      "pytest_exit_code": 1,
+      "pytest_result": "failed: throughput target assertion",
+      "reset_performed": false,
+      "sampling_mode": "host",
+      "started_utc": "2026-09-03T03:47:41Z",
+      "target_adjusted": {
+        "overall": false,
+        "tok_s_u": false,
+        "ttft": true
+      },
+      "targets": {
+        "adjusted_tok_s_u_min": 8.455,
+        "adjusted_ttft_max_ms": 105.0,
+        "tok_s_u": 8.9,
+        "tolerance_fraction": 0.05,
+        "ttft_ms": 100.0
+      },
+      "teardown_status": "clean: device and cluster close completed; no post-run device owner"
+    },
+    {
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "-vv",
+        "-s",
+        "--color=no",
+        "--timeout=5400",
+        "tests/hardware/models/llama33_70b/test_demo.py::test_llama33_70b[accuracy-batch-32-ci-T3K]"
+      ],
+      "environment": {
+        "HF_HOME": "/proj_sw/user_dev/huggingface",
+        "HF_HUB_OFFLINE": "1",
+        "HF_MODEL": "meta-llama/Llama-3.3-70B-Instruct",
+        "MESH_DEVICE": "T3K",
+        "PERF_NUM_DECODE_TOKENS": "200",
+        "PIPELINE_READBACK": "1",
+        "SAMPLING_MODE": "on_device_topk",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TT_CACHE_PATH": "/localdev/gwang/tt_transformers/model_cache/llama33_70b",
+        "TT_TRANSFORMERS_OFFLINE": "1"
+      },
+      "explicitly_unset": [
+        "CI",
+        "TT_VISIBLE_DEVICES",
+        "PYTEST_ADDOPTS",
+        "DISABLE_BATCHED_PREFILL",
+        "DISABLE_MINIMAL_MATMUL"
+      ],
+      "finished_utc": "2026-09-03T03:56:20Z",
+      "log_path": "/localdev/gwang/tt_transformers/hardware-results/2883a949860d749adc2ed1af5525b27a9a547505/diagnostics/accuracy-ttft/accuracy-batch-32-ci-T3K--on_device_topk.log",
+      "log_sha256": "895dd5c71d8e4cede8d7b4ca2859bb70f9e6cb6a1eefcf214db5c5b3a8ac0d84",
+      "log_size_bytes": 487293,
+      "node_id": "tests/hardware/models/llama33_70b/test_demo.py::test_llama33_70b[accuracy-batch-32-ci-T3K]",
+      "printed_metrics": {
+        "decode_latency_ms": 84.03,
+        "throughput_tok_s": 380.8,
+        "tok_s_u": 11.9,
+        "ttft_ms": 87.2
+      },
+      "pytest_exit_code": 1,
+      "pytest_result": "failed: throughput target assertion",
+      "reset_performed": false,
+      "sampling_mode": "on_device_topk",
+      "started_utc": "2026-09-03T03:52:29Z",
+      "target_adjusted": {
+        "overall": false,
+        "tok_s_u": false,
+        "ttft": true
+      },
+      "targets": {
+        "adjusted_tok_s_u_min": 13.489999999999998,
+        "adjusted_ttft_max_ms": 105.0,
+        "tok_s_u": 14.2,
+        "tolerance_fraction": 0.05,
+        "ttft_ms": 100.0
+      },
+      "teardown_status": "clean: device and cluster close completed; no post-run device owner"
+    }
+  ],
+  "classification": "non-canonical performance diagnostic",
+  "created_utc": "2026-09-03T03:57:31.191790Z",
+  "final_health": {
+    "all_dram_healthy": true,
+    "all_faults_zero": true,
+    "board_types": {
+      "n300 L": 4,
+      "n300 R": 4
+    },
+    "device_count": 8,
+    "device_owners": 0,
+    "runner_lock_present": false
+  },
+  "machine": "wh-lb-42.yyz2.tenstorrent.com",
+  "schema_version": 1,
+  "summary": {
+    "cells": 4,
+    "hardware_lifecycle_failures": 0,
+    "overall_target_passed": 0,
+    "pytest_failed": 4,
+    "pytest_passed": 0,
+    "resets": 0,
+    "throughput_target_passed": 0,
+    "ttft_target_passed": 4
+  }
+}
