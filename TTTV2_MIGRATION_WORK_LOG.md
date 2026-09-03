@@ -1086,3 +1086,28 @@ This log records milestones and evidence for the standalone migration defined in
   Twine, compilation, 133 JSON parses, four diagnostic log hashes, and 59
   focused host tests on each Python. The support-boundary manifest was
   regenerated last and contains 386 files with zero mismatches/evidence rows.
+
+## 2026-09-03T04:54:52Z — Throughput pipeline A/B closes one hypothesis
+
+- A read-only history/config audit found no standalone decode drift from the
+  pinned source. The same Llama 3.3 T3K throughput depression existed before
+  the migration: August same-box records include the exact 12.2/11.9 accuracy
+  results, while the current floors came from July measurements. The issue is
+  therefore external/pre-existing rather than caused by the accuracy-prefill
+  fix or package extraction.
+- Ran one additional non-canonical exact-SHA T3K A/B with on-device top-k and
+  `PIPELINE_READBACK=0`, explicitly clearing profiler and policy overrides.
+  TTFT remained 87.1 ms, while throughput regressed from the pipeline-on
+  12.2 to 11.7 tok/s/u (−4.10%) and aggregate throughput from 389.2 to
+  374.5 tok/s (−3.78%). Pipelined readback is not the throughput cause and
+  remains enabled.
+- Pytest failed only the retained 14.4 tok/s/u performance floor; device and
+  cluster teardown completed, all eight devices remained healthy/fault-free,
+  and no reset occurred. The comparison/log/health artifacts are retained
+  under the separate `qualification/evidence/diagnostics/2883a94...` tree and
+  do not alter the canonical 34/34 index or release counts.
+- The strongest remaining external A/B requires a custom TTNN/runtime build:
+  the post-0.77 Wormhole kernel-config L1-slack recovery `9795ce44d79c`, which
+  recovered 6.52% on the same model family but is absent from the published
+  TTNN 0.77 wheel. That materially expands beyond this standalone repository
+  and is not applied implicitly.

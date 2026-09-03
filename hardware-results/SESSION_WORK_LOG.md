@@ -687,3 +687,15 @@ checkout's tracked cleanliness during the mandatory synchronized hardware gate.
   dependency, package, JSON, compile, and focused host validators pass.
 - Release readiness remains 45 pass / 18 partial / 16 blocked; all twelve
   manifests remain experimental and unpromoted.
+
+## 2026-09-03T04:54:52Z — Non-canonical pipeline-readback A/B
+
+- Exact `2883a94...` accuracy/batch-32 on-device-topk with
+  `PIPELINE_READBACK=0` measured TTFT 87.1 ms, 11.7 tok/s/u, 374.5 aggregate
+  tok/s, and 85.46 ms decode latency.
+- Versus pipeline-on baseline, per-user throughput regressed 4.10% and
+  aggregate throughput regressed 3.78%; TTFT was effectively unchanged.
+- Pytest exit 1 is a performance-floor assertion, not lifecycle. Teardown was
+  clean, hardware remained healthy/fault-free, and no reset occurred.
+- Result is retained only under `qualification/evidence/diagnostics`; the
+  canonical matrix remains 34/34 pass and its index was not rewritten.
