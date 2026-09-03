@@ -881,8 +881,9 @@ def _run_perf_benchmark(
 
     # Batched-prefill A/B knob (parity caveat #12): set DISABLE_BATCHED_PREFILL=1 to force the
     # sequential per-user prefill loop (the pre-feature baseline) for before/after TTFT comparison.
-    # Companion knob (PLAN_01): DISABLE_MINIMAL_MATMUL=1 forces QKV/W2 prefill back to ttnn.linear
-    # (read at model build time, so it must be in the env before from_pretrained — it already is).
+    # The accuracy profile already keeps folded QKV/W2 on ttnn.linear. For the performance profile,
+    # DISABLE_MINIMAL_MATMUL=1 force-disables those minimal-matmul paths as an A/B control (read at
+    # model build time, so it must be in the env before from_pretrained — it already is).
     # The shared prefill runtime reads DISABLE_BATCHED_PREFILL for each prepare call.
     # Do not mutate model_args here: Llama33_70BRuntimeConfig is intentionally frozen.
 

@@ -637,3 +637,25 @@ checkout's tracked cleanliness during the mandatory synchronized hardware gate.
   separately SHA-256-bound by the hardware-evidence validator.
 - No model manifest was promoted; all twelve remain experimental with null
   validation identity and empty evidence lists.
+
+## 2026-09-03T02:17:06Z — Non-qualifying W6 operator A/B
+
+- With strict thresholds unchanged, `DISABLE_MINIMAL_MATMUL=1` passed one W6
+  order and then all four order permutations (4 passed in 340.99s).
+- QKV-only disable failed with two top-1 mismatches; W2-only disable failed
+  top-5 overlap 3 at row 11. The default combined minimal path retains the
+  canonical row-0 max-abs/top-5 failure.
+- Every A/B process exited and closed all devices cleanly; no reset. These are
+  diagnostic results and do not alter the canonical `b24eabe...` index.
+- Evidence supports an accuracy-linear/performance-minimal model policy, not a
+  weaker W6 acceptance envelope.
+
+## 2026-09-03T02:27:18Z — Profile-policy code candidate ready
+
+- Implemented accuracy-linear/performance-minimal Llama 3.3 policy with global
+  environment force-off retained; pinned model extraction reproduces it.
+- Full host suites pass on both supported Pythons: 2,165 passed, 28 skipped,
+  6,791 deselected, 5 warnings, and 81 subtests each.
+- Hardware remains idle and no reset occurred. Next gate is a clean published
+  SHA followed by complete WH/P150_X4 matrix reruns; W6 and both Llama accuracy
+  nodes are directly affected.

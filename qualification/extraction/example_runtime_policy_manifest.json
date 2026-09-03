@@ -121,7 +121,7 @@
     },
     {
       "path": "examples/llama33_70b/demo.py",
-      "sha256": "f15e3259e85a687db12ac2242221d057d92055f41fd3cab88fe83a654ec2865b",
+      "sha256": "2ebe0218e842c4d0ad5c8cb68e35697cf6e7ec348b3994653bd7dd70c4cfe862",
       "forced_trust_remote_code_true_lines": [],
       "cwd_model_cache_lines": [],
       "unscoped_default_device_lines": [],

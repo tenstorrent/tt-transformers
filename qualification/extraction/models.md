@@ -4,8 +4,8 @@ Source repository: `/localdev/gwang/tt-metal`
 
 Source revision: `00748e6ac7b65f50e5c2af07f6e7c1c535c7f4c0`
 
-Status: mechanical extraction complete; boundary closure and runtime
-qualification pending
+Status: mechanical extraction and reviewed deterministic policy transforms
+complete; hardware qualification remains a separate evidence boundary
 
 ## Extracted scope
 
@@ -52,6 +52,29 @@ behavior. Phase 3/7 subsequently normalized the twelve HF adaptors under the
 typed policy documented in `cache_environment.md`; the extractor now verifies
 their reviewed backward-compatible revision extensions, complete cache-identity
 inputs, exact preflight resolution, and exact policy-normalized hashes.
+
+## Llama 3.3 folded-prefill profile policy
+
+Post-qualification W6 triage identified one model-owned operator-policy delta
+in `llama33_70b/model.py`. The pinned source selected minimal matmul solely from
+the absence of `DISABLE_MINIMAL_MATMUL`, which made the accuracy recipe change
+operator family when a folded batched prefill crossed the common modules'
+`seq_len > 128` threshold. The reviewed standalone transform instead records
+the choice in the immutable precision recipe:
+
+- `LLAMA33_70B_ACCURACY` inherits `prefill_minimal_matmul=False`, keeping folded
+  QKV/W2 on `ttnn.linear` for the strict batch-one-versus-batched oracle;
+- `LLAMA33_70B_PERFORMANCE` sets `prefill_minimal_matmul=True`, retaining the
+  minimal-matmul TTFT tradeoff;
+- `_resolve_llama33_70b_profile` resolves the final value as the profile choice
+  **and** absence of `DISABLE_MINIMAL_MATMUL`, so the environment remains a
+  global force-off and cannot force the accuracy profile on.
+
+`tools/extract_model_packages.py` reproduces the exact pinned-source edits and
+refuses source drift in each changed block. It reparses the result and asserts
+the default-false dataclass field, accuracy's unoverridden linear policy,
+performance's explicit true policy, and the exact profile-and-environment
+force-off expression before comparing destination bytes.
 
 ## Verification
 

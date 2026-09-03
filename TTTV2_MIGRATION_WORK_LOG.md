@@ -974,3 +974,48 @@ This log records milestones and evidence for the standalone migration defined in
   mismatches, and zero raw evidence entries. Focused package/support/hardware
   host tests pass 51/51 on both Python 3.10 and 3.12; compilation and all 96
   qualification JSON parses pass.
+
+## 2026-09-03T02:17:06Z — W6 minimal-matmul root-cause isolation
+
+- Continued after publication with diagnostic-only WH runs outside canonical
+  evidence. All used the unchanged strict W6 oracle and completed clean device
+  teardown with no reset.
+- Disabling both folded-only experimental minimal matmuls through the existing
+  `DISABLE_MINIMAL_MATMUL=1` policy made one strict order pass, then made all
+  four capture/sampling permutations pass: **4 passed in 340.99s**.
+- Disabling only QKV minimal matmul removed the prior max-abs/top-5 symptom but
+  failed with two top-1 mismatches. Disabling only MLP W2 minimal matmul failed
+  top-5 overlap at row 11. Neither operator alone is the complete cause; the
+  accuracy failure is the combined geometry-dependent accumulation policy.
+- The sequential oracle runs each Q128 request at folded M=128 on
+  `ttnn.linear`; active15/padded16 folds to M=2048 and enables minimal QKV/W2
+  across all 80 layers. No applicable post-pinned TTNN/kernel fix exists in
+  local refs, and acceptance-threshold relaxation remains unjustified.
+- Next candidate is a model-owned profile split: accuracy keeps QKV/W2 on the
+  proven linear path, performance retains current minimal-matmul optimization,
+  and the global force-off environment control remains available.
+
+## 2026-09-03T02:27:18Z — Accuracy-linear profile candidate host gate
+
+- Added explicit `prefill_minimal_matmul` ownership to the frozen Llama 3.3
+  precision recipe: accuracy/default/custom-default is false; performance is
+  explicitly true; `DISABLE_MINIMAL_MATMUL` remains a global force-off.
+  Attention QKV and MLP W2 continue to consume the shared resolved SKU flag.
+- Extended the pinned model extractor with exact source-block and AST semantic
+  assertions for the profile split, and documented the reviewed transform.
+  The extractor verifies all 71 pinned concrete-model files plus the generated
+  initializer.
+- Focused Python 3.10/3.12 results: 61 Llama model/profile/adaptor/demo/oracle
+  tests and 51 Llama runtime-contract tests pass per interpreter. The complete
+  host suite passes identically on both: **2,165 passed, 28 skipped, 6,791
+  deselected, 5 warnings, and 81 subtests**. The three-pass increase is the
+  new/expanded profile coverage; Python 3.12 retains its known shutdown-only
+  nanobind diagnostic.
+- Regenerated and revalidated the example runtime-policy manifest after the
+  Llama demo A/B comment was clarified. No hardware evidence is assigned to
+  this uncommitted candidate yet.
+- Exact-SHA policy requires a complete new 34-node accessible matrix before it
+  can supersede `b24eabe...`. Accuracy token-accuracy nodes on both WH and BH
+  genuinely change at Q512; four folded batch-32 accuracy TTFT cells also need
+  fresh measurement because their 100 ms targets were calibrated with the
+  former minimal path.

@@ -319,19 +319,27 @@ class Llama33_70BPrecisionConfig:
     mlp_ff2_compute_kernel_cfg: ttnn.WormholeComputeKernelConfig = _HIFI2_FP16_COMPUTE_KERNEL_CFG
 
     lm_head_dtype: ttnn.DataType = ttnn.bfloat8_b
+    # Folded batched prefill crosses the common modules' ``seq_len > 128``
+    # threshold and changes QKV/W2 from ttnn.linear to minimal_matmul. Keep
+    # that performance tradeoff explicit in the immutable precision recipe.
+    prefill_minimal_matmul: bool = False
 
 
 # TTTv1 DecodersPrecision.accuracy("Llama-3.3-70B-Instruct") (model_config.py Llama-3 group):
 #   wqkv=BFP8, wo=BFP8, kv_cache=BFP8, mlp_w1_w3=BFP8, mlp_w2=BFP8,
 #   LI_FF1_FF3=HIFI2_FP16, LI_FF2=HIFI2_FP16, SDPA_prefill=HIFI4 (Attention1D default)
+# Accuracy keeps folded QKV/W2 on ttnn.linear so batch-one and batched-prefill
+# requests use the same operator family for the strict numerical oracle.
 LLAMA33_70B_ACCURACY = Llama33_70BPrecisionConfig()
 
 # TTTv1 DecodersPrecision.performance("Llama-3.3-70B-Instruct"):
-#   FF1_FF3 → BFP4, LI_FF1_FF3 → LOFI; all other fields same as accuracy.
+#   FF1_FF3 → BFP4, LI_FF1_FF3 → LOFI; folded QKV/W2 retain
+#   minimal_matmul for TTFT. DISABLE_MINIMAL_MATMUL remains a global force-off.
 LLAMA33_70B_PERFORMANCE = Llama33_70BPrecisionConfig(
     mlp_w1_w3_dtype=ttnn.bfloat4_b,
     mlp_ff1_3_compute_kernel_cfg=_LOFI_COMPUTE_KERNEL_CFG,
     mlp_ff2_compute_kernel_cfg=_HIFI2_FP16_COMPUTE_KERNEL_CFG,
+    prefill_minimal_matmul=True,
 )
 
 
@@ -494,8 +502,11 @@ def _resolve_llama33_70b_profile(
     if not is_wh and dram_width != 8:
         raise ValueError(f"Llama-3.3-70B Blackhole profile requires P150 DRAM width 8, got {dram_width}")
 
-    # WH locks the pre-change TTTv2 baseline. BH adopts the TTTv1 candidate
-    # recipe: five HiFi2/FP32/approx slots and exact HiFi4 SDPA prefill.
+    # WH locks the pre-change TTTv2 compute recipe. BH adopts the TTTv1
+    # candidate recipe: five HiFi2/FP32/approx slots and exact HiFi4 SDPA
+    # prefill. The immutable precision profile independently selects the
+    # folded-prefill minimal-matmul policy; the environment can only force it
+    # off globally.
     ordinary_attention = _kernel_config(arch, ttnn.MathFidelity.HiFi2, approx=not is_wh, fp32=not is_wh, packer=True)
     sdpa_prefill = _kernel_config(arch, ttnn.MathFidelity.HiFi4, approx=False, fp32=True, packer=True)
     ff1_ff3 = _copy_profile_kernel(arch, precision.mlp_ff1_3_compute_kernel_cfg)
@@ -521,7 +532,9 @@ def _resolve_llama33_70b_profile(
         decode_create_qkv_head_grid=None if is_wh else ttnn.CoreGrid(y=4, x=8),
         decode_transformation_core_grid=ttnn.CoreCoord(8, 8),
         lm_head_max_columns_per_device=8192 if is_wh else 128256 // 4 // 8,
-        prefill_minimal_matmul=not os.environ.get("DISABLE_MINIMAL_MATMUL"),
+        prefill_minimal_matmul=(
+            precision.prefill_minimal_matmul and not os.environ.get("DISABLE_MINIMAL_MATMUL")
+        ),
     )
     return _Llama33_70BComposition(model=model, sku=sku)
 

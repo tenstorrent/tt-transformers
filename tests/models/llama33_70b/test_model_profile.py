@@ -8,8 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 import torch
-
 import ttnn
+
 from tt_transformers.models.llama33_70b.model import (
     LLAMA33_70B_ACCURACY,
     LLAMA33_70B_BH_TP4_CLUSTER_TYPES,
@@ -77,8 +77,9 @@ def _cluster_type(arch):
     ],
 )
 def test_accuracy_profile_semantic_snapshot(
-    arch, cluster_type, devices, expected_attention, cutoff, qkv_grid, lm_columns
+    monkeypatch, arch, cluster_type, devices, expected_attention, cutoff, qkv_grid, lm_columns
 ):
+    monkeypatch.delenv("DISABLE_MINIMAL_MATMUL", raising=False)
     profile = _resolve_llama33_70b_profile(
         arch=arch,
         cluster_type=cluster_type,
@@ -103,13 +104,15 @@ def test_accuracy_profile_semantic_snapshot(
     assert profile.sku.mlp_prefill_len_cutoff == cutoff
     assert profile.sku.prefill_qkv_grid == qkv_grid
     assert profile.sku.lm_head_max_columns_per_device == lm_columns
-    assert profile.sku.prefill_minimal_matmul
+    assert LLAMA33_70B_ACCURACY.prefill_minimal_matmul is False
+    assert profile.sku.prefill_minimal_matmul is False
 
 
 @pytest.mark.host
 @pytest.mark.model
 @pytest.mark.parametrize("cluster_type", LLAMA33_70B_BH_TP4_CLUSTER_TYPES)
-def test_performance_profile_makes_all_four_mlp_slots_explicit(cluster_type):
+def test_performance_profile_makes_all_four_mlp_slots_explicit(monkeypatch, cluster_type):
+    monkeypatch.delenv("DISABLE_MINIMAL_MATMUL", raising=False)
     profile = _resolve_llama33_70b_profile(
         arch=ttnn.device.Arch.BLACKHOLE,
         cluster_type=cluster_type,
@@ -122,6 +125,25 @@ def test_performance_profile_makes_all_four_mlp_slots_explicit(cluster_type):
     assert _semantics(profile.model.decode_ff1_ff3) == (ttnn.MathFidelity.LoFi, False, False, True)
     assert _semantics(profile.model.prefill_ff2) == (ttnn.MathFidelity.HiFi2, False, False, True)
     assert _semantics(profile.model.decode_ff2) == (ttnn.MathFidelity.HiFi2, False, False, True)
+    assert LLAMA33_70B_PERFORMANCE.prefill_minimal_matmul is True
+    assert profile.sku.prefill_minimal_matmul is True
+
+
+@pytest.mark.host
+@pytest.mark.model
+def test_disable_minimal_matmul_forces_performance_profile_off(monkeypatch):
+    monkeypatch.setenv("DISABLE_MINIMAL_MATMUL", "1")
+
+    profile = _resolve_llama33_70b_profile(
+        arch=ttnn.device.Arch.WORMHOLE_B0,
+        cluster_type=ttnn.cluster.ClusterType.T3K,
+        num_devices=8,
+        dram_width=8,
+        precision=LLAMA33_70B_PERFORMANCE,
+    )
+
+    assert LLAMA33_70B_PERFORMANCE.prefill_minimal_matmul is True
+    assert profile.sku.prefill_minimal_matmul is False
 
 
 @pytest.mark.host
@@ -163,19 +185,24 @@ def test_blackhole_rope_resolves_to_attention_row_major_8x4_lane_grid():
 @pytest.mark.host
 @pytest.mark.model
 @pytest.mark.parametrize(
-    ("arch", "devices"),
+    ("arch", "devices", "precision", "expected_minimal_matmul"),
     [
-        (ttnn.device.Arch.WORMHOLE_B0, 8),
-        (ttnn.device.Arch.BLACKHOLE, 4),
+        (ttnn.device.Arch.WORMHOLE_B0, 8, LLAMA33_70B_ACCURACY, False),
+        (ttnn.device.Arch.WORMHOLE_B0, 8, LLAMA33_70B_PERFORMANCE, True),
+        (ttnn.device.Arch.BLACKHOLE, 4, LLAMA33_70B_ACCURACY, False),
+        (ttnn.device.Arch.BLACKHOLE, 4, LLAMA33_70B_PERFORMANCE, True),
     ],
 )
-def test_decoder_builder_writes_explicit_recipes_on_common_configs(monkeypatch, arch, devices):
+def test_decoder_builder_writes_explicit_recipes_on_common_configs(
+    monkeypatch, arch, devices, precision, expected_minimal_matmul
+):
+    monkeypatch.delenv("DISABLE_MINIMAL_MATMUL", raising=False)
     profile = _resolve_llama33_70b_profile(
         arch=arch,
         cluster_type=_cluster_type(arch),
         num_devices=devices,
         dram_width=8,
-        precision=LLAMA33_70B_ACCURACY,
+        precision=precision,
     )
     mesh = SimpleNamespace(get_num_devices=lambda: devices)
     params = Llama33_70BModelParameters(
@@ -204,7 +231,7 @@ def test_decoder_builder_writes_explicit_recipes_on_common_configs(monkeypatch, 
         tt_ccl=SimpleNamespace(),
         topology=ttnn.Topology.Ring,
         num_dev=devices,
-        precision=LLAMA33_70B_ACCURACY,
+        precision=precision,
         paged_attention_config=Llama33_70BPagedAttentionConfig(block_size=32, max_num_blocks=1),
         cache_path=None,
         profile=profile,
@@ -215,8 +242,8 @@ def test_decoder_builder_writes_explicit_recipes_on_common_configs(monkeypatch, 
     assert isinstance(block.mlp_config, MLP1DConfig)
     assert isinstance(block.attention_norm_config, RMSNorm1DConfig)
     assert isinstance(block.ff_norm_config, RMSNorm1DConfig)
-    assert block.attention_config.prefill_qkv_minimal_matmul
-    assert block.mlp_config.prefill_w2_minimal_matmul
+    assert block.attention_config.prefill_qkv_minimal_matmul is expected_minimal_matmul
+    assert block.mlp_config.prefill_w2_minimal_matmul is expected_minimal_matmul
     assert block.attention_norm_config.prefill_distributed
     assert block.mlp_config.prefill_len_cutoff == profile.sku.mlp_prefill_len_cutoff
     assert block.attention_config.prefill_qkv_grid == profile.sku.prefill_qkv_grid

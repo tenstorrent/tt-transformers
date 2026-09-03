@@ -338,8 +338,8 @@
     },
     {
       "path": "examples/llama33_70b/demo.py",
-      "sha256": "f15e3259e85a687db12ac2242221d057d92055f41fd3cab88fe83a654ec2865b",
-      "size": 55829
+      "sha256": "2ebe0218e842c4d0ad5c8cb68e35697cf6e7ec348b3994653bd7dd70c4cfe862",
+      "size": 55921
     },
     {
       "path": "examples/llama33_70b/support.json",
@@ -793,7 +793,7 @@
     },
     {
       "path": "qualification/extraction/example_runtime_policy_manifest.json",
-      "sha256": "ae2798e7c583e056cf5dba2da09162725123d8fff7ce534cb16d5ad77d27c698",
+      "sha256": "385e34fcd4068e97f361163e13ed21c6353965bd552a0a91ace3d9c2d607883b",
       "size": 11273
     },
     {
@@ -818,8 +818,8 @@
     },
     {
       "path": "qualification/extraction/models.md",
-      "sha256": "9257b5310df798805e3b011f7ccbd21a5ca84be288b3fbec486d1e31c1b214c2",
-      "size": 2813
+      "sha256": "b9211bd4a1e025b0c76a437ef32816ca32d8072fae63e5072540bf4390d24555",
+      "size": 4194
     },
     {
       "path": "qualification/extraction/normalize_host_support_tests.py",
@@ -1738,8 +1738,8 @@
     },
     {
       "path": "tests/models/llama33_70b/test_model_profile.py",
-      "sha256": "4b370076c560166c189ca76c833b1d4af492c91a1b31c51c50f8e2e4c417d72f",
-      "size": 11427
+      "sha256": "a27a0db43e3d498587b0fc124122e13fb277601299f8c948832dbc5692db59f8",
+      "size": 12681
     },
     {
       "path": "tests/models/llama33_70b/test_p150x4_smoke.py",

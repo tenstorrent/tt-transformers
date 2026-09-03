@@ -214,6 +214,141 @@ def remove_model_default_device_mutation(text: str, source_path: str) -> str:
     return text.replace(mutation, "")
 
 
+def apply_llama33_prefill_matmul_profile_policy(text: str, source_path: str) -> str:
+    """Make folded-prefill operator choice an immutable Llama 3.3 profile policy."""
+
+    if source_path != "models/common/models/llama33_70b/model.py":
+        return text
+    replacements = (
+        (
+            "precision-policy field",
+            "    lm_head_dtype: ttnn.DataType = ttnn.bfloat8_b\n",
+            "    lm_head_dtype: ttnn.DataType = ttnn.bfloat8_b\n"
+            "    # Folded batched prefill crosses the common modules' ``seq_len > 128``\n"
+            "    # threshold and changes QKV/W2 from ttnn.linear to minimal_matmul. Keep\n"
+            "    # that performance tradeoff explicit in the immutable precision recipe.\n"
+            "    prefill_minimal_matmul: bool = False\n",
+        ),
+        (
+            "accuracy linear policy",
+            "#   LI_FF1_FF3=HIFI2_FP16, LI_FF2=HIFI2_FP16, SDPA_prefill=HIFI4 (Attention1D default)\n"
+            "LLAMA33_70B_ACCURACY = Llama33_70BPrecisionConfig()\n",
+            "#   LI_FF1_FF3=HIFI2_FP16, LI_FF2=HIFI2_FP16, SDPA_prefill=HIFI4 (Attention1D default)\n"
+            "# Accuracy keeps folded QKV/W2 on ttnn.linear so batch-one and batched-prefill\n"
+            "# requests use the same operator family for the strict numerical oracle.\n"
+            "LLAMA33_70B_ACCURACY = Llama33_70BPrecisionConfig()\n",
+        ),
+        (
+            "performance minimal policy documentation",
+            "# TTTv1 DecodersPrecision.performance(\"Llama-3.3-70B-Instruct\"):\n"
+            "#   FF1_FF3 → BFP4, LI_FF1_FF3 → LOFI; all other fields same as accuracy.\n",
+            "# TTTv1 DecodersPrecision.performance(\"Llama-3.3-70B-Instruct\"):\n"
+            "#   FF1_FF3 → BFP4, LI_FF1_FF3 → LOFI; folded QKV/W2 retain\n"
+            "#   minimal_matmul for TTFT. DISABLE_MINIMAL_MATMUL remains a global force-off.\n",
+        ),
+        (
+            "performance minimal policy value",
+            "    mlp_ff2_compute_kernel_cfg=_HIFI2_FP16_COMPUTE_KERNEL_CFG,\n"
+            ")\n\n\n# =============================================================================\n"
+            "# Runtime configs\n"
+            "# =============================================================================\n\n\n"
+            "@dataclass\nclass Llama33_70BPagedAttentionConfig:",
+            "    mlp_ff2_compute_kernel_cfg=_HIFI2_FP16_COMPUTE_KERNEL_CFG,\n"
+            "    prefill_minimal_matmul=True,\n"
+            ")\n\n\n# =============================================================================\n"
+            "# Runtime configs\n"
+            "# =============================================================================\n\n\n"
+            "@dataclass\nclass Llama33_70BPagedAttentionConfig:",
+        ),
+        (
+            "profile/environment policy documentation",
+            "    # WH locks the pre-change TTTv2 baseline. BH adopts the TTTv1 candidate\n"
+            "    # recipe: five HiFi2/FP32/approx slots and exact HiFi4 SDPA prefill.\n",
+            "    # WH locks the pre-change TTTv2 compute recipe. BH adopts the TTTv1\n"
+            "    # candidate recipe: five HiFi2/FP32/approx slots and exact HiFi4 SDPA\n"
+            "    # prefill. The immutable precision profile independently selects the\n"
+            "    # folded-prefill minimal-matmul policy; the environment can only force it\n"
+            "    # off globally.\n",
+        ),
+        (
+            "profile-owned force-off expression",
+            '        prefill_minimal_matmul=not os.environ.get("DISABLE_MINIMAL_MATMUL"),\n',
+            "        prefill_minimal_matmul=(\n"
+            '            precision.prefill_minimal_matmul and not os.environ.get("DISABLE_MINIMAL_MATMUL")\n'
+            "        ),\n",
+        ),
+    )
+    for label, old, new in replacements:
+        count = text.count(old)
+        if count != 1:
+            raise ValueError(f"expected one Llama 3.3 {label} source block, found {count}")
+        text = text.replace(old, new, 1)
+
+    tree = ast.parse(text, filename=source_path)
+    precision_classes = [
+        node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "Llama33_70BPrecisionConfig"
+    ]
+    if len(precision_classes) != 1:
+        raise ValueError("expected one Llama33_70BPrecisionConfig")
+    policy_fields = [
+        node
+        for node in precision_classes[0].body
+        if isinstance(node, ast.AnnAssign)
+        and isinstance(node.target, ast.Name)
+        and node.target.id == "prefill_minimal_matmul"
+    ]
+    if len(policy_fields) != 1 or not (
+        isinstance(policy_fields[0].value, ast.Constant) and policy_fields[0].value.value is False
+    ):
+        raise ValueError("Llama 3.3 accuracy/default prefill policy must remain linear")
+
+    profile_assignments = {
+        target.id: node.value
+        for node in tree.body
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call)
+        for target in node.targets
+        if isinstance(target, ast.Name) and target.id in {"LLAMA33_70B_ACCURACY", "LLAMA33_70B_PERFORMANCE"}
+    }
+    if set(profile_assignments) != {"LLAMA33_70B_ACCURACY", "LLAMA33_70B_PERFORMANCE"}:
+        raise ValueError("Llama 3.3 accuracy/performance profile assignments drifted")
+    accuracy_keywords = {keyword.arg: keyword.value for keyword in profile_assignments["LLAMA33_70B_ACCURACY"].keywords}
+    performance_keywords = {
+        keyword.arg: keyword.value for keyword in profile_assignments["LLAMA33_70B_PERFORMANCE"].keywords
+    }
+    if "prefill_minimal_matmul" in accuracy_keywords or not (
+        isinstance(performance_keywords.get("prefill_minimal_matmul"), ast.Constant)
+        and performance_keywords["prefill_minimal_matmul"].value is True
+    ):
+        raise ValueError("Llama 3.3 profiles must select accuracy-linear and performance-minimal policies")
+
+    resolver = next(
+        (
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_resolve_llama33_70b_profile"
+        ),
+        None,
+    )
+    if resolver is None:
+        raise ValueError("missing Llama 3.3 profile resolver")
+    policy_values = [
+        keyword.value
+        for node in ast.walk(resolver)
+        if isinstance(node, ast.Call)
+        for keyword in node.keywords
+        if keyword.arg == "prefill_minimal_matmul"
+    ]
+    expected_policy = ast.parse(
+        'precision.prefill_minimal_matmul and not os.environ.get("DISABLE_MINIMAL_MATMUL")',
+        mode="eval",
+    ).body
+    if len(policy_values) != 1 or ast.dump(policy_values[0], include_attributes=False) != ast.dump(
+        expected_policy, include_attributes=False
+    ):
+        raise ValueError("Llama 3.3 resolved prefill policy must preserve the global environment force-off")
+    return text
+
+
 def remove_forced_remote_code(text: str, source_path: str) -> str:
     """Remove only the pinned Qwen forced remote-code opt-ins."""
 
@@ -463,6 +598,7 @@ def expected_content(row: InventoryRow) -> bytes:
     text = pin_standalone_checkpoint_revision(text, row.source_path)
     for old, new in NAMESPACE_REWRITES:
         text = text.replace(old, new)
+    text = apply_llama33_prefill_matmul_profile_policy(text, row.source_path)
     text = close_qwen3_optional_import(text, row.source_path)
     text = remove_model_default_device_mutation(text, row.source_path)
     text = remove_forced_remote_code(text, row.source_path)
