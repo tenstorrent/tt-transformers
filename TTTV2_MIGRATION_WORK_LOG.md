@@ -1111,3 +1111,25 @@ This log records milestones and evidence for the standalone migration defined in
   recovered 6.52% on the same model family but is absent from the published
   TTNN 0.77 wheel. That materially expands beyond this standalone repository
   and is not applied implicitly.
+
+## 2026-09-03T05:11:46Z — Historical fabric A/B rules out target-era controller
+
+- Reproduced the July target-era pairing in a temporary noncanonical pytest
+  hook: `FabricConfig::FABRIC_1D` with the model's Ring collectives unchanged.
+  The remote checkout was synchronized to report-only tip `efa9c06...`; all
+  132 installed package files remained byte-identical to code SHA `2883a94...`.
+- Host mode measured 8.0 tok/s/u, 257.1 aggregate tok/s, 124.46 ms decode
+  latency, and 83.1 ms TTFT. Versus current Ring, throughput improved only
+  1.27–1.30% and remained below the adjusted 8.835 floor.
+- On-device top-k measured 12.4 tok/s/u, 395.8 aggregate tok/s, 80.86 ms
+  latency, and 83.0 ms TTFT. Versus Ring, throughput improved only 1.64–1.70%
+  and remained below the adjusted 13.68 floor.
+- Both pytest exits were performance assertions only. Teardown was clean,
+  hardware remained healthy/fault-free, and no reset occurred. Historical
+  fabric selection cannot explain or recover the ~9–12% adjusted-floor gap;
+  current Ring policy remains unchanged.
+- The next leading experiment requires replacing the published TTNN 0.77
+  runtime with a custom build containing the post-0.77 Wormhole L1-slack
+  recovery. That is an external dependency/build expansion and requires
+  explicit authority; no additional standalone code change is justified by
+  current evidence.

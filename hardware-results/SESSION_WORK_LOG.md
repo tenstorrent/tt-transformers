@@ -699,3 +699,15 @@ checkout's tracked cleanliness during the mandatory synchronized hardware gate.
   clean, hardware remained healthy/fault-free, and no reset occurred.
 - Result is retained only under `qualification/evidence/diagnostics`; the
   canonical matrix remains 34/34 pass and its index was not rewritten.
+
+## 2026-09-03T05:11:46Z — Non-canonical historical-fabric A/B
+
+- Temporary `FABRIC_1D` controller with unchanged Ring collectives measured
+  host 8.0 tok/s/u (257.1 aggregate, 124.46 ms latency, 83.1 ms TTFT) and
+  device top-k 12.4 tok/s/u (395.8 aggregate, 80.86 ms latency, 83.0 ms TTFT).
+- Gains versus current Ring were only 1.3% host and 1.6–1.7% device, leaving
+  both throughput floors failed. The historical fabric is not the cause of the
+  full gap and is not adopted.
+- Both processes exited with throughput-only assertions, clean teardown,
+  healthy/fault-free devices, and no reset. Artifacts are diagnostic-only;
+  canonical hardware remains 34/34 pass.
