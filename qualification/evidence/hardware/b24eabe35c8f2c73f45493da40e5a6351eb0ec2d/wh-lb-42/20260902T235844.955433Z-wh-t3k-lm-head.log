@@ -1,0 +1,29 @@
+============================= test session starts ==============================
+platform linux -- Python 3.10.12, pytest-9.0.3, pluggy-1.6.0 -- /localdev/gwang/tt_transformers/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /localdev/gwang/tt_transformers
+configfile: pyproject.toml
+plugins: cov-7.0.0, timeout-2.4.0, anyio-4.14.2
+timeout: 1200.0s
+timeout method: signal
+timeout func_only: False
+collecting ... collected 63 items / 54 deselected / 9 selected
+
+tests/modules/lm_head/test_lm_head_1d.py::test_lm_head_1d_vs_reference[1x8-8B-1x8] PASSED [ 11%]
+tests/modules/lm_head/test_lm_head_1d.py::test_lm_head_1d_vs_reference[1x8-70B-1x8] PASSED [ 22%]
+tests/modules/lm_head/test_lm_head_1d.py::test_lm_head_1d_vs_reference[1x8-1B-1x8] PASSED [ 33%]
+tests/modules/lm_head/test_lm_head_1d.py::test_lm_head_1d_vs_reference[1x8-3B-1x8] PASSED [ 44%]
+tests/modules/lm_head/test_lm_head_1d.py::test_lm_head_1d_vs_reference[1x8-11B-1x8] PASSED [ 55%]
+tests/modules/lm_head/test_lm_head_1d.py::test_lm_head_1d_vs_reference[1x8-Qwen2.5-72B-1x8] PASSED [ 66%]
+tests/modules/lm_head/test_lm_head_1d.py::test_lm_head_1d_vs_reference[1x8-Qwen2.5-Coder-32B-1x8] PASSED [ 77%]
+tests/modules/lm_head/test_lm_head_1d.py::test_lm_head_1d_vs_reference[1x8-Qwen3-32B-1x8] PASSED [ 88%]
+tests/modules/lm_head/test_lm_head_1d.py::test_lm_head_1d_vs_reference[1x8-Mistral-7B-1x8] PASSED [100%]
+
+================= 9 passed, 54 deselected in 201.88s (0:03:21) =================
+2026-09-03 00:02:09.072 | info     |    BuildKernels | JIT cache stats: 77/77 hits (100.0%) [77 cached, 60 build-once dedup, 0 merged artifacts, 0 merged genfiles] (build_cache_telemetry.cpp:207)
+2026-09-03 00:02:09.072 | info     |    BuildKernels | JIT telemetry: 3 registered TelemetryTokens (build_cache_telemetry.cpp:230)
+2026-09-03 00:02:09.085 | info     |          Device | Closing user mode device drivers (tt_cluster.cpp:513)
+2026-09-03 00:02:09.085 | info     |             UMD | Closing devices in cluster (cluster.cpp:1201)
+2026-09-03 00:02:09.121 | info     |             UMD | Closing devices in cluster completed. (cluster.cpp:1210)
+2026-09-03 00:02:09.121 | info     |             UMD | Cluster destructor started. (cluster.cpp:916)
+2026-09-03 00:02:09.121 | info     |             UMD | Cluster destructor completed. (cluster.cpp:919)

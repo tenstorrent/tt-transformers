@@ -1,0 +1,21 @@
+============================= test session starts ==============================
+platform linux -- Python 3.10.12, pytest-9.0.3, pluggy-1.6.0 -- /localdev/gwang/tt_transformers/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /localdev/gwang/tt_transformers
+configfile: pyproject.toml
+plugins: anyio-4.14.2, cov-7.0.0, timeout-2.4.0
+timeout: 1800.0s
+timeout method: signal
+timeout func_only: False
+collecting ... collected 1 item
+
+tests/models/qwen3_32b/test_p150x4_smoke.py::test_qwen3_32b_one_layer_prefill_decode_smoke[physical-P150x4-ring] PASSED [100%]
+
+======================== 1 passed in 390.12s (0:06:30) =========================
+2026-09-02 23:49:41.707 | info     |    BuildKernels | JIT cache stats: 403/403 hits (100.0%) [403 cached, 227 build-once dedup, 0 merged artifacts, 0 merged genfiles] (build_cache_telemetry.cpp:207)
+2026-09-02 23:49:41.707 | info     |    BuildKernels | JIT telemetry: 3 registered TelemetryTokens (build_cache_telemetry.cpp:230)
+2026-09-02 23:49:41.731 | info     |          Device | Closing user mode device drivers (tt_cluster.cpp:513)
+2026-09-02 23:49:41.731 | info     |             UMD | Closing devices in cluster (cluster.cpp:1201)
+2026-09-02 23:49:42.344 | info     |             UMD | Closing devices in cluster completed. (cluster.cpp:1210)
+2026-09-02 23:49:42.344 | info     |             UMD | Cluster destructor started. (cluster.cpp:916)
+2026-09-02 23:49:42.344 | info     |             UMD | Cluster destructor completed. (cluster.cpp:919)

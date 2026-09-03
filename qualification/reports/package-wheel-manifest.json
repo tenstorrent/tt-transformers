@@ -1,7 +1,7 @@
 {
   "artifact": "tt_transformers-0.1.0.dev0-py3-none-any.whl",
-  "artifact_sha256": "18adf91d873ec27501909ab4fc26f1efb6058b9d4a1cd6c3e120f27e1285813c",
-  "artifact_size": 596738,
+  "artifact_sha256": "012b58b9c8b773eb4a2a4a2d247d752572652ede81944ac91608aaa3b6e4ff1b",
+  "artifact_size": 597486,
   "entries": [
     {
       "path": "tt_transformers-0.1.0.dev0.dist-info/METADATA",
@@ -10,7 +10,7 @@
     },
     {
       "path": "tt_transformers-0.1.0.dev0.dist-info/RECORD",
-      "sha256": "23837b7e6e67f2d00c057ca6039ce662bc8d10213dc711eef5a414273d22a565",
+      "sha256": "6a579f2792cbffa8c498abfc77998ca3748a37aa7a64f5686073ebcda957063c",
       "size": 13998
     },
     {
@@ -615,8 +615,8 @@
     },
     {
       "path": "tt_transformers/modules/sampling/params.py",
-      "sha256": "47b21b077dbb826f263bb9ff9d44a092e41924d53e65c8a04dde734223207538",
-      "size": 23357
+      "sha256": "16dc0f49c838c881e435a62ec63bd45b7b09f8bd3485e79e75ea5eeb7592a593",
+      "size": 23442
     },
     {
       "path": "tt_transformers/modules/sampling/penalties_1d.py",
@@ -630,13 +630,13 @@
     },
     {
       "path": "tt_transformers/modules/sampling/sampling_state_1d.py",
-      "sha256": "ffea00ce33b4894f85f552a5ac8ce42e544de9bc8bbf5be25c723031ef50d2bb",
-      "size": 39196
+      "sha256": "5d46e8e4712ed37d8725f4bef83460a3efcde6aa065e63c83d48107efaf5f7ed",
+      "size": 40498
     },
     {
       "path": "tt_transformers/modules/sampling/seed_manager_1d.py",
-      "sha256": "ea48db5c0d56a7f907aaa0c48ea092e0e1a2d70ca312b8b208eb660e48ba6919",
-      "size": 26808
+      "sha256": "ff09347e2c58c8e77ad43e0ff24e25c49f5cfdbedfd09510ef9f74a77900128e",
+      "size": 29495
     },
     {
       "path": "tt_transformers/modules/tt_ccl.py",
@@ -740,6 +740,6 @@
   "source_tree": {
     "algorithm": "sha256(path + NUL + content + NUL, sorted by path)",
     "python_files": 132,
-    "sha256": "be03de1c59c0b86afcbd45ac7a444a33b67ba33a4e469ccb2ab9607e0eb4ddf1"
+    "sha256": "11f65588f13055117316d808fece794759929196e82031f24a6add1b0a51149f"
   }
 }

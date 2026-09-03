@@ -13,7 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CHECKLIST = ROOT / "qualification/reports/release-readiness-checklist.csv"
-HARDWARE_CANDIDATE_SHA = "ba7abefba4484689c953ac53fe8810322db1d184"
+HARDWARE_CANDIDATE_SHA = "b24eabe35c8f2c73f45493da40e5a6351eb0ec2d"
 HARDWARE_EVIDENCE_INDEX = ROOT / f"qualification/evidence/hardware/{HARDWARE_CANDIDATE_SHA}/index.json"
 MODELS = {
     "deepseek_r1_distill_qwen_14b",
@@ -215,6 +215,26 @@ def main() -> int:
     )
 
     artifact_data = json.loads((ROOT / "qualification/reports/package-artifact-hashes.json").read_text(encoding="utf-8"))
+    require(
+        [
+            (artifact["filename"], artifact["size"], artifact["sha256"])
+            for artifact in artifact_data.get("artifacts", [])
+        ]
+        == [
+            (
+                "tt_transformers-0.1.0.dev0-py3-none-any.whl",
+                597486,
+                "012b58b9c8b773eb4a2a4a2d247d752572652ede81944ac91608aaa3b6e4ff1b",
+            ),
+            (
+                "tt_transformers-0.1.0.dev0.tar.gz",
+                498224,
+                "abd1bcc097596c5d992750c3ef10a668799f3342390f8179f1c39ec39344693b",
+            ),
+        ],
+        "final artifact names, sizes, or hashes drifted",
+        errors,
+    )
     for artifact in artifact_data["artifacts"]:
         path = ROOT / "dist" / artifact["filename"]
         require(path.is_file(), f"missing built artifact {path.name}", errors)
@@ -223,13 +243,13 @@ def main() -> int:
             require(sha256(path) == artifact["sha256"], f"artifact hash drift: {path.name}", errors)
     require(
         artifact_data["artifacts"][0]["sha256"]
-        == "18adf91d873ec27501909ab4fc26f1efb6058b9d4a1cd6c3e120f27e1285813c",
+        == "012b58b9c8b773eb4a2a4a2d247d752572652ede81944ac91608aaa3b6e4ff1b",
         "final wheel identity drifted",
         errors,
     )
     require(
         artifact_data["artifacts"][1]["sha256"]
-        == "e26ca18f49d54caeff87f430e4ade3ef7bca8b5f1b0984b46082a80d8d74965f",
+        == "abd1bcc097596c5d992750c3ef10a668799f3342390f8179f1c39ec39344693b",
         "final sdist identity drifted",
         errors,
     )
@@ -243,7 +263,7 @@ def main() -> int:
         == {
             "algorithm": "sha256(path + NUL + content + NUL, sorted by path)",
             "python_files": 132,
-            "sha256": "be03de1c59c0b86afcbd45ac7a444a33b67ba33a4e469ccb2ab9607e0eb4ddf1",
+            "sha256": "11f65588f13055117316d808fece794759929196e82031f24a6add1b0a51149f",
         },
         "artifact source identity drifted",
         errors,
@@ -313,9 +333,14 @@ def main() -> int:
         (ROOT / "qualification/reports/static-quality-baseline.json").read_text(encoding="utf-8")
     )
     require(static_quality["ruff_check"]["findings"] == 2158, "Ruff baseline drifted", errors)
-    require(static_quality["ruff_format"]["would_reformat"] == 166, "Ruff format baseline drifted", errors)
     require(
-        static_quality["mypy"]["errors"] == 502 and static_quality["mypy"]["files_with_errors"] == 99,
+        static_quality["ruff_format"]["would_reformat"] == 165
+        and static_quality["ruff_format"]["already_formatted"] == 206,
+        "Ruff format baseline drifted",
+        errors,
+    )
+    require(
+        static_quality["mypy"]["errors"] == 489 and static_quality["mypy"]["files_with_errors"] == 99,
         "mypy baseline drifted",
         errors,
     )
@@ -328,14 +353,15 @@ def main() -> int:
         errors,
     )
     host_report = (ROOT / "qualification/reports/host-ttnn-0.77.md").read_text(encoding="utf-8")
-    require("| 3.10.19 | 2,153 | 28 | 6,791 | 81 | 0 | 0 |" in host_report, "Python 3.10 host result drifted", errors)
-    require("| 3.12.13 | 2,153 | 28 | 6,791 | 81 | 0 | 0 |" in host_report, "Python 3.12 host result drifted", errors)
+    require(HARDWARE_CANDIDATE_SHA in host_report, "host report candidate SHA drifted", errors)
+    require("| 3.10.19 | 2,162 | 28 | 6,791 | 81 | 0 | 0 |" in host_report, "Python 3.10 host result drifted", errors)
+    require("| 3.12.13 | 2,162 | 28 | 6,791 | 81 | 0 | 0 |" in host_report, "Python 3.12 host result drifted", errors)
     require("nanobind: leaked 8 instances!" in host_report, "Python 3.12 nanobind diagnostic is missing", errors)
 
     pyramid = (ROOT / "qualification/reports/test-pyramid.md").read_text(encoding="utf-8")
-    require("1,452 source-level test functions" in pyramid, "test-pyramid total is stale", errors)
+    require("1,461 source-level test functions" in pyramid, "test-pyramid total is stale", errors)
     require(
-        "1,198 explicitly `host`" in pyramid and "254 explicitly `device`" in pyramid,
+        "1,207 explicitly `host`" in pyramid and "254 explicitly `device`" in pyramid,
         "test-pyramid lanes are stale",
         errors,
     )

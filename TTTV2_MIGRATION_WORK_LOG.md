@@ -913,3 +913,64 @@ This log records milestones and evidence for the standalone migration defined in
   nanobind shutdown leak diagnostic after pytest exits successfully.
 - WH and BH exact-SHA matrix sweeps are now running concurrently; each agent
   owns one physical host and serializes every TT process on that host.
+
+## 2026-09-03T01:26:03Z — Superseding exact-SHA qualification checkpoint
+
+- Published and synchronized final evidence SHA
+  `b24eabe35c8f2c73f45493da40e5a6351eb0ec2d`. Local, WH, and BH tracked
+  checkouts were clean, upstream-aligned, and divergence `0/0` before device
+  execution. Both remote non-editable installs matched all 132 package Python
+  files; dependency checks passed.
+- Ran WH and BH concurrently while serializing every TT process within each
+  physical host. All 34 nodes accessible on the reserved T3K and P150_X4
+  systems executed: **33 passed and one strict W6 functional failure**.
+  Modules are 23/23, smokes 3/3, end-to-end/token accuracy 7/7, and runtime
+  0/1. N150 is 9/9, N300 6/6, P150x4 11/11, and T3K 7/8.
+- The official W6 result is unchanged: all four orders fail row-0 numerical
+  parity at max-abs 1.5 versus 1.0 and top-5 overlap 3 versus 4. The
+  source-identical parent diagnostic proved every later trace, KV, decode,
+  sampling, resume/chunk, refresh, and cache/registry assertion for one order
+  when only that first cross-geometry oracle was bypassed. It is not counted
+  as qualification evidence and thresholds remain unchanged.
+- Zero hardware-lifecycle, pre-device, or missing-acceptance outcomes; zero
+  resets. Post-run audits found no TT processes/device owners and healthy DRAM
+  on all eight WH and four BH devices. The eight single-P150 priorities 24–30
+  and 38 remain deferred because `bh-lb-11` was unavailable; the P150_X4
+  quietbox is not a valid substitute.
+- Ingested exactly 34 JSON/log pairs under
+  `qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d`
+  and generated a schema/hash-validated index with SHA-256
+  `8bbf3e6340d4015753a24d5107ae4183f9de57c931ed6d4eb111af769e9c040c`.
+  The matrix SHA-256 remains
+  `e5e54f1a216164c2036913313d0775454357ce5c6a82dc09c61caaba3c890db4`.
+- Rebuilt wheel and normalized sdist twice sequentially; both pairs are
+  byte-identical. Final wheel SHA-256 is
+  `012b58b9c8b773eb4a2a4a2d247d752572652ede81944ac91608aaa3b6e4ff1b`
+  (597,486 bytes), sdist SHA-256 is
+  `abd1bcc097596c5d992750c3ef10a668799f3342390f8179f1c39ec39344693b`
+  (498,224 bytes), and package-source digest is
+  `11f65588f13055117316d808fece794759929196e82031f24a6add1b0a51149f`.
+  Twine strict, archive audit, and isolated Python 3.10/3.12 76-surface base
+  probes pass.
+- Final non-editable-wheel host suites pass on both supported interpreters:
+  2,162 passed, 28 skips, 6,791 deselected, 5 warnings, and 81 subtests each.
+  Taxonomy is 1,461 functions = 1,207 host + 254 device. The Python 3.12
+  nanobind shutdown diagnostic remains explicit after pytest exit 0.
+
+## 2026-09-03T01:35:37Z — Final authority and validator convergence
+
+- Updated hardware/support, package/TTNN, and release/host/static authorities
+  from the validated `b24eabe...` index. All twelve model manifests remain
+  unchanged, experimental, and without per-model validation/evidence claims.
+- Release readiness is proven unchanged at **45 pass, 18 partial, 16 blocked**.
+  The same five model subsets retain partial centralized evidence; strict W6,
+  eight P150 deferrals, observed CI, tagging, complete model contracts, and
+  downstream cutover remain open.
+- Final validators pass for hardware evidence, support documentation, TTNN
+  0.77 compatibility, release readiness, static quality, test taxonomy,
+  dependency locks/constraints, pinned foundation extraction, import
+  boundaries, and 1,760 public-API policy rows.
+- Regenerated the support-boundary manifest last: 386 files, zero hash/size
+  mismatches, and zero raw evidence entries. Focused package/support/hardware
+  host tests pass 51/51 on both Python 3.10 and 3.12; compilation and all 96
+  qualification JSON parses pass.

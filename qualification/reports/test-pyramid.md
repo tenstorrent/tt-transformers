@@ -8,11 +8,11 @@ Authority inputs are the pinned Phase 0 `marker_inventory.csv` (23 tokens),
 input counts before grading the expanded standalone tree.
 
 This report defines selection policy; it is not hardware evidence. The static
-taxonomy audit currently covers 1,452 source-level test functions:
+taxonomy audit currently covers 1,461 source-level test functions:
 
-- 1,198 explicitly `host`;
+- 1,207 explicitly `host`;
 - 254 explicitly `device`;
-- 390 concrete `model` surfaces;
+- 392 concrete `model` surfaces;
 - 27 explicitly `slow` source definitions;
 - exact static topology marks where a node name/path proves a SKU, plus
   collection-time topology marks when `MESH_DEVICE` proves the selected
@@ -148,7 +148,12 @@ PYTHONPATH=src:. pytest -q --confcutdir=tests/host \
 
 The exact execution and physical-inventory contract is documented in
 `qualification/reports/hardware-readiness.md`. Matrix presence and dry-run
-success are readiness evidence only, never a device-support claim.
+success alone are readiness evidence only, never a device-support claim.
+Separate SHA-bound evidence at final candidate
+`b24eabe35c8f2c73f45493da40e5a6351eb0ec2d` records 34 executed nodes:
+33 passed, the W6 runtime trace/order node failed functionally, and eight
+single-P150 nodes remain different-hardware deferred. The canonical index is
+`qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/index.json`.
 
 ## Evidence rule
 

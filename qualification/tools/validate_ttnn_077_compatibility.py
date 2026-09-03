@@ -13,7 +13,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "qualification/reports/ttnn-0.77.0-compatibility-matrix.json"
 REPORT = ROOT / "qualification/reports/ttnn-0.77.0.md"
-HARDWARE_CANDIDATE_SHA = "ba7abefba4484689c953ac53fe8810322db1d184"
+HARDWARE_CANDIDATE_SHA = "b24eabe35c8f2c73f45493da40e5a6351eb0ec2d"
 HARDWARE_INDEX_RELATIVE = f"qualification/evidence/hardware/{HARDWARE_CANDIDATE_SHA}/index.json"
 HARDWARE_MATRIX_RELATIVE = "qualification/manifests/hardware-matrix.json"
 HARDWARE_INDEX_ROOT = ROOT / Path(HARDWARE_INDEX_RELATIVE).parent
@@ -448,9 +448,9 @@ def build_matrix() -> dict[str, Any]:
     package_artifacts = {artifact["filename"]: artifact for artifact in artifacts["artifacts"]}
     expected_package_artifacts = {
         "tt_transformers-0.1.0.dev0-py3-none-any.whl": (
-            "18adf91d873ec27501909ab4fc26f1efb6058b9d4a1cd6c3e120f27e1285813c"
+            "012b58b9c8b773eb4a2a4a2d247d752572652ede81944ac91608aaa3b6e4ff1b"
         ),
-        "tt_transformers-0.1.0.dev0.tar.gz": ("e26ca18f49d54caeff87f430e4ade3ef7bca8b5f1b0984b46082a80d8d74965f"),
+        "tt_transformers-0.1.0.dev0.tar.gz": ("abd1bcc097596c5d992750c3ef10a668799f3342390f8179f1c39ec39344693b"),
     }
     if set(package_artifacts) != set(expected_package_artifacts):
         raise ValueError(f"package artifact set drift: {sorted(package_artifacts)}")
@@ -476,8 +476,8 @@ def build_matrix() -> dict[str, Any]:
             raise ValueError(f"dependency matrix drift for Python {dependency['python']}: {actual}")
     host_text = (ROOT / "qualification/reports/host-ttnn-0.77.md").read_text(encoding="utf-8")
     for required in (
-        "| 3.10.19 | 2,153 | 28 | 6,791 | 81 | 0 | 0 |",
-        "| 3.12.13 | 2,153 | 28 | 6,791 | 81 | 0 | 0 |",
+        "| 3.10.19 | 2,162 | 28 | 6,791 | 81 | 0 | 0 |",
+        "| 3.12.13 | 2,162 | 28 | 6,791 | 81 | 0 | 0 |",
         "nanobind: leaked 8 instances!",
         "nanobind: leaked 36 types!",
         "nanobind: leaked 330 functions!",
@@ -489,8 +489,8 @@ def build_matrix() -> dict[str, Any]:
             raise ValueError(f"host support report is missing final evidence {required!r}")
     pyramid_text = (ROOT / "qualification/reports/test-pyramid.md").read_text(encoding="utf-8")
     for required in (
-        "1,452 source-level test functions",
-        "1,198 explicitly `host`",
+        "1,461 source-level test functions",
+        "1,207 explicitly `host`",
         "254 explicitly `device`",
     ):
         if required not in pyramid_text:
@@ -572,7 +572,7 @@ def build_matrix() -> dict[str, Any]:
         "host_suites": [
             {
                 "python": "3.10.19",
-                "passed": 2153,
+                "passed": 2162,
                 "skipped": 28,
                 "deselected": 6791,
                 "warnings": 5,
@@ -590,7 +590,7 @@ def build_matrix() -> dict[str, Any]:
             },
             {
                 "python": "3.12.13",
-                "passed": 2153,
+                "passed": 2162,
                 "skipped": 28,
                 "deselected": 6791,
                 "warnings": 5,
@@ -617,8 +617,8 @@ def build_matrix() -> dict[str, Any]:
             },
         ],
         "test_taxonomy": {
-            "source_level_test_functions": 1452,
-            "host": 1198,
+            "source_level_test_functions": 1461,
+            "host": 1207,
             "device": 254,
             "evidence": evidence_record(["qualification/reports/test-pyramid.md"]),
         },
@@ -814,7 +814,7 @@ def validate(matrix: dict[str, Any]) -> None:
     if [suite["python"] for suite in matrix["host_suites"]] != ["3.10.19", "3.12.13"]:
         raise ValueError("host suite interpreter coverage is incomplete")
     for suite in matrix["host_suites"]:
-        expected = (2153, 28, 6791, 5, 81, 0, 0, 0)
+        expected = (2162, 28, 6791, 5, 81, 0, 0, 0)
         actual = tuple(
             suite[field]
             for field in (
@@ -831,8 +831,8 @@ def validate(matrix: dict[str, Any]) -> None:
         if actual != expected:
             raise ValueError(f"host suite result drift for Python {suite['python']}: {actual}")
     if matrix["test_taxonomy"] != {
-        "source_level_test_functions": 1452,
-        "host": 1198,
+        "source_level_test_functions": 1461,
+        "host": 1207,
         "device": 254,
         "evidence": evidence_record(["qualification/reports/test-pyramid.md"]),
     }:
@@ -883,9 +883,9 @@ def validate(matrix: dict[str, Any]) -> None:
     report_text = REPORT.read_text(encoding="utf-8")
     for required in (
         HARDWARE_CANDIDATE_SHA,
-        "2,153 passed",
-        "1,452 source-level test functions",
-        "1,198 host and 254 device",
+        "2,162 passed",
+        "1,461 source-level test functions",
+        "1,207 host and 254 device",
         "33/34 executed nodes passed",
         "modules 23/23",
         "smoke 3/3",

@@ -3,13 +3,13 @@
 Status: **not fully green — 33 passed, 1 functional blocker, and 8 topology-specific nodes deferred**
 
 The attributable release-candidate revision is
-`ba7abefba4484689c953ac53fe8810322db1d184` on branch
+`b24eabe35c8f2c73f45493da40e5a6351eb0ec2d` on branch
 `tttv2-standalone-migration`.
 
 The canonical evidence index is
-`qualification/evidence/hardware/ba7abefba4484689c953ac53fe8810322db1d184/index.json`.
+`qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/index.json`.
 Its SHA-256 is
-`749b0fe829b9d378b9dc0bd99b45d6dd6dcb77f38cccf16ebb862d5d166cc24b`.
+`8bbf3e6340d4015753a24d5107ae4183f9de57c931ed6d4eb111af769e9c040c`.
 
 ## Final-SHA result
 
@@ -51,10 +51,20 @@ The runner classified this as `functional_failure`, not
 `hardware_lifecycle_failure`. The process exited and no reset was performed.
 Its evidence record is:
 
-`qualification/evidence/hardware/ba7abefba4484689c953ac53fe8810322db1d184/wh-lb-42/20260902T205014.027051Z-wh-t3k-runtime-trace-order.json`
+`qualification/evidence/hardware/b24eabe35c8f2c73f45493da40e5a6351eb0ec2d/wh-lb-42/20260903T001610.842135Z-wh-t3k-runtime-trace-order.json`
 
 This blocker does not invalidate the separately passing module, smoke, or e2e
 records, but it prevents a fully green hardware-qualification verdict.
+
+### Non-qualifying relaxed diagnostic
+
+One order was also run at diagnostic candidate
+`d7677f822356e839f707a6447fd0abc89e620d56` with only the known
+cross-geometry logits oracle relaxed. It passed the later trace, KV, replay,
+sampling, resume, chunk, and cache invariants in 176.12 seconds. This result is
+diagnostic context only: it is excluded from the canonical index and pass count,
+does not qualify W6, and does not supersede or weaken the official
+strict functional failure above.
 
 ## Deferred single-P150 scope
 
@@ -90,9 +100,9 @@ they are not standalone-N150 product evidence. `N300` rows select a physical
 left/right N300 board pair within the T3K.
 
 The Blackhole records were produced on `bh-qb-05`, a physical P150_X4
-quietbox with four p150b boards and a 2x2 system mesh. Its inventory recorded
-healthy DRAM on all four devices, TT-KMD 2.9.0, firmware 19.12.0.0, and
-`TT_VISIBLE_DEVICES` unset.
+quietbox with four physical p150b boards and a 2x2 system mesh. Its final-SHA
+inventory recorded the full-host P150_X4 topology and
+`TT_VISIBLE_DEVICES` unset; these records are not physical-P300 evidence.
 
 The two independent physical hosts may run one node each concurrently. The
 records overlap in time across Wormhole and Blackhole while remaining
@@ -115,12 +125,13 @@ hardware-verified`. This wording is retained verbatim: process exit is
 recorded, but independent post-fixture hardware verification is not claimed.
 
 `qualification/analysis/support/hardware_evidence.csv` lists all 34 attributable
-records and all eight deferred nodes individually. Same-SHA functional evidence
-is eligible for the pinned baseline even when it records a blocker; eligibility
-means attributable evidence, not a passing result. Deferred nodes have no
-execution evidence and are ineligible.
+current-candidate records and all eight deferred nodes individually. Current
+same-SHA functional evidence is eligible for the pinned baseline even when it
+records a blocker; eligibility means attributable evidence, not a passing
+result. Deferred and superseded-candidate rows are ineligible.
 
-The ledger also preserves earlier revisions
+The ledger also preserves the earlier exact-SHA candidate
+`ba7abefba4484689c953ac53fe8810322db1d184` and older revisions
 `00748e6ac7b65f50e5c2af07f6e7c1c535c7f4c0` and
 `b1a75d474ee44f583c32c5e6279c7026907553b9` as historical, ineligible context.
 Their observations do not transfer to the final candidate SHA.

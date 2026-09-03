@@ -11,8 +11,8 @@ the reviewed provenance normalizations.
 | Gate | Current result |
 | --- | --- |
 | Ruff lint | 2,158 findings across the tree; 629 automatically fixable |
-| Ruff format | 166 files would change; 205 already formatted |
-| mypy | 502 errors in 99 of 132 package files using the qualified dependency environment |
+| Ruff format | 165 files would change; 206 already formatted |
+| mypy | 489 errors in 99 of 132 package files using the qualified dependency environment |
 | Black | did not complete the 132-file package check within the bounded 30-second run |
 
 Ruff's largest classes are 1,446 line-length findings, 227 import-order

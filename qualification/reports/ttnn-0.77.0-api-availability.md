@@ -21,7 +21,7 @@ The inventory includes functions, operations, enums and enum members, tensor/lay
 
 Both probes used `env -u PYTHONPATH` from `/tmp/gwang`. Their `sys.path` records contain the probe script directory, managed standard library, and isolated venv `site-packages`, but no `tt_transformers/src` or `tt-metal` checkout.
 
-Source snapshot SHA256: `be03de1c59c0b86afcbd45ac7a444a33b67ba33a4e469ccb2ab9607e0eb4ddf1`.
+Source snapshot SHA256: `11f65588f13055117316d808fece794759929196e82031f24a6add1b0a51149f`.
 
 ## Previously tracked unstable APIs
 

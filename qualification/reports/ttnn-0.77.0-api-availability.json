@@ -3,7 +3,7 @@
   "verdict": "all_module_symbols_available_semantics_and_hardware_unqualified",
   "source_inventory": {
     "source_root": "/localdev/gwang/tt_transformers/src",
-    "source_sha256": "be03de1c59c0b86afcbd45ac7a444a33b67ba33a4e469ccb2ab9607e0eb4ddf1",
+    "source_sha256": "11f65588f13055117316d808fece794759929196e82031f24a6add1b0a51149f",
     "unique_module_api_paths": 160,
     "module_api_occurrences": 4393,
     "typed_dynamic_member_sites": 204,
@@ -2641,7 +2641,7 @@
       "schema_version": 1,
       "source_checkout_on_sys_path": false,
       "source_root": "/localdev/gwang/tt_transformers/src",
-    "source_sha256": "be03de1c59c0b86afcbd45ac7a444a33b67ba33a4e469ccb2ab9607e0eb4ddf1",
+    "source_sha256": "11f65588f13055117316d808fece794759929196e82031f24a6add1b0a51149f",
       "sys_path": [
         "/localdev/gwang/tt_transformers/qualification/tools",
         "/usr/local/share/uv/cpython-3.10.19-linux-x86_64-gnu/lib/python310.zip",
@@ -5284,7 +5284,7 @@
       "schema_version": 1,
       "source_checkout_on_sys_path": false,
       "source_root": "/localdev/gwang/tt_transformers/src",
-    "source_sha256": "be03de1c59c0b86afcbd45ac7a444a33b67ba33a4e469ccb2ab9607e0eb4ddf1",
+    "source_sha256": "11f65588f13055117316d808fece794759929196e82031f24a6add1b0a51149f",
       "sys_path": [
         "/localdev/gwang/tt_transformers/qualification/tools",
         "/tmp/gwang/uv-python/cpython-3.12.13-linux-x86_64-gnu/lib/python312.zip",

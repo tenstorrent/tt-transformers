@@ -1,9 +1,9 @@
 # Release-readiness audit
 
-Audit date: 2026-09-02 (UTC)
+Audit date: 2026-09-03 (UTC)
 
 Source baseline: `tt-metal` `00748e6ac7b65f50e5c2af07f6e7c1c535c7f4c0`
-Destination candidate: `tt-transformers==0.1.0.dev0` at pushed commit `ba7abefba4484689c953ac53fe8810322db1d184`
+Destination candidate: `tt-transformers==0.1.0.dev0` at pushed commit `b24eabe35c8f2c73f45493da40e5a6351eb0ec2d`
 
 ## Verdict
 
@@ -36,12 +36,12 @@ This audit includes ingested evidence from remote Wormhole and Blackhole executi
 - The provenance inventory classifies 366 pinned rows. All 26 exclusions are under `models/common/modules/moe`; there is no second excluded subsystem.
 - All twelve concrete model packages, reusable Python modules, runtime components, and shared executors are installed under `tt_transformers`.
 - Source and installed-wheel import-boundary checks pass. The base wheel imports without `transformers`, `tqdm`, `pytest`, a legacy `models.*` namespace, or a `tt-metal` checkout.
-- The audited wheel rebuilt from frozen hardware-candidate code is SHA-256 `18adf91d873ec27501909ab4fc26f1efb6058b9d4a1cd6c3e120f27e1285813c`; the normalized sdist is `e26ca18f49d54caeff87f430e4ade3ef7bca8b5f1b0984b46082a80d8d74965f`. Two `SOURCE_DATE_EPOCH` builds are byte-identical, and their recorded pyproject and 132-file source identities match the candidate payload.
+- The audited wheel rebuilt from final candidate `b24eabe35c8f2c73f45493da40e5a6351eb0ec2d` is 597,486 bytes with SHA-256 `012b58b9c8b773eb4a2a4a2d247d752572652ede81944ac91608aaa3b6e4ff1b`; the normalized 498,224-byte sdist is `abd1bcc097596c5d992750c3ef10a668799f3342390f8179f1c39ec39344693b`. Two `SOURCE_DATE_EPOCH` builds are byte-identical, and the 132-file source digest is `11f65588f13055117316d808fece794759929196e82031f24a6add1b0a51149f`.
 - Fresh non-editable CPython 3.10 and 3.12 wheel installs pass the 76-surface import probe and `pip check` with `ttnn==0.77.0`, Torch 2.11.0, and Loguru 0.6.0.
 - All 160 currently referenced TTNN module paths, including 13 experimental and one private path, exist in the published 0.77 wheels for both interpreters.
-- The exact full host command passes from the non-editable wheel, without `PYTHONPATH`, on both CPython 3.10 and 3.12: 2,153 passed, 28 intentional skips, 6,791 deselected, 5 warnings, 81 subtests, zero failures/errors on each interpreter.
+- The exact full host command passes from the non-editable wheel, without `PYTHONPATH`, on both CPython 3.10 and 3.12: 2,162 passed, 28 intentional skips, 6,791 deselected, 5 warnings, 81 subtests, zero failures/errors on each interpreter.
 - CPython 3.12 emits a shutdown-only TTNN/nanobind diagnostic after pytest succeeds: 8 leaked instances, 36 leaked types, and 330 leaked functions. It remains actionable TTNN binding feedback, not a test failure and not a cleanup qualification pass.
-- All 1,452 test functions have an explicit lane: 1,198 host and 254 device. The current taxonomy audit has zero errors.
+- All 1,461 test functions have an explicit lane: 1,207 host and 254 device. The current taxonomy audit has zero errors.
 - Five retained runtime/module/sampling documents now have verified pinned-source destinations and standalone path rewrites; every non-excluded provenance assignment resolves.
 - The Qwen3 configuration required by host characterization is retained as qualification-only pinned blob `12ea4a36c6ac093af8d8dbc3bd435ae8b67067d6`; production does not load the repository asset.
 - All twelve example READMEs and `support.json` files validate. Every model is honestly marked `experimental`, with null validation date/SHA and an empty evidence array.
@@ -50,7 +50,7 @@ This audit includes ingested evidence from remote Wormhole and Blackhole executi
 - Implicit cache defaults are identity-versioned; explicit `cache_dir` and `TT_CACHE_PATH` overrides retain their established unversioned paths and emit release warnings.
 - Eight binary dependency locks are hash-complete and pass clean strict installs plus `pip check`: base 31/29, host 64/61, qualification 20/19, and build-dev 44/40 packages on Python 3.10/3.12. Torch is exactly `2.11.0+cpu` in base/host, absent from auxiliary locks, and `tt-transformers` is excluded. Both base locks prove hashed PyYAML 6.0.3.
 - Clean `twine==7.0.0` with `readme-renderer==46.0` passes `twine check --strict` for both final artifacts with exit zero.
-- Static-quality debt is measured rather than called green: 2,158 Ruff findings, 166 files needing Ruff format, 502 mypy errors across 99 package files, and a bounded Black timeout.
+- Static-quality debt is measured rather than called green: 2,158 Ruff findings (629 fixable), 165 files needing Ruff format with 206 already formatted, 489 mypy errors across 99 package files, and a bounded Black timeout.
 - Final-SHA device execution covers 34 of 42 matrix nodes: all 23 executed module nodes, all 3 smoke nodes, and all 7 end-to-end nodes pass; the single executed runtime node fails functionally.
 - Passing coverage spans Wormhole N150, N300, and T3K plus a physical four-board P150_X4 Blackhole quietbox. Five model rows now have partial hardware evidence, without changing any experimental manifest.
 - All retained processes exited; no result is classified as a hardware-lifecycle failure and no hardware reset was performed.
@@ -66,7 +66,7 @@ This audit includes ingested evidence from remote Wormhole and Blackhole executi
 | Hardware CI is policy only | Marker selectors, reservation policy, host-scoped serialization, and manual final-SHA results exist, but no reservation-aware hardware workflow or observed scheduled result exists. | Hardware CI owner | Implement scheduled/release execution and ingest exact-SHA non-skipped evidence. |
 | Explicit cache overrides remain unversioned | Implicit defaults include the complete identity digest; compatibility `cache_dir` and `TT_CACHE_PATH` overrides preserve their established paths, report `identity_applied_to_path=false`, and warn. | Cache owner | Qualify explicit cold/warm caches and bind every override path to its exact preflight identity in evidence. |
 | Clean-machine release flow is incomplete | Isolated installation/import and final-SHA device output are proven, but no example is promoted and the complete flow has not run from an approved non-development release artifact through validation and cleanup. | Release qualification | Complete the plan's release artifact → checkpoint → qualified example → validated output → cleanup flow. |
-| No final release identity | The migration candidate is committed and pushed at `ba7abefba4484689c953ac53fe8810322db1d184`; device evidence and rebuilt artifacts are tied to its code. The package remains `0.1.0.dev0`; no approved release tag exists; support identities remain null. | Release owner | Choose an approved non-development version/tag, rebuild, and regenerate artifact and support identities against it. |
+| No final release identity | The migration candidate is committed and pushed at `b24eabe35c8f2c73f45493da40e5a6351eb0ec2d`; device evidence and rebuilt artifacts are tied to its code. The package remains `0.1.0.dev0`; no approved release tag exists; support identities remain null. | Release owner | Choose an approved non-development version/tag, rebuild, and regenerate artifact and support identities against it. |
 | Consumer cutover has not started | All 209 mapped downstream rows remain `not_cut_over`: 64 imports, 107 CI/test paths, 9 duplicated qualification assets, 12 vLLM registrations, 15 selector/error sites, and 2 missing plugin contracts. | Consumer migration owners | Follow the staged vLLM → tt-metal/tt-train/Emule → CI/qualification → selector → shim/removal sequence. |
 | Single-source and split-brain gates fail | vLLM registrations and tt-metal consumers still use `models.common`; no common released package version or source/destination hardware comparison exists. | Release and consumer owners | Pass registry/import-origin/version equality/zero-reference checks before disabling the in-tree implementation. |
 
@@ -83,7 +83,7 @@ This audit includes ingested evidence from remote Wormhole and Blackhole executi
 | 6 — docs/examples | partial | All twelve experimental contracts validate; five model rows have partial exact-SHA hardware evidence, but there are still zero qualified examples. | Complete each intended support contract before evidence-backed manifest promotion. |
 | 7 — packaging/release | partial | The development candidate is committed, pushed, and hardware-evidenced at one SHA; current artifacts, locks, installs, and Twine checks pass. A non-development tag, regenerated artifact/support identities, explicit-cache evidence, observed CI, and clean release flow remain. | Choose an approved release identity, rebuild from it, and run the complete clean-machine qualification flow. |
 | 8 — consumer cutover | blocked | The inventory and one-way design are ready, but every external row remains not cut over. | Add downstream gates and migrate consumers in documented order. |
-| 9 — post-extraction cleanup | partial/deferred | A precise failing static-quality baseline exists, but cleanup is correctly deferred until hardware parity: Ruff 2,158, Ruff format 166, mypy 502/99, and bounded Black timeout. | After parity, reduce reviewed categories incrementally and make them zero-regression gates. |
+| 9 — post-extraction cleanup | partial/deferred | A precise failing static-quality baseline exists, but cleanup is correctly deferred until hardware parity: Ruff 2,158, Ruff format 165, mypy 489/99, and bounded Black timeout. | After parity, reduce reviewed categories incrementally and make them zero-regression gates. |
 
 ## Twelve-model readiness
 

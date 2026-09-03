@@ -32,11 +32,11 @@ Published artifact directory: `dist/`
 
 | Artifact | Size | Archive entries | SHA-256 |
 |---|---:|---:|---|
-| `tt_transformers-0.1.0.dev0-py3-none-any.whl` | 596,738 bytes | 138 files | `18adf91d873ec27501909ab4fc26f1efb6058b9d4a1cd6c3e120f27e1285813c` |
-| `tt_transformers-0.1.0.dev0.tar.gz` | 497,470 bytes | 143 files / 171 total members | `e26ca18f49d54caeff87f430e4ade3ef7bca8b5f1b0984b46082a80d8d74965f` |
+| `tt_transformers-0.1.0.dev0-py3-none-any.whl` | 597,486 bytes | 138 files | `012b58b9c8b773eb4a2a4a2d247d752572652ede81944ac91608aaa3b6e4ff1b` |
+| `tt_transformers-0.1.0.dev0.tar.gz` | 498,224 bytes | 143 files / 171 total members | `abd1bcc097596c5d992750c3ef10a668799f3342390f8179f1c39ec39344693b` |
 
 These payloads were rebuilt from frozen hardware-candidate code SHA
-`ba7abefba4484689c953ac53fe8810322db1d184`. Later evidence/report commits do
+`b24eabe35c8f2c73f45493da40e5a6351eb0ec2d`. Later evidence/report commits do
 not alter the audited `src/tt_transformers` payload.
 
 Machine-readable evidence:
@@ -58,7 +58,7 @@ Final source identity:
 ```text
 algorithm: sha256(path + NUL + content + NUL, sorted by path)
 python files: 132
-sha256: be03de1c59c0b86afcbd45ac7a444a33b67ba33a4e469ccb2ab9607e0eb4ddf1
+sha256: 11f65588f13055117316d808fece794759929196e82031f24a6add1b0a51149f
 pyproject sha256: cc6442ca297411f6faffd72e90bab4a05fdc8af5f558f2d5d423684bec63f98c
 ```
 

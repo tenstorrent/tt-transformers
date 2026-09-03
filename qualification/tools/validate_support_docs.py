@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import re
 import sys
+from collections import Counter
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
@@ -27,8 +29,15 @@ MODELS = (
     "qwen3_32b",
 )
 PINNED_SHA = "00748e6ac7b65f50e5c2af07f6e7c1c535c7f4c0"
-FINAL_HARDWARE_SHA = "ba7abefba4484689c953ac53fe8810322db1d184"
+FINAL_HARDWARE_SHA = "b24eabe35c8f2c73f45493da40e5a6351eb0ec2d"
 FINAL_HARDWARE_INDEX = ROOT / "qualification/evidence/hardware" / FINAL_HARDWARE_SHA / "index.json"
+HISTORICAL_HARDWARE_SHA = "ba7abefba4484689c953ac53fe8810322db1d184"
+HISTORICAL_HARDWARE_INDEX = ROOT / "qualification/evidence/hardware" / HISTORICAL_HARDWARE_SHA / "index.json"
+HARDWARE_MATRIX = ROOT / "qualification/manifests/hardware-matrix.json"
+HARDWARE_EVIDENCE_CSV = ROOT / "qualification/analysis/support/hardware_evidence.csv"
+RELAXED_W6_DIAGNOSTIC_SHA = "d7677f822356e839f707a6447fd0abc89e620d56"
+EXPECTED_DEFERRED_PRIORITIES = {*range(24, 31), 38}
+EXPECTED_TEARDOWN = "process_exited; fixture teardown not independently hardware-verified"
 REQUIRED_HEADINGS = (
     "### Purpose",
     "### Status and checkpoint",
@@ -43,6 +52,138 @@ REQUIRED_HEADINGS = (
 )
 
 
+def _validate_hardware_authorities(errors: list[str]) -> None:
+    if not FINAL_HARDWARE_INDEX.is_file():
+        errors.append(f"centralized final-SHA hardware index is missing: {FINAL_HARDWARE_INDEX}")
+        return
+    if not HARDWARE_MATRIX.is_file():
+        errors.append(f"hardware matrix is missing: {HARDWARE_MATRIX}")
+        return
+
+    hardware_index = json.loads(FINAL_HARDWARE_INDEX.read_text())
+    matrix = json.loads(HARDWARE_MATRIX.read_text())
+    records = hardware_index.get("records", [])
+    matrix_nodes = matrix.get("nodes", [])
+    if hardware_index.get("candidate_sha") != FINAL_HARDWARE_SHA:
+        errors.append(f"centralized hardware candidate SHA drifted: {hardware_index.get('candidate_sha')}")
+    if len(records) != 34 or len({record.get("node") for record in records}) != 34:
+        errors.append(f"centralized hardware record count/identity drifted: {len(records)}")
+    if any(record.get("full_sha") != FINAL_HARDWARE_SHA for record in records):
+        errors.append("centralized hardware bundle contains a mixed-SHA record")
+
+    outcomes = Counter(record.get("outcome") for record in records)
+    expected_outcomes = Counter({"passed": 33, "functional_failure": 1})
+    if outcomes != expected_outcomes:
+        errors.append(f"centralized hardware outcome count drifted: {dict(outcomes)}")
+    stage_outcomes = Counter((record.get("stage"), record.get("outcome")) for record in records)
+    expected_stage_outcomes = Counter(
+        {
+            ("module", "passed"): 23,
+            ("smoke", "passed"): 3,
+            ("e2e", "passed"): 7,
+            ("runtime", "functional_failure"): 1,
+        }
+    )
+    if stage_outcomes != expected_stage_outcomes:
+        errors.append(f"centralized hardware stage outcomes drifted: {dict(stage_outcomes)}")
+    mesh_outcomes = Counter((record.get("mesh_device"), record.get("outcome")) for record in records)
+    expected_mesh_outcomes = Counter(
+        {
+            ("N150", "passed"): 9,
+            ("N300", "passed"): 6,
+            ("T3K", "passed"): 7,
+            ("T3K", "functional_failure"): 1,
+            ("P150x4", "passed"): 11,
+        }
+    )
+    if mesh_outcomes != expected_mesh_outcomes:
+        errors.append(f"centralized hardware mesh outcomes drifted: {dict(mesh_outcomes)}")
+
+    blockers = [record for record in records if record.get("outcome") != "passed"]
+    if (
+        len(blockers) != 1
+        or blockers[0].get("node") != "wh-t3k-runtime-trace-order"
+        or blockers[0].get("outcome") != "functional_failure"
+    ):
+        errors.append(f"centralized hardware blocker drifted: {blockers}")
+    elif blockers:
+        raw_path = FINAL_HARDWARE_INDEX.parent / blockers[0]["source"]["evidence_json"]["path"]
+        if not raw_path.is_file():
+            errors.append(f"strict W6 evidence is missing: {raw_path}")
+        else:
+            raw = json.loads(raw_path.read_text())
+            expected_selector = {
+                "target": (
+                    "tests/models/llama33_70b/test_t3k_batched_prefill_correctness.py::"
+                    "test_w6_active15_padded16_trace_correctness"
+                )
+            }
+            if raw.get("selector") != expected_selector:
+                errors.append(f"canonical W6 selector is not the official strict node: {raw.get('selector')}")
+            if raw.get("failure_classification") != "functional_failure" or raw.get("exit_code") != 1:
+                errors.append("canonical W6 result is not the recorded strict functional failure")
+
+    for record in records:
+        if record.get("reset") != {
+            "automatic": False,
+            "performed": False,
+            "reason": "runner never resets hardware",
+        }:
+            errors.append(f"hardware reset record drifted: {record.get('node')}")
+        if record.get("teardown_status") != EXPECTED_TEARDOWN:
+            errors.append(f"hardware teardown record drifted: {record.get('node')}")
+        for artifact in ("evidence_json", "stdout_log"):
+            path = FINAL_HARDWARE_INDEX.parent / record["source"][artifact]["path"]
+            if not path.is_file():
+                errors.append(f"hardware evidence artifact is missing: {path}")
+
+    executed = {record.get("node") for record in records}
+    deferred = [node for node in matrix_nodes if node.get("id") not in executed]
+    if {node.get("priority") for node in deferred} != EXPECTED_DEFERRED_PRIORITIES:
+        errors.append(f"deferred hardware priorities drifted: {[node.get('priority') for node in deferred]}")
+    for node in deferred:
+        if node.get("mesh_device") != "P150" or node.get("machine_pool") != ["bh-lb-11"]:
+            errors.append(f"deferred hardware provenance drifted: {node.get('id')}")
+
+    summary = hardware_index.get("summary", {})
+    if summary.get("total") != 34 or summary.get("outcomes") != {
+        "functional_failure": 1,
+        "hardware_lifecycle_failure": 0,
+        "missing_acceptance_data": 0,
+        "passed": 33,
+        "pre_device_failure": 0,
+    }:
+        errors.append(f"canonical hardware summary drifted: {summary.get('outcomes')}")
+
+    if not HISTORICAL_HARDWARE_INDEX.is_file():
+        errors.append(f"historical ba7 hardware index is missing: {HISTORICAL_HARDWARE_INDEX}")
+    else:
+        historical = json.loads(HISTORICAL_HARDWARE_INDEX.read_text())
+        if (
+            historical.get("candidate_sha") != HISTORICAL_HARDWARE_SHA
+            or historical.get("summary", {}).get("total") != 34
+        ):
+            errors.append("historical ba7 hardware evidence drifted")
+
+    if not HARDWARE_EVIDENCE_CSV.is_file():
+        errors.append(f"hardware evidence CSV is missing: {HARDWARE_EVIDENCE_CSV}")
+        return
+    with HARDWARE_EVIDENCE_CSV.open(newline="", encoding="utf-8") as handle:
+        ledger = list(csv.DictReader(handle))
+    current = [row for row in ledger if row["evidence_sha"] == FINAL_HARDWARE_SHA]
+    current_executed = [row for row in current if row["eligible_for_pinned_baseline"] == "true"]
+    current_deferred = [row for row in current if row["result"] == "deferred_not_run"]
+    if len(current_executed) != 34 or {row["scope"] for row in current_executed} != executed:
+        errors.append("hardware evidence CSV does not contain the 34 current execution records")
+    if len(current_deferred) != 8 or any(row["eligible_for_pinned_baseline"] != "false" for row in current_deferred):
+        errors.append("hardware evidence CSV does not contain eight ineligible current deferrals")
+    historical_rows = [row for row in ledger if row["evidence_sha"] == HISTORICAL_HARDWARE_SHA]
+    if len(historical_rows) != 42 or any(row["eligible_for_pinned_baseline"] != "false" for row in historical_rows):
+        errors.append("hardware evidence CSV does not preserve ba7 as 42 ineligible historical rows")
+    if any(row["evidence_sha"] == RELAXED_W6_DIAGNOSTIC_SHA for row in ledger):
+        errors.append("non-qualifying relaxed W6 diagnostic must not enter the hardware evidence CSV")
+
+
 def validate() -> list[str]:
     errors: list[str] = []
     schema_path = ROOT / "qualification/schemas/support-manifest.schema.json"
@@ -54,22 +195,7 @@ def validate() -> list[str]:
         return errors
     validator = Draft202012Validator(schema)
 
-    if not FINAL_HARDWARE_INDEX.exists():
-        errors.append(f"centralized final-SHA hardware index is missing: {FINAL_HARDWARE_INDEX}")
-    else:
-        hardware_index = json.loads(FINAL_HARDWARE_INDEX.read_text())
-        records = hardware_index.get("records", [])
-        passed = [record for record in records if record.get("outcome") == "passed"]
-        failures = [record for record in records if record.get("outcome") != "passed"]
-        if hardware_index.get("candidate_sha") != FINAL_HARDWARE_SHA:
-            errors.append(f"centralized hardware candidate SHA drifted: {hardware_index.get('candidate_sha')}")
-        if len(passed) != 33 or len(failures) != 1:
-            errors.append(f"centralized hardware outcome count drifted: passed={len(passed)} nonpassed={len(failures)}")
-        elif (
-            failures[0].get("node") != "wh-t3k-runtime-trace-order"
-            or failures[0].get("outcome") != "functional_failure"
-        ):
-            errors.append(f"centralized hardware blocker drifted: {failures[0]}")
+    _validate_hardware_authorities(errors)
 
     manifests = {}
     paths = sorted((ROOT / "examples").glob("*/support.json"))
@@ -172,17 +298,57 @@ def validate() -> list[str]:
     example_matrix = (ROOT / "examples/README.md").read_text()
     for matrix_name, matrix in (("SUPPORT.md", root_matrix), ("examples/README.md", example_matrix)):
         for token in (
-            "Centralized final-SHA subset evidence",
+            "Current final-SHA subset evidence",
             FINAL_HARDWARE_SHA,
             "33 passing nodes and one functional failure",
-            "W6 trace-order correctness",
+            "official strict W6",
+            "23 executed module nodes",
+            "all three smoke nodes",
+            "all seven end-to-end/token-accuracy nodes",
             "P150_X4 evidence",
+            RELAXED_W6_DIAGNOSTIC_SHA,
+            "non-qualifying",
+            "excluded from the canonical pass count",
+            HISTORICAL_HARDWARE_SHA,
             "do not qualify any model or geometry"
             if matrix_name == "SUPPORT.md"
             else "not qualification of an example",
         ):
             if token not in matrix:
                 errors.append(f"{matrix_name}: missing centralized evidence token {token!r}")
+
+    authority_docs = {
+        "qualification/evidence/hardware/README.md": (
+            "Current candidate",
+            "Historical candidate",
+            FINAL_HARDWARE_SHA,
+            HISTORICAL_HARDWARE_SHA,
+            RELAXED_W6_DIAGNOSTIC_SHA,
+            "not a qualification pass",
+            "official strict",
+        ),
+        "qualification/reports/hardware-readiness.md": (
+            FINAL_HARDWARE_SHA,
+            HISTORICAL_HARDWARE_SHA,
+            RELAXED_W6_DIAGNOSTIC_SHA,
+            "33 passed",
+            "23/23",
+            "3/3",
+            "7/7",
+            "runtime gate is 0/1",
+            "Non-qualifying relaxed diagnostic",
+            "excluded from the canonical index and pass count",
+        ),
+    }
+    for relative_path, tokens in authority_docs.items():
+        path = ROOT / relative_path
+        if not path.is_file():
+            errors.append(f"hardware authority is missing: {relative_path}")
+            continue
+        text = path.read_text()
+        for token in tokens:
+            if token not in text:
+                errors.append(f"{relative_path}: missing final hardware token {token!r}")
     for model in MODELS:
         manifest = manifests.get(model)
         if not manifest:

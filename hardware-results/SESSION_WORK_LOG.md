@@ -603,3 +603,37 @@ checkout's tracked cleanliness during the mandatory synchronized hardware gate.
   6,791 deselected, 5 warnings, and 81 subtests per interpreter.
 - Started exact-`d7677f8...` WH and BH matrix reruns concurrently, with one TT
   process at a time on each physical host.
+
+## 2026-09-03T01:26:03Z — `b24eabe` accessible matrix complete
+
+- Superseding exact evidence SHA:
+  `b24eabe35c8f2c73f45493da40e5a6351eb0ec2d`; local and both remote tracked
+  checkouts were clean, upstream-aligned, and divergence `0/0` at the gate.
+- WH executed 23/23 eligible nodes: 22 pass and strict W6 as the sole
+  functional failure. WH mesh results are N150 9/9, N300 6/6, and T3K 7/8.
+- BH executed all 11 P150_X4 nodes: 11/11 pass. The seven modules, two
+  one-layer smokes, and two token-accuracy paths all passed.
+- Combined stages: modules 23/23, smokes 3/3, e2e 7/7, runtime 0/1. There
+  were zero lifecycle/pre-device/missing-acceptance results and zero resets.
+  Post-run inventories remained healthy and no test/device-owner process
+  remained.
+- Official W6 strict failure is unchanged at row-0 max-abs 1.5 > 1.0 and
+  top-5 overlap 3 < 4. The earlier relaxed one-order diagnostic is not part of
+  canonical evidence.
+- The eight P150-only nodes (priorities 24–30 and 38) remain deferred for the
+  unavailable `bh-lb-11`; no P150_X4 result was relabeled as P150 evidence.
+- Canonical local bundle contains exactly 34 JSON/log pairs plus generated
+  index under `qualification/evidence/hardware/b24eabe...`. Index SHA-256 is
+  `8bbf3e6340d4015753a24d5107ae4183f9de57c931ed6d4eb111af769e9c040c`;
+  matrix SHA-256 remains `e5e54f1a...`.
+
+## 2026-09-03T01:35:37Z — Final evidence publication validation
+
+- Hardware/support, TTNN/package, and release/static authorities now consume
+  the canonical `b24eabe...` index. All relevant validators pass and release
+  readiness remains 45 pass / 18 partial / 16 blocked.
+- Support-boundary manifest regenerated last: 386 files, zero mismatches, raw
+  evidence deliberately excluded. The 34 JSON/log pairs and index remain
+  separately SHA-256-bound by the hardware-evidence validator.
+- No model manifest was promoted; all twelve remain experimental with null
+  validation identity and empty evidence lists.
