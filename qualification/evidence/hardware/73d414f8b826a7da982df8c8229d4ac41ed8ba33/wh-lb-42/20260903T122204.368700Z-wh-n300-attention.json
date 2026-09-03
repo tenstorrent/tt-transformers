@@ -1,0 +1,72 @@
+{
+  "acceptance_types": [
+    "pcc_threshold",
+    "clean_teardown"
+  ],
+  "actual_fqdn": "wh-lb-42-special-gwang-for-reservation-173014",
+  "architecture": "wormhole",
+  "branch": "tttv2-standalone-migration",
+  "cache_paths": {
+    "TT_CACHE_PATH": "/localdev/gwang/tt_transformers/hardware-results/incoming/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42-20260903T1210Z/results/cache/wh-n300-attention"
+  },
+  "caller_machine_identity": "wh-lb-42.yyz2.tenstorrent.com",
+  "command": [
+    "/localdev/gwang/tt_transformers/.venv/bin/python",
+    "-m",
+    "pytest",
+    "-vv",
+    "--color=no",
+    "--timeout=1200",
+    "tests/modules/attention/test_attention_1d.py::test_attention_1d_vs_reference",
+    "-k",
+    "1x2"
+  ],
+  "environment": {
+    "MESH_DEVICE": "N300",
+    "TT_CACHE_PATH": "/localdev/gwang/tt_transformers/hardware-results/incoming/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42-20260903T1210Z/results/cache/wh-n300-attention"
+  },
+  "evidence_json_path": "/localdev/gwang/tt_transformers/hardware-results/incoming/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42-20260903T1210Z/results/20260903T122204.368700Z-wh-n300-attention.json",
+  "exit_code": 0,
+  "failure_classification": "passed",
+  "finished_utc": "2026-09-03T12:30:00.087663Z",
+  "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+  "mesh_device": "N300",
+  "metrics": [
+    "cachedir: .pytest_cache",
+    "2026-09-03 12:29:59.634 | info     |    BuildKernels | JIT cache stats: 2209/2209 hits (100.0%) [2209 cached, 954 build-once dedup, 0 merged artifacts, 0 merged genfiles] (build_cache_telemetry.cpp:207)",
+    "2026-09-03 12:29:59.634 | info     |    BuildKernels | JIT telemetry: 3 registered TelemetryTokens (build_cache_telemetry.cpp:230)"
+  ],
+  "node": "wh-n300-attention",
+  "physical_inventory": {
+    "architecture": "wormhole",
+    "board_types": [
+      "n300 L",
+      "n300 R"
+    ],
+    "captured_utc": "2026-09-03T12:10:55.802250Z",
+    "cluster_type": "T3K",
+    "device_count": 8,
+    "dram_status": "healthy on all 8 devices",
+    "driver": "TT-KMD 2.4.1",
+    "firmware_bundle": "18.12.1.0",
+    "machine_identity": "wh-lb-42.yyz2.tenstorrent.com",
+    "physical_sku": "T3K (four N300 left/right pairs)",
+    "source_command": "tt-smi -s",
+    "system_mesh": "1x8",
+    "tt_visible_devices": null
+  },
+  "reset": {
+    "automatic": false,
+    "performed": false,
+    "reason": "runner never resets hardware"
+  },
+  "schema_version": 1,
+  "selector": {
+    "keyword": "1x2",
+    "target": "tests/modules/attention/test_attention_1d.py::test_attention_1d_vs_reference"
+  },
+  "started_utc": "2026-09-03T12:22:04.368700Z",
+  "stdout_log_path": "/localdev/gwang/tt_transformers/hardware-results/incoming/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42-20260903T1210Z/results/20260903T122204.368700Z-wh-n300-attention.log",
+  "teardown_status": "process_exited; fixture teardown not independently hardware-verified",
+  "tt_visible_devices": null
+}

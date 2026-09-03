@@ -4,17 +4,26 @@ This directory stores immutable runner JSON/stdout pairs and their canonical
 indexes. Evidence is grouped by the exact code candidate it qualifies; later
 report-only commits do not rewrite the recorded candidate SHA.
 
-## Current candidate: `2883a949860d749adc2ed1af5525b27a9a547505`
+## Current candidate: `73d414f8b826a7da982df8c8229d4ac41ed8ba33`
 
-- 34 of 42 matrix nodes executed on reserved `wh-lb-42` and `bh-qb-05` hosts.
-- All 34 executed nodes passed: 23 modules, one runtime trace/order gate, three
-  smokes, and seven end-to-end/token-accuracy nodes.
+The canonical `index.json` SHA-256 is
+`4e98b62c34fb9f8744e00624c091dc9de18b3f32c5cd74f2ad2be1ad26274d7a`.
+
+- All 42 matrix nodes executed on reserved `wh-lb-42` and `bh-qb-05` hosts and
+  passed: 30 modules, one runtime trace/order gate, three smokes, and eight
+  end-to-end/token-accuracy nodes.
+- The host split was 23 Wormhole records on `wh-lb-42` and 19 Blackhole
+  records on `bh-qb-05`. Mesh coverage was N150 9, N300 6, T3K 8, P150 8,
+  and P150x4 11.
 - The official strict `wh-t3k-runtime-trace-order` node passed all four W6
   capture/sampling orders at the unchanged default thresholds. The accuracy
   profile kept folded QKV/W2 prefill on `ttnn.linear`; no environment or
-  threshold override was used.
-- Eight single-P150 nodes were not run because their required `bh-lb-11`
-  physical host was unavailable; P150_X4 results are not substituted.
+  threshold override was used. Pytest reported four passes in 490.54 seconds.
+- Eight `MESH_DEVICE=P150` nodes passed as logical 1x1 executions on the
+  physical P150_X4 `bh-qb-05` quietbox. `MESH_DEVICE=P150` was the only
+  topology-selection variable and `TT_VISIBLE_DEVICES` was unset, leaving
+  board selection to TTNN. These records are not standalone-P150 product
+  evidence or full-host P150_X4 evidence.
 - No functional, hardware-lifecycle, pre-device, or missing-acceptance result
   and no reset occurred.
 
@@ -27,9 +36,9 @@ Validate the current bundle from the repository root:
 
 ```bash
 python -B qualification/tools/validate_hardware_evidence.py \
-  --candidate-sha 2883a949860d749adc2ed1af5525b27a9a547505 \
-  --evidence-root qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505 \
-  --output qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json
+  --candidate-sha 73d414f8b826a7da982df8c8229d4ac41ed8ba33 \
+  --evidence-root qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33 \
+  --output qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/index.json
 ```
 
 ### Noncanonical accuracy-TTFT diagnostic
@@ -40,8 +49,22 @@ records four Llama-3.3-70B accuracy-profile performance cells on `wh-lb-42`.
 TTFT passed 4/4 at 86.7–87.2 ms against the tolerance-adjusted 105 ms ceiling;
 throughput failed its performance floor in all 4/4 cells. These pytest exits
 are `performance_floor_failure` diagnostics, not correctness or lifecycle
-failures. The summary is noncanonical, is excluded from the 34 hardware pass
-count, and does not alter the canonical index.
+failures. This diagnostic remains bound only to candidate `2883a949...`; it is
+noncanonical, is excluded from the current 42 hardware pass count, and does
+not alter the current canonical index.
+
+## Superseded candidate: `2883a949860d749adc2ed1af5525b27a9a547505`
+
+- 34 of 42 matrix nodes executed on reserved `wh-lb-42` and `bh-qb-05` hosts.
+- All 34 executed nodes passed: 23 modules, one runtime trace/order gate, three
+  smokes, and seven end-to-end/token-accuracy nodes.
+- Eight single-P150 nodes were deferred under the matrix policy then in force.
+- No functional, hardware-lifecycle, pre-device, or missing-acceptance result
+  and no reset occurred.
+
+Its immutable raw pairs and index remain under the candidate-named directory;
+all ledger rows are now ineligible superseded history. Its separate throughput
+diagnostics remain attributable only to this exact SHA.
 
 ## Superseded candidate: `b24eabe35c8f2c73f45493da40e5a6351eb0ec2d`
 

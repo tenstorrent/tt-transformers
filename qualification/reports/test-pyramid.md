@@ -8,9 +8,9 @@ Authority inputs are the pinned Phase 0 `marker_inventory.csv` (23 tokens),
 input counts before grading the expanded standalone tree.
 
 This report defines selection policy; it is not hardware evidence. The static
-taxonomy audit currently covers 1,462 source-level test functions:
+taxonomy audit currently covers 1,465 source-level test functions:
 
-- 1,208 explicitly `host`;
+- 1,211 explicitly `host`;
 - 254 explicitly `device`;
 - 393 concrete `model` surfaces;
 - 27 explicitly `slow` source definitions;
@@ -125,7 +125,7 @@ one-process nodes:
 - eight end-to-end/token-accuracy nodes;
 - 23 Wormhole and 19 Blackhole nodes across N150, N300, T3K, P150, and P150x4.
 
-The runner is host-validated by ten test definitions in
+The runner is host-validated by 17 test definitions in
 `tests/host/test_hardware_matrix_runner.py`. It validates and lists the matrix,
 supports a no-device dry run, requires external synchronization and physical
 inventory attestation before execution, owns a single-process lock, rejects
@@ -150,16 +150,19 @@ The exact execution and physical-inventory contract is documented in
 `qualification/reports/hardware-readiness.md`. Matrix presence and dry-run
 success alone are readiness evidence only, never a device-support claim.
 Separate SHA-bound evidence at final candidate
-`2883a949860d749adc2ed1af5525b27a9a547505` records 34 executed nodes and all
-34 pass, including the strict W6 runtime trace/order node. Eight single-P150
-nodes remain different-hardware deferred. The canonical index is
-`qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json`
-(SHA-256 `ec9a540a8f31762078b592909e02cdb03e99384f9ddf8f955966fa41e42af07b`).
+`73d414f8b826a7da982df8c8229d4ac41ed8ba33` records all 42 matrix nodes and
+all 42 pass, including the strict W6 runtime trace/order node. The eight
+`MESH_DEVICE=P150` records are logical 1x1 executions on `bh-qb-05`'s physical
+P150_X4 2x2 quietbox, with TTNN selecting the board and no visibility mask;
+they are not full-host P150_X4 evidence. The canonical index is
+`qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/index.json`
+(SHA-256 `4e98b62c34fb9f8744e00624c091dc9de18b3f32c5cd74f2ad2be1ad26274d7a`).
 
-An explicitly noncanonical four-cell T3K accuracy/TTFT diagnostic at that SHA
-passes the TTFT ceiling in all four cells but misses the adjusted throughput
-floor in all four. It is performance-triage evidence, not part of the 34-node
-canonical result, and is retained at
+An explicitly noncanonical four-cell T3K accuracy/TTFT diagnostic at the older
+code SHA `2883a949860d749adc2ed1af5525b27a9a547505` passes the TTFT ceiling in
+all four cells but misses the adjusted throughput floor in all four. It was not
+rerun at the hardware candidate SHA. It is performance-triage evidence, not
+part of the 42-node canonical result, and is retained at
 `qualification/evidence/diagnostics/2883a949860d749adc2ed1af5525b27a9a547505/accuracy-ttft/summary.json`.
 
 ## Evidence rule

@@ -35,9 +35,13 @@ Published artifact directory: `dist/`
 | `tt_transformers-0.1.0.dev0-py3-none-any.whl` | 597,778 bytes | 138 files | `8c55fac0a764fb9ae4d6ca514062ef2cb6cfe3097306a2f877bcad41269c50c2` |
 | `tt_transformers-0.1.0.dev0.tar.gz` | 498,499 bytes | 143 files / 171 total members | `f161e13dedc5ce076d9553b677f0a1a4785996f932316f2325de9217376da644` |
 
-These payloads were rebuilt from frozen hardware-candidate code SHA
-`2883a949860d749adc2ed1af5525b27a9a547505`. Later evidence/report commits do
-not alter the audited `src/tt_transformers` payload.
+These payloads were rebuilt from code SHA
+`2883a949860d749adc2ed1af5525b27a9a547505`. Final hardware candidate
+`73d414f8b826a7da982df8c8229d4ac41ed8ba33` has the identical
+`src/tt_transformers` tree and `pyproject.toml`, so the same audited bytes,
+source digest, and artifact hashes bind to that candidate. The intervening
+hardware-matrix, runner-test, evidence, and report changes do not alter the
+package payload or metadata.
 
 Machine-readable evidence:
 

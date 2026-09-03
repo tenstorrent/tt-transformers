@@ -2,7 +2,7 @@
 
 Status: substantive production failure fixed; final full-host suite passes.
 
-Final candidate SHA: `2883a949860d749adc2ed1af5525b27a9a547505`
+Final candidate SHA: `73d414f8b826a7da982df8c8229d4ac41ed8ba33`
 
 Environment:
 
@@ -148,9 +148,9 @@ added the hardware-runner host policies, exact full runs passed on both
 supported interpreters:
 
 ```text
-CPython 3.10.19: 2165 passed, 28 skipped, 6791 deselected,
+CPython 3.10.19: 2170 passed, 28 skipped, 6791 deselected,
                  5 warnings, 81 subtests passed, exit 0
-CPython 3.12.13: 2165 passed, 28 skipped, 6791 deselected,
+CPython 3.12.13: 2170 passed, 28 skipped, 6791 deselected,
                  5 warnings, 81 subtests passed, exit 0
 ```
 
@@ -160,11 +160,11 @@ cases. The five warnings are existing pytest empty-regex warnings in runtime
 configuration tests, not TTNN semantic failures.
 
 The 3.12 process emitted shutdown-only nanobind diagnostics after pytest's
-successful result: 8 leaked instances, 36 leaked types, and 330 leaked
+successful result: 10 leaked instances, 36 leaked types, and 330 leaked
 functions, ending with a likely binding reference-counting issue. This is
 recorded as TTNN binding-lifecycle feedback, not hidden and not counted as a
 pytest failure. Full evidence: `host-ttnn-0.77.md` and retained output
-`/tmp/gwang/tttv2-py312-host-final.log`.
+`/tmp/gwang/tttv2-73d-py312-host-final.log`.
 
 No runtime or concrete-model production adaptation was required. The three
 model-profile candidates were confirmed as obsolete path/namespace

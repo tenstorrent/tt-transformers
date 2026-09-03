@@ -1152,3 +1152,120 @@ This log records milestones and evidence for the standalone migration defined in
   ran at its SHA. Because the matrix and full commit identity change, the next
   canonical publication requires a fresh exact-SHA run of all 42 nodes, with
   WH and BH hosts concurrent but each physical host strictly serial.
+
+## 2026-09-03T12:16:23Z — Exact-SHA 42-node qualification started
+
+- Committed and pushed corrected candidate
+  `73d414f8b826a7da982df8c8229d4ac41ed8ba33`. Local, WH, and BH
+  `tt_transformers` checkouts passed the clean branch/SHA/upstream `0/0` gate.
+  Both remote non-editable installs match all 132 source Python files.
+- Fresh inventories are healthy: WH exposes eight devices/four N300 pairs; BH
+  exposes four P150B boards as P150_X4 with a 2x2 system mesh. The supporting
+  custom TTNN source/install on each host is demonstrably unchanged from the
+  accepted `2883a94...` run; it remains distinct from the isolated published
+  TTNN 0.77 wheel qualification.
+- WH priorities 1–8 passed 8/8 at exact SHA with serialized process exits,
+  zero lifecycle faults, and zero resets. BH exact selector collection/dry-run
+  preflight is still in progress before its 19-node serial sweep.
+- Host-side matrix and focused evidence tests pass 49/49 on both Pythons.
+  After replacing stale installed wheels, every non-authority host test passes;
+  the sole remaining expected failure is the support-doc validator that still
+  describes the former eight-node deferral and will be updated only after the
+  new hardware evidence exists.
+
+## 2026-09-03T12:26:04Z — Quietbox single-P150 module gate proven
+
+- BH completed all seven logical single-P150 module priorities 24–30: **7/7
+  passed** on the physical P150_X4 `bh-qb-05` quietbox. Every process used
+  `MESH_DEVICE=P150` with `TT_VISIBLE_DEVICES` absent; no BDF selector or
+  relabeling was used.
+- The first three full-host P150x4 nodes, priorities 31–33, also passed and
+  priority 34 is active. Priority 24's teardown transcript explicitly records
+  device/cluster/destructor closure; there are no non-pass classifications,
+  lifecycle faults, or resets.
+- WH priorities 1–11 pass. Priority 12, the longer N300 attention node, is
+  active within its prior accepted runtime window. Both hosts remain strictly
+  serialized independently.
+
+## 2026-09-03T12:32:42Z — Complete single-P150 lane green
+
+- Priority 38, the Llama 3.1 8B performance token-accuracy node, passed at
+  exact candidate `73d414f...`. Together with priorities 24–30, the corrected
+  single-P150 lane is now **8/8 passed** on `bh-qb-05` using only
+  `MESH_DEVICE=P150` with `TT_VISIBLE_DEVICES` unset.
+- The established model cache resolves exactly to
+  `model_cache/llama3_8b/P150`; no duplicated `P150/P150` topology directory
+  exists. This is logical 1x1 execution on the physical P150_X4 quietbox, not
+  a standalone-product hardware claim.
+- All 14 BH module nodes also pass. BH has moved to priority 39, the first
+  P150x4 model smoke. WH has completed N150 8/8 and N300 4/4 and is executing
+  T3K priorities 13–16. No failure, lifecycle event, or reset has occurred.
+
+## 2026-09-03T12:49:18Z — Full module matrix green
+
+- All 30 reusable-module nodes now pass at exact candidate SHA: WH modules are
+  16/16 and BH modules are 14/14, including all seven corrected P150 1x1
+  selectors and all seven P150x4 selectors.
+- Both long module tails matched their prior accepted timing. WH T3K attention
+  passed in about 10m03s versus about 9m56s previously. BH Llama 3.3 P150x4
+  one-layer smoke also passed within its configured limit.
+- Confirmed aggregate is 33/33 completed nodes passed. WH is executing strict
+  W6 runtime priority 17; BH is executing Qwen3 token-accuracy priority 41,
+  with only priorities 41–42 remaining there. Zero lifecycle faults/resets.
+
+## 2026-09-03T14:13:57Z — Exact-SHA hardware matrix complete at 42/42
+
+- Candidate `73d414f8b826a7da982df8c8229d4ac41ed8ba33` completed the
+  entire matrix: **42/42 nodes passed**. Stages are modules 30/30, runtime 1/1,
+  smoke 3/3, and e2e 8/8. Mesh totals are N150 9/9, N300 6/6, T3K 8/8,
+  P150 8/8, and P150x4 11/11.
+- WH passed 23/23 and BH passed 19/19 while remaining independently serialized.
+  All eight P150 nodes used only `MESH_DEVICE=P150` with
+  `TT_VISIBLE_DEVICES` unset on the physical P150_X4 quietbox.
+- Strict W6 passed all four cases at default acceptance in 490.54s of pytest
+  time. This is about 42% slower than the prior accepted runner observation but
+  is not a functional or configured performance-floor failure.
+- Both hosts completed healthy with no active pytest/runner owner. WH reports
+  8/8 healthy DRAM, zero faults/throttling; BH reports four healthy P150B boards
+  and zero corrected/uncorrected GDDR errors. Across the complete matrix there
+  were zero functional, lifecycle, pre-device, or missing-acceptance outcomes
+  and zero resets.
+- Both independently transferred evidence bundles validate. Publication now
+  requires merging exactly 42 JSON/log pairs into one canonical SHA-bound
+  index, superseding rather than rewriting the `2883a94...` evidence history.
+
+## 2026-09-03T14:16:00Z — Canonical 42-record evidence index validated
+
+- Merged exactly 23 WH and 19 BH JSON/log pairs under
+  `qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33`.
+  No preflight, postflight, dry-run, or duplicate artifact entered the bundle.
+- The canonical validator accepts all 42 unique records at exact SHA and the
+  embedded matrix digest is
+  `1d04716dd79cf3c5ab6a7a2ac251224fe326ad64ef19fa440c06187118b9d7de`.
+  Generated index SHA-256 is
+  `4e98b62c34fb9f8744e00624c091dc9de18b3f32c5cd74f2ad2be1ad26274d7a`.
+- Index summaries prove 42 passes, stages 30/1/3/8, architectures WH 23/BH 19,
+  meshes N150 9, N300 6, T3K 8, P150 8, and P150x4 11, with every failure
+  class zero. Authority/report publication is now in progress.
+
+## 2026-09-03T14:35:43Z — Hardware and release authorities converge
+
+- Support/hardware, TTNN/package, and release authorities now consume the
+  `73d414f...` 42-record index while retaining `2883a94...`, `b24eabe...`, and
+  `ba7abef...` as ineligible history. The earlier four-cell throughput
+  diagnostic remains bound only to `2883a94...` and was not presented as a
+  current-candidate rerun.
+- Final non-editable-wheel host suites pass on both CPython 3.10.19 and 3.12.13:
+  **2,170 passed, 28 skipped, 6,791 deselected, 5 warnings, and 81 subtests**
+  each. Taxonomy is 1,465 functions = 1,211 host + 254 device, including 393
+  model surfaces, with zero audit errors.
+- The CPython 3.12 shutdown-only TTNN/nanobind diagnostic reproduced twice
+  after pytest success at 10 leaked instances, 36 types, and 330 functions.
+  It remains explicit non-failing binding feedback; retained final output is
+  `/tmp/gwang/tttv2-73d-py312-host-final.log` with SHA-256
+  `6bc8b6f17783c9cdb98009cb726d2b9663f1d25e416113fe36df2fac3e91e258`.
+- Hardware evidence, matrix, taxonomy, support docs, deterministic TTNN
+  compatibility, and release-readiness validators pass on both supported
+  Python environments. Readiness is **45 pass / 19 partial / 15 blocked**;
+  Llama 3.1 8B moves from blocked to partial evidence, while all twelve
+  manifests remain experimental and unpromoted.

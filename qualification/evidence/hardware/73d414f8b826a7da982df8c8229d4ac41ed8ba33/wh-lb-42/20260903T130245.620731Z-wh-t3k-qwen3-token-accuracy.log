@@ -1,0 +1,22 @@
+============================= test session starts ==============================
+platform linux -- Python 3.10.12, pytest-9.0.3, pluggy-1.6.0 -- /localdev/gwang/tt_transformers/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /localdev/gwang/tt_transformers
+configfile: pyproject.toml
+plugins: cov-7.0.0, timeout-2.4.0, anyio-4.14.2
+timeout: 5400.0s
+timeout method: signal
+timeout func_only: False
+collecting ... collected 22 items / 20 deselected / 2 selected
+
+tests/hardware/models/qwen3_32b/test_demo.py::test_qwen3_32b[performance-token-accuracy-T3K] PASSED [ 50%]
+tests/hardware/models/qwen3_32b/test_demo.py::test_qwen3_32b[accuracy-token-accuracy-T3K] PASSED [100%]
+
+================= 2 passed, 20 deselected in 431.80s (0:07:11) =================
+2026-09-03 13:10:05.814 | info     |    BuildKernels | JIT cache stats: 521/521 hits (100.0%) [521 cached, 272 build-once dedup, 0 merged artifacts, 0 merged genfiles] (build_cache_telemetry.cpp:207)
+2026-09-03 13:10:05.814 | info     |    BuildKernels | JIT telemetry: 3 registered TelemetryTokens (build_cache_telemetry.cpp:230)
+2026-09-03 13:10:05.837 | info     |          Device | Closing user mode device drivers (tt_cluster.cpp:513)
+2026-09-03 13:10:05.838 | info     |             UMD | Closing devices in cluster (cluster.cpp:1201)
+2026-09-03 13:10:05.875 | info     |             UMD | Closing devices in cluster completed. (cluster.cpp:1210)
+2026-09-03 13:10:05.875 | info     |             UMD | Cluster destructor started. (cluster.cpp:916)
+2026-09-03 13:10:05.875 | info     |             UMD | Cluster destructor completed. (cluster.cpp:919)

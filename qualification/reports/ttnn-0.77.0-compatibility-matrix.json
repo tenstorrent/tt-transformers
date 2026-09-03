@@ -136,7 +136,7 @@
       "path": "qualification/reports/test-pyramid.md"
     },
     {
-      "path": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json"
+      "path": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/index.json"
     },
     {
       "path": "qualification/manifests/hardware-matrix.json"
@@ -206,122 +206,31 @@
         "passed": 23
       },
       {
-        "deferred": 8,
-        "executed": 11,
+        "deferred": 0,
+        "executed": 19,
         "functional_failure": 0,
         "hardware_lifecycle_failure": 0,
         "matrix_total": 19,
         "name": "blackhole",
-        "passed": 11
+        "passed": 19
       }
     ],
     "blocking_records": [],
     "branch": "tttv2-standalone-migration",
-    "candidate_sha": "2883a949860d749adc2ed1af5525b27a9a547505",
+    "candidate_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
     "canonical_index": {
-      "path": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json",
-      "record_count": 34,
-      "sha256": "ec9a540a8f31762078b592909e02cdb03e99384f9ddf8f955966fa41e42af07b"
+      "path": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/index.json",
+      "record_count": 42,
+      "sha256": "4e98b62c34fb9f8744e00624c091dc9de18b3f32c5cd74f2ad2be1ad26274d7a"
     },
     "deferred": {
-      "classification": "deferred_not_run",
-      "count": 8,
-      "nodes": [
-        {
-          "architecture": "blackhole",
-          "mesh_device": "P150",
-          "node": "bh-p150-rmsnorm-decode",
-          "priority": 24,
-          "required_host_role": "8-P150 development loudbox",
-          "required_machine_pool": [
-            "bh-lb-11"
-          ],
-          "stage": "module"
-        },
-        {
-          "architecture": "blackhole",
-          "mesh_device": "P150",
-          "node": "bh-p150-lm-head",
-          "priority": 25,
-          "required_host_role": "8-P150 development loudbox",
-          "required_machine_pool": [
-            "bh-lb-11"
-          ],
-          "stage": "module"
-        },
-        {
-          "architecture": "blackhole",
-          "mesh_device": "P150",
-          "node": "bh-p150-mlp-decode",
-          "priority": 26,
-          "required_host_role": "8-P150 development loudbox",
-          "required_machine_pool": [
-            "bh-lb-11"
-          ],
-          "stage": "module"
-        },
-        {
-          "architecture": "blackhole",
-          "mesh_device": "P150",
-          "node": "bh-p150-mlp-prefill",
-          "priority": 27,
-          "required_host_role": "8-P150 development loudbox",
-          "required_machine_pool": [
-            "bh-lb-11"
-          ],
-          "stage": "module"
-        },
-        {
-          "architecture": "blackhole",
-          "mesh_device": "P150",
-          "node": "bh-p150-attention-prefill",
-          "priority": 28,
-          "required_host_role": "8-P150 development loudbox",
-          "required_machine_pool": [
-            "bh-lb-11"
-          ],
-          "stage": "module"
-        },
-        {
-          "architecture": "blackhole",
-          "mesh_device": "P150",
-          "node": "bh-p150-attention-decode",
-          "priority": 29,
-          "required_host_role": "8-P150 development loudbox",
-          "required_machine_pool": [
-            "bh-lb-11"
-          ],
-          "stage": "module"
-        },
-        {
-          "architecture": "blackhole",
-          "mesh_device": "P150",
-          "node": "bh-p150-attention-paged-transition",
-          "priority": 30,
-          "required_host_role": "8-P150 development loudbox",
-          "required_machine_pool": [
-            "bh-lb-11"
-          ],
-          "stage": "module"
-        },
-        {
-          "architecture": "blackhole",
-          "mesh_device": "P150",
-          "node": "bh-p150-llama3-8b-token-accuracy",
-          "priority": 38,
-          "required_host_role": "8-P150 development loudbox",
-          "required_machine_pool": [
-            "bh-lb-11"
-          ],
-          "stage": "e2e"
-        }
-      ],
-      "reason": "required bh-lb-11 development loudbox was unavailable",
-      "substitution_refused": "bh-qb-05 P150_X4 quietbox does not satisfy single-P150 development-loudbox provenance"
+      "classification": "none",
+      "count": 0,
+      "nodes": []
     },
     "evidence": [
       {
-        "path": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json"
+        "path": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/index.json"
       },
       {
         "path": "qualification/manifests/hardware-matrix.json"
@@ -330,7 +239,7 @@
     "executed_records": [
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023401.813663Z-wh-n150-rmsnorm-prefill.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T121504.636856Z-wh-n150-rmsnorm-prefill.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N150",
         "metrics_count": 4,
@@ -339,12 +248,12 @@
         "priority": 1,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023401.813663Z-wh-n150-rmsnorm-prefill.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T121504.636856Z-wh-n150-rmsnorm-prefill.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023406.557742Z-wh-n150-rmsnorm-decode.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T121538.564054Z-wh-n150-rmsnorm-decode.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N150",
         "metrics_count": 4,
@@ -353,12 +262,12 @@
         "priority": 2,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023406.557742Z-wh-n150-rmsnorm-decode.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T121538.564054Z-wh-n150-rmsnorm-decode.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023411.028244Z-wh-n150-lm-head.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T121542.980755Z-wh-n150-lm-head.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N150",
         "metrics_count": 4,
@@ -367,12 +276,12 @@
         "priority": 3,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023411.028244Z-wh-n150-lm-head.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T121542.980755Z-wh-n150-lm-head.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023413.654989Z-wh-n150-mlp-prefill.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T121545.360534Z-wh-n150-mlp-prefill.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N150",
         "metrics_count": 4,
@@ -381,12 +290,12 @@
         "priority": 4,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023413.654989Z-wh-n150-mlp-prefill.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T121545.360534Z-wh-n150-mlp-prefill.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023418.922771Z-wh-n150-mlp-decode.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T121550.427025Z-wh-n150-mlp-decode.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N150",
         "metrics_count": 4,
@@ -395,12 +304,12 @@
         "priority": 5,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023418.922771Z-wh-n150-mlp-decode.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T121550.427025Z-wh-n150-mlp-decode.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023424.395573Z-wh-n150-attention-prefill.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T121555.934857Z-wh-n150-attention-prefill.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N150",
         "metrics_count": 4,
@@ -409,12 +318,12 @@
         "priority": 6,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023424.395573Z-wh-n150-attention-prefill.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T121555.934857Z-wh-n150-attention-prefill.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023430.117582Z-wh-n150-attention-decode.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T121601.715679Z-wh-n150-attention-decode.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N150",
         "metrics_count": 4,
@@ -423,12 +332,12 @@
         "priority": 7,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023430.117582Z-wh-n150-attention-decode.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T121601.715679Z-wh-n150-attention-decode.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023435.487532Z-wh-n150-attention-paged-transition.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T121606.891469Z-wh-n150-attention-paged-transition.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N150",
         "metrics_count": 4,
@@ -437,12 +346,12 @@
         "priority": 8,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023435.487532Z-wh-n150-attention-paged-transition.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T121606.891469Z-wh-n150-attention-paged-transition.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023441.018846Z-wh-n300-rmsnorm.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T121632.321212Z-wh-n300-rmsnorm.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N300",
         "metrics_count": 3,
@@ -451,12 +360,12 @@
         "priority": 9,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023441.018846Z-wh-n300-rmsnorm.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T121632.321212Z-wh-n300-rmsnorm.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023602.773598Z-wh-n300-lm-head.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T121754.847095Z-wh-n300-lm-head.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N300",
         "metrics_count": 3,
@@ -465,12 +374,12 @@
         "priority": 10,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023602.773598Z-wh-n300-lm-head.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T121754.847095Z-wh-n300-lm-head.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023816.856646Z-wh-n300-mlp.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T122007.683434Z-wh-n300-mlp.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N300",
         "metrics_count": 3,
@@ -479,12 +388,12 @@
         "priority": 11,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T023816.856646Z-wh-n300-mlp.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T122007.683434Z-wh-n300-mlp.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T024010.853055Z-wh-n300-attention.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T122204.368700Z-wh-n300-attention.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N300",
         "metrics_count": 3,
@@ -493,12 +402,12 @@
         "priority": 12,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T024010.853055Z-wh-n300-attention.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T122204.368700Z-wh-n300-attention.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T024804.366297Z-wh-t3k-rmsnorm.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T123017.141969Z-wh-t3k-rmsnorm.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "T3K",
         "metrics_count": 3,
@@ -507,12 +416,12 @@
         "priority": 13,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T024804.366297Z-wh-t3k-rmsnorm.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T123017.141969Z-wh-t3k-rmsnorm.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T024939.872592Z-wh-t3k-lm-head.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T123152.377754Z-wh-t3k-lm-head.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "T3K",
         "metrics_count": 3,
@@ -521,12 +430,12 @@
         "priority": 14,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T024939.872592Z-wh-t3k-lm-head.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T123152.377754Z-wh-t3k-lm-head.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T025304.716151Z-wh-t3k-mlp.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T123517.388362Z-wh-t3k-mlp.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "T3K",
         "metrics_count": 3,
@@ -535,12 +444,12 @@
         "priority": 15,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T025304.716151Z-wh-t3k-mlp.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T123517.388362Z-wh-t3k-mlp.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T025643.955155Z-wh-t3k-attention.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T123858.021163Z-wh-t3k-attention.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "T3K",
         "metrics_count": 3,
@@ -549,12 +458,12 @@
         "priority": 16,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T025643.955155Z-wh-t3k-attention.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T123858.021163Z-wh-t3k-attention.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T030639.828366Z-wh-t3k-runtime-trace-order.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T124923.309445Z-wh-t3k-runtime-trace-order.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "T3K",
         "metrics_count": 3,
@@ -563,12 +472,12 @@
         "priority": 17,
         "reset_performed": false,
         "stage": "runtime",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T030639.828366Z-wh-t3k-runtime-trace-order.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T124923.309445Z-wh-t3k-runtime-trace-order.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T031233.697885Z-wh-t3k-qwen25-coder-smoke.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T125745.327292Z-wh-t3k-qwen25-coder-smoke.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "T3K",
         "metrics_count": 3,
@@ -577,12 +486,12 @@
         "priority": 18,
         "reset_performed": false,
         "stage": "smoke",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T031233.697885Z-wh-t3k-qwen25-coder-smoke.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T125745.327292Z-wh-t3k-qwen25-coder-smoke.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T031308.896136Z-wh-n150-llama32-1b-token-accuracy.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T125848.248595Z-wh-n150-llama32-1b-token-accuracy.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N150",
         "metrics_count": 3,
@@ -591,12 +500,12 @@
         "priority": 19,
         "reset_performed": false,
         "stage": "e2e",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T031308.896136Z-wh-n150-llama32-1b-token-accuracy.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T125848.248595Z-wh-n150-llama32-1b-token-accuracy.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T031354.919124Z-wh-n300-llama32-1b-token-accuracy.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T125933.993835Z-wh-n300-llama32-1b-token-accuracy.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N300",
         "metrics_count": 3,
@@ -605,12 +514,12 @@
         "priority": 20,
         "reset_performed": false,
         "stage": "e2e",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T031354.919124Z-wh-n300-llama32-1b-token-accuracy.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T125933.993835Z-wh-n300-llama32-1b-token-accuracy.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T031449.844864Z-wh-n300-qwen25-7b-token-accuracy.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T130029.967833Z-wh-n300-qwen25-7b-token-accuracy.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "N300",
         "metrics_count": 3,
@@ -619,12 +528,12 @@
         "priority": 21,
         "reset_performed": false,
         "stage": "e2e",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T031449.844864Z-wh-n300-qwen25-7b-token-accuracy.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T130029.967833Z-wh-n300-qwen25-7b-token-accuracy.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T031646.711908Z-wh-t3k-qwen3-token-accuracy.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T130245.620731Z-wh-t3k-qwen3-token-accuracy.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "T3K",
         "metrics_count": 3,
@@ -633,12 +542,12 @@
         "priority": 22,
         "reset_performed": false,
         "stage": "e2e",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T031646.711908Z-wh-t3k-qwen3-token-accuracy.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T130245.620731Z-wh-t3k-qwen3-token-accuracy.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "wormhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T032407.555450Z-wh-t3k-llama33-token-accuracy.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T131006.556856Z-wh-t3k-llama33-token-accuracy.json",
         "machine_pool_entry": "wh-lb-42",
         "mesh_device": "T3K",
         "metrics_count": 3,
@@ -647,12 +556,110 @@
         "priority": 23,
         "reset_performed": false,
         "stage": "e2e",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/20260903T032407.555450Z-wh-t3k-llama33-token-accuracy.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/wh-lb-42/20260903T131006.556856Z-wh-t3k-llama33-token-accuracy.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "blackhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023112.388384Z-bh-p150x4-rmsnorm.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122322.272114Z-bh-p150-rmsnorm-decode.json",
+        "machine_pool_entry": "bh-qb-05",
+        "mesh_device": "P150",
+        "metrics_count": 4,
+        "node": "bh-p150-rmsnorm-decode",
+        "outcome": "passed",
+        "priority": 24,
+        "reset_performed": false,
+        "stage": "module",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122322.272114Z-bh-p150-rmsnorm-decode.log",
+        "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+      },
+      {
+        "architecture": "blackhole",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122409.384008Z-bh-p150-lm-head.json",
+        "machine_pool_entry": "bh-qb-05",
+        "mesh_device": "P150",
+        "metrics_count": 4,
+        "node": "bh-p150-lm-head",
+        "outcome": "passed",
+        "priority": 25,
+        "reset_performed": false,
+        "stage": "module",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122409.384008Z-bh-p150-lm-head.log",
+        "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+      },
+      {
+        "architecture": "blackhole",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122415.014919Z-bh-p150-mlp-decode.json",
+        "machine_pool_entry": "bh-qb-05",
+        "mesh_device": "P150",
+        "metrics_count": 4,
+        "node": "bh-p150-mlp-decode",
+        "outcome": "passed",
+        "priority": 26,
+        "reset_performed": false,
+        "stage": "module",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122415.014919Z-bh-p150-mlp-decode.log",
+        "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+      },
+      {
+        "architecture": "blackhole",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122425.225098Z-bh-p150-mlp-prefill.json",
+        "machine_pool_entry": "bh-qb-05",
+        "mesh_device": "P150",
+        "metrics_count": 4,
+        "node": "bh-p150-mlp-prefill",
+        "outcome": "passed",
+        "priority": 27,
+        "reset_performed": false,
+        "stage": "module",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122425.225098Z-bh-p150-mlp-prefill.log",
+        "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+      },
+      {
+        "architecture": "blackhole",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122435.331089Z-bh-p150-attention-prefill.json",
+        "machine_pool_entry": "bh-qb-05",
+        "mesh_device": "P150",
+        "metrics_count": 4,
+        "node": "bh-p150-attention-prefill",
+        "outcome": "passed",
+        "priority": 28,
+        "reset_performed": false,
+        "stage": "module",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122435.331089Z-bh-p150-attention-prefill.log",
+        "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+      },
+      {
+        "architecture": "blackhole",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122453.133711Z-bh-p150-attention-decode.json",
+        "machine_pool_entry": "bh-qb-05",
+        "mesh_device": "P150",
+        "metrics_count": 4,
+        "node": "bh-p150-attention-decode",
+        "outcome": "passed",
+        "priority": 29,
+        "reset_performed": false,
+        "stage": "module",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122453.133711Z-bh-p150-attention-decode.log",
+        "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+      },
+      {
+        "architecture": "blackhole",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122509.934531Z-bh-p150-attention-paged-transition.json",
+        "machine_pool_entry": "bh-qb-05",
+        "mesh_device": "P150",
+        "metrics_count": 4,
+        "node": "bh-p150-attention-paged-transition",
+        "outcome": "passed",
+        "priority": 30,
+        "reset_performed": false,
+        "stage": "module",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122509.934531Z-bh-p150-attention-paged-transition.log",
+        "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+      },
+      {
+        "architecture": "blackhole",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122522.539833Z-bh-p150x4-rmsnorm.json",
         "machine_pool_entry": "bh-qb-05",
         "mesh_device": "P150x4",
         "metrics_count": 4,
@@ -661,12 +668,12 @@
         "priority": 31,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023112.388384Z-bh-p150x4-rmsnorm.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122522.539833Z-bh-p150x4-rmsnorm.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "blackhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023120.627021Z-bh-p150x4-lm-head.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122529.936141Z-bh-p150x4-lm-head.json",
         "machine_pool_entry": "bh-qb-05",
         "mesh_device": "P150x4",
         "metrics_count": 4,
@@ -675,12 +682,12 @@
         "priority": 32,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023120.627021Z-bh-p150x4-lm-head.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122529.936141Z-bh-p150x4-lm-head.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "blackhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023126.915918Z-bh-p150x4-mlp-decode.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122536.029157Z-bh-p150x4-mlp-decode.json",
         "machine_pool_entry": "bh-qb-05",
         "mesh_device": "P150x4",
         "metrics_count": 4,
@@ -689,12 +696,12 @@
         "priority": 33,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023126.915918Z-bh-p150x4-mlp-decode.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122536.029157Z-bh-p150x4-mlp-decode.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "blackhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023134.925320Z-bh-p150x4-mlp-prefill.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122543.937677Z-bh-p150x4-mlp-prefill.json",
         "machine_pool_entry": "bh-qb-05",
         "mesh_device": "P150x4",
         "metrics_count": 4,
@@ -703,12 +710,12 @@
         "priority": 34,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023134.925320Z-bh-p150x4-mlp-prefill.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122543.937677Z-bh-p150x4-mlp-prefill.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "blackhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023143.028311Z-bh-p150x4-attention-prefill.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122552.138899Z-bh-p150x4-attention-prefill.json",
         "machine_pool_entry": "bh-qb-05",
         "mesh_device": "P150x4",
         "metrics_count": 4,
@@ -717,12 +724,12 @@
         "priority": 35,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023143.028311Z-bh-p150x4-attention-prefill.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122552.138899Z-bh-p150x4-attention-prefill.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "blackhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023151.635227Z-bh-p150x4-attention-decode.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122600.650242Z-bh-p150x4-attention-decode.json",
         "machine_pool_entry": "bh-qb-05",
         "mesh_device": "P150x4",
         "metrics_count": 4,
@@ -731,12 +738,12 @@
         "priority": 36,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023151.635227Z-bh-p150x4-attention-decode.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122600.650242Z-bh-p150x4-attention-decode.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "blackhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023200.133721Z-bh-p150x4-attention-paged-transition.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122608.950356Z-bh-p150x4-attention-paged-transition.json",
         "machine_pool_entry": "bh-qb-05",
         "mesh_device": "P150x4",
         "metrics_count": 4,
@@ -745,12 +752,26 @@
         "priority": 37,
         "reset_performed": false,
         "stage": "module",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023200.133721Z-bh-p150x4-attention-paged-transition.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122608.950356Z-bh-p150x4-attention-paged-transition.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "blackhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023228.461383Z-bh-p150x4-qwen3-one-layer-smoke.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122617.454705Z-bh-p150-llama3-8b-token-accuracy.json",
+        "machine_pool_entry": "bh-qb-05",
+        "mesh_device": "P150",
+        "metrics_count": 3,
+        "node": "bh-p150-llama3-8b-token-accuracy",
+        "outcome": "passed",
+        "priority": 38,
+        "reset_performed": false,
+        "stage": "e2e",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T122617.454705Z-bh-p150-llama3-8b-token-accuracy.log",
+        "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+      },
+      {
+        "architecture": "blackhole",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T123224.809436Z-bh-p150x4-qwen3-one-layer-smoke.json",
         "machine_pool_entry": "bh-qb-05",
         "mesh_device": "P150x4",
         "metrics_count": 3,
@@ -759,12 +780,12 @@
         "priority": 39,
         "reset_performed": false,
         "stage": "smoke",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023228.461383Z-bh-p150x4-qwen3-one-layer-smoke.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T123224.809436Z-bh-p150x4-qwen3-one-layer-smoke.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "blackhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023913.393685Z-bh-p150x4-llama33-one-layer-smoke.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T123901.653328Z-bh-p150x4-llama33-one-layer-smoke.json",
         "machine_pool_entry": "bh-qb-05",
         "mesh_device": "P150x4",
         "metrics_count": 3,
@@ -773,12 +794,12 @@
         "priority": 40,
         "reset_performed": false,
         "stage": "smoke",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T023913.393685Z-bh-p150x4-llama33-one-layer-smoke.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T123901.653328Z-bh-p150x4-llama33-one-layer-smoke.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "blackhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T024915.494735Z-bh-p150x4-qwen3-token-accuracy.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T124840.829619Z-bh-p150x4-qwen3-token-accuracy.json",
         "machine_pool_entry": "bh-qb-05",
         "mesh_device": "P150x4",
         "metrics_count": 3,
@@ -787,12 +808,12 @@
         "priority": 41,
         "reset_performed": false,
         "stage": "e2e",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T024915.494735Z-bh-p150x4-qwen3-token-accuracy.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T124840.829619Z-bh-p150x4-qwen3-token-accuracy.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       },
       {
         "architecture": "blackhole",
-        "evidence_json": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T030805.335398Z-bh-p150x4-llama33-token-accuracy.json",
+        "evidence_json": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T130719.396188Z-bh-p150x4-llama33-token-accuracy.json",
         "machine_pool_entry": "bh-qb-05",
         "mesh_device": "P150x4",
         "metrics_count": 3,
@@ -801,7 +822,7 @@
         "priority": 42,
         "reset_performed": false,
         "stage": "e2e",
-        "stdout_log": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/bh-qb-05/20260903T030805.335398Z-bh-p150x4-llama33-token-accuracy.log",
+        "stdout_log": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/bh-qb-05/20260903T130719.396188Z-bh-p150x4-llama33-token-accuracy.log",
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
       }
     ],
@@ -815,7 +836,7 @@
       "node_count": 42,
       "path": "qualification/manifests/hardware-matrix.json",
       "schema_version": 1,
-      "sha256": "e5e54f1a216164c2036913313d0775454357ce5c6a82dc09c61caaba3c890db4"
+      "sha256": "1d04716dd79cf3c5ab6a7a2ac251224fe326ad64ef19fa440c06187118b9d7de"
     },
     "mesh_coverage": [
       {
@@ -846,13 +867,13 @@
         "passed": 8
       },
       {
-        "deferred": 8,
-        "executed": 0,
+        "deferred": 0,
+        "executed": 8,
         "functional_failure": 0,
         "hardware_lifecycle_failure": 0,
         "matrix_total": 8,
         "name": "P150",
-        "passed": 0
+        "passed": 8
       },
       {
         "deferred": 0,
@@ -868,18 +889,30 @@
       "functional_failure": 0,
       "hardware_lifecycle_failure": 0,
       "missing_acceptance_data": 0,
-      "passed": 34,
+      "passed": 42,
       "pre_device_failure": 0
+    },
+    "p150_logical_provenance": {
+      "claim_limit": "logical single-P150 execution; not standalone-product or full-host P150_X4 evidence",
+      "logical_mesh": "1x1",
+      "machine_pool_entry": "bh-qb-05",
+      "physical_cluster_type": "P150_X4",
+      "physical_system_mesh": "2x2",
+      "records": 8,
+      "selection_environment": {
+        "MESH_DEVICE": "P150",
+        "TT_VISIBLE_DEVICES": null
+      }
     },
     "stage_coverage": [
       {
-        "deferred": 7,
-        "executed": 23,
+        "deferred": 0,
+        "executed": 30,
         "functional_failure": 0,
         "hardware_lifecycle_failure": 0,
         "matrix_total": 30,
         "name": "module",
-        "passed": 23
+        "passed": 30
       },
       {
         "deferred": 0,
@@ -900,16 +933,22 @@
         "passed": 3
       },
       {
-        "deferred": 1,
-        "executed": 7,
+        "deferred": 0,
+        "executed": 8,
         "functional_failure": 0,
         "hardware_lifecycle_failure": 0,
         "matrix_total": 8,
         "name": "e2e",
-        "passed": 7
+        "passed": 8
       }
     ],
-    "verdict": "partial_34_pass_8_p150_deferred"
+    "verdict": "pass_42_of_42_matrix_nodes",
+    "w6_observation": {
+      "cases_passed": 4,
+      "configured_performance_floor": false,
+      "interpretation": "correctness pass; slower timing observation is not a configured performance failure",
+      "pytest_duration_seconds": 490.54
+    }
   },
   "host_semantics_exercised": [
     "dependency resolution, metadata, wheel installation, and import isolation",
@@ -933,7 +972,7 @@
         }
       ],
       "failures": 0,
-      "passed": 2165,
+      "passed": 2170,
       "process_exit": 0,
       "python": "3.10.19",
       "shutdown_diagnostics": null,
@@ -953,17 +992,17 @@
         }
       ],
       "failures": 0,
-      "passed": 2165,
+      "passed": 2170,
       "process_exit": 0,
       "python": "3.12.13",
       "shutdown_diagnostics": {
         "classification": "ttnn_nanobind_binding_lifecycle_feedback",
         "leaked_functions": 330,
-        "leaked_instances": 8,
+        "leaked_instances": 10,
         "leaked_types": 36,
         "message": "this is likely caused by a reference counting issue in the binding code.",
         "phase": "interpreter_shutdown_after_pytest_success",
-        "retained_output": "/tmp/gwang/tttv2-py312-host-final.log",
+        "retained_output": "/tmp/gwang/tttv2-73d-py312-host-final.log",
         "test_failure": false
       },
       "skipped": 28,
@@ -1015,7 +1054,7 @@
         }
       ],
       "firmware_driver_verdict": "partial_exact_sha_stacks_recorded_not_target_complete",
-      "geometry_verdict": "source_declared_with_partial_exact_sha_matrix_evidence_not_promoted",
+      "geometry_verdict": "source_declared_with_full_exact_sha_matrix_evidence_not_promoted",
       "hardware_verdict": "not_qualified",
       "hf_id": "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B",
       "hf_revision": "1df8507178afcc1bef68cd8c393f61a886323761",
@@ -1029,7 +1068,7 @@
       ],
       "host_verdict": "pass_import_py310_py312_and_host_contracts_py310_py312",
       "known_gaps": [
-        "Final-SHA hardware evidence is partial and does not qualify the complete model contract",
+        "Final-SHA hardware evidence covers the 42-node matrix but does not qualify the complete model contract",
         "N150/TP1",
         "N300 accuracy eval-32 and batch-32-ci",
         "any geometry not declared in support.json"
@@ -1099,7 +1138,7 @@
         }
       ],
       "firmware_driver_verdict": "partial_exact_sha_stacks_recorded_not_target_complete",
-      "geometry_verdict": "source_declared_with_partial_exact_sha_matrix_evidence_not_promoted",
+      "geometry_verdict": "source_declared_with_full_exact_sha_matrix_evidence_not_promoted",
       "hardware_verdict": "not_qualified",
       "hf_id": "meta-llama/Llama-3.2-1B-Instruct",
       "hf_revision": "9213176726f574b556790deb65791e0c5aa438b6",
@@ -1113,7 +1152,7 @@
       ],
       "host_verdict": "pass_import_py310_py312_and_host_contracts_py310_py312",
       "known_gaps": [
-        "Final-SHA hardware evidence is partial and does not qualify the complete model contract",
+        "Final-SHA hardware evidence covers the 42-node matrix but does not qualify the complete model contract",
         "TP4 lanes",
         "N150 batch-32-ci sequence 2048",
         "any geometry not declared in support.json"
@@ -1183,7 +1222,7 @@
         }
       ],
       "firmware_driver_verdict": "partial_exact_sha_stacks_recorded_not_target_complete",
-      "geometry_verdict": "source_declared_with_partial_exact_sha_matrix_evidence_not_promoted",
+      "geometry_verdict": "source_declared_with_full_exact_sha_matrix_evidence_not_promoted",
       "hardware_verdict": "not_qualified",
       "hf_id": "meta-llama/Llama-3.2-3B-Instruct",
       "hf_revision": "0cb88a4f764b7a12671c53f0838cd831a0843b95",
@@ -1197,7 +1236,7 @@
       ],
       "host_verdict": "pass_import_py310_py312_and_host_contracts_py310_py312",
       "known_gaps": [
-        "Final-SHA hardware evidence is partial and does not qualify the complete model contract",
+        "Final-SHA hardware evidence covers the 42-node matrix but does not qualify the complete model contract",
         "TP4 lanes",
         "traced prefill on N150",
         "any geometry not declared in support.json"
@@ -1239,7 +1278,7 @@
         }
       ],
       "firmware_driver_verdict": "partial_exact_sha_stacks_recorded_not_target_complete",
-      "geometry_verdict": "source_declared_with_partial_exact_sha_matrix_evidence_not_promoted",
+      "geometry_verdict": "source_declared_with_full_exact_sha_matrix_evidence_not_promoted",
       "hardware_verdict": "not_qualified",
       "hf_id": "meta-llama/Llama-3.3-70B-Instruct",
       "hf_revision": "6f6073b423013f6a7d4d9f39144961bfbfbc386b",
@@ -1253,7 +1292,7 @@
       ],
       "host_verdict": "pass_import_py310_py312_and_host_contracts_py310_py312",
       "known_gaps": [
-        "Final-SHA hardware evidence is partial and does not qualify the complete model contract",
+        "Final-SHA hardware evidence covers the 42-node matrix but does not qualify the complete model contract",
         "DP greater than 1",
         "noncanonical P150x4 orientations",
         "unproven 32K context",
@@ -1359,7 +1398,7 @@
         }
       ],
       "firmware_driver_verdict": "partial_exact_sha_stacks_recorded_not_target_complete",
-      "geometry_verdict": "source_declared_with_partial_exact_sha_matrix_evidence_not_promoted",
+      "geometry_verdict": "source_declared_with_full_exact_sha_matrix_evidence_not_promoted",
       "hardware_verdict": "not_qualified",
       "hf_id": "meta-llama/Llama-3.1-8B-Instruct",
       "hf_revision": "0e9e39f249a16976918f6564b8830bc894c89659",
@@ -1373,7 +1412,7 @@
       ],
       "host_verdict": "pass_import_py310_py312_and_host_contracts_py310_py312",
       "known_gaps": [
-        "Final-SHA hardware evidence is partial and does not qualify the complete model contract",
+        "Final-SHA hardware evidence covers the 42-node matrix but does not qualify the complete model contract",
         "TTTv1 DRAM prefetcher",
         "P100 and 128K P300 acceptance",
         "development two-P150 stand-in as real-P300 evidence",
@@ -1437,7 +1476,7 @@
         }
       ],
       "firmware_driver_verdict": "partial_exact_sha_stacks_recorded_not_target_complete",
-      "geometry_verdict": "source_declared_with_partial_exact_sha_matrix_evidence_not_promoted",
+      "geometry_verdict": "source_declared_with_full_exact_sha_matrix_evidence_not_promoted",
       "hardware_verdict": "not_qualified",
       "hf_id": "mistralai/Mistral-7B-Instruct-v0.3",
       "hf_revision": "c170c708c41dac9275d15a8fff4eca08d52bab71",
@@ -1451,7 +1490,7 @@
       ],
       "host_verdict": "pass_import_py310_py312_and_host_contracts_py310_py312",
       "known_gaps": [
-        "Final-SHA hardware evidence is partial and does not qualify the complete model contract",
+        "Final-SHA hardware evidence covers the 42-node matrix but does not qualify the complete model contract",
         "DP layouts other than the declared one-device lanes",
         "any geometry not declared in support.json"
       ],
@@ -1492,7 +1531,7 @@
         }
       ],
       "firmware_driver_verdict": "partial_exact_sha_stacks_recorded_not_target_complete",
-      "geometry_verdict": "source_declared_with_partial_exact_sha_matrix_evidence_not_promoted",
+      "geometry_verdict": "source_declared_with_full_exact_sha_matrix_evidence_not_promoted",
       "hardware_verdict": "not_qualified",
       "hf_id": "microsoft/phi-4",
       "hf_revision": "187ef0342fff0eb3333be9f00389385e95ef0b61",
@@ -1506,7 +1545,7 @@
       ],
       "host_verdict": "pass_import_py310_py312_and_host_contracts_py310_py312",
       "known_gaps": [
-        "Final-SHA hardware evidence is partial and does not qualify the complete model contract",
+        "Final-SHA hardware evidence covers the 42-node matrix but does not qualify the complete model contract",
         "N150",
         "ordinary T3K/TG tensor parallelism",
         "DP layouts other than T3K DP4/TP2",
@@ -1542,7 +1581,7 @@
         }
       ],
       "firmware_driver_verdict": "partial_exact_sha_stacks_recorded_not_target_complete",
-      "geometry_verdict": "source_declared_with_partial_exact_sha_matrix_evidence_not_promoted",
+      "geometry_verdict": "source_declared_with_full_exact_sha_matrix_evidence_not_promoted",
       "hardware_verdict": "not_qualified",
       "hf_id": "Qwen/Qwen2.5-72B-Instruct",
       "hf_revision": "495f39366efef23836d0cfae4fbe635880d2be31",
@@ -1556,7 +1595,7 @@
       ],
       "host_verdict": "pass_import_py310_py312_and_host_contracts_py310_py312",
       "known_gaps": [
-        "Final-SHA hardware evidence is partial and does not qualify the complete model contract",
+        "Final-SHA hardware evidence covers the 42-node matrix but does not qualify the complete model contract",
         "non-T3K meshes",
         "DP greater than 1",
         "any geometry not declared in support.json"
@@ -1598,7 +1637,7 @@
         }
       ],
       "firmware_driver_verdict": "partial_exact_sha_stacks_recorded_not_target_complete",
-      "geometry_verdict": "source_declared_with_partial_exact_sha_matrix_evidence_not_promoted",
+      "geometry_verdict": "source_declared_with_full_exact_sha_matrix_evidence_not_promoted",
       "hardware_verdict": "not_qualified",
       "hf_id": "Qwen/Qwen2.5-7B-Instruct",
       "hf_revision": "a09a35458c702b33eeacc393d103063234e8bc28",
@@ -1612,7 +1651,7 @@
       ],
       "host_verdict": "pass_import_py310_py312_and_host_contracts_py310_py312",
       "known_gaps": [
-        "Final-SHA hardware evidence is partial and does not qualify the complete model contract",
+        "Final-SHA hardware evidence covers the 42-node matrix but does not qualify the complete model contract",
         "N150",
         "ordinary T3K/TG TP",
         "DP factors other than T3K DP4",
@@ -1648,7 +1687,7 @@
         }
       ],
       "firmware_driver_verdict": "partial_exact_sha_stacks_recorded_not_target_complete",
-      "geometry_verdict": "source_declared_with_partial_exact_sha_matrix_evidence_not_promoted",
+      "geometry_verdict": "source_declared_with_full_exact_sha_matrix_evidence_not_promoted",
       "hardware_verdict": "not_qualified",
       "hf_id": "Qwen/Qwen2.5-Coder-32B-Instruct",
       "hf_revision": "381fc969f78efac66bc87ff7ddeadb7e73c218a7",
@@ -1662,7 +1701,7 @@
       ],
       "host_verdict": "pass_import_py310_py312_and_host_contracts_py310_py312",
       "known_gaps": [
-        "Final-SHA hardware evidence is partial and does not qualify the complete model contract",
+        "Final-SHA hardware evidence covers the 42-node matrix but does not qualify the complete model contract",
         "non-T3K meshes",
         "DP greater than 1",
         "any geometry not declared in support.json"
@@ -1704,7 +1743,7 @@
         }
       ],
       "firmware_driver_verdict": "partial_exact_sha_stacks_recorded_not_target_complete",
-      "geometry_verdict": "source_declared_with_partial_exact_sha_matrix_evidence_not_promoted",
+      "geometry_verdict": "source_declared_with_full_exact_sha_matrix_evidence_not_promoted",
       "hardware_verdict": "not_qualified",
       "hf_id": "Qwen/Qwen2-7B-Instruct",
       "hf_revision": "f2826a00ceef68f0f2b946d945ecc0477ce4450c",
@@ -1718,7 +1757,7 @@
       ],
       "host_verdict": "pass_import_py310_py312_and_host_contracts_py310_py312",
       "known_gaps": [
-        "Final-SHA hardware evidence is partial and does not qualify the complete model contract",
+        "Final-SHA hardware evidence covers the 42-node matrix but does not qualify the complete model contract",
         "N150",
         "ordinary T3K/TG TP",
         "DP factors other than T3K DP4",
@@ -1761,7 +1800,7 @@
         }
       ],
       "firmware_driver_verdict": "partial_exact_sha_stacks_recorded_not_target_complete",
-      "geometry_verdict": "source_declared_with_partial_exact_sha_matrix_evidence_not_promoted",
+      "geometry_verdict": "source_declared_with_full_exact_sha_matrix_evidence_not_promoted",
       "hardware_verdict": "not_qualified",
       "hf_id": "Qwen/Qwen3-32B",
       "hf_revision": "9216db5781bf21249d130ec9da846c4624c16137",
@@ -1775,7 +1814,7 @@
       ],
       "host_verdict": "pass_import_py310_py312_and_host_contracts_py310_py312",
       "known_gaps": [
-        "Final-SHA hardware evidence is partial and does not qualify the complete model contract",
+        "Final-SHA hardware evidence covers the 42-node matrix but does not qualify the complete model contract",
         "P100/P150/P300 single/two-die model paths",
         "DP greater than 1",
         "noncanonical P150x4 orientations",
@@ -1864,6 +1903,7 @@
       }
     ],
     "classification": "non_canonical_performance_diagnostic",
+    "current_hardware_candidate_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
     "evidence": [
       {
         "path": "qualification/evidence/diagnostics/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/accuracy-ttft/summary.json"
@@ -1881,6 +1921,7 @@
         "path": "qualification/evidence/diagnostics/2883a949860d749adc2ed1af5525b27a9a547505/wh-lb-42/accuracy-ttft/accuracy-batch-32-ci-T3K--on_device_topk.log"
       }
     ],
+    "rerun_at_current_hardware_candidate": false,
     "summary": {
       "cells": 4,
       "hardware_lifecycle_failures": 0,
@@ -1894,9 +1935,8 @@
     "verdict": "ttft_4_of_4_pass_throughput_0_of_4_pass_overall_0_of_4"
   },
   "not_exercised": [
-    "single-P150 execution on the required bh-lb-11 development loudbox",
-    "experimental/private TTNN operations not selected by the 34 executed matrix records",
-    "hardware behavior outside the exact recorded N150, N300, T3K, and P150x4 selectors",
+    "experimental/private TTNN operations not selected by the 42 executed matrix records",
+    "hardware behavior outside the exact recorded N150, N300, T3K, P150, and P150x4 selectors",
     "performance qualification beyond the recorded correctness and token-accuracy acceptance data; four Llama33 accuracy TTFT diagnostics are noncanonical feedback only",
     "complete model-manifest geometry, TP/DP, batch/context, and lifecycle qualification",
     "independent post-fixture hardware teardown verification"
@@ -1934,18 +1974,18 @@
         "path": "qualification/reports/host-ttnn-0.77.md"
       },
       {
-        "path": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json"
+        "path": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/index.json"
       },
       {
         "path": "qualification/manifests/hardware-matrix.json"
       }
     ],
     "firmware_driver": "exact stacks recorded for executed wh-lb-42 and bh-qb-05 evidence; not qualified beyond those records",
-    "model_geometry": "partial exact-SHA matrix evidence exists; manifests remain experimental and unpromoted",
-    "overall": "34_of_34_executed_pass; 8 P150 nodes deferred",
+    "model_geometry": "full exact-SHA matrix evidence exists; manifests remain experimental and unpromoted",
+    "overall": "42_of_42_matrix_nodes_pass; complete model contracts remain unqualified",
     "required_next_evidence": [
-      "run priorities 24-30 and 38 on the required bh-lb-11 P150 development loudbox",
       "extend exact-SHA evidence to remaining model-manifest geometry and context buckets",
+      "close the throughput regression measured only by the older noncanonical diagnostic SHA",
       "independently verify post-fixture hardware teardown where a clean-teardown claim is required"
     ],
     "unstable_api_semantics": "14 paths present; only behavior selected by the executed matrix is evidenced"
@@ -2099,7 +2139,7 @@
           "path": "qualification/extraction/device_ownership.md"
         },
         {
-          "path": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json"
+          "path": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/index.json"
         },
         {
           "path": "qualification/manifests/hardware-matrix.json"
@@ -2128,13 +2168,13 @@
           "path": "qualification/reports/host-ttnn-0.77.md"
         },
         {
-          "path": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json"
+          "path": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/index.json"
         },
         {
           "path": "qualification/manifests/hardware-matrix.json"
         }
       ],
-      "hardware_verdict": "pass_executed_scope_23_of_30_with_7_p150_deferred",
+      "hardware_verdict": "pass_executed_scope_30_of_30",
       "host_import_pythons": [
         "3.10.19",
         "3.12.13"
@@ -2157,7 +2197,7 @@
           "path": "qualification/reports/host-ttnn-0.77.md"
         },
         {
-          "path": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json"
+          "path": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/index.json"
         },
         {
           "path": "qualification/manifests/hardware-matrix.json"
@@ -2186,7 +2226,7 @@
           "path": "qualification/reports/host-ttnn-0.77.md"
         },
         {
-          "path": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json"
+          "path": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/index.json"
         },
         {
           "path": "qualification/manifests/hardware-matrix.json"
@@ -2215,7 +2255,7 @@
           "path": "qualification/reports/host-ttnn-0.77.md"
         },
         {
-          "path": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json"
+          "path": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/index.json"
         },
         {
           "path": "qualification/manifests/hardware-matrix.json"
@@ -2247,7 +2287,7 @@
           "path": "qualification/reports/ttnn-0.77.0-host-triage.md"
         },
         {
-          "path": "qualification/evidence/hardware/2883a949860d749adc2ed1af5525b27a9a547505/index.json"
+          "path": "qualification/evidence/hardware/73d414f8b826a7da982df8c8229d4ac41ed8ba33/index.json"
         },
         {
           "path": "qualification/manifests/hardware-matrix.json"
@@ -2274,12 +2314,12 @@
         "path": "qualification/reports/test-pyramid.md"
       }
     ],
-    "host": 1208,
+    "host": 1211,
     "model": 393,
-    "source_level_test_functions": 1462
+    "source_level_test_functions": 1465
   },
   "tt_transformers": "0.1.0.dev0",
   "ttnn": "0.77.0",
-  "validation_date": "2026-09-02",
-  "verdict": "host_compatible_with_ttnn_0_77_partial_hardware_qualification"
+  "validation_date": "2026-09-03",
+  "verdict": "host_compatible_with_ttnn_0_77_partial_release_qualification"
 }

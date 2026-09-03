@@ -13,11 +13,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CHECKLIST = ROOT / "qualification/reports/release-readiness-checklist.csv"
-HARDWARE_CANDIDATE_SHA = "2883a949860d749adc2ed1af5525b27a9a547505"
+HARDWARE_CANDIDATE_SHA = "73d414f8b826a7da982df8c8229d4ac41ed8ba33"
 HARDWARE_EVIDENCE_INDEX = ROOT / f"qualification/evidence/hardware/{HARDWARE_CANDIDATE_SHA}/index.json"
-HARDWARE_EVIDENCE_INDEX_SHA256 = "ec9a540a8f31762078b592909e02cdb03e99384f9ddf8f955966fa41e42af07b"
+HARDWARE_EVIDENCE_INDEX_SHA256 = "4e98b62c34fb9f8744e00624c091dc9de18b3f32c5cd74f2ad2be1ad26274d7a"
+PERFORMANCE_DIAGNOSTIC_SHA = "2883a949860d749adc2ed1af5525b27a9a547505"
 PERFORMANCE_DIAGNOSTIC = (
-    ROOT / f"qualification/evidence/diagnostics/{HARDWARE_CANDIDATE_SHA}/accuracy-ttft/summary.json"
+    ROOT / f"qualification/evidence/diagnostics/{PERFORMANCE_DIAGNOSTIC_SHA}/accuracy-ttft/summary.json"
 )
 MODELS = {
     "deepseek_r1_distill_qwen_14b",
@@ -36,6 +37,7 @@ MODELS = {
 PARTIAL_HARDWARE_MODELS = {
     "llama32_1b",
     "llama33_70b",
+    "llama3_8b",
     "qwen25_7b",
     "qwen25_coder_32b",
     "qwen3_32b",
@@ -80,7 +82,7 @@ def main() -> int:
         for relative in row["evidence_paths"].split("|"):
             require((ROOT / relative).exists(), f"{row['id']}: missing evidence path {relative}", errors)
     status_counts = Counter(row["status"] for row in rows)
-    require(status_counts == {"pass": 45, "partial": 18, "blocked": 16}, f"unexpected status counts: {dict(status_counts)}", errors)
+    require(status_counts == {"pass": 45, "partial": 19, "blocked": 15}, f"unexpected status counts: {dict(status_counts)}", errors)
     require(any(row["release_blocking"] == "true" and row["status"] != "pass" for row in rows), "checklist has no release blocker", errors)
     rows_by_id = {row["id"]: row for row in rows}
     expected_hardware_gate_statuses = {
@@ -154,16 +156,28 @@ def main() -> int:
     hardware_evidence = json.loads(HARDWARE_EVIDENCE_INDEX.read_text(encoding="utf-8"))
     hardware_records = hardware_evidence.get("records", [])
     require(hardware_evidence.get("candidate_sha") == HARDWARE_CANDIDATE_SHA, "hardware candidate SHA drifted", errors)
-    require(len(hardware_records) == 34, f"expected 34 executed hardware nodes; got {len(hardware_records)}", errors)
+    require(len(hardware_records) == 42, f"expected 42 executed hardware nodes; got {len(hardware_records)}", errors)
     require(
-        Counter(record.get("outcome") for record in hardware_records) == {"passed": 34},
+        Counter(record.get("outcome") for record in hardware_records) == {"passed": 42},
         "hardware outcome counts drifted",
         errors,
     )
     require(
         Counter(record.get("stage") for record in hardware_records if record.get("outcome") == "passed")
-        == {"module": 23, "runtime": 1, "smoke": 3, "e2e": 7},
+        == {"module": 30, "runtime": 1, "smoke": 3, "e2e": 8},
         "passing hardware stage counts drifted",
+        errors,
+    )
+    require(
+        Counter(record.get("mesh_device") for record in hardware_records)
+        == {"N150": 9, "N300": 6, "T3K": 8, "P150": 8, "P150x4": 11},
+        "passing hardware mesh counts drifted",
+        errors,
+    )
+    require(
+        Counter(record.get("machine_pool_entry") for record in hardware_records)
+        == {"wh-lb-42": 23, "bh-qb-05": 19},
+        "passing hardware machine counts drifted",
         errors,
     )
     w6_records = [record for record in hardware_records if record.get("node") == "wh-t3k-runtime-trace-order"]
@@ -187,18 +201,19 @@ def main() -> int:
         errors,
     )
     executed_nodes = {record.get("node") for record in hardware_records}
-    deferred_nodes = [node for node in hardware["nodes"] if node["id"] not in executed_nodes]
     require(
-        len(deferred_nodes) == 8
-        and {node["priority"] for node in deferred_nodes} == {*range(24, 31), 38}
-        and all(node["mesh_device"] == "P150" and node["machine_pool"] == ["bh-lb-11"] for node in deferred_nodes),
-        "the eight different-hardware-deferred P150 nodes drifted",
+        executed_nodes == {node["id"] for node in hardware["nodes"]},
+        "canonical hardware evidence does not cover the exact 42-node matrix",
         errors,
     )
 
     diagnostic = json.loads(PERFORMANCE_DIAGNOSTIC.read_text(encoding="utf-8"))
     diagnostic_cells = diagnostic.get("cells", [])
-    require(diagnostic.get("candidate_sha") == HARDWARE_CANDIDATE_SHA, "diagnostic candidate SHA drifted", errors)
+    require(
+        diagnostic.get("candidate_sha") == PERFORMANCE_DIAGNOSTIC_SHA,
+        "performance diagnostic candidate SHA drifted",
+        errors,
+    )
     require(
         diagnostic.get("classification") == "noncanonical_performance_diagnostic"
         and diagnostic.get("canonical_hardware_evidence") is False,
@@ -413,14 +428,14 @@ def main() -> int:
     )
     host_report = (ROOT / "qualification/reports/host-ttnn-0.77.md").read_text(encoding="utf-8")
     require(HARDWARE_CANDIDATE_SHA in host_report, "host report candidate SHA drifted", errors)
-    require("| 3.10.19 | 2,165 | 28 | 6,791 | 81 | 0 | 0 |" in host_report, "Python 3.10 host result drifted", errors)
-    require("| 3.12.13 | 2,165 | 28 | 6,791 | 81 | 0 | 0 |" in host_report, "Python 3.12 host result drifted", errors)
-    require("nanobind: leaked 8 instances!" in host_report, "Python 3.12 nanobind diagnostic is missing", errors)
+    require("| 3.10.19 | 2,170 | 28 | 6,791 | 81 | 0 | 0 |" in host_report, "Python 3.10 host result drifted", errors)
+    require("| 3.12.13 | 2,170 | 28 | 6,791 | 81 | 0 | 0 |" in host_report, "Python 3.12 host result drifted", errors)
+    require("nanobind: leaked 10 instances!" in host_report, "Python 3.12 nanobind diagnostic is missing", errors)
 
     pyramid = (ROOT / "qualification/reports/test-pyramid.md").read_text(encoding="utf-8")
-    require("1,462 source-level test functions" in pyramid, "test-pyramid total is stale", errors)
+    require("1,465 source-level test functions" in pyramid, "test-pyramid total is stale", errors)
     require(
-        "1,208 explicitly `host`" in pyramid
+        "1,211 explicitly `host`" in pyramid
         and "254 explicitly `device`" in pyramid
         and "393 concrete `model` surfaces" in pyramid,
         "test-pyramid lanes are stale",

@@ -61,7 +61,7 @@ imports TTNN or runs device tests, and preserves the one-node/one-process
 hardware boundary.
 
 The final local non-editable-wheel host selector passes identically on both
-supported interpreters: 2,165 passed, 28 skipped, 6,791 deselected, 5 warnings,
+supported interpreters: 2,170 passed, 28 skipped, 6,791 deselected, 5 warnings,
 and 81 passing subtests, with zero failures or errors. This is local evidence;
 it does not convert the still-unobserved GitHub workflow into a CI pass.
 

@@ -223,8 +223,8 @@
   "files": [
     {
       "path": "examples/README.md",
-      "sha256": "dacba9bda3b4f20971eac549514c5dd88b9ca90c71394072867139f33633715b",
-      "size": 7249
+      "sha256": "3cca257e25cfe975117706cebed9f8e9ef264d2046750d0dad3b65663ca1fc8e",
+      "size": 7696
     },
     {
       "path": "examples/__init__.py",
@@ -648,8 +648,8 @@
     },
     {
       "path": "qualification/analysis/support/hardware_evidence.csv",
-      "sha256": "86f6a4de66a4b65212bbc7d54d9441539c87ac3b250cb38b4ff435aba62001d7",
-      "size": 59050
+      "sha256": "bf48e51f6c3260a70558e9734683c47ca31e882f7030fa1bc58b72a8906f87af",
+      "size": 80835
     },
     {
       "path": "qualification/analysis/support/marker_inventory.csv",
@@ -1013,7 +1013,7 @@
     },
     {
       "path": "qualification/reports/ci-and-constraints.md",
-      "sha256": "c4aa69f38ae48df11cacd907ac93f30fe0f466ff84b5dab352df6d801ea6d268",
+      "sha256": "a89ebe6ae42dfc064bd08a2bc50bdeb87a454a25d9bc244ab3ee113ea702f5d4",
       "size": 4148
     },
     {
@@ -1058,13 +1058,13 @@
     },
     {
       "path": "qualification/reports/hardware-readiness.md",
-      "sha256": "b3311c1b69f3a2fdfb591254cd3c6f6181da79ece623fd7994d375fa2bd1b2f1",
-      "size": 6891
+      "sha256": "6f2e3bbdbab376df1d39c5347a231e7809b7527053f005abe2342bf032cf9d5b",
+      "size": 7152
     },
     {
       "path": "qualification/reports/host-ttnn-0.77.md",
-      "sha256": "f92650ae13bae8128443254612476f4d97b308e04f95cfd36daaaa44516e7aac",
-      "size": 6614
+      "sha256": "532491b1ce7bcadbcf539b13d480185d4bd656c2a56af3536062faa5525f53ba",
+      "size": 6665
     },
     {
       "path": "qualification/reports/package-artifact-hashes.json",
@@ -1078,18 +1078,18 @@
     },
     {
       "path": "qualification/reports/package-wheel.md",
-      "sha256": "2ea096e763072a2ec3278f1e785153e51d5233a381b91b9452a9a91310ba269a",
-      "size": 11401
+      "sha256": "2bfeabee78c477216031afbfad42d941ba1b2f87e0c1dd6c26c44e637a7f1454",
+      "size": 11631
     },
     {
       "path": "qualification/reports/release-readiness-checklist.csv",
-      "sha256": "f2b81b2c78463996a26169077c92b9476c5dbeb5eafe18347e5a6f9debba2ae6",
-      "size": 38770
+      "sha256": "f1dec80fcb4a2f829eca15ab4e1c65bebd559418ff4d94642d9a98038f5ef812",
+      "size": 39262
     },
     {
       "path": "qualification/reports/release-readiness.md",
-      "sha256": "0a030bac87ea2974c1846137c8e7c08f586fa3c50bfd7c3e916e5ea47e79fc32",
-      "size": 20314
+      "sha256": "35f8ef9e56926cb7c370af5457cc4f87dbf7240fda34579c4d6272724a694841",
+      "size": 21011
     },
     {
       "path": "qualification/reports/remote-code-policy.md",
@@ -1113,8 +1113,8 @@
     },
     {
       "path": "qualification/reports/test-pyramid.md",
-      "sha256": "c7580d9799232f6ec7a01f65c50da0c709c66acef5d5001426a775c0dfa6f2f3",
-      "size": 8056
+      "sha256": "12009091a5767d1d0c51202f6a0164c08ada4589228b9723fdb6a3574aeb0ffc",
+      "size": 8304
     },
     {
       "path": "qualification/reports/ttnn-0.77.0-api-availability.csv",
@@ -1133,13 +1133,13 @@
     },
     {
       "path": "qualification/reports/ttnn-0.77.0-compatibility-matrix.json",
-      "sha256": "26d5d842bb59fbd994ac5938d11e857460a607ae546053aee778c0ca731fccfe",
-      "size": 78458
+      "sha256": "1ad28b482a62e843697948909b1786c4ea7e7413faa08c7e1f1e77b2fd320e83",
+      "size": 82391
     },
     {
       "path": "qualification/reports/ttnn-0.77.0-host-triage.md",
-      "sha256": "5e35a0f27b4386a22681905d976e9061fad4139865fbb3ee0cb90c1c7da5c1b3",
-      "size": 7617
+      "sha256": "a2949edec243e1ae33d488b5570adc17535798ad93bc9e98736eeb6c328cca55",
+      "size": 7622
     },
     {
       "path": "qualification/reports/ttnn-0.77.0-py312.md",
@@ -1158,8 +1158,8 @@
     },
     {
       "path": "qualification/reports/ttnn-0.77.0.md",
-      "sha256": "7c78693d0b95f9dfda6882a53706bbf6d80facfc94be3e2ff36dd6562c87f8c7",
-      "size": 28825
+      "sha256": "79d8f7ef3c037246aafe2c62404c3a99f5dc20021b930c00b842275df5efa9d4",
+      "size": 29196
     },
     {
       "path": "qualification/schemas/bh_required_capabilities.schema.json",
@@ -1323,8 +1323,8 @@
     },
     {
       "path": "qualification/tools/validate_release_readiness.py",
-      "sha256": "06ce0d459227be7a1ee52ed2b99b8b6584920b108b632b890ea057c948dc1dd7",
-      "size": 19767
+      "sha256": "fc4b96c17e074086e4690bd08db568859ff91b5726e8b97a260b983aa45d078d",
+      "size": 20103
     },
     {
       "path": "qualification/tools/validate_static_quality_baseline.py",
@@ -1333,13 +1333,13 @@
     },
     {
       "path": "qualification/tools/validate_support_docs.py",
-      "sha256": "1cb0c538d066df4f3898bbb68374fffa348b5f50610cfd2abe6170a99affe74a",
-      "size": 22320
+      "sha256": "b3cdbe419ad6824ef2e2ab5dcecd5cac2ed9c7f5c57587d3470eb969b84b3050",
+      "size": 24716
     },
     {
       "path": "qualification/tools/validate_ttnn_077_compatibility.py",
-      "sha256": "7bec3cb0a791342fbd69c6d518d6f5c7e0065f50f92635de1960cc1431d5fc11",
-      "size": 48553
+      "sha256": "1d3cf76ba434990345c6dda4b63a8ee5366abfebbcc13b0cf99302b652e18f5f",
+      "size": 50098
     },
     {
       "path": "qualification/tools/validate_vllm_matrix.py",

@@ -1,0 +1,21 @@
+============================= test session starts ==============================
+platform linux -- Python 3.10.12, pytest-9.0.3, pluggy-1.6.0 -- /localdev/gwang/tt_transformers/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /localdev/gwang/tt_transformers
+configfile: pyproject.toml
+plugins: anyio-4.14.2, cov-7.0.0, timeout-2.4.0
+timeout: 900.0s
+timeout method: signal
+timeout func_only: False
+collecting ... collected 1 item
+
+tests/modules/attention/test_attention_1d.py::test_attention_1d_blackhole_common_config_standard_correctness_cache_and_timing[prefill-p150x4-1x4] PASSED [100%]
+
+============================== 1 passed in 4.99s ===============================
+2026-09-03 12:25:59.774 | info     |    BuildKernels | JIT cache stats: 140/140 hits (100.0%) [140 cached, 93 build-once dedup, 0 merged artifacts, 0 merged genfiles] (build_cache_telemetry.cpp:207)
+2026-09-03 12:25:59.774 | info     |    BuildKernels | JIT telemetry: 3 registered TelemetryTokens (build_cache_telemetry.cpp:230)
+2026-09-03 12:25:59.796 | info     |          Device | Closing user mode device drivers (tt_cluster.cpp:513)
+2026-09-03 12:25:59.796 | info     |             UMD | Closing devices in cluster (cluster.cpp:1201)
+2026-09-03 12:26:00.461 | info     |             UMD | Closing devices in cluster completed. (cluster.cpp:1210)
+2026-09-03 12:26:00.461 | info     |             UMD | Cluster destructor started. (cluster.cpp:916)
+2026-09-03 12:26:00.461 | info     |             UMD | Cluster destructor completed. (cluster.cpp:919)

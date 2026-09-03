@@ -2,7 +2,7 @@
 
 Validation date: 2026-09-03 (UTC)
 
-Candidate SHA: `2883a949860d749adc2ed1af5525b27a9a547505`
+Candidate SHA: `73d414f8b826a7da982df8c8229d4ac41ed8ba33`
 
 This report records host-only validation of the extracted standalone support and test surface. No TT device, remote machine, server, or hardware test was used.
 
@@ -10,8 +10,8 @@ This report records host-only validation of the extracted standalone support and
 
 | Python | Interpreter | Direct host-test tuple |
 |---|---|---|
-| 3.10.19 | `/tmp/gwang/ttnn-077-symbol-probe.rGt2zl/venv/bin/python` | TTNN 0.77.0, Torch 2.11.0+cpu, Loguru 0.6.0, Transformers 5.12.1, pytest 9.0.3, jsonschema 4.26.0, pytz 2026.3.post1 |
-| 3.12.13 | `/tmp/gwang/tttv2-deps-py312.yi8BCf/venv/bin/python` | TTNN 0.77.0, Torch 2.11.0+cpu, Loguru 0.6.0, Transformers 5.12.1, pytest 9.0.3, jsonschema 4.26.0, pytz 2026.3.post1 |
+| 3.10.19 | `/tmp/gwang/tt-transformers-lock-install-v1/host-py310/bin/python` | TTNN 0.77.0, Torch 2.11.0+cpu, Loguru 0.6.0, Transformers 5.12.1, pytest 9.0.3, jsonschema 4.26.0, pytz 2026.3.post1 |
+| 3.12.13 | `/tmp/gwang/tt-transformers-lock-install-v1/host-py312/bin/python` | TTNN 0.77.0, Torch 2.11.0+cpu, Loguru 0.6.0, Transformers 5.12.1, pytest 9.0.3, jsonschema 4.26.0, pytz 2026.3.post1 |
 
 The final audited wheel
 `dist/tt_transformers-0.1.0.dev0-py3-none-any.whl` was installed non-editably
@@ -20,9 +20,9 @@ in both environments. The repository remained the test/support source, but no
 
 ```bash
 TT_TRANSFORMERS_OFFLINE=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
-  /tmp/gwang/ttnn-077-symbol-probe.rGt2zl/venv/bin/python -m pytest -m host -q
+  /tmp/gwang/tt-transformers-lock-install-v1/host-py310/bin/python -m pytest -m host -q
 TT_TRANSFORMERS_OFFLINE=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
-  /tmp/gwang/tttv2-deps-py312.yi8BCf/venv/bin/python -m pytest -m host -q
+  /tmp/gwang/tt-transformers-lock-install-v1/host-py312/bin/python -m pytest -m host -q
 ```
 
 ## Result
@@ -31,8 +31,8 @@ Both final commands completed successfully with the same exact test totals:
 
 | Python | Passed | Skipped | Deselected | Passing subtests | Failures/errors | Process exit |
 |---|---:|---:|---:|---:|---:|---:|
-| 3.10.19 | 2,165 | 28 | 6,791 | 81 | 0 | 0 |
-| 3.12.13 | 2,165 | 28 | 6,791 | 81 | 0 | 0 |
+| 3.10.19 | 2,170 | 28 | 6,791 | 81 | 0 | 0 |
+| 3.12.13 | 2,170 | 28 | 6,791 | 81 | 0 | 0 |
 
 The previously recorded five pytest warnings are empty-regex warnings emitted by `pytest.raises` in `tests/llm_runtime/test_config.py`; they do not indicate collection or execution failure.
 
@@ -41,14 +41,14 @@ The previously recorded five pytest warnings are empty-regex warnings emitted by
 After pytest had reported its successful result and exit status, CPython 3.12 emitted:
 
 ```text
-nanobind: leaked 8 instances!
+nanobind: leaked 10 instances!
 nanobind: leaked 36 types!
 nanobind: leaked 330 functions!
 nanobind: this is likely caused by a reference counting issue in the binding code.
 ```
 
 The complete retained source-layout reproduction is
-`/tmp/gwang/tttv2-py312-host-final.log`; the same diagnostic class and counts
+`/tmp/gwang/tttv2-73d-py312-host-final.log`; the same diagnostic class and counts
 were reproduced after non-editable wheel installation. The diagnostics occur
 during interpreter teardown and do not change pytest's exit code 0. They are not counted as a test failure or collection error.
 
@@ -64,7 +64,7 @@ The 28 skips are accounted for as follows:
 
 The MLP2D 8x4 topology-bug probe is explicitly classified as `device` +
 `wormhole`; it is deselected by the host command and therefore does not probe
-PCI devices. The final taxonomy audit reports 1,462 test functions, 1,208 host,
+PCI devices. The final taxonomy audit reports 1,465 test functions, 1,211 host,
 254 device, 393 model surfaces, and no errors.
 
 ## Defects closed

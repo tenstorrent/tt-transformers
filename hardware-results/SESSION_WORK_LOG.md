@@ -722,3 +722,74 @@ checkout's tracked cleanliness during the mandatory synchronized hardware gate.
 - Matrix validation reports 42 nodes with P150 8/8, and focused runner/evidence
   tests pass 49/49 on both supported Python versions. A new exact-SHA 42-node
   run is required; prior 34-node evidence is not spliced or relabeled.
+
+## 2026-09-03T12:16:23Z — `73d414f` full sweep in progress
+
+- Candidate `73d414f8b826a7da982df8c8229d4ac41ed8ba33` is pushed and
+  synchronized cleanly to both reserved hosts with divergence `0/0`.
+- Fresh WH and BH inventory is healthy, remote package/source parity is
+  132/132, and the supporting custom TTNN runtime installs are unchanged from
+  the accepted `2883a94...` sweep.
+- WH priorities 1–8 (all N150 modules) passed 8/8, serially, with clean exits
+  and no reset. BH is completing exact-one selector collection and dry-runs
+  before executing priorities 24–42 serially.
+
+## 2026-09-03T12:26:04Z — P150 1x1 modules pass on `bh-qb-05`
+
+- Priorities 24–30 passed 7/7 on the quietbox with only
+  `MESH_DEVICE=P150`; `TT_VISIBLE_DEVICES` remained unset and no BDF selector
+  was supplied. These are logical 1x1 records on the physical P150_X4 host.
+- BH P150x4 priorities 31–33 also pass and 34 is active. WH priorities 1–11
+  pass and priority 12 is active within its normal duration. Zero failures,
+  lifecycle events, or resets have occurred.
+
+## 2026-09-03T12:32:42Z — Single-P150 lane complete at 8/8
+
+- Llama 3.1 8B priority 38 passed, completing all P150 priorities 24–30 and 38
+  at 8/8 on `bh-qb-05`. `MESH_DEVICE=P150` was the sole topology selector and
+  the cache resolved once to `model_cache/llama3_8b/P150`.
+- BH modules are 14/14. WH is N150 8/8 plus N300 4/4 and has entered T3K.
+  BH priority 39 is active. Zero lifecycle faults or resets.
+
+## 2026-09-03T12:49:18Z — Modules 30/30
+
+- WH modules pass 16/16 and BH modules pass 14/14 at exact `73d414f...`, so
+  the complete reusable-module stage is green at 30/30.
+- Aggregate completed execution is 33/33. Strict W6 priority 17 and Qwen3
+  P150x4 token accuracy priority 41 are active independently. No lifecycle
+  fault or reset has occurred.
+
+## 2026-09-03T14:13:57Z — Full `73d414f` matrix passes 42/42
+
+- WH passes 23/23 and BH passes 19/19 at exact candidate
+  `73d414f8b826a7da982df8c8229d4ac41ed8ba33`.
+- Stages: modules 30/30, runtime 1/1, smoke 3/3, e2e 8/8. Meshes: N150 9/9,
+  N300 6/6, T3K 8/8, P150 8/8, P150x4 11/11.
+- All P150 records use only `MESH_DEVICE=P150`, with `TT_VISIBLE_DEVICES`
+  unset. Strict W6 passes 4/4. Zero failures, lifecycle events, or resets; both
+  hosts finish healthy and process-free.
+- Incoming bundles contain exactly 23 WH and 19 BH JSON/log pairs and each
+  subset passes the canonical evidence validator. Canonical merge/publication
+  is next; prior evidence remains immutable history.
+
+## 2026-09-03T14:16:00Z — Canonical index generated
+
+- Canonical directory contains exactly 42 runner JSON/log pairs at exact
+  `73d414f...`, split WH 23 and BH 19. The validator reports 42/42 passed.
+- Matrix SHA-256 is `1d04716dd79cf3c5ab6a7a2ac251224fe326ad64ef19fa440c06187118b9d7de`;
+  generated index SHA-256 is
+  `4e98b62c34fb9f8744e00624c091dc9de18b3f32c5cd74f2ad2be1ad26274d7a`.
+- Prior candidate evidence remains untouched. Report and release-authority
+  updates are the next publication checkpoint.
+
+## 2026-09-03T14:35:43Z — Final authority and host gate
+
+- All current reports/validators consume canonical `73d414f...` hardware
+  evidence: 42/42 pass, WH 23/BH 19, module30/runtime1/smoke3/e2e8.
+- Final non-editable host suites pass on each supported Python with 2,170
+  passed, 28 skipped, 6,791 deselected, 5 warnings, and 81 subtests.
+- Taxonomy is 1,465 = 1,211 host + 254 device, model 393. Support, TTNN,
+  hardware-evidence, release, and taxonomy validators pass. Release readiness
+  is 45 pass / 19 partial / 15 blocked; all manifests remain experimental.
+- Python 3.12 retains non-failing shutdown binding feedback, now reproduced as
+  10 leaked instances, 36 types, and 330 functions after pytest exit 0.

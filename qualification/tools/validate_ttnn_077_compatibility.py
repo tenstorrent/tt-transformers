@@ -13,27 +13,28 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "qualification/reports/ttnn-0.77.0-compatibility-matrix.json"
 REPORT = ROOT / "qualification/reports/ttnn-0.77.0.md"
-HARDWARE_CANDIDATE_SHA = "2883a949860d749adc2ed1af5525b27a9a547505"
+HARDWARE_CANDIDATE_SHA = "73d414f8b826a7da982df8c8229d4ac41ed8ba33"
 HARDWARE_INDEX_RELATIVE = f"qualification/evidence/hardware/{HARDWARE_CANDIDATE_SHA}/index.json"
 HARDWARE_MATRIX_RELATIVE = "qualification/manifests/hardware-matrix.json"
 HARDWARE_INDEX_ROOT = ROOT / Path(HARDWARE_INDEX_RELATIVE).parent
-EXPECTED_HARDWARE_INDEX_SHA256 = "ec9a540a8f31762078b592909e02cdb03e99384f9ddf8f955966fa41e42af07b"
+EXPECTED_HARDWARE_INDEX_SHA256 = "4e98b62c34fb9f8744e00624c091dc9de18b3f32c5cd74f2ad2be1ad26274d7a"
+EXPECTED_HARDWARE_MATRIX_SHA256 = "1d04716dd79cf3c5ab6a7a2ac251224fe326ad64ef19fa440c06187118b9d7de"
+DIAGNOSTIC_CANDIDATE_SHA = "2883a949860d749adc2ed1af5525b27a9a547505"
 TTFT_DIAGNOSTIC_RELATIVE = (
-    f"qualification/evidence/diagnostics/{HARDWARE_CANDIDATE_SHA}/wh-lb-42/accuracy-ttft/summary.json"
+    f"qualification/evidence/diagnostics/{DIAGNOSTIC_CANDIDATE_SHA}/wh-lb-42/accuracy-ttft/summary.json"
 )
-EXPECTED_DEFERRED_PRIORITIES = {*range(24, 31), 38}
 EXPECTED_HARDWARE_OUTCOMES = {
-    "passed": 34,
+    "passed": 42,
     "functional_failure": 0,
     "hardware_lifecycle_failure": 0,
     "missing_acceptance_data": 0,
     "pre_device_failure": 0,
 }
 EXPECTED_STAGE_COVERAGE = {
-    "module": (30, 23, 23, 0, 7),
+    "module": (30, 30, 30, 0, 0),
     "runtime": (1, 1, 1, 0, 0),
     "smoke": (3, 3, 3, 0, 0),
-    "e2e": (8, 7, 7, 0, 1),
+    "e2e": (8, 8, 8, 0, 0),
 }
 EXPECTED_W6_NODE = "wh-t3k-runtime-trace-order"
 EXPECTED_TEARDOWN_STATUS = "process_exited; fixture teardown not independently hardware-verified"
@@ -51,7 +52,7 @@ SURFACE_HARDWARE_VERDICTS = {
     "package_artifact": "not_applicable",
     "package_root": "not_applicable",
     "foundation_helpers": "partial_exact_sha_matrix_evidence_not_surface_complete",
-    "reusable_modules": "pass_executed_scope_23_of_30_with_7_p150_deferred",
+    "reusable_modules": "pass_executed_scope_30_of_30",
     "sampling_foundation": "partial_exact_sha_matrix_evidence_not_surface_complete",
     "llm_runtime": "pass_executed_w6_trace_order_scope_not_runtime_complete",
     "shared_executors": "partial_exact_sha_runtime_smoke_and_e2e_pass",
@@ -189,6 +190,8 @@ def build_hardware_qualification() -> dict[str, Any]:
         raise ValueError("canonical hardware index digest drift")
     if index["candidate_sha"] != HARDWARE_CANDIDATE_SHA:
         raise ValueError(f"unexpected hardware candidate SHA: {index['candidate_sha']}")
+    if sha256_file(matrix_path) != EXPECTED_HARDWARE_MATRIX_SHA256:
+        raise ValueError("hardware matrix digest drift")
     if index["matrix"] != {
         "node_count": 42,
         "path": HARDWARE_MATRIX_RELATIVE,
@@ -198,8 +201,8 @@ def build_hardware_qualification() -> dict[str, Any]:
         raise ValueError("canonical hardware index matrix identity drift")
     if len(matrix_by_id) != len(matrix_nodes) or len(matrix_nodes) != 42:
         raise ValueError("hardware matrix must contain 42 unique nodes")
-    if len(records) != 34 or len({record["node"] for record in records}) != 34:
-        raise ValueError("canonical hardware evidence must contain 34 unique executed nodes")
+    if len(records) != 42 or len({record["node"] for record in records}) != 42:
+        raise ValueError("canonical hardware evidence must contain 42 unique executed nodes")
 
     for record in records:
         if record["full_sha"] != HARDWARE_CANDIDATE_SHA:
@@ -236,9 +239,22 @@ def build_hardware_qualification() -> dict[str, Any]:
                 raise ValueError(f"hardware evidence size drift: {artifact_path}")
             if sha256_file(artifact_path) != artifact["sha256"]:
                 raise ValueError(f"hardware evidence digest drift: {artifact_path}")
+        if record["mesh_device"] == "P150":
+            source_evidence = json.loads(
+                (HARDWARE_INDEX_ROOT / record["source"]["evidence_json"]["path"]).read_text(encoding="utf-8")
+            )
+            if (
+                record["machine_pool_entry"] != "bh-qb-05"
+                or source_evidence["environment"].get("MESH_DEVICE") != "P150"
+                or source_evidence["environment"].get("TT_VISIBLE_DEVICES") is not None
+                or source_evidence["physical_inventory"].get("cluster_type") != "P150_X4"
+                or source_evidence["physical_inventory"].get("system_mesh") != "2x2"
+                or source_evidence["physical_inventory"].get("device_count") != 4
+            ):
+                raise ValueError(f"logical single-P150 physical provenance drift: {record['node']}")
 
     actual_outcomes = outcome_counts(records)
-    if index["summary"]["total"] != 34 or actual_outcomes != EXPECTED_HARDWARE_OUTCOMES:
+    if index["summary"]["total"] != 42 or actual_outcomes != EXPECTED_HARDWARE_OUTCOMES:
         raise ValueError(f"hardware outcome drift: {actual_outcomes}")
     if index["summary"]["outcomes"] != actual_outcomes:
         raise ValueError("canonical hardware summary does not match its records")
@@ -264,16 +280,8 @@ def build_hardware_qualification() -> dict[str, Any]:
 
     executed_ids = {record["node"] for record in records}
     deferred_nodes = [node for node in matrix_nodes if node["id"] not in executed_ids]
-    if {node["priority"] for node in deferred_nodes} != EXPECTED_DEFERRED_PRIORITIES:
-        raise ValueError("deferred hardware node set drift")
-    for node in deferred_nodes:
-        if (
-            node["architecture"] != "blackhole"
-            or node["mesh_device"] != "P150"
-            or node["machine_pool"] != ["bh-lb-11"]
-            or node["physical_sku_provenance"]["required_host_role"] != "8-P150 development loudbox"
-        ):
-            raise ValueError(f"deferred P150 provenance drift: {node['id']}")
+    if deferred_nodes:
+        raise ValueError(f"canonical hardware matrix is not fully executed: {[node['id'] for node in deferred_nodes]}")
 
     blockers = [record for record in records if record["outcome"] != "passed"]
     if blockers:
@@ -281,6 +289,9 @@ def build_hardware_qualification() -> dict[str, Any]:
     w6_records = [record for record in records if record["node"] == EXPECTED_W6_NODE]
     if len(w6_records) != 1 or w6_records[0]["outcome"] != "passed" or w6_records[0]["exit_code"] != 0:
         raise ValueError("W6 exact-SHA hardware pass is missing")
+    w6_log = HARDWARE_INDEX_ROOT / w6_records[0]["source"]["stdout_log"]["path"]
+    if "4 passed in 490.54s" not in w6_log.read_text(encoding="utf-8"):
+        raise ValueError("W6 four-case duration observation drift")
 
     executed_records = []
     for record in records:
@@ -302,7 +313,7 @@ def build_hardware_qualification() -> dict[str, Any]:
         )
 
     return {
-        "verdict": "partial_34_pass_8_p150_deferred",
+        "verdict": "pass_42_of_42_matrix_nodes",
         "candidate_sha": HARDWARE_CANDIDATE_SHA,
         "branch": "tttv2-standalone-migration",
         "canonical_index": {
@@ -331,27 +342,23 @@ def build_hardware_qualification() -> dict[str, Any]:
             "automatic_resets": 0,
             "teardown_status": EXPECTED_TEARDOWN_STATUS,
         },
-        "blocking_records": [],
-        "deferred": {
-            "count": len(deferred_nodes),
-            "classification": "deferred_not_run",
-            "reason": "required bh-lb-11 development loudbox was unavailable",
-            "substitution_refused": (
-                "bh-qb-05 P150_X4 quietbox does not satisfy single-P150 development-loudbox provenance"
-            ),
-            "nodes": [
-                {
-                    "priority": node["priority"],
-                    "node": node["id"],
-                    "stage": node["stage"],
-                    "architecture": node["architecture"],
-                    "mesh_device": node["mesh_device"],
-                    "required_machine_pool": node["machine_pool"],
-                    "required_host_role": node["physical_sku_provenance"]["required_host_role"],
-                }
-                for node in deferred_nodes
-            ],
+        "w6_observation": {
+            "cases_passed": 4,
+            "pytest_duration_seconds": 490.54,
+            "configured_performance_floor": False,
+            "interpretation": "correctness pass; slower timing observation is not a configured performance failure",
         },
+        "p150_logical_provenance": {
+            "records": 8,
+            "logical_mesh": "1x1",
+            "machine_pool_entry": "bh-qb-05",
+            "physical_cluster_type": "P150_X4",
+            "physical_system_mesh": "2x2",
+            "selection_environment": {"MESH_DEVICE": "P150", "TT_VISIBLE_DEVICES": None},
+            "claim_limit": "logical single-P150 execution; not standalone-product or full-host P150_X4 evidence",
+        },
+        "blocking_records": [],
+        "deferred": {"count": 0, "classification": "none", "nodes": []},
         "executed_records": executed_records,
         "evidence": evidence_record([HARDWARE_INDEX_RELATIVE, HARDWARE_MATRIX_RELATIVE]),
     }
@@ -371,7 +378,7 @@ def build_noncanonical_performance_feedback() -> dict[str, Any]:
         "ttft_target_passed": 4,
     }
     if (
-        diagnostic.get("candidate_sha") != HARDWARE_CANDIDATE_SHA
+        diagnostic.get("candidate_sha") != DIAGNOSTIC_CANDIDATE_SHA
         or diagnostic.get("classification") != "non-canonical performance diagnostic"
         or diagnostic.get("canonical_hardware_evidence_modified") is not False
         or diagnostic.get("summary") != expected_summary
@@ -443,7 +450,9 @@ def build_noncanonical_performance_feedback() -> dict[str, Any]:
         raise ValueError("Llama33 accuracy TTFT diagnostic coverage is incomplete")
     return {
         "classification": "non_canonical_performance_diagnostic",
-        "candidate_sha": HARDWARE_CANDIDATE_SHA,
+        "candidate_sha": DIAGNOSTIC_CANDIDATE_SHA,
+        "current_hardware_candidate_sha": HARDWARE_CANDIDATE_SHA,
+        "rerun_at_current_hardware_candidate": False,
         "canonical_hardware_record_count_impact": 0,
         "verdict": "ttft_4_of_4_pass_throughput_0_of_4_pass_overall_0_of_4",
         "summary": expected_summary,
@@ -498,7 +507,7 @@ def model_record(manifest_path: Path, manifest: dict[str, Any]) -> dict[str, Any
     validation = manifest["validation"]
     stale_hardware_gap = "No hardware evidence is attributable to the pinned extraction revision"
     current_known_gaps = [
-        "Final-SHA hardware evidence is partial and does not qualify the complete model contract",
+        "Final-SHA hardware evidence covers the 42-node matrix but does not qualify the complete model contract",
         *(gap for gap in manifest["known_gaps"] if gap != stale_hardware_gap),
     ]
     return {
@@ -511,7 +520,7 @@ def model_record(manifest_path: Path, manifest: dict[str, Any]) -> dict[str, Any
         "host_semantics_pythons": ["3.10.19", "3.12.13"],
         "hardware_verdict": "not_qualified",
         "firmware_driver_verdict": "partial_exact_sha_stacks_recorded_not_target_complete",
-        "geometry_verdict": "source_declared_with_partial_exact_sha_matrix_evidence_not_promoted",
+        "geometry_verdict": "source_declared_with_full_exact_sha_matrix_evidence_not_promoted",
         "declared_hardware_targets": manifest["hardware"],
         "known_gaps": current_known_gaps,
         "manifest_validation": validation,
@@ -562,9 +571,9 @@ def build_matrix() -> dict[str, Any]:
             raise ValueError(f"dependency matrix drift for Python {dependency['python']}: {actual}")
     host_text = (ROOT / "qualification/reports/host-ttnn-0.77.md").read_text(encoding="utf-8")
     for required in (
-        "| 3.10.19 | 2,165 | 28 | 6,791 | 81 | 0 | 0 |",
-        "| 3.12.13 | 2,165 | 28 | 6,791 | 81 | 0 | 0 |",
-        "nanobind: leaked 8 instances!",
+        "| 3.10.19 | 2,170 | 28 | 6,791 | 81 | 0 | 0 |",
+        "| 3.12.13 | 2,170 | 28 | 6,791 | 81 | 0 | 0 |",
+        "nanobind: leaked 10 instances!",
         "nanobind: leaked 36 types!",
         "nanobind: leaked 330 functions!",
         "not counted as a test failure or collection error",
@@ -575,8 +584,8 @@ def build_matrix() -> dict[str, Any]:
             raise ValueError(f"host support report is missing final evidence {required!r}")
     pyramid_text = (ROOT / "qualification/reports/test-pyramid.md").read_text(encoding="utf-8")
     for required in (
-        "1,462 source-level test functions",
-        "1,208 explicitly `host`",
+        "1,465 source-level test functions",
+        "1,211 explicitly `host`",
         "254 explicitly `device`",
         "393 concrete `model` surfaces",
     ):
@@ -626,8 +635,8 @@ def build_matrix() -> dict[str, Any]:
     ]
     return {
         "schema_version": 3,
-        "verdict": "host_compatible_with_ttnn_0_77_partial_hardware_qualification",
-        "validation_date": "2026-09-02",
+        "verdict": "host_compatible_with_ttnn_0_77_partial_release_qualification",
+        "validation_date": "2026-09-03",
         "tt_transformers": "0.1.0.dev0",
         "ttnn": "0.77.0",
         "source_tree": artifacts["source_tree"],
@@ -659,7 +668,7 @@ def build_matrix() -> dict[str, Any]:
         "host_suites": [
             {
                 "python": "3.10.19",
-                "passed": 2165,
+                "passed": 2170,
                 "skipped": 28,
                 "deselected": 6791,
                 "warnings": 5,
@@ -677,7 +686,7 @@ def build_matrix() -> dict[str, Any]:
             },
             {
                 "python": "3.12.13",
-                "passed": 2165,
+                "passed": 2170,
                 "skipped": 28,
                 "deselected": 6791,
                 "warnings": 5,
@@ -688,12 +697,12 @@ def build_matrix() -> dict[str, Any]:
                 "shutdown_diagnostics": {
                     "classification": "ttnn_nanobind_binding_lifecycle_feedback",
                     "phase": "interpreter_shutdown_after_pytest_success",
-                    "leaked_instances": 8,
+                    "leaked_instances": 10,
                     "leaked_types": 36,
                     "leaked_functions": 330,
                     "test_failure": False,
                     "message": "this is likely caused by a reference counting issue in the binding code.",
-                    "retained_output": "/tmp/gwang/tttv2-py312-host-final.log",
+                    "retained_output": "/tmp/gwang/tttv2-73d-py312-host-final.log",
                 },
                 "evidence": evidence_record(
                     [
@@ -704,8 +713,8 @@ def build_matrix() -> dict[str, Any]:
             },
         ],
         "test_taxonomy": {
-            "source_level_test_functions": 1462,
-            "host": 1208,
+            "source_level_test_functions": 1465,
+            "host": 1211,
             "device": 254,
             "model": 393,
             "evidence": evidence_record(["qualification/reports/test-pyramid.md"]),
@@ -768,9 +777,8 @@ def build_matrix() -> dict[str, Any]:
             "all twelve model package/core imports and host-only model configuration/contracts",
         ],
         "not_exercised": [
-            "single-P150 execution on the required bh-lb-11 development loudbox",
-            "experimental/private TTNN operations not selected by the 34 executed matrix records",
-            "hardware behavior outside the exact recorded N150, N300, T3K, and P150x4 selectors",
+            "experimental/private TTNN operations not selected by the 42 executed matrix records",
+            "hardware behavior outside the exact recorded N150, N300, T3K, P150, and P150x4 selectors",
             (
                 "performance qualification beyond the recorded correctness and token-accuracy acceptance data; "
                 "four Llama33 accuracy TTFT diagnostics are noncanonical feedback only"
@@ -779,17 +787,17 @@ def build_matrix() -> dict[str, Any]:
             "independent post-fixture hardware teardown verification",
         ],
         "remaining_hardware_gaps": {
-            "overall": "34_of_34_executed_pass; 8 P150 nodes deferred",
+            "overall": "42_of_42_matrix_nodes_pass; complete model contracts remain unqualified",
             "firmware_driver": (
                 "exact stacks recorded for executed wh-lb-42 and bh-qb-05 evidence; not qualified beyond those records"
             ),
             "unstable_api_semantics": ("14 paths present; only behavior selected by the executed matrix is evidenced"),
             "model_geometry": (
-                "partial exact-SHA matrix evidence exists; manifests remain experimental and unpromoted"
+                "full exact-SHA matrix evidence exists; manifests remain experimental and unpromoted"
             ),
             "required_next_evidence": [
-                "run priorities 24-30 and 38 on the required bh-lb-11 P150 development loudbox",
                 "extend exact-SHA evidence to remaining model-manifest geometry and context buckets",
+                "close the throughput regression measured only by the older noncanonical diagnostic SHA",
                 "independently verify post-fixture hardware teardown where a clean-teardown claim is required",
             ],
             "evidence": evidence_record(
@@ -823,7 +831,7 @@ def validate(matrix: dict[str, Any]) -> None:
         raise ValueError("compatibility matrix differs from deterministic authoritative-input projection")
     if (
         matrix["schema_version"] != 3
-        or matrix["verdict"] != "host_compatible_with_ttnn_0_77_partial_hardware_qualification"
+        or matrix["verdict"] != "host_compatible_with_ttnn_0_77_partial_release_qualification"
     ):
         raise ValueError("top-level TTNN 0.77 compatibility verdict drift")
     if {surface["id"] for surface in matrix["surfaces"]} != EXPECTED_SURFACES:
@@ -839,10 +847,10 @@ def validate(matrix: dict[str, Any]) -> None:
     hardware = matrix["hardware_qualification"]
     if (
         hardware["candidate_sha"] != HARDWARE_CANDIDATE_SHA
-        or hardware["canonical_index"]["record_count"] != 34
+        or hardware["canonical_index"]["record_count"] != 42
         or hardware["outcomes"] != EXPECTED_HARDWARE_OUTCOMES
-        or len(hardware["executed_records"]) != 34
-        or hardware["deferred"]["count"] != 8
+        or len(hardware["executed_records"]) != 42
+        or hardware["deferred"] != {"count": 0, "classification": "none", "nodes": []}
     ):
         raise ValueError("hardware qualification totals drift")
     if hardware["canonical_index"]["sha256"] != EXPECTED_HARDWARE_INDEX_SHA256:
@@ -865,13 +873,21 @@ def validate(matrix: dict[str, Any]) -> None:
         "teardown_status": EXPECTED_TEARDOWN_STATUS,
     }:
         raise ValueError("hardware lifecycle/reset verdict drift")
+    if hardware["p150_logical_provenance"] != {
+        "records": 8,
+        "logical_mesh": "1x1",
+        "machine_pool_entry": "bh-qb-05",
+        "physical_cluster_type": "P150_X4",
+        "physical_system_mesh": "2x2",
+        "selection_environment": {"MESH_DEVICE": "P150", "TT_VISIBLE_DEVICES": None},
+        "claim_limit": "logical single-P150 execution; not standalone-product or full-host P150_X4 evidence",
+    }:
+        raise ValueError("logical single-P150 qualification provenance drift")
     if hardware["blocking_records"]:
         raise ValueError("canonical hardware evidence must have no blocking record")
     w6_records = [record for record in hardware["executed_records"] if record["node"] == EXPECTED_W6_NODE]
     if len(w6_records) != 1 or w6_records[0]["outcome"] != "passed":
         raise ValueError("W6 hardware pass verdict drift")
-    if {node["priority"] for node in hardware["deferred"]["nodes"]} != (EXPECTED_DEFERRED_PRIORITIES):
-        raise ValueError("deferred P150 verdict drift")
     source_models = {path.parent.name for path in (ROOT / "src/tt_transformers/models").glob("*/model.py")}
     manifest_models = {
         json.loads(path.read_text(encoding="utf-8"))["model"]["package"]
@@ -893,7 +909,7 @@ def validate(matrix: dict[str, Any]) -> None:
         if not model["known_gaps"] or not model["evidence"]:
             raise ValueError(f"model lacks gaps/evidence: {model['package']}")
         if model["known_gaps"][0] != (
-            "Final-SHA hardware evidence is partial and does not qualify the complete model contract"
+            "Final-SHA hardware evidence covers the 42-node matrix but does not qualify the complete model contract"
         ):
             raise ValueError(f"model hardware gap verdict drift: {model['package']}")
         if model["host_semantics_pythons"] != ["3.10.19", "3.12.13"]:
@@ -906,7 +922,7 @@ def validate(matrix: dict[str, Any]) -> None:
     if [suite["python"] for suite in matrix["host_suites"]] != ["3.10.19", "3.12.13"]:
         raise ValueError("host suite interpreter coverage is incomplete")
     for suite in matrix["host_suites"]:
-        expected = (2165, 28, 6791, 5, 81, 0, 0, 0)
+        expected = (2170, 28, 6791, 5, 81, 0, 0, 0)
         actual = tuple(
             suite[field]
             for field in (
@@ -923,8 +939,8 @@ def validate(matrix: dict[str, Any]) -> None:
         if actual != expected:
             raise ValueError(f"host suite result drift for Python {suite['python']}: {actual}")
     if matrix["test_taxonomy"] != {
-        "source_level_test_functions": 1462,
-        "host": 1208,
+        "source_level_test_functions": 1465,
+        "host": 1211,
         "device": 254,
         "model": 393,
         "evidence": evidence_record(["qualification/reports/test-pyramid.md"]),
@@ -932,7 +948,9 @@ def validate(matrix: dict[str, Any]) -> None:
         raise ValueError("test taxonomy drift")
     performance_feedback = matrix["noncanonical_performance_feedback"]
     if (
-        performance_feedback["candidate_sha"] != HARDWARE_CANDIDATE_SHA
+        performance_feedback["candidate_sha"] != DIAGNOSTIC_CANDIDATE_SHA
+        or performance_feedback["current_hardware_candidate_sha"] != HARDWARE_CANDIDATE_SHA
+        or performance_feedback["rerun_at_current_hardware_candidate"] is not False
         or performance_feedback["canonical_hardware_record_count_impact"] != 0
         or performance_feedback["summary"]["ttft_target_passed"] != 4
         or performance_feedback["summary"]["throughput_target_passed"] != 0
@@ -944,7 +962,7 @@ def validate(matrix: dict[str, Any]) -> None:
     if (
         feedback["classification"] != "ttnn_nanobind_binding_lifecycle_feedback"
         or feedback["test_failure"]
-        or (feedback["leaked_instances"], feedback["leaked_types"], feedback["leaked_functions"]) != (8, 36, 330)
+        or (feedback["leaked_instances"], feedback["leaked_types"], feedback["leaked_functions"]) != (10, 36, 330)
     ):
         raise ValueError("Python 3.12 TTNN binding feedback is missing or misclassified")
     for section in (
@@ -989,17 +1007,19 @@ def validate(matrix: dict[str, Any]) -> None:
     report_text = REPORT.read_text(encoding="utf-8")
     for required in (
         HARDWARE_CANDIDATE_SHA,
-        "2,165 passed",
-        "1,462 source-level test functions",
-        "1,208 host, 254 device, and 393 model-marked surfaces",
-        "34/34 executed nodes passed",
-        "modules 23/23",
+        DIAGNOSTIC_CANDIDATE_SHA,
+        "2,170 passed",
+        "1,465 source-level test functions",
+        "1,211 host, 254 device, and 393 model-marked surfaces",
+        "42/42 matrix nodes passed",
+        "modules 30/30",
         "smoke 3/3",
-        "e2e 7/7",
+        "e2e 8/8",
         "W6 passes all four",
+        "490.54 seconds",
         "TTFT passed 4/4",
         "throughput failed 4/4",
-        "eight single-P150 nodes remain deferred",
+        "logical 1x1 execution on the physical P150_X4",
         "zero hardware-lifecycle failures and zero resets",
         "All twelve model manifests remain `experimental`",
     ):

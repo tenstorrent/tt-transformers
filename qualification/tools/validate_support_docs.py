@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import re
 import sys
@@ -29,8 +30,11 @@ MODELS = (
     "qwen3_32b",
 )
 PINNED_SHA = "00748e6ac7b65f50e5c2af07f6e7c1c535c7f4c0"
-FINAL_HARDWARE_SHA = "2883a949860d749adc2ed1af5525b27a9a547505"
+FINAL_HARDWARE_SHA = "73d414f8b826a7da982df8c8229d4ac41ed8ba33"
 FINAL_HARDWARE_INDEX = ROOT / "qualification/evidence/hardware" / FINAL_HARDWARE_SHA / "index.json"
+FINAL_HARDWARE_INDEX_SHA256 = "4e98b62c34fb9f8744e00624c091dc9de18b3f32c5cd74f2ad2be1ad26274d7a"
+PREVIOUS_HARDWARE_SHA = "2883a949860d749adc2ed1af5525b27a9a547505"
+PREVIOUS_HARDWARE_INDEX = ROOT / "qualification/evidence/hardware" / PREVIOUS_HARDWARE_SHA / "index.json"
 SUPERSEDED_HARDWARE_SHA = "b24eabe35c8f2c73f45493da40e5a6351eb0ec2d"
 SUPERSEDED_HARDWARE_INDEX = ROOT / "qualification/evidence/hardware" / SUPERSEDED_HARDWARE_SHA / "index.json"
 HISTORICAL_HARDWARE_SHA = "ba7abefba4484689c953ac53fe8810322db1d184"
@@ -38,10 +42,9 @@ HISTORICAL_HARDWARE_INDEX = ROOT / "qualification/evidence/hardware" / HISTORICA
 HARDWARE_MATRIX = ROOT / "qualification/manifests/hardware-matrix.json"
 HARDWARE_EVIDENCE_CSV = ROOT / "qualification/analysis/support/hardware_evidence.csv"
 ACCURACY_TTFT_DIAGNOSTIC = (
-    ROOT / "qualification/evidence/diagnostics" / FINAL_HARDWARE_SHA / "accuracy-ttft/summary.json"
+    ROOT / "qualification/evidence/diagnostics" / PREVIOUS_HARDWARE_SHA / "accuracy-ttft/summary.json"
 )
 RELAXED_W6_DIAGNOSTIC_SHA = "d7677f822356e839f707a6447fd0abc89e620d56"
-EXPECTED_DEFERRED_PRIORITIES = {*range(24, 31), 38}
 EXPECTED_TEARDOWN = "process_exited; fixture teardown not independently hardware-verified"
 REQUIRED_HEADINGS = (
     "### Purpose",
@@ -71,21 +74,24 @@ def _validate_hardware_authorities(errors: list[str]) -> None:
     matrix_nodes = matrix.get("nodes", [])
     if hardware_index.get("candidate_sha") != FINAL_HARDWARE_SHA:
         errors.append(f"centralized hardware candidate SHA drifted: {hardware_index.get('candidate_sha')}")
-    if len(records) != 34 or len({record.get("node") for record in records}) != 34:
+    index_sha256 = hashlib.sha256(FINAL_HARDWARE_INDEX.read_bytes()).hexdigest()
+    if index_sha256 != FINAL_HARDWARE_INDEX_SHA256:
+        errors.append(f"centralized hardware index SHA-256 drifted: {index_sha256}")
+    if len(records) != 42 or len({record.get("node") for record in records}) != 42:
         errors.append(f"centralized hardware record count/identity drifted: {len(records)}")
     if any(record.get("full_sha") != FINAL_HARDWARE_SHA for record in records):
         errors.append("centralized hardware bundle contains a mixed-SHA record")
 
     outcomes = Counter(record.get("outcome") for record in records)
-    expected_outcomes = Counter({"passed": 34})
+    expected_outcomes = Counter({"passed": 42})
     if outcomes != expected_outcomes:
         errors.append(f"centralized hardware outcome count drifted: {dict(outcomes)}")
     stage_outcomes = Counter((record.get("stage"), record.get("outcome")) for record in records)
     expected_stage_outcomes = Counter(
         {
-            ("module", "passed"): 23,
+            ("module", "passed"): 30,
             ("smoke", "passed"): 3,
-            ("e2e", "passed"): 7,
+            ("e2e", "passed"): 8,
             ("runtime", "passed"): 1,
         }
     )
@@ -97,11 +103,16 @@ def _validate_hardware_authorities(errors: list[str]) -> None:
             ("N150", "passed"): 9,
             ("N300", "passed"): 6,
             ("T3K", "passed"): 8,
+            ("P150", "passed"): 8,
             ("P150x4", "passed"): 11,
         }
     )
     if mesh_outcomes != expected_mesh_outcomes:
         errors.append(f"centralized hardware mesh outcomes drifted: {dict(mesh_outcomes)}")
+    machine_outcomes = Counter((record.get("machine_pool_entry"), record.get("outcome")) for record in records)
+    expected_machine_outcomes = Counter({("wh-lb-42", "passed"): 23, ("bh-qb-05", "passed"): 19})
+    if machine_outcomes != expected_machine_outcomes:
+        errors.append(f"centralized hardware host outcomes drifted: {dict(machine_outcomes)}")
 
     w6_records = [record for record in records if record.get("node") == "wh-t3k-runtime-trace-order"]
     if len(w6_records) != 1 or w6_records[0].get("outcome") != "passed":
@@ -131,7 +142,7 @@ def _validate_hardware_authorities(errors: list[str]) -> None:
             if forbidden:
                 errors.append(f"canonical W6 pass contains forbidden diagnostic overrides: {forbidden}")
             log_path = FINAL_HARDWARE_INDEX.parent / w6_records[0]["source"]["stdout_log"]["path"]
-            if log_path.is_file() and "4 passed in 343.05s" not in log_path.read_text():
+            if log_path.is_file() and "4 passed in 490.54s" not in log_path.read_text():
                 errors.append("canonical W6 log does not contain the four-case strict pass")
 
     for record in records:
@@ -149,22 +160,49 @@ def _validate_hardware_authorities(errors: list[str]) -> None:
                 errors.append(f"hardware evidence artifact is missing: {path}")
 
     executed = {record.get("node") for record in records}
-    deferred = [node for node in matrix_nodes if node.get("id") not in executed]
-    if {node.get("priority") for node in deferred} != EXPECTED_DEFERRED_PRIORITIES:
-        errors.append(f"deferred hardware priorities drifted: {[node.get('priority') for node in deferred]}")
-    for node in deferred:
-        if node.get("mesh_device") != "P150" or node.get("machine_pool") != ["bh-lb-11"]:
-            errors.append(f"deferred hardware provenance drifted: {node.get('id')}")
+    matrix_ids = {node.get("id") for node in matrix_nodes}
+    if executed != matrix_ids:
+        errors.append(f"current hardware execution does not cover the full matrix: {sorted(matrix_ids - executed)}")
+
+    p150_records = [record for record in records if record.get("mesh_device") == "P150"]
+    if len(p150_records) != 8 or any(record.get("machine_pool_entry") != "bh-qb-05" for record in p150_records):
+        errors.append("logical single-P150 record provenance drifted")
+    for record in p150_records:
+        raw_path = FINAL_HARDWARE_INDEX.parent / record["source"]["evidence_json"]["path"]
+        if not raw_path.is_file():
+            continue
+        raw = json.loads(raw_path.read_text())
+        inventory = raw.get("physical_inventory", {})
+        environment = raw.get("environment", {})
+        if (
+            environment.get("MESH_DEVICE") != "P150"
+            or environment.get("TT_VISIBLE_DEVICES") is not None
+            or inventory.get("cluster_type") != "P150_X4"
+            or inventory.get("system_mesh") != "2x2"
+            or inventory.get("device_count") != 4
+        ):
+            errors.append(f"logical single-P150 physical boundary drifted: {record.get('node')}")
 
     summary = hardware_index.get("summary", {})
-    if summary.get("total") != 34 or summary.get("outcomes") != {
+    if summary.get("total") != 42 or summary.get("outcomes") != {
         "functional_failure": 0,
         "hardware_lifecycle_failure": 0,
         "missing_acceptance_data": 0,
-        "passed": 34,
+        "passed": 42,
         "pre_device_failure": 0,
     }:
         errors.append(f"canonical hardware summary drifted: {summary.get('outcomes')}")
+
+    if not PREVIOUS_HARDWARE_INDEX.is_file():
+        errors.append(f"superseded 2883 hardware index is missing: {PREVIOUS_HARDWARE_INDEX}")
+    else:
+        previous = json.loads(PREVIOUS_HARDWARE_INDEX.read_text())
+        if (
+            previous.get("candidate_sha") != PREVIOUS_HARDWARE_SHA
+            or previous.get("summary", {}).get("total") != 34
+            or previous.get("summary", {}).get("outcomes", {}).get("passed") != 34
+        ):
+            errors.append("superseded 2883 hardware evidence drifted")
 
     if not SUPERSEDED_HARDWARE_INDEX.is_file():
         errors.append(f"superseded b24 hardware index is missing: {SUPERSEDED_HARDWARE_INDEX}")
@@ -195,9 +233,8 @@ def _validate_hardware_authorities(errors: list[str]) -> None:
         ledger = list(csv.DictReader(handle))
     current = [row for row in ledger if row["evidence_sha"] == FINAL_HARDWARE_SHA]
     current_executed = [row for row in current if row["eligible_for_pinned_baseline"] == "true"]
-    current_deferred = [row for row in current if row["result"] == "deferred_not_run"]
-    if len(current_executed) != 34 or {row["scope"] for row in current_executed} != executed:
-        errors.append("hardware evidence CSV does not contain the 34 current execution records")
+    if len(current_executed) != 42 or {row["scope"] for row in current_executed} != executed:
+        errors.append("hardware evidence CSV does not contain the 42 current execution records")
     if any(row["result"] != "passed" for row in current_executed):
         errors.append("current eligible hardware evidence contains a non-pass result")
     indexed_sources = {
@@ -208,15 +245,11 @@ def _validate_hardware_authorities(errors: list[str]) -> None:
     }
     if any(row["source"] != indexed_sources.get(row["scope"]) for row in current_executed):
         errors.append("current hardware evidence CSV source paths drifted from the canonical index")
-    deferred_ids = {node.get("id") for node in deferred}
-    if (
-        len(current_deferred) != 8
-        or {row["scope"] for row in current_deferred} != deferred_ids
-        or any(row["eligible_for_pinned_baseline"] != "false" for row in current_deferred)
-    ):
-        errors.append("hardware evidence CSV does not contain eight ineligible current deferrals")
     if len(current) != 42:
         errors.append(f"hardware evidence CSV current-candidate row count drifted: {len(current)}")
+    previous_rows = [row for row in ledger if row["evidence_sha"] == PREVIOUS_HARDWARE_SHA]
+    if len(previous_rows) != 42 or any(row["eligible_for_pinned_baseline"] != "false" for row in previous_rows):
+        errors.append("hardware evidence CSV does not preserve 2883 as 42 ineligible superseded rows")
     superseded_rows = [row for row in ledger if row["evidence_sha"] == SUPERSEDED_HARDWARE_SHA]
     if len(superseded_rows) != 42 or any(row["eligible_for_pinned_baseline"] != "false" for row in superseded_rows):
         errors.append("hardware evidence CSV does not preserve b24 as 42 ineligible superseded rows")
@@ -232,7 +265,7 @@ def _validate_hardware_authorities(errors: list[str]) -> None:
     diagnostic = json.loads(ACCURACY_TTFT_DIAGNOSTIC.read_text())
     cells = diagnostic.get("cells", [])
     if (
-        diagnostic.get("candidate_sha") != FINAL_HARDWARE_SHA
+        diagnostic.get("candidate_sha") != PREVIOUS_HARDWARE_SHA
         or diagnostic.get("canonical_hardware_evidence") is not False
         or diagnostic.get("classification") != "noncanonical_performance_diagnostic"
         or len(cells) != 4
@@ -367,11 +400,15 @@ def validate() -> list[str]:
         for token in (
             "Current final-SHA subset evidence",
             FINAL_HARDWARE_SHA,
-            "34 passing nodes",
+            PREVIOUS_HARDWARE_SHA,
+            "42 passing nodes",
             "official strict W6",
-            "23 executed module nodes",
+            "30 module nodes",
             "all three smoke nodes",
-            "all seven end-to-end/token-accuracy nodes",
+            "all eight end-to-end/token-accuracy nodes",
+            "MESH_DEVICE=P150",
+            "logical 1x1",
+            "not standalone-P150 product evidence",
             "P150_X4 evidence",
             "accuracy-TTFT diagnostic",
             "TTFT passed 4/4",
@@ -394,6 +431,8 @@ def validate() -> list[str]:
             "Superseded candidate",
             "Historical candidate",
             FINAL_HARDWARE_SHA,
+            FINAL_HARDWARE_INDEX_SHA256,
+            PREVIOUS_HARDWARE_SHA,
             SUPERSEDED_HARDWARE_SHA,
             HISTORICAL_HARDWARE_SHA,
             RELAXED_W6_DIAGNOSTIC_SHA,
@@ -401,23 +440,29 @@ def validate() -> list[str]:
             "official strict",
             "TTFT passed 4/4",
             "performance_floor_failure",
-            "excluded from the 34",
-            "does not alter the canonical index",
+            "excluded from the current 42",
+            "current canonical index",
+            "MESH_DEVICE=P150",
+            "standalone-P150 product",
         ),
         "qualification/reports/hardware-readiness.md": (
             FINAL_HARDWARE_SHA,
+            FINAL_HARDWARE_INDEX_SHA256,
+            PREVIOUS_HARDWARE_SHA,
             SUPERSEDED_HARDWARE_SHA,
             HISTORICAL_HARDWARE_SHA,
             RELAXED_W6_DIAGNOSTIC_SHA,
-            "34 passed",
-            "23/23",
+            "42/42 passed",
+            "30/30",
             "1/1",
             "3/3",
-            "7/7",
+            "8/8",
             "Noncanonical accuracy-TTFT diagnostic",
             "TTFT passed 4/4",
             "performance_floor_failure",
-            "34-record index",
+            "42-record index",
+            "MESH_DEVICE=P150",
+            "standalone-P150 product",
             "excluded from the",
             "current canonical index and pass count",
         ),

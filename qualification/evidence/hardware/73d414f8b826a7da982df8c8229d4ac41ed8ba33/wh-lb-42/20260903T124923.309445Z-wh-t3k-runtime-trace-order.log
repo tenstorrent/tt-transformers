@@ -1,0 +1,24 @@
+============================= test session starts ==============================
+platform linux -- Python 3.10.12, pytest-9.0.3, pluggy-1.6.0 -- /localdev/gwang/tt_transformers/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /localdev/gwang/tt_transformers
+configfile: pyproject.toml
+plugins: cov-7.0.0, timeout-2.4.0, anyio-4.14.2
+timeout: 1800.0s
+timeout method: signal
+timeout func_only: False
+collecting ... collected 4 items
+
+tests/models/llama33_70b/test_t3k_batched_prefill_correctness.py::test_w6_active15_padded16_trace_correctness[logits-topk-16-15-T3K] PASSED [ 25%]
+tests/models/llama33_70b/test_t3k_batched_prefill_correctness.py::test_w6_active15_padded16_trace_correctness[logits-topk-15-16-T3K] PASSED [ 50%]
+tests/models/llama33_70b/test_t3k_batched_prefill_correctness.py::test_w6_active15_padded16_trace_correctness[topk-logits-16-15-T3K] PASSED [ 75%]
+tests/models/llama33_70b/test_t3k_batched_prefill_correctness.py::test_w6_active15_padded16_trace_correctness[topk-logits-15-16-T3K] PASSED [100%]
+
+======================== 4 passed in 490.54s (0:08:10) =========================
+2026-09-03 12:57:44.688 | info     |    BuildKernels | JIT cache stats: 1056/1056 hits (100.0%) [1056 cached, 951 build-once dedup, 0 merged artifacts, 0 merged genfiles] (build_cache_telemetry.cpp:207)
+2026-09-03 12:57:44.688 | info     |    BuildKernels | JIT telemetry: 3 registered TelemetryTokens (build_cache_telemetry.cpp:230)
+2026-09-03 12:57:44.711 | info     |          Device | Closing user mode device drivers (tt_cluster.cpp:513)
+2026-09-03 12:57:44.711 | info     |             UMD | Closing devices in cluster (cluster.cpp:1201)
+2026-09-03 12:57:44.749 | info     |             UMD | Closing devices in cluster completed. (cluster.cpp:1210)
+2026-09-03 12:57:44.749 | info     |             UMD | Cluster destructor started. (cluster.cpp:916)
+2026-09-03 12:57:44.749 | info     |             UMD | Cluster destructor completed. (cluster.cpp:919)

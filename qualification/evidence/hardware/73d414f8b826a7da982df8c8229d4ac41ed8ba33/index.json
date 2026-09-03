@@ -1,0 +1,1811 @@
+{
+  "candidate_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+  "matrix": {
+    "node_count": 42,
+    "path": "qualification/manifests/hardware-matrix.json",
+    "schema_version": 1,
+    "sha256": "1d04716dd79cf3c5ab6a7a2ac251224fe326ad64ef19fa440c06187118b9d7de"
+  },
+  "records": [
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "architecture": "wormhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:15:08.853836Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "wh-lb-42",
+      "mesh_device": "N150",
+      "metrics_count": 4,
+      "node": "wh-n150-rmsnorm-prefill",
+      "outcome": "passed",
+      "priority": 1,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "wh-lb-42/20260903T121504.636856Z-wh-n150-rmsnorm-prefill.json",
+          "sha256": "4aa98579adb5cf5adf5464621696bfca1da51902c4c305e0789c11a649c5aa6c",
+          "size_bytes": 3232
+        },
+        "pair_sha256": "76e2ca17d17e479cd2268ff86f3fe98de3b3a29d74df7240f71bc5f9162a071f",
+        "stdout_log": {
+          "path": "wh-lb-42/20260903T121504.636856Z-wh-n150-rmsnorm-prefill.log",
+          "sha256": "25095bdcf0ee95d99340bac75d4b69d70274e5625ee017c241894d05e2b0c89c",
+          "size_bytes": 1510
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:15:04.636856Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "architecture": "wormhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:15:42.931617Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "wh-lb-42",
+      "mesh_device": "N150",
+      "metrics_count": 4,
+      "node": "wh-n150-rmsnorm-decode",
+      "outcome": "passed",
+      "priority": 2,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "wh-lb-42/20260903T121538.564054Z-wh-n150-rmsnorm-decode.json",
+          "sha256": "a2b35f3c6fc9641835baf3dc973752ec2b49c9ab9b0918ff73c01f75e1c4438b",
+          "size_bytes": 3224
+        },
+        "pair_sha256": "bf557549a12ae882c4c6a7c6ff4ff895f30c272d95fee72b131ce1aa15f4428a",
+        "stdout_log": {
+          "path": "wh-lb-42/20260903T121538.564054Z-wh-n150-rmsnorm-decode.log",
+          "sha256": "95806e15531b8d7eeb671a4b881aa12f5889f29b07a5dd78b1dc1c1aa5814026",
+          "size_bytes": 1509
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:15:38.564054Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "architecture": "wormhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:15:45.312808Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "wh-lb-42",
+      "mesh_device": "N150",
+      "metrics_count": 4,
+      "node": "wh-n150-lm-head",
+      "outcome": "passed",
+      "priority": 3,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "wh-lb-42/20260903T121542.980755Z-wh-n150-lm-head.json",
+          "sha256": "83083c2783222e0b6fed41bffa3b0d085e5fb69fb0884c09df8aaa34784f0a6c",
+          "size_bytes": 3189
+        },
+        "pair_sha256": "7cc13f0ebb0695e9c62f2e6393a4ab640a03c84699ecc9bcdd421a2b1c955552",
+        "stdout_log": {
+          "path": "wh-lb-42/20260903T121542.980755Z-wh-n150-lm-head.log",
+          "sha256": "357f81bdfff61b5a1232a0b1cefe7d331817531a2ecab13003c9bbaf2f61eccd",
+          "size_bytes": 1509
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:15:42.980755Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "architecture": "wormhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:15:50.378796Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "wh-lb-42",
+      "mesh_device": "N150",
+      "metrics_count": 4,
+      "node": "wh-n150-mlp-prefill",
+      "outcome": "passed",
+      "priority": 4,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "wh-lb-42/20260903T121545.360534Z-wh-n150-mlp-prefill.json",
+          "sha256": "d574dabe69aaeadfb2dcda9690bfedff5bee56be23357c71fde45c38d6c6e74e",
+          "size_bytes": 3227
+        },
+        "pair_sha256": "346a87f215b423a73168633478599a30e75356f153dba2b1ac1bb503debcd8e4",
+        "stdout_log": {
+          "path": "wh-lb-42/20260903T121545.360534Z-wh-n150-mlp-prefill.log",
+          "sha256": "36b80aa84389866e8c28268c4b0b3dc9b662b426418b7fbbf910bde2e28eb140",
+          "size_bytes": 1515
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:15:45.360534Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "architecture": "wormhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:15:55.885306Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "wh-lb-42",
+      "mesh_device": "N150",
+      "metrics_count": 4,
+      "node": "wh-n150-mlp-decode",
+      "outcome": "passed",
+      "priority": 5,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "wh-lb-42/20260903T121550.427025Z-wh-n150-mlp-decode.json",
+          "sha256": "535a16825d56c9f18e29d9a776edc0297f79823faa119de99bbc14df2e4716c0",
+          "size_bytes": 3186
+        },
+        "pair_sha256": "1fa8e97a74f3913dafe3763cb8632c9e708d3e8108ae546955ffa606b65cde75",
+        "stdout_log": {
+          "path": "wh-lb-42/20260903T121550.427025Z-wh-n150-mlp-decode.log",
+          "sha256": "8de6a9e34fa05018d9c0230713cd00b6b1db2e7c67b9ae3339d120ea6f227e09",
+          "size_bytes": 1503
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:15:50.427025Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "architecture": "wormhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:16:01.666599Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "wh-lb-42",
+      "mesh_device": "N150",
+      "metrics_count": 4,
+      "node": "wh-n150-attention-prefill",
+      "outcome": "passed",
+      "priority": 6,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "wh-lb-42/20260903T121555.934857Z-wh-n150-attention-prefill.json",
+          "sha256": "84cdca81d5f802be980981d0feec2684513eec372e4fc67e0dd511186dd78d6f",
+          "size_bytes": 3257
+        },
+        "pair_sha256": "9fb099315e299b23a6a7f63f6040c17e3be2c4e3f97413490c9016052ae93bd1",
+        "stdout_log": {
+          "path": "wh-lb-42/20260903T121555.934857Z-wh-n150-attention-prefill.log",
+          "sha256": "ee4893965675021cc55ff181bc39f6eb672080320f90cef170f29b819d2f3b2f",
+          "size_bytes": 1517
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:15:55.934857Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "architecture": "wormhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:16:06.843184Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "wh-lb-42",
+      "mesh_device": "N150",
+      "metrics_count": 4,
+      "node": "wh-n150-attention-decode",
+      "outcome": "passed",
+      "priority": 7,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "wh-lb-42/20260903T121601.715679Z-wh-n150-attention-decode.json",
+          "sha256": "1391e15ae17610b64d652faa13fa3e78e5055c79d6dbfe57cc99700998511d35",
+          "size_bytes": 3249
+        },
+        "pair_sha256": "c5ab4b54cedece84521ae2179da47a1a46e4ea1f5f78b5309fc4acf35cc16ae9",
+        "stdout_log": {
+          "path": "wh-lb-42/20260903T121601.715679Z-wh-n150-attention-decode.log",
+          "sha256": "8ee68162baba4160d1ae4c847217b517bc8e92c669336be9adf8bb23e9bc80e0",
+          "size_bytes": 1516
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:16:01.715679Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "architecture": "wormhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:16:12.311852Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "wh-lb-42",
+      "mesh_device": "N150",
+      "metrics_count": 4,
+      "node": "wh-n150-attention-paged-transition",
+      "outcome": "passed",
+      "priority": 8,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "wh-lb-42/20260903T121606.891469Z-wh-n150-attention-paged-transition.json",
+          "sha256": "458f47a14213ab3ab1a6512657b3bd222455f6f8c5a56c6dfb910c168b434fab",
+          "size_bytes": 3338
+        },
+        "pair_sha256": "f76b7715172a143bc30bcea3ae8408246a769fa21034cbedf7a541df4e58bee1",
+        "stdout_log": {
+          "path": "wh-lb-42/20260903T121606.891469Z-wh-n150-attention-paged-transition.log",
+          "sha256": "bcdc33623b3bf8118c790bb2f65831d4055892344f69581f7583402a6683cd17",
+          "size_bytes": 1529
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:16:06.891469Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "clean_teardown"
+      ],
+      "architecture": "wormhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:17:54.796994Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "wh-lb-42",
+      "mesh_device": "N300",
+      "metrics_count": 3,
+      "node": "wh-n300-rmsnorm",
+      "outcome": "passed",
+      "priority": 9,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "wh-lb-42/20260903T121632.321212Z-wh-n300-rmsnorm.json",
+          "sha256": "907d9caa5e26f47ce0ca66a28d233f4fb30c831ac0a619905307198a58510bd2",
+          "size_bytes": 2940
+        },
+        "pair_sha256": "265befbc336e49abb3ec5fb5d3047a4697cb68438cb76c407ac71fb578b2bf9f",
+        "stdout_log": {
+          "path": "wh-lb-42/20260903T121632.321212Z-wh-n300-rmsnorm.log",
+          "sha256": "0b9639dc7dc4f277abd025e9835738a21f308d1365c1c878efa06e29cf0d4416",
+          "size_bytes": 11122
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:16:32.321212Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "clean_teardown"
+      ],
+      "architecture": "wormhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:20:07.601354Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "wh-lb-42",
+      "mesh_device": "N300",
+      "metrics_count": 3,
+      "node": "wh-n300-lm-head",
+      "outcome": "passed",
+      "priority": 10,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "wh-lb-42/20260903T121754.847095Z-wh-n300-lm-head.json",
+          "sha256": "30cae3bfd368a8128540684cf1368ffae79394cc32d71e46f4a4d813640dc295",
+          "size_bytes": 2939
+        },
+        "pair_sha256": "767b5f2317bd2bd16f256e263a8f78c70fd1db852c7b1808a03dad11fc575169",
+        "stdout_log": {
+          "path": "wh-lb-42/20260903T121754.847095Z-wh-n300-lm-head.log",
+          "sha256": "90b21fb7c7a96e04df91568cb1c3fd781a778339fa183c69f998509ba8c52a9e",
+          "size_bytes": 2213
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:17:54.847095Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "clean_teardown"
+      ],
+      "architecture": "wormhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:22:04.320359Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "wh-lb-42",
+      "mesh_device": "N300",
+      "metrics_count": 3,
+      "node": "wh-n300-mlp",
+      "outcome": "passed",
+      "priority": 11,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "wh-lb-42/20260903T122007.683434Z-wh-n300-mlp.json",
+          "sha256": "a11b24b336203180ce66206d755ec799fa216e6c566f6def881f3903c4fed0c5",
+          "size_bytes": 2896
+        },
+        "pair_sha256": "f7c2b354fe7000c34c669bcb267cf114074fa4a70a1f7dbef9b3e9af99391d76",
+        "stdout_log": {
+          "path": "wh-lb-42/20260903T122007.683434Z-wh-n300-mlp.log",
+          "sha256": "f5fb6e947ca60e5e8fe7c855e56d73dee2c66e208050c218c28c732e16d7d87f",
+          "size_bytes": 10462
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:20:07.683434Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "clean_teardown"
+      ],
+      "architecture": "wormhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:30:00.087663Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "wh-lb-42",
+      "mesh_device": "N300",
+      "metrics_count": 3,
+      "node": "wh-n300-attention",
+      "outcome": "passed",
+      "priority": 12,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "wh-lb-42/20260903T122204.368700Z-wh-n300-attention.json",
+          "sha256": "0226b9832d84809ec077607cb318c325c111337fd27e7ffa826e0b063f731007",
+          "size_bytes": 2965
+        },
+        "pair_sha256": "6fd855d7d91b47ed7b69367720c9261cd7f60105d98d0af8f16334d3b3458e7c",
+        "stdout_log": {
+          "path": "wh-lb-42/20260903T122204.368700Z-wh-n300-attention.log",
+          "sha256": "6bc90b515243add3fb345f17de3e8b9726e6ce40e45744ca68198f433134d973",
+          "size_bytes": 25607
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:22:04.368700Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "clean_teardown"
+      ],
+      "architecture": "wormhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:31:52.328263Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "wh-lb-42",
+      "mesh_device": "T3K",
+      "metrics_count": 3,
+      "node": "wh-t3k-rmsnorm",
+      "outcome": "passed",
+      "priority": 13,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "wh-lb-42/20260903T123017.141969Z-wh-t3k-rmsnorm.json",
+          "sha256": "d1df6b3e4d346b5e7a99e64c5b651e5509d7472a65fd043e20d1f461800eb516",
+          "size_bytes": 2933
+        },
+        "pair_sha256": "d168a731d80171cb7d9a4005083782ded49f771cf83ce75af8bba12bbf5de548",
+        "stdout_log": {
+          "path": "wh-lb-42/20260903T123017.141969Z-wh-t3k-rmsnorm.log",
+          "sha256": "c7fd16b8fd2ce5c2f972fea549d63df300d582389779e1a29516d1cd85ae427b",
+          "size_bytes": 15158
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:30:17.141969Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "clean_teardown"
+      ],
+      "architecture": "wormhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:35:17.339794Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "wh-lb-42",
+      "mesh_device": "T3K",
+      "metrics_count": 3,
+      "node": "wh-t3k-lm-head",
+      "outcome": "passed",
+      "priority": 14,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "wh-lb-42/20260903T123152.377754Z-wh-t3k-lm-head.json",
+          "sha256": "5292a1c64ba86c4f2e6c2c699014db33ac530f276f88932ffebc1674c4ad359b",
+          "size_bytes": 2929
+        },
+        "pair_sha256": "6e7df8d21db8d422b507d9a4c0dccbc4159358abd963a79c3c26bfa8340263bc",
+        "stdout_log": {
+          "path": "wh-lb-42/20260903T123152.377754Z-wh-t3k-lm-head.log",
+          "sha256": "68b6112a012cb2a1b3c7f36c065229b586197dc07b916cf2bcbbf09fe3fd6511",
+          "size_bytes": 2312
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:31:52.377754Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "clean_teardown"
+      ],
+      "architecture": "wormhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:38:57.972293Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "wh-lb-42",
+      "mesh_device": "T3K",
+      "metrics_count": 3,
+      "node": "wh-t3k-mlp",
+      "outcome": "passed",
+      "priority": 15,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "wh-lb-42/20260903T123517.388362Z-wh-t3k-mlp.json",
+          "sha256": "6d31d4382b6a1b0d08b639a5c5664b24e72bacdbaeb797bfe9e185fd3b7c6fa3",
+          "size_bytes": 2893
+        },
+        "pair_sha256": "444de7fdefc9566151727e751d3e43c92fb789f20caac5992c89bbe628148054",
+        "stdout_log": {
+          "path": "wh-lb-42/20260903T123517.388362Z-wh-t3k-mlp.log",
+          "sha256": "c381d84226f1324dc50258758f4375ffc1284a3976fc1c58dfd4eb32c7c5c42e",
+          "size_bytes": 11985
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:35:17.388362Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "clean_teardown"
+      ],
+      "architecture": "wormhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:49:01.057458Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "wh-lb-42",
+      "mesh_device": "T3K",
+      "metrics_count": 3,
+      "node": "wh-t3k-attention",
+      "outcome": "passed",
+      "priority": 16,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "wh-lb-42/20260903T123858.021163Z-wh-t3k-attention.json",
+          "sha256": "e8559c1e6dd16bb7258b70ca451a0fb620e9b77c635f88ec4103d4f5ac5a6e51",
+          "size_bytes": 2959
+        },
+        "pair_sha256": "d4558eceee61b24a81cc04b0753b94c61f972d2a59fe02e4d8340021f59a5a2f",
+        "stdout_log": {
+          "path": "wh-lb-42/20260903T123858.021163Z-wh-t3k-attention.log",
+          "sha256": "7822beca1b9b7d60b53bea6404531662c565e6b64ec0490444aee79659379a2a",
+          "size_bytes": 32147
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:38:58.021163Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "trace_correctness",
+        "cross_order_consistency",
+        "clean_teardown"
+      ],
+      "architecture": "wormhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:57:45.279002Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "wh-lb-42",
+      "mesh_device": "T3K",
+      "metrics_count": 3,
+      "node": "wh-t3k-runtime-trace-order",
+      "outcome": "passed",
+      "priority": 17,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "wh-lb-42/20260903T124923.309445Z-wh-t3k-runtime-trace-order.json",
+          "sha256": "a533b8e2b93fc192b4e50d50a6a05527884ec9a5c73d030eb6143652ea87bd86",
+          "size_bytes": 3011
+        },
+        "pair_sha256": "825222e41a22caf471f7eb9c7fd0bb98a35d3de848e51e1e05a2d9e4eb9d257a",
+        "stdout_log": {
+          "path": "wh-lb-42/20260903T124923.309445Z-wh-t3k-runtime-trace-order.log",
+          "sha256": "1624a22910fb750c5cb5e516362c2732398f65b7417a252152afe4bceaf3fbf7",
+          "size_bytes": 1963
+        }
+      },
+      "stage": "runtime",
+      "started_utc": "2026-09-03T12:49:23.309445Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "prefill_smoke",
+        "clean_teardown"
+      ],
+      "architecture": "wormhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:58:20.649548Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "wh-lb-42",
+      "mesh_device": "T3K",
+      "metrics_count": 3,
+      "node": "wh-t3k-qwen25-coder-smoke",
+      "outcome": "passed",
+      "priority": 18,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "wh-lb-42/20260903T125745.327292Z-wh-t3k-qwen25-coder-smoke.json",
+          "sha256": "092bead7060c7d3915ccc8dc9c891f504f430cfafe704982bc568c64a63cbdf0",
+          "size_bytes": 2938
+        },
+        "pair_sha256": "e4a95cdcabbbbc666caf683464e490bcf91b4e7393cb3563fdb28b37e7485ee9",
+        "stdout_log": {
+          "path": "wh-lb-42/20260903T125745.327292Z-wh-t3k-qwen25-coder-smoke.log",
+          "sha256": "1856232a3f1edfd83b4f7835fd6d888932e795fb09b3069ae42721b2e767b123",
+          "size_bytes": 1520
+        }
+      },
+      "stage": "smoke",
+      "started_utc": "2026-09-03T12:57:45.327292Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "token_accuracy_threshold",
+        "clean_teardown"
+      ],
+      "architecture": "wormhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:59:33.944735Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "wh-lb-42",
+      "mesh_device": "N150",
+      "metrics_count": 3,
+      "node": "wh-n150-llama32-1b-token-accuracy",
+      "outcome": "passed",
+      "priority": 19,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "wh-lb-42/20260903T125848.248595Z-wh-n150-llama32-1b-token-accuracy.json",
+          "sha256": "5216f2416c21376663cb07d2f3db74eebe6e21ab3fe3de8118cafd1819730257",
+          "size_bytes": 3000
+        },
+        "pair_sha256": "9e4fcdc7c695075f7fdcf4f9f835a45ebf07f028d29f64651c071678354e6322",
+        "stdout_log": {
+          "path": "wh-lb-42/20260903T125848.248595Z-wh-n150-llama32-1b-token-accuracy.log",
+          "sha256": "1c150656b94f60b8fbedf6c5ab99e98ab4163097bfca3ec60c2f0184f9c29eda",
+          "size_bytes": 1618
+        }
+      },
+      "stage": "e2e",
+      "started_utc": "2026-09-03T12:58:48.248595Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "token_accuracy_threshold",
+        "clean_teardown"
+      ],
+      "architecture": "wormhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T13:00:29.918632Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "wh-lb-42",
+      "mesh_device": "N300",
+      "metrics_count": 3,
+      "node": "wh-n300-llama32-1b-token-accuracy",
+      "outcome": "passed",
+      "priority": 20,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "wh-lb-42/20260903T125933.993835Z-wh-n300-llama32-1b-token-accuracy.json",
+          "sha256": "b21a59eadf34eb996129bc0fdb7cf23ae8d82b69e1bdf285beaf48de2f835797",
+          "size_bytes": 3001
+        },
+        "pair_sha256": "12493d993059c2866a6acdb9dd9de81524b6b8f29b1c0afd9da1cc56db50645d",
+        "stdout_log": {
+          "path": "wh-lb-42/20260903T125933.993835Z-wh-n300-llama32-1b-token-accuracy.log",
+          "sha256": "997c6523c733b5187e3ab9d2d13b6a9850db8b6cff4b1535a015e02283435b4c",
+          "size_bytes": 1619
+        }
+      },
+      "stage": "e2e",
+      "started_utc": "2026-09-03T12:59:33.993835Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "token_accuracy_threshold",
+        "clean_teardown"
+      ],
+      "architecture": "wormhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T13:02:26.849166Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "wh-lb-42",
+      "mesh_device": "N300",
+      "metrics_count": 3,
+      "node": "wh-n300-qwen25-7b-token-accuracy",
+      "outcome": "passed",
+      "priority": 21,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "wh-lb-42/20260903T130029.967833Z-wh-n300-qwen25-7b-token-accuracy.json",
+          "sha256": "6d935848bd811da15952f8a95db83826c9d977c6dd39cb3c0675341c406060a0",
+          "size_bytes": 2984
+        },
+        "pair_sha256": "9d0a6274505df2bba4d07d6bba35c6da24eca8abd5aeeed0d8e8657cbcd090e8",
+        "stdout_log": {
+          "path": "wh-lb-42/20260903T130029.967833Z-wh-n300-qwen25-7b-token-accuracy.log",
+          "sha256": "2939406116f008073775ad72cf0dd2d307e99e92074630f13dceb6e697f6326b",
+          "size_bytes": 1615
+        }
+      },
+      "stage": "e2e",
+      "started_utc": "2026-09-03T13:00:29.967833Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "token_accuracy_threshold",
+        "clean_teardown"
+      ],
+      "architecture": "wormhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T13:10:06.506541Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "wh-lb-42",
+      "mesh_device": "T3K",
+      "metrics_count": 3,
+      "node": "wh-t3k-qwen3-token-accuracy",
+      "outcome": "passed",
+      "priority": 22,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "wh-lb-42/20260903T130245.620731Z-wh-t3k-qwen3-token-accuracy.json",
+          "sha256": "d8754051b001fa3320978b89b40bd9a41471814c96053735cedbc39de25251b8",
+          "size_bytes": 2996
+        },
+        "pair_sha256": "684637be183e7477007aff3526870cad2b3022000eb9c997ec6db6f1bc5c5a0c",
+        "stdout_log": {
+          "path": "wh-lb-42/20260903T130245.620731Z-wh-t3k-qwen3-token-accuracy.log",
+          "sha256": "dbcc32b0b68a22733226f5d4704e69e0f90ef5c5e49d47a02a9d275f8a50a974",
+          "size_bytes": 1613
+        }
+      },
+      "stage": "e2e",
+      "started_utc": "2026-09-03T13:02:45.620731Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "token_accuracy_threshold",
+        "clean_teardown"
+      ],
+      "architecture": "wormhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T13:20:58.321381Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "wh-lb-42",
+      "mesh_device": "T3K",
+      "metrics_count": 3,
+      "node": "wh-t3k-llama33-token-accuracy",
+      "outcome": "passed",
+      "priority": 23,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "wh-lb-42/20260903T131006.556856Z-wh-t3k-llama33-token-accuracy.json",
+          "sha256": "98ba3e71276d798be58947e3692f147fc129173d6e51f35d3b0b6291a56f56a7",
+          "size_bytes": 3033
+        },
+        "pair_sha256": "715cc93fc21e84121e3f28268b86869ba822345ffddeeb6499a1317f33314d2f",
+        "stdout_log": {
+          "path": "wh-lb-42/20260903T131006.556856Z-wh-t3k-llama33-token-accuracy.log",
+          "sha256": "26f83c5474e57af301ea16260cf70fa5b8c87b11717fab9eb4957302e6b18ab2",
+          "size_bytes": 1621
+        }
+      },
+      "stage": "e2e",
+      "started_utc": "2026-09-03T13:10:06.556856Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "architecture": "blackhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:23:34.556115Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "bh-qb-05",
+      "mesh_device": "P150",
+      "metrics_count": 4,
+      "node": "bh-p150-rmsnorm-decode",
+      "outcome": "passed",
+      "priority": 24,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "bh-qb-05/20260903T122322.272114Z-bh-p150-rmsnorm-decode.json",
+          "sha256": "c4344293738f959759a51518098c8c5889b08aa32b8f1f70e49395de2f0a33df",
+          "size_bytes": 3267
+        },
+        "pair_sha256": "f3aa010528f1a31ea7a3595fd741a752c5ec0db2439279eda07c3afd266aba3a",
+        "stdout_log": {
+          "path": "bh-qb-05/20260903T122322.272114Z-bh-p150-rmsnorm-decode.log",
+          "sha256": "ff5752dd7123bd7b363a8bcc6313fbd0411b943be2fa984afea3698d84ed38cb",
+          "size_bytes": 1508
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:23:22.272114Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "architecture": "blackhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:24:14.955368Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "bh-qb-05",
+      "mesh_device": "P150",
+      "metrics_count": 4,
+      "node": "bh-p150-lm-head",
+      "outcome": "passed",
+      "priority": 25,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "bh-qb-05/20260903T122409.384008Z-bh-p150-lm-head.json",
+          "sha256": "a71b4d8d34ccec8093e4c1ddf30f172bee1659874ce4b1ce1084cd770d7f1b5a",
+          "size_bytes": 3232
+        },
+        "pair_sha256": "4f3d703a429bf2eb55498cd86debcb38f10644c5b18f10c7d8ff797923d53398",
+        "stdout_log": {
+          "path": "bh-qb-05/20260903T122409.384008Z-bh-p150-lm-head.log",
+          "sha256": "9f42d06a1cd5e233b44d690f6aaa0722131eb91293dd1bf85c0b7ee643790ef4",
+          "size_bytes": 1508
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:24:09.384008Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "architecture": "blackhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:24:25.165743Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "bh-qb-05",
+      "mesh_device": "P150",
+      "metrics_count": 4,
+      "node": "bh-p150-mlp-decode",
+      "outcome": "passed",
+      "priority": 26,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "bh-qb-05/20260903T122415.014919Z-bh-p150-mlp-decode.json",
+          "sha256": "50ad069eb9e4cac3511de9b73e658dbf0769add86335e60c8cd08198253ac1dc",
+          "size_bytes": 3229
+        },
+        "pair_sha256": "a89e453223ade0e0bcf2e78677526f0512a34d0481f4e8f16d6627573f1efb85",
+        "stdout_log": {
+          "path": "bh-qb-05/20260903T122415.014919Z-bh-p150-mlp-decode.log",
+          "sha256": "f1aaa6dd531d4027f7abfc8d61ce3a15e87f28da83d60ad0b261cc82f4b89184",
+          "size_bytes": 1502
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:24:15.014919Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "architecture": "blackhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:24:35.270398Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "bh-qb-05",
+      "mesh_device": "P150",
+      "metrics_count": 4,
+      "node": "bh-p150-mlp-prefill",
+      "outcome": "passed",
+      "priority": 27,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "bh-qb-05/20260903T122425.225098Z-bh-p150-mlp-prefill.json",
+          "sha256": "4aee7906ad282e290c47e183ce25accd909b6193ab400a4d4cf154cdd60de0e1",
+          "size_bytes": 3270
+        },
+        "pair_sha256": "c13021be233e21c99bd3f697a2224fdd1d9837d46231456f16349874ec9422f6",
+        "stdout_log": {
+          "path": "bh-qb-05/20260903T122425.225098Z-bh-p150-mlp-prefill.log",
+          "sha256": "ae28cdd558ffb4c3127596994e5c4d4e487b3755612878c676be67f40a393aac",
+          "size_bytes": 1514
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:24:25.225098Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "architecture": "blackhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:24:53.073425Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "bh-qb-05",
+      "mesh_device": "P150",
+      "metrics_count": 4,
+      "node": "bh-p150-attention-prefill",
+      "outcome": "passed",
+      "priority": 28,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "bh-qb-05/20260903T122435.331089Z-bh-p150-attention-prefill.json",
+          "sha256": "964a850f73bbe1da072cf23d70f4ead25d1feb1afcf17ab22c4a978151f353cf",
+          "size_bytes": 3325
+        },
+        "pair_sha256": "5eed58311ecddd429dc06828c35b0568ebda7626ff3d02a660d7d259cf0b7668",
+        "stdout_log": {
+          "path": "bh-qb-05/20260903T122435.331089Z-bh-p150-attention-prefill.log",
+          "sha256": "ad24a6adf22ca0b5ecd8602e6dfb1f0ac0068c1a848d643bf1732bf63e0ad72d",
+          "size_bytes": 1523
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:24:35.331089Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "architecture": "blackhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:25:09.875490Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "bh-qb-05",
+      "mesh_device": "P150",
+      "metrics_count": 4,
+      "node": "bh-p150-attention-decode",
+      "outcome": "passed",
+      "priority": 29,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "bh-qb-05/20260903T122453.133711Z-bh-p150-attention-decode.json",
+          "sha256": "4f2004970027cc422c7cd1b9113f37010a93fdece3532f2ca661750c3b1dc8b9",
+          "size_bytes": 3318
+        },
+        "pair_sha256": "90723da50675708d0964a252c813e9e7746e58c4a94ae250d1d44ed2c53bd959",
+        "stdout_log": {
+          "path": "bh-qb-05/20260903T122453.133711Z-bh-p150-attention-decode.log",
+          "sha256": "6f6fd79400d8e3b8087d72c0cbe2cdee36dca6066185245404ae06e49113254e",
+          "size_bytes": 1523
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:24:53.133711Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "architecture": "blackhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:25:22.480408Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "bh-qb-05",
+      "mesh_device": "P150",
+      "metrics_count": 4,
+      "node": "bh-p150-attention-paged-transition",
+      "outcome": "passed",
+      "priority": 30,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "bh-qb-05/20260903T122509.934531Z-bh-p150-attention-paged-transition.json",
+          "sha256": "1d0d0a6689dfa67eb9ad66f0d9ba6a222994eea54dcfc6c1231c0e46559ee4f5",
+          "size_bytes": 3382
+        },
+        "pair_sha256": "2131460c0d6882f2f61d10c492d6fbda070d9a64968ca03629c0bc253e1cb15f",
+        "stdout_log": {
+          "path": "bh-qb-05/20260903T122509.934531Z-bh-p150-attention-paged-transition.log",
+          "sha256": "fd60b276c927577623dc81eb144e0555fa5d4e86d211795a7ae1997fb03e9f97",
+          "size_bytes": 1529
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:25:09.934531Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "architecture": "blackhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:25:29.877291Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "bh-qb-05",
+      "mesh_device": "P150x4",
+      "metrics_count": 4,
+      "node": "bh-p150x4-rmsnorm",
+      "outcome": "passed",
+      "priority": 31,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "bh-qb-05/20260903T122522.539833Z-bh-p150x4-rmsnorm.json",
+          "sha256": "f0144fd04465cdbedf861da5fa220d2ce9e807283e6a8da2219cca45f0161a50",
+          "size_bytes": 3299
+        },
+        "pair_sha256": "1531ea7903bb632675d2fb4f2130d6c4852142f58c52e642f0397d6a04c7023a",
+        "stdout_log": {
+          "path": "bh-qb-05/20260903T122522.539833Z-bh-p150x4-rmsnorm.log",
+          "sha256": "087b20ecd83ddc2a4ef549b85fa5ba66dfe28aa080e5f9bb52711db338ff746e",
+          "size_bytes": 1527
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:25:22.539833Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "architecture": "blackhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:25:35.969917Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "bh-qb-05",
+      "mesh_device": "P150x4",
+      "metrics_count": 4,
+      "node": "bh-p150x4-lm-head",
+      "outcome": "passed",
+      "priority": 32,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "bh-qb-05/20260903T122529.936141Z-bh-p150x4-lm-head.json",
+          "sha256": "91fbf58a0b4d2d844542fa5ba5fee1d27bff4e19531949b105171201f75af7f6",
+          "size_bytes": 3272
+        },
+        "pair_sha256": "4b6f02d015c3d39cdabf2786ca46a8d034aa4df43ffb3ff2080c72afdee7ea73",
+        "stdout_log": {
+          "path": "bh-qb-05/20260903T122529.936141Z-bh-p150x4-lm-head.log",
+          "sha256": "5b847298c270a135f840bfa0d9b1e02b37e8eeddf0e3b9d32f9829be3cd0f495",
+          "size_bytes": 1518
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:25:29.936141Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "architecture": "blackhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:25:43.879076Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "bh-qb-05",
+      "mesh_device": "P150x4",
+      "metrics_count": 4,
+      "node": "bh-p150x4-mlp-decode",
+      "outcome": "passed",
+      "priority": 33,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "bh-qb-05/20260903T122536.029157Z-bh-p150x4-mlp-decode.json",
+          "sha256": "d26e78f289e3d023c405d6ef014132b4b03b2b3b0be531ff2971ee08ee80f68f",
+          "size_bytes": 3266
+        },
+        "pair_sha256": "8eb179cb9f335204a65863dd104dfe533c634c18914f497f80d215c04813fe69",
+        "stdout_log": {
+          "path": "bh-qb-05/20260903T122536.029157Z-bh-p150x4-mlp-decode.log",
+          "sha256": "eefba840946ba63897e58d5d78956326d23985e92609c6a9920736c708eb7507",
+          "size_bytes": 1511
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:25:36.029157Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "architecture": "blackhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:25:52.078688Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "bh-qb-05",
+      "mesh_device": "P150x4",
+      "metrics_count": 4,
+      "node": "bh-p150x4-mlp-prefill",
+      "outcome": "passed",
+      "priority": 34,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "bh-qb-05/20260903T122543.937677Z-bh-p150x4-mlp-prefill.json",
+          "sha256": "a6f4013d4acf7a5aab2c71a1f06dc7cff96ecdd9c4511eb5a06476f9f013b901",
+          "size_bytes": 3307
+        },
+        "pair_sha256": "1b6572e2f50741152bb3a409d2b7d8292ba9badb7f8e6c80c1b9cc4f5325e5cb",
+        "stdout_log": {
+          "path": "bh-qb-05/20260903T122543.937677Z-bh-p150x4-mlp-prefill.log",
+          "sha256": "d6ed30c4e9b979742b8d69664505cc099b226f37d08f5a4e15888b01619885b4",
+          "size_bytes": 1523
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:25:43.937677Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "architecture": "blackhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:26:00.591021Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "bh-qb-05",
+      "mesh_device": "P150x4",
+      "metrics_count": 4,
+      "node": "bh-p150x4-attention-prefill",
+      "outcome": "passed",
+      "priority": 35,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "bh-qb-05/20260903T122552.138899Z-bh-p150x4-attention-prefill.json",
+          "sha256": "1636126985fa46172070b24d56b0bde1c4436a2f7c7489cfa8fe4f4f90f37b2a",
+          "size_bytes": 3349
+        },
+        "pair_sha256": "5311e8f86fe653cf3ff400fd0e762446f857553570a27d3b35d5cfb87c7051ec",
+        "stdout_log": {
+          "path": "bh-qb-05/20260903T122552.138899Z-bh-p150x4-attention-prefill.log",
+          "sha256": "aa8d8b47f9b954fe0c07536fdbc8ea1d0f1f351c8e296250968547668dba2a2d",
+          "size_bytes": 1529
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:25:52.138899Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "architecture": "blackhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:26:08.890082Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "bh-qb-05",
+      "mesh_device": "P150x4",
+      "metrics_count": 4,
+      "node": "bh-p150x4-attention-decode",
+      "outcome": "passed",
+      "priority": 36,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "bh-qb-05/20260903T122600.650242Z-bh-p150x4-attention-decode.json",
+          "sha256": "55d469b706c04aab0df694c47f8f16800ee020a21cf84c57d76c8ef7a3f7e0d5",
+          "size_bytes": 3342
+        },
+        "pair_sha256": "85c9923c87d11d94076fb54fea5046799735ffb29d5095356e83112ade3cb030",
+        "stdout_log": {
+          "path": "bh-qb-05/20260903T122600.650242Z-bh-p150x4-attention-decode.log",
+          "sha256": "20ad9f35dcfc2bf19751c3f429e0c9cb8a3dbaccf3ae41d13234932d1370e274",
+          "size_bytes": 1529
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:26:00.650242Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "architecture": "blackhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:26:17.395051Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "bh-qb-05",
+      "mesh_device": "P150x4",
+      "metrics_count": 4,
+      "node": "bh-p150x4-attention-paged-transition",
+      "outcome": "passed",
+      "priority": 37,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "bh-qb-05/20260903T122608.950356Z-bh-p150x4-attention-paged-transition.json",
+          "sha256": "197378493209c604b3ae21c0ffcd869481b8d7bfa9757231ad30aba4d7d43bf1",
+          "size_bytes": 3404
+        },
+        "pair_sha256": "8fb95780b4fe44d9402eace1122015fb40cd3b7f1b32bf70f7bbf5e17422bfa8",
+        "stdout_log": {
+          "path": "bh-qb-05/20260903T122608.950356Z-bh-p150x4-attention-paged-transition.log",
+          "sha256": "936bb79f6d37bd2332f2255a9a7dadafa86d7f69f21a5d9295ee4b6a0674ce60",
+          "size_bytes": 1533
+        }
+      },
+      "stage": "module",
+      "started_utc": "2026-09-03T12:26:08.950356Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "token_accuracy_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "architecture": "blackhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:32:24.746171Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "bh-qb-05",
+      "mesh_device": "P150",
+      "metrics_count": 3,
+      "node": "bh-p150-llama3-8b-token-accuracy",
+      "outcome": "passed",
+      "priority": 38,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "bh-qb-05/20260903T122617.454705Z-bh-p150-llama3-8b-token-accuracy.json",
+          "sha256": "73c3fa1e8057473a09ed8eb0aab7ee87f12e2fa80c8aba861dba4264070a61ca",
+          "size_bytes": 3173
+        },
+        "pair_sha256": "03bb647e86ab801020c03f09a1f94a0e323b9dbf3f9d134c12e3cba913b1d232",
+        "stdout_log": {
+          "path": "bh-qb-05/20260903T122617.454705Z-bh-p150-llama3-8b-token-accuracy.log",
+          "sha256": "6ba49cd27ec41da81ea5631ea80817aebd01aa4a1fa57ba0fa0a633b7c1137f6",
+          "size_bytes": 1548
+        }
+      },
+      "stage": "e2e",
+      "started_utc": "2026-09-03T12:26:17.454705Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "prefill_decode_smoke",
+        "clean_teardown"
+      ],
+      "architecture": "blackhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:39:01.592613Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "bh-qb-05",
+      "mesh_device": "P150x4",
+      "metrics_count": 3,
+      "node": "bh-p150x4-qwen3-one-layer-smoke",
+      "outcome": "passed",
+      "priority": 39,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "bh-qb-05/20260903T123224.809436Z-bh-p150x4-qwen3-one-layer-smoke.json",
+          "sha256": "bdf613e38a29e7206c5c483709c257e188704435bb7fff6a83709d9c0a890eb2",
+          "size_bytes": 3072
+        },
+        "pair_sha256": "b409c48410e9c0f55c06f42ce39a600b6e7030d7698722fa698d2922284ecc68",
+        "stdout_log": {
+          "path": "bh-qb-05/20260903T123224.809436Z-bh-p150x4-qwen3-one-layer-smoke.log",
+          "sha256": "b7f5414d2654de43a2957ea558364e706d0a4269f4aeb273cfa316240dd9f091",
+          "size_bytes": 1498
+        }
+      },
+      "stage": "smoke",
+      "started_utc": "2026-09-03T12:32:24.809436Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "prefill_decode_smoke",
+        "clean_teardown"
+      ],
+      "architecture": "blackhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T12:48:40.769104Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "bh-qb-05",
+      "mesh_device": "P150x4",
+      "metrics_count": 3,
+      "node": "bh-p150x4-llama33-one-layer-smoke",
+      "outcome": "passed",
+      "priority": 40,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "bh-qb-05/20260903T123901.653328Z-bh-p150x4-llama33-one-layer-smoke.json",
+          "sha256": "17bc2d7b1c11f449570679c1ab4027955ebc3934efc10999dd11d7bde8357dda",
+          "size_bytes": 3109
+        },
+        "pair_sha256": "8d0d6476b2c1a257fec99d04286a2af7f01b2cbe3ad93cb7c0738e5a95f7a8b0",
+        "stdout_log": {
+          "path": "bh-qb-05/20260903T123901.653328Z-bh-p150x4-llama33-one-layer-smoke.log",
+          "sha256": "5f85482f110b80aef3ba2b8637e763d7f1a192fc2888b810db732db3a4f28a05",
+          "size_bytes": 1502
+        }
+      },
+      "stage": "smoke",
+      "started_utc": "2026-09-03T12:39:01.653328Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "token_accuracy_threshold",
+        "clean_teardown"
+      ],
+      "architecture": "blackhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T13:07:19.336017Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "bh-qb-05",
+      "mesh_device": "P150x4",
+      "metrics_count": 3,
+      "node": "bh-p150x4-qwen3-token-accuracy",
+      "outcome": "passed",
+      "priority": 41,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "bh-qb-05/20260903T124840.829619Z-bh-p150x4-qwen3-token-accuracy.json",
+          "sha256": "996da742a42da77ceea51ddeba57951ed6251058cc34e3a90e60b3be09e5472f",
+          "size_bytes": 3099
+        },
+        "pair_sha256": "6596d6857059dd28e95ab03d63c9aec8b1cd84c21cdd420faa47fbcaaa612d84",
+        "stdout_log": {
+          "path": "bh-qb-05/20260903T124840.829619Z-bh-p150x4-qwen3-token-accuracy.log",
+          "sha256": "f61f5618d45c744441d7df03711ea6e519cdf754f2b2d6a7c9220d0a859eb652",
+          "size_bytes": 1619
+        }
+      },
+      "stage": "e2e",
+      "started_utc": "2026-09-03T12:48:40.829619Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    },
+    {
+      "acceptance_types": [
+        "token_accuracy_threshold",
+        "clean_teardown"
+      ],
+      "architecture": "blackhole",
+      "branch": "tttv2-standalone-migration",
+      "exit_code": 0,
+      "finished_utc": "2026-09-03T13:47:59.143501Z",
+      "full_sha": "73d414f8b826a7da982df8c8229d4ac41ed8ba33",
+      "machine_pool_entry": "bh-qb-05",
+      "mesh_device": "P150x4",
+      "metrics_count": 3,
+      "node": "bh-p150x4-llama33-token-accuracy",
+      "outcome": "passed",
+      "priority": 42,
+      "reset": {
+        "automatic": false,
+        "performed": false,
+        "reason": "runner never resets hardware"
+      },
+      "runner_classification": "passed",
+      "source": {
+        "evidence_json": {
+          "path": "bh-qb-05/20260903T130719.396188Z-bh-p150x4-llama33-token-accuracy.json",
+          "sha256": "e06e52ae3b9167bdc308f750ab74f6c315b8f2b63e6e7165368164e5326c2890",
+          "size_bytes": 3136
+        },
+        "pair_sha256": "022bf836c6e9599c2733aa0c9b69f7a53a4734c547978a32dc81fafe920d6e12",
+        "stdout_log": {
+          "path": "bh-qb-05/20260903T130719.396188Z-bh-p150x4-llama33-token-accuracy.log",
+          "sha256": "a1625f922428176a58664df053df909fd0db789bb5109ca99370ed0d3f7e2fe7",
+          "size_bytes": 1627
+        }
+      },
+      "stage": "e2e",
+      "started_utc": "2026-09-03T13:07:19.396188Z",
+      "teardown_status": "process_exited; fixture teardown not independently hardware-verified"
+    }
+  ],
+  "schema_version": 1,
+  "summary": {
+    "by_architecture": [
+      {
+        "name": "blackhole",
+        "outcomes": {
+          "functional_failure": 0,
+          "hardware_lifecycle_failure": 0,
+          "missing_acceptance_data": 0,
+          "passed": 19,
+          "pre_device_failure": 0
+        },
+        "total": 19
+      },
+      {
+        "name": "wormhole",
+        "outcomes": {
+          "functional_failure": 0,
+          "hardware_lifecycle_failure": 0,
+          "missing_acceptance_data": 0,
+          "passed": 23,
+          "pre_device_failure": 0
+        },
+        "total": 23
+      }
+    ],
+    "by_mesh_device": [
+      {
+        "name": "N150",
+        "outcomes": {
+          "functional_failure": 0,
+          "hardware_lifecycle_failure": 0,
+          "missing_acceptance_data": 0,
+          "passed": 9,
+          "pre_device_failure": 0
+        },
+        "total": 9
+      },
+      {
+        "name": "N300",
+        "outcomes": {
+          "functional_failure": 0,
+          "hardware_lifecycle_failure": 0,
+          "missing_acceptance_data": 0,
+          "passed": 6,
+          "pre_device_failure": 0
+        },
+        "total": 6
+      },
+      {
+        "name": "P150",
+        "outcomes": {
+          "functional_failure": 0,
+          "hardware_lifecycle_failure": 0,
+          "missing_acceptance_data": 0,
+          "passed": 8,
+          "pre_device_failure": 0
+        },
+        "total": 8
+      },
+      {
+        "name": "P150x4",
+        "outcomes": {
+          "functional_failure": 0,
+          "hardware_lifecycle_failure": 0,
+          "missing_acceptance_data": 0,
+          "passed": 11,
+          "pre_device_failure": 0
+        },
+        "total": 11
+      },
+      {
+        "name": "T3K",
+        "outcomes": {
+          "functional_failure": 0,
+          "hardware_lifecycle_failure": 0,
+          "missing_acceptance_data": 0,
+          "passed": 8,
+          "pre_device_failure": 0
+        },
+        "total": 8
+      }
+    ],
+    "by_stage": [
+      {
+        "name": "e2e",
+        "outcomes": {
+          "functional_failure": 0,
+          "hardware_lifecycle_failure": 0,
+          "missing_acceptance_data": 0,
+          "passed": 8,
+          "pre_device_failure": 0
+        },
+        "total": 8
+      },
+      {
+        "name": "module",
+        "outcomes": {
+          "functional_failure": 0,
+          "hardware_lifecycle_failure": 0,
+          "missing_acceptance_data": 0,
+          "passed": 30,
+          "pre_device_failure": 0
+        },
+        "total": 30
+      },
+      {
+        "name": "runtime",
+        "outcomes": {
+          "functional_failure": 0,
+          "hardware_lifecycle_failure": 0,
+          "missing_acceptance_data": 0,
+          "passed": 1,
+          "pre_device_failure": 0
+        },
+        "total": 1
+      },
+      {
+        "name": "smoke",
+        "outcomes": {
+          "functional_failure": 0,
+          "hardware_lifecycle_failure": 0,
+          "missing_acceptance_data": 0,
+          "passed": 3,
+          "pre_device_failure": 0
+        },
+        "total": 3
+      }
+    ],
+    "outcomes": {
+      "functional_failure": 0,
+      "hardware_lifecycle_failure": 0,
+      "missing_acceptance_data": 0,
+      "passed": 42,
+      "pre_device_failure": 0
+    },
+    "total": 42
+  }
+}
