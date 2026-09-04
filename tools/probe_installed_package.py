@@ -18,7 +18,7 @@ BLOCKED_OPTIONAL = {"pytest", "tqdm", "transformers"}
 EXPECTED_VERSIONS = {
     "tt-transformers": "2.0.0.dev0",
     "ttnn": "0.77.0",
-    "torch": "2.11.0",
+    "torch": "2.11.0+cpu",
     "loguru": "0.6.0",
 }
 MODEL_FAMILIES = (
