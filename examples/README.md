@@ -31,11 +31,11 @@ cache requirements, supported arguments, and exact commands.
 
 ## Validation boundary
 
-The current pre-cleanup regression record is 42/42 passing at code SHA
-`73d414f8b826a7da982df8c8229d4ac41ed8ba33`: modules 30/30, runtime 1/1,
+The current regression record is 42/42 passing at code SHA
+`9134c399334240e3e4d35dfa93013c6c7293a3d1`: modules 30/30, runtime 1/1,
 smoke 3/3, and end-to-end 8/8. See
 [`docs/validation.md`](../docs/validation.md) for topology qualifications and
-the archived raw-evidence location.
+evidence hashes.
 
 A passing subset does not qualify a complete model contract. The canonical
 status and declared candidate geometries are summarized in

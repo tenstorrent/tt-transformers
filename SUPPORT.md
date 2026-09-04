@@ -28,7 +28,7 @@ known-limit declarations.
 
 ## Current validation snapshot
 
-At tested code SHA `73d414f8b826a7da982df8c8229d4ac41ed8ba33`, the
+At tested code SHA `9134c399334240e3e4d35dfa93013c6c7293a3d1`, the
 42-node regression matrix passed in full:
 
 | Scope | Passed |
@@ -48,8 +48,8 @@ The eight P150 cells were logical 1x1 selections on a physical P150_X4 host
 with `MESH_DEVICE=P150` and `TT_VISIBLE_DEVICES` unset. They are not
 standalone-P150 product evidence.
 
-See [docs/validation.md](docs/validation.md) for exact counts, limitations,
-and the immutable audit tag containing the pre-cleanup raw evidence.
+See [docs/validation.md](docs/validation.md) for exact counts, topology
+qualifications, current evidence hashes, and the historical audit tag.
 
 ## Unsupported or unqualified by default
 
