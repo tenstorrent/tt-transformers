@@ -15,7 +15,7 @@ Usage::
 
     python qualification/tools/qwen2_7b/generate_controlled_refpt.py \\
         --hf-model Qwen/Qwen2-7B-Instruct \\
-        --output tests/models/qwen2_7b/reference_outputs/Qwen2-7B-Instruct.refpt
+        --output tests/assets/reference_outputs/qwen2_7b/Qwen2-7B-Instruct.refpt
 
 Always verify intrinsic self-consistency (top-1 ≥ 95%) before using a ``.refpt`` for
 accuracy thresholding — see the reference-sanity guide.
@@ -30,9 +30,8 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
 from examples.common.prompting import encode_prompt_hf
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 DEFAULT_PROMPT = "Write a short paragraph explaining why deterministic model references are important for debugging."
 
@@ -51,7 +50,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--hf-model", required=True, help="HF model id, e.g. Qwen/Qwen2-7B-Instruct")
     parser.add_argument(
         "--output",
-        default="tests/models/qwen2_7b/reference_outputs/Qwen2-7B-Instruct.refpt",
+        default="tests/assets/reference_outputs/qwen2_7b/Qwen2-7B-Instruct.refpt",
         help="Output .refpt path",
     )
     parser.add_argument("--seed", type=int, default=0, help="Random seed")

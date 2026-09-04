@@ -17,9 +17,18 @@ from email.parser import BytesParser
 from email.policy import default
 from pathlib import Path, PurePosixPath
 
-
-FORBIDDEN_TREE_PARTS = {"tests", "examples", "qualification", "__pycache__", "model_cache", ".cache"}
-FORBIDDEN_SUFFIXES = {
+COMMON_FORBIDDEN_TREE_PARTS = {"__pycache__", "model_cache", ".cache", "hardware-results"}
+WHEEL_FORBIDDEN_TREE_PARTS = {
+    *COMMON_FORBIDDEN_TREE_PARTS,
+    ".github",
+    "constraints",
+    "docs",
+    "examples",
+    "qualification",
+    "tests",
+    "tools",
+}
+WHEEL_FORBIDDEN_SUFFIXES = {
     ".bin",
     ".npy",
     ".npz",
@@ -30,6 +39,28 @@ FORBIDDEN_SUFFIXES = {
     ".refpt",
     ".safetensors",
     ".tensorbin",
+}
+SDIST_FORBIDDEN_SUFFIXES = {".bin", ".npy", ".npz", ".pt", ".pth", ".pyc", ".pyo", ".safetensors", ".tensorbin"}
+SDIST_REQUIRED_ROOT_FILES = {
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "LICENSE",
+    "NOTICE",
+    "PKG-INFO",
+    "README.md",
+    "SECURITY.md",
+    "SUPPORT.md",
+    "pyproject.toml",
+}
+SDIST_REQUIRED_DIRECTORIES = {
+    ".github",
+    "constraints",
+    "docs",
+    "examples",
+    "qualification",
+    "src",
+    "tests",
+    "tools",
 }
 ABSOLUTE_TEXT_PATTERNS = (b"/localdev/", b"/home/gwang/", b"/tmp/gwang/", b"C:\\")
 EXPECTED_BASE_REQUIRES = {"ttnn==0.77.0", "torch==2.11.0", "loguru==0.6.0"}
@@ -55,20 +86,25 @@ def source_tree_identity(source_root: Path) -> dict[str, object]:
     }
 
 
-def validate_member_path(name: str) -> None:
+def validate_member_path(
+    name: str,
+    *,
+    forbidden_parts: set[str],
+    forbidden_suffixes: set[str],
+) -> None:
     path = PurePosixPath(name)
     if path.is_absolute() or ".." in path.parts or "\\" in name or re.match(r"^[A-Za-z]:", name):
         raise ValueError(f"unsafe or absolute archive member: {name}")
-    if FORBIDDEN_TREE_PARTS & set(path.parts):
+    if forbidden_parts & set(path.parts):
         raise ValueError(f"forbidden tree/cache member: {name}")
-    if path.suffix.lower() in FORBIDDEN_SUFFIXES:
+    if path.suffix.lower() in forbidden_suffixes:
         raise ValueError(f"forbidden weight/reference/cache/bytecode payload: {name}")
     if path.parts and path.parts[0] == "models":
         raise ValueError(f"legacy top-level models namespace in archive: {name}")
 
 
-def validate_python(name: str, data: bytes) -> None:
-    if any(pattern in data for pattern in ABSOLUTE_TEXT_PATTERNS):
+def validate_python(name: str, data: bytes, *, enforce_production_boundary: bool) -> None:
+    if enforce_production_boundary and any(pattern in data for pattern in ABSOLUTE_TEXT_PATTERNS):
         raise ValueError(f"workspace absolute path embedded in {name}")
     tree = ast.parse(data.decode("utf-8"), filename=name)
     for node in ast.walk(tree):
@@ -79,17 +115,18 @@ def validate_python(name: str, data: bytes) -> None:
             imported = [node.module]
         for module in imported:
             root = module.split(".", 1)[0]
-            if root == "models":
-                raise ValueError(f"legacy models import in {name}:{node.lineno}: {module}")
-            if root in {"tests", "examples", "pytest"}:
-                raise ValueError(f"production test/example import in {name}:{node.lineno}: {module}")
+            if enforce_production_boundary:
+                if root == "models":
+                    raise ValueError(f"legacy models import in {name}:{node.lineno}: {module}")
+                if root in {"tests", "examples", "qualification", "pytest"}:
+                    raise ValueError(f"production repository-only import in {name}:{node.lineno}: {module}")
 
 
 def parse_metadata(data: bytes, *, source: str) -> dict[str, object]:
     metadata = BytesParser(policy=default).parsebytes(data)
     if metadata["Name"] != "tt-transformers":
         raise ValueError(f"unexpected Name in {source}: {metadata['Name']}")
-    if metadata["Version"] != "0.1.0.dev0":
+    if metadata["Version"] != "2.0.0.dev0":
         raise ValueError(f"unexpected Version in {source}: {metadata['Version']}")
     if metadata["Requires-Python"] != "<3.13,>=3.10":
         raise ValueError(f"unexpected Requires-Python in {source}: {metadata['Requires-Python']}")
@@ -140,9 +177,13 @@ def audit_wheel(path: Path, source_root: Path) -> tuple[dict[str, object], list[
             raise ValueError("duplicate wheel members")
         files = {name: archive.read(name) for name in names if not name.endswith("/")}
     for name, data in files.items():
-        validate_member_path(name)
+        validate_member_path(
+            name,
+            forbidden_parts=WHEEL_FORBIDDEN_TREE_PARTS,
+            forbidden_suffixes=WHEEL_FORBIDDEN_SUFFIXES,
+        )
         if name.endswith(".py"):
-            validate_python(name, data)
+            validate_python(name, data, enforce_production_boundary=True)
     metadata_names = [name for name in files if name.endswith(".dist-info/METADATA")]
     wheel_names = [name for name in files if name.endswith(".dist-info/WHEEL")]
     record_names = [name for name in files if name.endswith(".dist-info/RECORD")]
@@ -162,15 +203,10 @@ def audit_wheel(path: Path, source_root: Path) -> tuple[dict[str, object], list[
         missing = sorted(set(source_python) - set(wheel_python))
         extra = sorted(set(wheel_python) - set(source_python))
         changed = sorted(
-            name
-            for name in set(wheel_python) & set(source_python)
-            if wheel_python[name] != source_python[name]
+            name for name in set(wheel_python) & set(source_python) if wheel_python[name] != source_python[name]
         )
         raise ValueError(f"wheel/source Python mismatch: missing={missing}, extra={extra}, changed={changed}")
-    entries = [
-        {"path": name, "size": len(data), "sha256": sha256(data)}
-        for name, data in sorted(files.items())
-    ]
+    entries = [{"path": name, "size": len(data), "sha256": sha256(data)} for name, data in sorted(files.items())]
     return {
         **metadata,
         "tag": "py3-none-any",
@@ -185,22 +221,37 @@ def audit_sdist(path: Path) -> dict[str, object]:
         names = [member.name for member in members]
         if len(names) != len(set(names)):
             raise ValueError("duplicate sdist members")
-        files = {
-            member.name: archive.extractfile(member).read()
-            for member in members
-            if member.isfile()
-        }
+        files = {member.name: archive.extractfile(member).read() for member in members if member.isfile()}
     for name, data in files.items():
-        validate_member_path(name)
+        validate_member_path(
+            name,
+            forbidden_parts=COMMON_FORBIDDEN_TREE_PARTS,
+            forbidden_suffixes=SDIST_FORBIDDEN_SUFFIXES,
+        )
         if name.endswith(".py"):
-            validate_python(name, data)
+            validate_python(name, data, enforce_production_boundary=False)
     pkg_info = [
-        name
-        for name in files
-        if PurePosixPath(name).name == "PKG-INFO" and len(PurePosixPath(name).parts) == 2
+        name for name in files if PurePosixPath(name).name == "PKG-INFO" and len(PurePosixPath(name).parts) == 2
     ]
     if len(pkg_info) != 1:
         raise ValueError("sdist must contain exactly one root PKG-INFO")
+    root_name = PurePosixPath(pkg_info[0]).parts[0]
+    root_files = {
+        PurePosixPath(name).parts[1]
+        for name in files
+        if len(PurePosixPath(name).parts) == 2 and PurePosixPath(name).parts[0] == root_name
+    }
+    if not SDIST_REQUIRED_ROOT_FILES <= root_files:
+        raise ValueError(f"sdist lacks required root files: {sorted(SDIST_REQUIRED_ROOT_FILES - root_files)}")
+    directories = {
+        PurePosixPath(name).parts[1]
+        for name in files
+        if len(PurePosixPath(name).parts) > 2 and PurePosixPath(name).parts[0] == root_name
+    }
+    if not SDIST_REQUIRED_DIRECTORIES <= directories:
+        raise ValueError(
+            f"sdist lacks required source/test directories: {sorted(SDIST_REQUIRED_DIRECTORIES - directories)}"
+        )
     metadata = parse_metadata(files[pkg_info[0]], source=pkg_info[0])
     return {**metadata, "entry_count": len(files)}
 

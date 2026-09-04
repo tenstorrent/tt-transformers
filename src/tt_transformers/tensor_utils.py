@@ -10,7 +10,6 @@ import math
 import re
 
 import torch
-
 import ttnn
 
 # Standard tile size - hardware constant

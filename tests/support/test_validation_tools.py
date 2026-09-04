@@ -8,11 +8,11 @@ against reference PyTorch implementations with automatic metrics collection.
 
 import pytest
 import torch
-
 import ttnn
-from qualification.tools.auto_compose import to_torch_auto_compose
-from qualification.tools.metrics import compute_pcc_host
-from qualification.tools.validation_tools import (
+from examples.common.auto_compose import to_torch_auto_compose
+
+from tests.support.metrics import compute_pcc_host
+from tests.support.validation_tools import (
     Metric,
     MetricSpec,
     clear_validation_results,

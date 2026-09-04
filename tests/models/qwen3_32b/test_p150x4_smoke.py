@@ -10,13 +10,13 @@ from pathlib import Path
 
 import pytest
 import torch
-
 import ttnn
+from tests.integration.cleanup_utils import cleanup_model_case
+from tests.integration.run_helpers import make_contiguous_page_table
+
 from tt_transformers.models.qwen3_32b.executor import EagerQwen3_32BExecutor
 from tt_transformers.models.qwen3_32b.hf_adaptor import from_pretrained
 from tt_transformers.models.qwen3_32b.model import QWEN3_32B_ACCURACY, QWEN3_32B_BH_TP4_CLUSTER_TYPES
-from tests.integration.cleanup_utils import cleanup_model_case
-from tests.integration.run_helpers import make_contiguous_page_table
 
 _HF_MODEL = "Qwen/Qwen3-32B"
 _BLOCK_SIZE = 32
@@ -45,9 +45,9 @@ pytestmark = [
 
 def _assert_physical_bh_tp4(mesh_device: ttnn.MeshDevice) -> None:
     assert ttnn.device.is_blackhole(), "BlackHole TP4 smoke requires BlackHole"
-    assert (
-        ttnn.cluster.get_cluster_type() in QWEN3_32B_BH_TP4_CLUSTER_TYPES
-    ), "BlackHole TP4 smoke requires a physical P150_X4 or P300_X2 product"
+    assert ttnn.cluster.get_cluster_type() in QWEN3_32B_BH_TP4_CLUSTER_TYPES, (
+        "BlackHole TP4 smoke requires a physical P150_X4 or P300_X2 product"
+    )
     assert mesh_device.get_num_devices() == 4
     assert tuple(mesh_device.shape) == (1, 4)
 

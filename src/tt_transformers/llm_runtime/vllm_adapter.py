@@ -86,7 +86,7 @@ class VLLMAdapterConfig:
         expected_head_dim: int | None = None,
         model_kv_cache_dtype: Any | Sequence[Any],
         request_state_fields: Sequence[str] = (),
-    ) -> "VLLMAdapterConfig":
+    ) -> VLLMAdapterConfig:
         if type(trace) is not TraceConfig:
             raise TypeError("trace must be a TraceConfig")
         if type(paged_kv_cache) is not PagedKVCacheConfig:
@@ -244,8 +244,7 @@ class VLLMAdapter:
         configured_num_blocks = config.num_blocks
         if configured_num_blocks is not None and int(configured_num_blocks) != num_blocks:
             raise ValueError(
-                f"PagedKVCacheConfig is already resolved to {configured_num_blocks} blocks; "
-                f"vLLM requested {num_blocks}"
+                f"PagedKVCacheConfig is already resolved to {configured_num_blocks} blocks; vLLM requested {num_blocks}"
             )
         return dataclasses.replace(
             config,
@@ -287,8 +286,7 @@ class VLLMAdapter:
         # an unselected operation intentionally uses eager execution.
         if enable_trace and not configured:
             raise ValueError(
-                f"enable_trace={enable_trace} for {operation} disagrees with static "
-                f"TraceConfig policy ({configured})"
+                f"enable_trace={enable_trace} for {operation} disagrees with static TraceConfig policy ({configured})"
             )
 
 

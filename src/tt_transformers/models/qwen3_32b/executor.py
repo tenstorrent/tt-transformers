@@ -3,7 +3,7 @@
 
 """Model-owned Qwen3-32B policy over the shared model executor.
 
-Qwen3-32B is currently the only Qwen3 product in ``models/common/models``.
+Qwen3-32B is currently the only Qwen3 product in ``tt_transformers.models``.
 This module therefore retains its concrete sampling, trace-prime, and
 compatibility policy while delegating the family-neutral lifecycle to
 ``ModelExecutor``. The public class is a composition facade, not a subclass.
@@ -12,13 +12,14 @@ compatibility policy while delegating the family-neutral lifecycle to
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Callable
+from typing import Any
 
 import torch
-
 import ttnn
+
 from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
 from tt_transformers.models.executor import ModelExecutor, ModelExecutorConfig
 from tt_transformers.models.qwen3_32b.hf_adaptor import Qwen3_32BForCausalLM

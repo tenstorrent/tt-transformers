@@ -9,9 +9,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import ttnn
 from transformers import AutoConfig, AutoTokenizer
 
-import ttnn
 from tt_transformers.cache_environment import (
     environment_flag,
     offline_mode,

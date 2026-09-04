@@ -19,7 +19,7 @@ Run the concrete 72B Qwen2.5 model on its full T3K TP8 lane for accuracy, perfor
 
 This is the declared qualification candidate, not a passing verdict:
 
-- `tt-transformers==0.1.0.dev0`
+- `tt-transformers==2.0.0.dev0`
 - `ttnn==0.77.0`
 - Python `3.10, 3.12`
 - `torch==2.11.0`
@@ -48,7 +48,7 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 - Set a writable `TT_CACHE_PATH` (the example appends topology exactly once), or use the versioned standalone root selected by `TT_TRANSFORMERS_CACHE`, `XDG_CACHE_HOME`, or the user cache.
 - Examples use built-in Transformers loading behavior; `trust_remote_code` is not enabled by default.
 - For offline runs set `HF_HOME`, `HF_HUB_OFFLINE=1`, and `TRANSFORMERS_OFFLINE=1` after populating the exact snapshot.
-- Reference asset root: `qualification/assets/reference_outputs/qwen25_72b`.
+- Reference asset root: `tests/assets/reference_outputs/qwen25_72b`.
 
 ### Install, run, and collect
 
@@ -79,16 +79,15 @@ PYTHONPATH=src MESH_DEVICE=T3K pytest --collect-only -q tests/hardware/models/qw
 - Evidence: **none attributable to pinned source revision `00748e6ac7b65f50e5c2af07f6e7c1c535c7f4c0`**.
 - [Machine-readable manifest](support.json)
 - [Hardware gate](../../tests/hardware/models/qwen25_72b/test_demo.py)
-- [Pinned support baseline](../../qualification/analysis/support/support_baseline.md)
-- [Phase 3 boundary evidence](../../qualification/extraction/support_boundary.md)
-- [Historical evidence ledger](../../qualification/analysis/support/hardware_evidence.csv)
+- [Support matrix](../../SUPPORT.md)
+- [Validation summary](../../docs/validation.md)
 
 ### Known and unsupported gaps
 
 - non-T3K meshes.
 - DP greater than 1.
 - any geometry not declared in support.json.
-- No hardware evidence is attributable to the pinned extraction revision.
+- Current regression evidence does not qualify the complete declared model contract.
 
 <!-- END GENERATED SUPPORT -->
 
@@ -111,8 +110,8 @@ topology, precision, and program policy locally.
 ## Executor composition
 
 The public 72B executor/config/builder remains importable from this directory.
-Its lifecycle is supplied by `models/common/models/qwen2_executor.py` over
-`models/common/models/executor.py::ModelExecutor`.
+Its lifecycle is supplied by `src/tt_transformers/models/qwen2_executor.py` over
+`src/tt_transformers/models/executor.py::ModelExecutor`.
 
 The shared owner composes paged-KV management, prefill/decode runtimes,
 eager/trace compilation, output handling, warmup, and cleanup. Qwen2.5-72B uses
@@ -130,10 +129,10 @@ artifacts, output leases, sampling buffers, and terminal cleanup.
 
 ## Tests
 
-- `models/common/tests/models/qwen25_72b/test_hf_adaptor.py`
-- `models/common/tests/models/qwen25_72b/test_model_runtime_surface.py`
-- `models/common/tests/models/qwen25_72b/test_demo_contract.py`
-- `models/common/tests/demos/qwen25_72b/demo.py`
-- `models/common/tests/models/test_qwen2_executor_family.py`
-- `models/common/tests/llm_runtime/test_executor_integration.py`
-- `models/common/tests/llm_runtime/test_model_executor.py`
+- `tests/models/qwen25_72b/test_hf_adaptor.py`
+- `tests/models/qwen25_72b/test_model_runtime_surface.py`
+- `tests/models/qwen25_72b/test_demo_contract.py`
+- `tests/hardware/models/qwen25_72b/test_demo.py`
+- `tests/models/test_qwen2_executor_family.py`
+- `tests/llm_runtime/test_executor_integration.py`
+- `tests/llm_runtime/test_model_executor.py`

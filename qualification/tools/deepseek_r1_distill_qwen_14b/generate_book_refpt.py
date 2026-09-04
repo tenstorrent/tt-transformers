@@ -46,7 +46,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # tale-of-two-cities corpus, shared with the TTTv1 book-reference generator.
-DEFAULT_CORPUS = "qualification/assets/reference_inputs/tale-of-two-cities.txt.bz2"
+DEFAULT_CORPUS = "tests/assets/reference_inputs/tale-of-two-cities.txt.bz2"
 
 
 def _dtype_from_arg(name: str) -> torch.dtype:
@@ -64,7 +64,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--output",
-        default="tests/models/deepseek_r1_distill_qwen_14b/reference_outputs/DeepSeek-R1-Distill-Qwen-14B.refpt",
+        default="tests/assets/reference_outputs/deepseek_r1_distill_qwen_14b/DeepSeek-R1-Distill-Qwen-14B.refpt",
         help="Output .refpt path (shared reference_outputs dir, same as the sibling book refpts)",
     )
     parser.add_argument("--total-length", type=int, default=1024, help="Number of corpus tokens to score")

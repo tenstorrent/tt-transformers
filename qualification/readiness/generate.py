@@ -35,7 +35,6 @@ import bz2
 import json
 import os
 from pathlib import Path
-from typing import Optional
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -52,18 +51,18 @@ DEFAULT_PROMPT_LEN = 128
 DEFAULT_GEN_LEN = 100
 DEFAULT_PROMPT_SOURCE = "book"
 DEFAULT_AIME24_PROMPTS_FILE = (
-    Path(__file__).resolve().parents[2] / "demos" / "deepseek_v3" / "demo" / "aime_under_8k_prompts.json"
+    Path(__file__).resolve().parents[2] / "examples/assets/sample_prompts/aime_under_8k_prompts.json"
 )
 PROMPT_SOURCE_CHOICES = ("book", "aime24", "text", "file")
 
 
 def _load_book_text() -> str:
     """Load the tale of two cities book text."""
-    book_file = Path(__file__).resolve().parents[1] / "assets/reference_inputs/tale-of-two-cities.txt.bz2"
+    book_file = Path(__file__).resolve().parents[2] / "tests/assets/reference_inputs/tale-of-two-cities.txt.bz2"
 
     if not os.path.exists(book_file):
         raise FileNotFoundError(
-            f"Book text not found at {book_file}. " "Expected qualification/assets/reference_inputs/tale-of-two-cities.txt.bz2"
+            f"Book text not found at {book_file}. Expected tests/assets/reference_inputs/tale-of-two-cities.txt.bz2"
         )
 
     with bz2.open(book_file, "rt", encoding="utf-8") as f:
@@ -97,8 +96,8 @@ def _load_aime24_prompt(prompts_file: Path, prompt_index: int) -> str:
 def _resolve_prompt_text(
     prompt_source: str,
     *,
-    prompt: Optional[str],
-    prompt_file: Optional[Path],
+    prompt: str | None,
+    prompt_file: Path | None,
     aime24_prompts_file: Path,
     aime24_prompt_index: int,
 ) -> str:
@@ -165,7 +164,7 @@ def _generation_stop_ids(tokenizer, model: torch.nn.Module) -> list[int]:
     return deduped
 
 
-def _safe_pad_id(tokenizer, stop_ids: list[int]) -> Optional[int]:
+def _safe_pad_id(tokenizer, stop_ids: list[int]) -> int | None:
     pad_id = tokenizer.pad_token_id
     if pad_id is not None and pad_id != tokenizer.bos_token_id:
         return int(pad_id)
@@ -270,11 +269,11 @@ def generate_reference(
     output_path: Path | str = "reference.refpt",
     top_k: int = DEFAULT_K,
     num_entries: int = 1,
-    device: Optional[torch.device] = None,
+    device: torch.device | None = None,
     prompt_source: str = DEFAULT_PROMPT_SOURCE,
     chat_template: bool = False,
-    prompt: Optional[str] = None,
-    prompt_file: Optional[Path] = None,
+    prompt: str | None = None,
+    prompt_file: Path | None = None,
     aime24_prompts_file: Path = DEFAULT_AIME24_PROMPTS_FILE,
     aime24_prompt_index: int = 0,
 ) -> Path:

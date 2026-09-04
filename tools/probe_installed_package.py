@@ -14,10 +14,9 @@ import pathlib
 import site
 import sys
 
-
 BLOCKED_OPTIONAL = {"pytest", "tqdm", "transformers"}
 EXPECTED_VERSIONS = {
-    "tt-transformers": "0.1.0.dev0",
+    "tt-transformers": "2.0.0.dev0",
     "ttnn": "0.77.0",
     "torch": "2.11.0",
     "loguru": "0.6.0",
@@ -154,16 +153,14 @@ def probe() -> dict[str, object]:
     site_roots = [pathlib.Path(entry).resolve() for entry in site.getsitepackages()]
     if not any(package_file.is_relative_to(root) for root in site_roots):
         raise AssertionError(f"package is not under site-packages: {package_file}")
-    workspace = "/localdev/gwang/tt_transformers"
-    if workspace in str(package_file) or any(workspace in entry for entry in sys.path):
-        raise AssertionError("repository leaked onto isolated import path")
-
     versions = {name: importlib.metadata.version(name) for name in EXPECTED_VERSIONS}
     if versions != EXPECTED_VERSIONS:
         raise AssertionError(f"version mismatch: {versions}")
     loaded_roots = {module.split(".", 1)[0] for module in sys.modules}
     if BLOCKED_OPTIONAL & loaded_roots:
         raise AssertionError(f"optional imports loaded: {sorted(BLOCKED_OPTIONAL & loaded_roots)}")
+
+    import ttnn
 
     from tt_transformers import device_utils
     from tt_transformers.cache_environment import model_preflight_report
@@ -176,7 +173,6 @@ def probe() -> dict[str, object]:
     from tt_transformers.llm_runtime import tensor_resources
     from tt_transformers.models.executor import ModelExecutor
     from tt_transformers.tensor_utils import program_config_to_dict
-    import ttnn
 
     cleanup = {
         device_utils: ("cleanup_ttnn_value", "cleanup_object_graph", "cleanup_model_case", "cleanup_dp_model_case"),

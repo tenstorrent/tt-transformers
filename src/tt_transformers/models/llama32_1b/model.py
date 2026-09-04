@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-TTTv2 Llama 3.2-1B-Instruct — native stack (no ``models/tt_transformers`` imports).
+TTTv2 Llama 3.2-1B-Instruct — native stack with no legacy model-tree imports.
 
 Architecture: standard Llama 1D transformer, same topology family as Llama 3.2-3B / 3.1-8B.
   hidden=2048, layers=16, n_heads=32, n_kv_heads=8, head_dim=64,
@@ -14,7 +14,7 @@ Mesh compatibility: N150 (1×1), N300 (1×2), T3K (1×8) — 32 heads / 8 KV hea
 divide all three.
 
 TTTv1 source for precision recipes:
-  ``models/tt_transformers/tt/model_config.py :: DecodersPrecision``
+  the legacy tt-metal ``DecodersPrecision`` policy
   (Llama-3 group: ``accuracy()`` lines 130-159, ``performance()`` lines 208-218)
 """
 
@@ -27,10 +27,9 @@ from pathlib import Path
 from typing import Any
 
 import torch
+import ttnn
 from loguru import logger
 
-import ttnn
-from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.modules.attention.attention_1d import (
     Attention1D,
     Attention1DConfig,
@@ -39,6 +38,7 @@ from tt_transformers.modules.attention.attention_1d import (
 )
 from tt_transformers.modules.embedding.embedding_1d import Embedding1D, Embedding1DConfig
 from tt_transformers.modules.lazy_weight import LazyWeight
+from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.modules.lm_head.lm_head_1d import LMHead1D, LMHead1DConfig, _nearest_32
 from tt_transformers.modules.mlp.mlp_1d import MLP1D, MLP1DConfig, _dram_shard_core_grid_k_n
 from tt_transformers.modules.rmsnorm.rmsnorm_1d import RMSNorm1D, RMSNorm1DConfig, _create_sharded_norm_program_config
@@ -675,8 +675,7 @@ def build_llama32_1b_transformer_1d_config(
         raise ValueError(f"Llama-3.2-1B supports 1, 2, or 8 devices, got {num_devices}")
     if params.n_heads % num_devices or params.n_kv_heads % num_devices:
         raise ValueError(
-            f"Checkpoint heads ({params.n_heads}/{params.n_kv_heads}) "
-            f"must be divisible by device count ({num_devices})"
+            f"Checkpoint heads ({params.n_heads}/{params.n_kv_heads}) must be divisible by device count ({num_devices})"
         )
     if len(weights.layers) != n_layers:
         raise ValueError(f"Expected {n_layers} decoder layer weight sets, got {len(weights.layers)}")

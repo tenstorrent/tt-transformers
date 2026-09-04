@@ -1,10 +1,8 @@
-
-import pytest
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 # SPDX-License-Identifier: Apache-2.0
-
 from types import SimpleNamespace
 
+import pytest
 import torch
 from transformers import Qwen2Config, Qwen2ForCausalLM
 from transformers.models.qwen2.modeling_qwen2 import Qwen2RotaryEmbedding

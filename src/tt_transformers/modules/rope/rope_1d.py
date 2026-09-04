@@ -20,13 +20,17 @@ Note: torch is used at construction time for building transformation matrices.
 """
 
 from dataclasses import dataclass, replace
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 import ttnn
+
 from tt_transformers.device_ownership import compatibility_default_device
-from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.modules.lazy_weight import LazyWeight, resolve_lazy_weight
+from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.tensor_utils import TILE_SIZE, get_rot_transformation_mat, nearest_32
+
+if TYPE_CHECKING:
+    import torch
 
 # =============================================================================
 # Config dataclass
@@ -65,12 +69,12 @@ class Rope1DConfig:
     batch_size_per_device_group: int | None = None
     core_grid: Any | None = None
     batch_grid: Any | None = None
-    decode_trans_mat_mem_config: Optional[ttnn.MemoryConfig] = None
-    cos_sin_shard_mem_config: Optional[ttnn.MemoryConfig] = None
+    decode_trans_mat_mem_config: ttnn.MemoryConfig | None = None
+    cos_sin_shard_mem_config: ttnn.MemoryConfig | None = None
 
     # Internal: transformation matrix LazyWeights (built by _resolve_rope_config)
-    _decode_trans_mat: Optional[LazyWeight] = None
-    _prefill_trans_mat: Optional[LazyWeight] = None
+    _decode_trans_mat: LazyWeight | None = None
+    _prefill_trans_mat: LazyWeight | None = None
 
 
 # =============================================================================
@@ -145,7 +149,7 @@ class RotarySetup1D(LightweightModule):
 
     # ---- Core API ----
 
-    def decode_forward(self, rot_idxs: ttnn.Tensor) -> List[ttnn.Tensor]:
+    def decode_forward(self, rot_idxs: ttnn.Tensor) -> list[ttnn.Tensor]:
         """Look up cos/sin rotation matrices for given position indices (decode mode).
 
         Args:
@@ -184,7 +188,7 @@ class RotarySetup1D(LightweightModule):
 
         return [cos, sin]
 
-    def prefill_forward(self, start_pos: int, seq_len: int, pad_to: int | None = None) -> List[ttnn.Tensor]:
+    def prefill_forward(self, start_pos: int, seq_len: int, pad_to: int | None = None) -> list[ttnn.Tensor]:
         """Slice cos/sin matrices for prefill mode.
 
         This replaces the duplicated cos/sin slicing logic found in every model's
@@ -219,7 +223,7 @@ class RotarySetup1D(LightweightModule):
 
         return [cos_slice, sin_slice]
 
-    def forward(self, mode: str, **kwargs) -> List[ttnn.Tensor]:
+    def forward(self, mode: str, **kwargs) -> list[ttnn.Tensor]:
         """Dispatch to decode_forward or prefill_forward based on mode.
 
         Args:
@@ -235,17 +239,14 @@ class RotarySetup1D(LightweightModule):
         else:
             raise ValueError(f"Unknown mode: {mode!r}. Expected 'decode' or 'prefill'.")
 
-    def get_both_trans_mats(self) -> Dict[str, ttnn.Tensor]:
+    def get_both_trans_mats(self) -> dict[str, ttnn.Tensor]:
         """Return both decode and prefill transformation matrices."""
         self.load_device_weights()
         return {"decode": self.transformation_mat, "prefill": self.transformation_mat_prefill}
 
     # ---- Backward-compatible API (will retire with TTTv1) ----
 
-
-
     # ---- Factory for TTTv1 backward compatibility ----
-
 
 
 # =============================================================================
@@ -405,9 +406,9 @@ def prepare_rot_idxs(
 
     if config.use_qk_fused:
         position_idxs = position_idxs.repeat(2)
-        assert (
-            position_idxs.shape[0] == config.batch_size_per_device_group
-        ), "Position idxs must match batch_size_per_device_group"
+        assert position_idxs.shape[0] == config.batch_size_per_device_group, (
+            "Position idxs must match batch_size_per_device_group"
+        )
 
     batch = position_idxs.shape[0]
     position_idxs = position_idxs.reshape(1, batch)

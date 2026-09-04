@@ -7,9 +7,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
-from qualification.tools.model_targets import resolve_accuracy_targets, resolve_metric_tolerance
-from qualification.tools.trace_region_sizes import resolve_trace_region_size
+from examples.common.model_targets import resolve_accuracy_targets, resolve_metric_tolerance
+from examples.common.trace_region_sizes import resolve_trace_region_size
 
 _DEMO_PATH = "examples/llama33_70b/demo.py"
 _HARDWARE_DEMO_PATH = "tests/hardware/models/llama33_70b/test_demo.py"
@@ -20,7 +19,7 @@ _DEMO_TREE = ast.parse(_DEMO_SOURCE, filename=f"{_DEMO_PATH}+{_HARDWARE_DEMO_PAT
 _SMOKE_PATH = "tests/models/llama33_70b/test_p150x4_smoke.py"
 _SMOKE_SOURCE = Path(_SMOKE_PATH).read_text(encoding="utf-8")
 _SMOKE_TREE = ast.parse(_SMOKE_SOURCE, filename=_SMOKE_PATH)
-_REQUIRED_CAPABILITIES_PATH = "qualification/manifests/llama33_70b/bh_required_capabilities.json"
+_REQUIRED_CAPABILITIES_PATH = "tests/hardware/capabilities/llama33_70b.json"
 
 
 def _function(name):
@@ -136,7 +135,12 @@ def test_demo_uses_model_owned_runtime_provider_and_shared_helpers():
     assert any("tt_transformers.models.llama33_70b.executor" in statement for statement in imports)
     assert any("tt_transformers.models.llama33_70b.hf_adaptor" in statement for statement in imports)
     assert any("examples.common.run_helpers" in statement for statement in imports)
-    assert any("tt_transformers.device_utils import get_device_name" in statement for statement in imports)
+    assert any(
+        isinstance(node, ast.ImportFrom)
+        and node.module == "tt_transformers.device_utils"
+        and any(alias.name == "get_device_name" for alias in node.names)
+        for node in _DEMO_TREE.body
+    )
     assert not any(node.name == "get_device_name" for node in _DEMO_TREE.body if isinstance(node, ast.FunctionDef))
     assert all("tt_transformers.models.executor" not in statement for statement in imports)
     assert all("AutoConfig" not in statement and "AutoTokenizer" not in statement for statement in imports)
@@ -213,7 +217,6 @@ def test_demo_allocates_kv_cache_without_model_shape_arguments():
 @pytest.mark.host
 @pytest.mark.model
 def test_perf_registers_actual_prefill_before_closed_world_trace_activation():
-    function = _function("_run_perf_benchmark")
     tokenization = _calls("_run_perf_benchmark", "tokenize_prompts")[0]
     warmup = _calls("_run_perf_benchmark", "_warmup_demo_executor")[0]
     benchmark = _calls("_run_perf_benchmark", "run_perf_benchmark")[0]

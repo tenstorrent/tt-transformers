@@ -18,14 +18,14 @@ from unittest.mock import MagicMock
 
 import pytest
 import torch
-from loguru import logger
-
 import ttnn
-from qualification.tools.auto_compose import to_torch_auto_compose
+from examples.common.auto_compose import to_torch_auto_compose
+from loguru import logger
+from tests.support.comparison import comp_allclose, comp_pcc
+
 from tt_transformers.modules.lazy_weight import LazyWeight
 from tt_transformers.modules.lm_head.lm_head_1d import LMHead1D, LMHead1DConfig, resolve_lm_head_1d_arch_config
 from tt_transformers.tensor_utils import TILE_SIZE
-from tests.support.comparison import comp_allclose, comp_pcc
 
 # 1D module suites target the T3K; skip when the host system is a Galaxy.
 pytestmark = pytest.mark.usefixtures("skip_on_galaxy_system")
@@ -442,7 +442,7 @@ def test_lm_head_1d_vs_reference(
     # Shape checks
     assert tt_output_torch.shape[-2] == batch_rows, f"Expected batch_rows={batch_rows}, got {tt_output_torch.shape[-2]}"
     assert tt_output_torch.shape[-1] >= vocab_size, (
-        f"Expected vocab cols>={vocab_size}, got {tt_output_torch.shape[-1]}. " f"num_devices={num_devices}"
+        f"Expected vocab cols>={vocab_size}, got {tt_output_torch.shape[-1]}. num_devices={num_devices}"
     )
 
     # PCC against torch reference (trim to actual vocab_size, ignore padding zeros)
@@ -631,4 +631,6 @@ def test_lm_head_1d_wormhole_common_config_correctness_cache_and_timing(request,
     indirect=True,
 )
 def test_lm_head_1d_vs_reference_from_model_args(ttnn_mesh_device: ttnn.MeshDevice):
-    pytest.skip("TTTv1 compatibility characterization retired; standalone constructor coverage lives in tests/host/test_foundation_boundary.py")
+    pytest.skip(
+        "TTTv1 compatibility characterization retired; standalone constructor coverage lives in tests/host/test_foundation_boundary.py"
+    )

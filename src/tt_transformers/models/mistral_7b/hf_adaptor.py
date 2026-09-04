@@ -11,9 +11,9 @@ from pathlib import Path
 from typing import Any
 
 import torch
+import ttnn
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
-import ttnn
 from tt_transformers.cache_environment import (
     environment_flag,
     offline_mode,
@@ -178,9 +178,7 @@ def _cache_path(
     hf_revision: str | None = None,
     dtype=None,
 ) -> Path:
-    topology = {1: "N150", 2: "N300", 8: "T3K"}.get(
-        mesh_device.get_num_devices(), f"TP{mesh_device.get_num_devices()}"
-    )
+    topology = {1: "N150", 2: "N300", 8: "T3K"}.get(mesh_device.get_num_devices(), f"TP{mesh_device.get_num_devices()}")
     resolution = resolve_model_cache(
         hf_model_id=hf_model,
         hf_revision=hf_revision,

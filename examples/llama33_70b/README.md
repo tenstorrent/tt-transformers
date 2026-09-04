@@ -19,7 +19,7 @@ Run the concrete 70B Llama model on its full tensor-parallel lane for token accu
 
 This is the declared qualification candidate, not a passing verdict:
 
-- `tt-transformers==0.1.0.dev0`
+- `tt-transformers==2.0.0.dev0`
 - `ttnn==0.77.0`
 - Python `3.10, 3.12`
 - `torch==2.11.0`
@@ -49,7 +49,7 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 - Set a writable `TT_CACHE_PATH` (the example appends topology exactly once), or use the versioned standalone root selected by `TT_TRANSFORMERS_CACHE`, `XDG_CACHE_HOME`, or the user cache.
 - Examples use built-in Transformers loading behavior; `trust_remote_code` is not enabled by default.
 - For offline runs set `HF_HOME`, `HF_HUB_OFFLINE=1`, and `TRANSFORMERS_OFFLINE=1` after populating the exact snapshot.
-- Reference asset root: `qualification/assets/reference_outputs/llama33_70b`.
+- Reference asset root: `tests/assets/reference_outputs/llama33_70b`.
 
 ### Install, run, and collect
 
@@ -80,9 +80,8 @@ PYTHONPATH=src MESH_DEVICE=T3K pytest --collect-only -q tests/hardware/models/ll
 - Evidence: **none attributable to pinned source revision `00748e6ac7b65f50e5c2af07f6e7c1c535c7f4c0`**.
 - [Machine-readable manifest](support.json)
 - [Hardware gate](../../tests/hardware/models/llama33_70b/test_demo.py)
-- [Pinned support baseline](../../qualification/analysis/support/support_baseline.md)
-- [Phase 3 boundary evidence](../../qualification/extraction/support_boundary.md)
-- [Historical evidence ledger](../../qualification/analysis/support/hardware_evidence.csv)
+- [Support matrix](../../SUPPORT.md)
+- [Validation summary](../../docs/validation.md)
 
 ### Known and unsupported gaps
 
@@ -90,7 +89,7 @@ PYTHONPATH=src MESH_DEVICE=T3K pytest --collect-only -q tests/hardware/models/ll
 - noncanonical P150x4 orientations.
 - unproven 32K context.
 - any geometry not declared in support.json.
-- No hardware evidence is attributable to the pinned extraction revision.
+- Current regression evidence does not qualify the complete declared model contract.
 
 <!-- END GENERATED SUPPORT -->
 
@@ -113,8 +112,8 @@ program policy remains model-owned.
 ## Executor composition
 
 The local file retains `Llama33_70BExecutor`, its config, and its builder as
-stable imports. `models/common/models/llama3_executor.py` supplies the 70B
-family policy and composes `models/common/models/executor.py::ModelExecutor`.
+stable imports. `src/tt_transformers/models/llama3_executor.py` supplies the 70B
+family policy and composes `src/tt_transformers/models/executor.py::ModelExecutor`.
 
 The family-neutral owner composes paged-KV management, output reading,
 prefill/decode runtimes, eager and traced execution, warmup coordination, and
@@ -134,12 +133,12 @@ state; generator/adapter objects own no TT tensors.
 
 ## Tests
 
-- `models/common/tests/models/llama33_70b/test_hf_adaptor.py`
-- `models/common/tests/models/llama33_70b/test_model_profile.py`
-- `models/common/tests/models/llama33_70b/test_demo_contract.py`
-- `models/common/tests/models/llama33_70b/test_logits_oracle.py`
-- `models/common/tests/models/llama33_70b/test_t3k_batched_prefill_correctness.py`
-- `models/common/tests/models/llama33_70b/test_p150x4_smoke.py`
-- `models/common/tests/demos/llama33_70b/demo.py`
-- `models/common/tests/llm_runtime/test_executor_integration.py`
-- `models/common/tests/llm_runtime/test_model_executor.py`
+- `tests/models/llama33_70b/test_hf_adaptor.py`
+- `tests/models/llama33_70b/test_model_profile.py`
+- `tests/models/llama33_70b/test_demo_contract.py`
+- `tests/models/llama33_70b/test_logits_oracle.py`
+- `tests/models/llama33_70b/test_t3k_batched_prefill_correctness.py`
+- `tests/models/llama33_70b/test_p150x4_smoke.py`
+- `tests/hardware/models/llama33_70b/test_demo.py`
+- `tests/llm_runtime/test_executor_integration.py`
+- `tests/llm_runtime/test_model_executor.py`

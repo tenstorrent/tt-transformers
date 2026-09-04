@@ -8,8 +8,8 @@ from unittest.mock import create_autospec
 
 import pytest
 import torch
-
 import ttnn
+
 from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig
 from tt_transformers.llm_runtime.vllm_adapter import (
     NormalizedDecodeKwargs,

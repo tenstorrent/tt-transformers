@@ -1,6 +1,6 @@
 """Narrow fixture policy helpers internalized from tt-metal tests."""
 
-from qualification.tools.trace_region_sizes import resolve_trace_region_size
+from examples.common.trace_region_sizes import resolve_trace_region_size
 
 
 def get_updated_device_params(params):

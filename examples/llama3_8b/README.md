@@ -19,7 +19,7 @@ Run the concrete Llama-3.1-8B tensor model across Wormhole and declared Blackhol
 
 This is the declared qualification candidate, not a passing verdict:
 
-- `tt-transformers==0.1.0.dev0`
+- `tt-transformers==2.0.0.dev0`
 - `ttnn==0.77.0`
 - Python `3.10, 3.12`
 - `torch==2.11.0`
@@ -58,7 +58,7 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 - Set a writable `TT_CACHE_PATH` (the example appends topology exactly once), or use the versioned standalone root selected by `TT_TRANSFORMERS_CACHE`, `XDG_CACHE_HOME`, or the user cache.
 - Examples use built-in Transformers loading behavior; `trust_remote_code` is not enabled by default.
 - For offline runs set `HF_HOME`, `HF_HUB_OFFLINE=1`, and `TRANSFORMERS_OFFLINE=1` after populating the exact snapshot.
-- Reference asset root: `qualification/assets/reference_outputs/llama3_8b`.
+- Reference asset root: `tests/assets/reference_outputs/llama3_8b`.
 
 ### Install, run, and collect
 
@@ -89,9 +89,8 @@ PYTHONPATH=src MESH_DEVICE=N150 pytest --collect-only -q tests/hardware/models/l
 - Evidence: **none attributable to pinned source revision `00748e6ac7b65f50e5c2af07f6e7c1c535c7f4c0`**.
 - [Machine-readable manifest](support.json)
 - [Hardware gate](../../tests/hardware/models/llama3_8b/test_demo.py)
-- [Pinned support baseline](../../qualification/analysis/support/support_baseline.md)
-- [Phase 3 boundary evidence](../../qualification/extraction/support_boundary.md)
-- [Historical evidence ledger](../../qualification/analysis/support/hardware_evidence.csv)
+- [Support matrix](../../SUPPORT.md)
+- [Validation summary](../../docs/validation.md)
 
 ### Known and unsupported gaps
 
@@ -99,7 +98,7 @@ PYTHONPATH=src MESH_DEVICE=N150 pytest --collect-only -q tests/hardware/models/l
 - P100 and 128K P300 acceptance.
 - development two-P150 stand-in as real-P300 evidence.
 - any geometry not declared in support.json.
-- No hardware evidence is attributable to the pinned extraction revision.
+- Current regression evidence does not qualify the complete declared model contract.
 
 <!-- END GENERATED SUPPORT -->
 
@@ -120,10 +119,10 @@ The most important boundary is between the tensor model and runtime
 orchestration:
 
 - TTTv2 `LightweightModule` objects implement tensor computation.
-- [`models/common/llm_runtime`](../../llm_runtime/README.md) implements reusable
+- [`src/tt_transformers/llm_runtime`](../../src/tt_transformers/llm_runtime/README.md) implements reusable
   execution, tracing, I/O, cache, warmup, and resource mechanics.
-- `models/common/models/executor.py::ModelExecutor` composes the common owners.
-- `models/common/models/llama3_executor.py::Llama3Executor` supplies the
+- `src/tt_transformers/models/executor.py::ModelExecutor` composes the common owners.
+- `src/tt_transformers/models/llama3_executor.py::Llama3Executor` supplies the
   Llama-8B sampling and prefill policy as a composition facade.
 - `Llama3Generator` adapts the resulting target to vLLM.
 
@@ -318,7 +317,7 @@ the runtime owners and exposes three execution targets:
   configured.
 
 There is no aggregate executor in `llm_runtime`. The shared composition root
-lives in the model layer at `models/common/models/executor.py`.
+lives in the model layer at `src/tt_transformers/models/executor.py`.
 
 ### 4. Build the vLLM boundary adapter
 
@@ -550,7 +549,7 @@ The tensor model should expose the runtime contract needed by its executor:
 
 ### Model execution composition
 
-Use the shared `models/common/models/executor.py::ModelExecutor` when the model
+Use the shared `src/tt_transformers/models/executor.py::ModelExecutor` when the model
 fits its established lifecycle. A demonstrated family may add a small policy
 facade such as `llama3_executor.py` or `qwen2_executor.py`.
 

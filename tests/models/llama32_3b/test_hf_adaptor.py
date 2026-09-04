@@ -9,9 +9,8 @@ from transformers import LlamaConfig, LlamaForCausalLM
 from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding
 
 from tt_transformers.models.llama32_3b import generator as llama_generator
-from tt_transformers.models.llama32_3b import hf_adaptor
+from tt_transformers.models.llama32_3b import hf_adaptor, weight_utils
 from tt_transformers.models.llama32_3b import model as llama_model
-from tt_transformers.models.llama32_3b import weight_utils
 from tt_transformers.models.llama32_3b.hf_adaptor import (
     Llama32_3BForCausalLM,
     Llama32_3BRuntimeConfig,

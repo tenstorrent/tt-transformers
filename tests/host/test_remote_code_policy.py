@@ -13,7 +13,6 @@ from types import SimpleNamespace
 
 import pytest
 
-
 ROOT = Path(__file__).resolve().parents[2]
 QWEN_ADAPTORS = (
     "qwen25_72b",
@@ -46,14 +45,11 @@ def test_all_production_from_pretrained_calls_forbid_implicit_remote_code():
             ):
                 calls.append((path, node.lineno))
                 if any(
-                    keyword.arg == "trust_remote_code" and _is_literal_true(keyword.value)
-                    for keyword in node.keywords
+                    keyword.arg == "trust_remote_code" and _is_literal_true(keyword.value) for keyword in node.keywords
                 ):
                     forced.append((path, node.lineno))
             if isinstance(node, ast.Dict) and any(
-                isinstance(key, ast.Constant)
-                and key.value == "trust_remote_code"
-                and _is_literal_true(value)
+                isinstance(key, ast.Constant) and key.value == "trust_remote_code" and _is_literal_true(value)
                 for key, value in zip(node.keys, node.values)
             ):
                 forced.append((path, node.lineno))

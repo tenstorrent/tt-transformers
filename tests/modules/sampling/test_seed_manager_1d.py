@@ -3,13 +3,12 @@
 
 """Eager host contract tests for the TTTv2-native seed lifecycle."""
 
-import pytest
-
 import ast
 import random
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 import torch
 
 from tt_transformers.modules.lazy_buffer import LazyBuffer
@@ -333,6 +332,6 @@ def test_seed_manager_1d_imports_no_legacy_sampling_state_or_generator():
         node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module is not None
     }
 
-    assert "models.common.sampling.generator" not in imported_modules
-    assert "models.common.sampling.tt_sampling" not in imported_modules
-    assert "models.common.sampling.tt_penalties" not in imported_modules
+    assert "tt_transformers.sampling.generator" not in imported_modules
+    assert "tt_transformers.sampling.tt_sampling" not in imported_modules
+    assert "tt_transformers.sampling.tt_penalties" not in imported_modules

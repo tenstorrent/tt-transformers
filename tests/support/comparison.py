@@ -6,16 +6,14 @@ import math
 import os
 import struct
 import time
-from typing import Union
 
 import numpy as np
 import pytest
 import torch
+import ttnn
 from loguru import logger
 from ttnn.device import Arch
 from typing_extensions import deprecated
-
-import ttnn
 
 
 def get_mesh_device():
@@ -197,7 +195,7 @@ def torch2tt_tensor(
 
 
 def tt_tensors_to_torch_tensors(
-    tt_tensors_device: ttnn.Tensor, mesh_device: Union[ttnn.MeshDevice, ttnn.Device], concat_dim: int = 0
+    tt_tensors_device: ttnn.Tensor, mesh_device: ttnn.MeshDevice | ttnn.Device, concat_dim: int = 0
 ):
     # Convert tensors to interleaved
     if tt_tensors_device.is_sharded():
@@ -438,7 +436,6 @@ def is_close(a, b, rtol=1e-2, atol=1e-2, max_mag=2.0, max_mag_fraction=0.02):
         logger.info(f"reldiff2={reldiff2.reshape(-1)[debug_index]}")
         logger.info(f"absdiff={absdiff.reshape(-1)[debug_index]}")
 
-        HT = a.shape[-2] // 32
         WT = a.shape[-1] // 32
         hwt = debug_index // 1024
         wt = hwt % WT
@@ -567,7 +564,7 @@ def comp_pcc(golden, calculated, pcc=0.99, rtol=1e-05, atol=1e-04):
     return cal_pcc >= pcc, cal_pcc
 
 
-def ulp(x: Union[ttnn.Tensor, torch.Tensor]) -> Union[ttnn.Tensor, torch.Tensor]:
+def ulp(x: ttnn.Tensor | torch.Tensor) -> ttnn.Tensor | torch.Tensor:
     "Return Unit of Least Precision for each element of a given tensor"
 
     received_ttnn_input = False
@@ -815,7 +812,6 @@ def print_diff_argmax(a, b, annotation=""):
     diff = absdiff.reshape(-1)[argmax]
     rela = a.abs() / (torch.max(a.abs(), b.abs()))
     relb = b.abs() / (torch.max(a.abs(), b.abs()))
-    HT = a.shape[-2] // 32
     WT = a.shape[-1] // 32
     hwt = argmax // 1024
     wt = hwt % WT
@@ -846,12 +842,12 @@ def print_diff_argmax(a, b, annotation=""):
 def print_diff_tt_pyt(a, b, annotation=""):
     # first convert a pytorch tensor argument b to tt
     padded_b = pad_weight(b)
-    pyt_a = tt2torch(a)  # untilizes also
+    pyt_a = tt2torch_tensor(a)  # untilizes also
     return print_diff_argmax(pyt_a, padded_b, annotation)
 
 
 def ttP(x, count=4, offset=0, stride=1):
-    if type(x) == torch.Tensor:
+    if type(x) is torch.Tensor:
         t1 = x.reshape(-1)
     else:
         tt_out = x.cpu()
@@ -1184,11 +1180,11 @@ def get_debug_tensor(num_pages_width, num_pages_height, dtype, page_width=32, pa
         for col_idx in range(0, int(num_pages_width)):
             tile_idx = col_idx + num_pages_width * row_idx
             tile = torch.full((1, 1, page_width, page_height), tile_idx + 1, dtype=dtype)
-            if tile_row == None:
+            if tile_row is None:
                 tile_row = tile
             else:
                 tile_row = torch.cat((tile_row, tile), 3)
-        if torch_tensor == None:
+        if torch_tensor is None:
             torch_tensor = tile_row
         else:
             torch_tensor = torch.cat((torch_tensor, tile_row), 2)

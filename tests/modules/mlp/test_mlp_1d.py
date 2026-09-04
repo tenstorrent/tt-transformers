@@ -30,12 +30,12 @@ except ImportError:
     from transformers.modeling_utils import no_init_weights
 
 import ttnn
-from qualification.tools.auto_compose import to_torch_auto_compose
+from examples.common.auto_compose import to_torch_auto_compose
+from tests.support.comparison import comp_allclose, comp_pcc
+
 from tt_transformers.modules.lazy_weight import LazyWeight
 from tt_transformers.modules.mlp.mlp_1d import MLP1D, MLP1DConfig, _matmul_config
 from tt_transformers.tensor_utils import TILE_SIZE
-from tests.support.comparison import comp_allclose, comp_pcc
-from tt_transformers.modules.mode import Mode
 
 # 1D module suites target the T3K; skip when the host system is a Galaxy.
 pytestmark = pytest.mark.usefixtures("skip_on_galaxy_system")
@@ -790,13 +790,16 @@ def test_mlp_1d_wormhole_common_config_correctness_cache_and_timing(request, ttn
         topology=None,
         prefill_w2_minimal_matmul=True,
     )
-    kernel = lambda: ttnn.init_device_compute_kernel_config(
-        ttnn.device.Arch.WORMHOLE_B0,
-        math_fidelity=ttnn.MathFidelity.HiFi2,
-        math_approx_mode=False,
-        fp32_dest_acc_en=False,
-        packer_l1_acc=True,
-    )
+
+    def kernel():
+        return ttnn.init_device_compute_kernel_config(
+            ttnn.device.Arch.WORMHOLE_B0,
+            math_fidelity=ttnn.MathFidelity.HiFi2,
+            math_approx_mode=False,
+            fp32_dest_acc_en=False,
+            packer_l1_acc=True,
+        )
+
     common = replace(
         common,
         ff1_3_compute_kernel_cfg=kernel(),
@@ -973,4 +976,6 @@ def test_mlp_1d_config_prefill_override(ttnn_mesh_device: ttnn.MeshDevice):
 )
 @pytest.mark.parametrize("seq_len", (512, 32))
 def test_mlp_1d_vs_reference_from_model_args(ttnn_mesh_device: ttnn.MeshDevice, seq_len):
-    pytest.skip("TTTv1 compatibility characterization retired; standalone constructor coverage lives in tests/host/test_foundation_boundary.py")
+    pytest.skip(
+        "TTTv1 compatibility characterization retired; standalone constructor coverage lives in tests/host/test_foundation_boundary.py"
+    )

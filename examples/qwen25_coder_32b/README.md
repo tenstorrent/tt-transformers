@@ -19,7 +19,7 @@ Run the concrete 32B coder model on T3K TP8, with end-to-end and focused smoke/P
 
 This is the declared qualification candidate, not a passing verdict:
 
-- `tt-transformers==0.1.0.dev0`
+- `tt-transformers==2.0.0.dev0`
 - `ttnn==0.77.0`
 - Python `3.10, 3.12`
 - `torch==2.11.0`
@@ -49,7 +49,7 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 - Set a writable `TT_CACHE_PATH` (the example appends topology exactly once), or use the versioned standalone root selected by `TT_TRANSFORMERS_CACHE`, `XDG_CACHE_HOME`, or the user cache.
 - Examples use built-in Transformers loading behavior; `trust_remote_code` is not enabled by default.
 - For offline runs set `HF_HOME`, `HF_HUB_OFFLINE=1`, and `TRANSFORMERS_OFFLINE=1` after populating the exact snapshot.
-- Reference asset root: `qualification/assets/reference_outputs/qwen25_coder_32b`.
+- Reference asset root: `tests/assets/reference_outputs/qwen25_coder_32b`.
 
 ### Install, run, and collect
 
@@ -86,16 +86,15 @@ PYTHONPATH=src MESH_DEVICE=T3K pytest --collect-only -q tests/hardware/models/qw
 - Evidence: **none attributable to pinned source revision `00748e6ac7b65f50e5c2af07f6e7c1c535c7f4c0`**.
 - [Machine-readable manifest](support.json)
 - [Hardware gate](../../tests/hardware/models/qwen25_coder_32b/test_demo.py)
-- [Pinned support baseline](../../qualification/analysis/support/support_baseline.md)
-- [Phase 3 boundary evidence](../../qualification/extraction/support_boundary.md)
-- [Historical evidence ledger](../../qualification/analysis/support/hardware_evidence.csv)
+- [Support matrix](../../SUPPORT.md)
+- [Validation summary](../../docs/validation.md)
 
 ### Known and unsupported gaps
 
 - non-T3K meshes.
 - DP greater than 1.
 - any geometry not declared in support.json.
-- No hardware evidence is attributable to the pinned extraction revision.
+- Current regression evidence does not qualify the complete declared model contract.
 
 <!-- END GENERATED SUPPORT -->
 
@@ -117,8 +116,8 @@ precision, and tuning remain model-owned.
 
 ## Executor composition
 
-The lifecycle is shared through `models/common/models/qwen2_executor.py`, which
-configures `models/common/models/executor.py::ModelExecutor`. The common owner
+The lifecycle is shared through `src/tt_transformers/models/qwen2_executor.py`, which
+configures `src/tt_transformers/models/executor.py::ModelExecutor`. The common owner
 constructs paged KV, output reading, prefill/decode runtimes, eager/traced
 execution, warmup, and ordered cleanup.
 
@@ -136,10 +135,10 @@ resources and cleanup.
 
 ## Tests
 
-- `models/common/tests/models/qwen25_coder_32b/test_hf_adaptor.py`
-- `models/common/tests/models/qwen25_coder_32b/test_model_runtime_surface.py`
-- `models/common/tests/models/qwen25_coder_32b/test_demo_contract.py`
-- `models/common/tests/demos/qwen25_coder_32b/demo.py`
-- `models/common/tests/models/test_qwen2_executor_family.py`
-- `models/common/tests/llm_runtime/test_executor_integration.py`
-- `models/common/tests/llm_runtime/test_model_executor.py`
+- `tests/models/qwen25_coder_32b/test_hf_adaptor.py`
+- `tests/models/qwen25_coder_32b/test_model_runtime_surface.py`
+- `tests/models/qwen25_coder_32b/test_demo_contract.py`
+- `tests/hardware/models/qwen25_coder_32b/test_demo.py`
+- `tests/models/test_qwen2_executor_family.py`
+- `tests/llm_runtime/test_executor_integration.py`
+- `tests/llm_runtime/test_model_executor.py`

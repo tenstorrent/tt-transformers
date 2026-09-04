@@ -27,10 +27,11 @@ except ImportError:
     from transformers.modeling_utils import no_init_weights
 
 import ttnn
-from qualification.tools.auto_compose import to_torch_auto_compose
+from examples.common.auto_compose import to_torch_auto_compose
+from tests.support.comparison import comp_allclose, comp_pcc
+
 from tt_transformers.modules.lazy_weight import LazyWeight
 from tt_transformers.modules.rmsnorm.rmsnorm_2d import RMSNorm2D, RMSNorm2DConfig
-from tests.support.comparison import comp_allclose, comp_pcc
 
 # ============================================================================
 # Weight Caching - Avoid expensive weight loading per test
@@ -264,4 +265,6 @@ HF_MODEL_NAME = os.environ.get("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
 )
 @pytest.mark.parametrize("seq_len", [1, 128])
 def test_rmsnorm_2d_vs_reference_from_model_args(ttnn_mesh_device: ttnn.MeshDevice, seq_len: int):
-    pytest.skip("TTTv1 compatibility characterization retired; standalone constructor coverage lives in tests/host/test_foundation_boundary.py")
+    pytest.skip(
+        "TTTv1 compatibility characterization retired; standalone constructor coverage lives in tests/host/test_foundation_boundary.py"
+    )

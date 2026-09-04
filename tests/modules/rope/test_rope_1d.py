@@ -15,18 +15,17 @@ import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple
 
 import pytest
 import torch
-from loguru import logger
-
 import ttnn
-from qualification.tools.auto_compose import to_torch_auto_compose
+from examples.common.auto_compose import to_torch_auto_compose
+from loguru import logger
+from tests.support.comparison import comp_pcc
+
 from tt_transformers.modules.lazy_weight import LazyWeight
 from tt_transformers.modules.rope.rope_1d import Rope1DConfig, RotarySetup1D, prepare_rot_idxs
 from tt_transformers.tensor_utils import get_rot_transformation_mat
-from tests.support.comparison import comp_pcc
 
 # 1D module suites target the T3K; skip when the host system is a Galaxy.
 pytestmark = pytest.mark.usefixtures("skip_on_galaxy_system")
@@ -71,8 +70,8 @@ def _rope_cos_sin(
     head_dim: int,
     max_seq_len: int,
     theta: float,
-    scaling: Optional[Llama3Scaling] = None,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+    scaling: Llama3Scaling | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Compute RoPE cos/sin tables in Meta interleaved format (pure torch).
 
     This is the HF reference implementation for RoPE, independent of TTTv1.
@@ -759,4 +758,6 @@ def test_prefill_forward_bounds_check(ttnn_mesh_device: ttnn.MeshDevice, expect_
     indirect=True,
 )
 def test_rope_1d_vs_reference_from_model_args(ttnn_mesh_device: ttnn.MeshDevice):
-    pytest.skip("TTTv1 compatibility characterization retired; standalone constructor coverage lives in tests/host/test_foundation_boundary.py")
+    pytest.skip(
+        "TTTv1 compatibility characterization retired; standalone constructor coverage lives in tests/host/test_foundation_boundary.py"
+    )

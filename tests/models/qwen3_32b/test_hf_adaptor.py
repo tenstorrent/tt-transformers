@@ -6,11 +6,10 @@ from types import SimpleNamespace
 
 import pytest
 import torch
-
 import ttnn
-from tt_transformers.models.qwen3_32b import executor, generator, hf_adaptor
+
+from tt_transformers.models.qwen3_32b import executor, generator, hf_adaptor, weight_utils
 from tt_transformers.models.qwen3_32b import model as qwen3_model
-from tt_transformers.models.qwen3_32b import weight_utils
 from tt_transformers.models.qwen3_32b.hf_adaptor import Qwen3_32BForCausalLM, Qwen3_32BRuntimeConfig, _trace_seq_lens
 
 

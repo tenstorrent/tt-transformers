@@ -224,9 +224,7 @@ class SamplingState1D:
         if prepared.slot_remap is not None:
             self.seed_manager.apply_slot_remap(state.seed_state, prepared.slot_remap)
         survivor_slots = tuple(
-            slot
-            for slot, active in enumerate(state.seed_state.active)
-            if active and slot not in destination_slots
+            slot for slot, active in enumerate(state.seed_state.active) if active and slot not in destination_slots
         )
         execution_prepared = (
             _broadcast_prefill_prepared(prepared, active_sources[0]) if len(active_sources) == 1 else prepared
@@ -585,9 +583,7 @@ class SamplingState1D:
 
         self._validate_state(state)
         if state.pending_sample_id != int(sample_id):
-            raise RuntimeError(
-                f"sample_id {sample_id} is not the pending sampling step " f"({state.pending_sample_id})"
-            )
+            raise RuntimeError(f"sample_id {sample_id} is not the pending sampling step ({state.pending_sample_id})")
         if count_tokens and state.static_identity is not None and state.static_identity.penalties_enabled:
             # Leave the step pending if the device update fails: retrying blindly
             # could count a partially applied token twice.

@@ -13,10 +13,10 @@ torch input.
 
 import pytest
 import torch
-
 import ttnn
-from qualification.tools.auto_compose import extract_tensor_topology_info, to_torch_auto_compose
-from qualification.tools.distribute_as import from_torch_dist_as
+from examples.common.auto_compose import extract_tensor_topology_info, to_torch_auto_compose
+
+from tests.support.distribute_as import from_torch_dist_as
 
 # ======================================================================================
 # Test Parameters

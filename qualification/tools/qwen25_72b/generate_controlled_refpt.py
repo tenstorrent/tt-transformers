@@ -28,9 +28,8 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
 from examples.common.prompting import encode_prompt_hf
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 DEFAULT_PROMPT = (
     "Write a short Python function that returns the n-th Fibonacci number using memoization, "
@@ -57,7 +56,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--output",
-        default="tests/models/qwen25_72b/reference_outputs/Qwen2.5-72B-Instruct.refpt",
+        default="tests/assets/reference_outputs/qwen25_72b/Qwen2.5-72B-Instruct.refpt",
         help="Output .refpt path",
     )
     parser.add_argument("--seed", type=int, default=0, help="Random seed")

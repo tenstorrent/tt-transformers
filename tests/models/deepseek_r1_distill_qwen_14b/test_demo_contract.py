@@ -41,6 +41,31 @@ def _called_names(function_name):
 
 @pytest.mark.host
 @pytest.mark.model
+def test_demo_tokenizer_loader_uses_the_imported_transformers_surface():
+    sentinel = object()
+    calls = []
+
+    class FakeAutoTokenizer:
+        @staticmethod
+        def from_pretrained(model_id, **kwargs):
+            calls.append((model_id, kwargs))
+            return sentinel
+
+    load_tokenizer = _demo_function(
+        "_load_tokenizer",
+        {
+            "AutoTokenizer": FakeAutoTokenizer,
+            "Path": Path,
+            "os": os,
+        },
+    )
+
+    assert load_tokenizer("example/model") is sentinel
+    assert calls == [("example/model", {})]
+
+
+@pytest.mark.host
+@pytest.mark.model
 def test_demo_case_manifest_is_preserved():
     test_function = next(
         node

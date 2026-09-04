@@ -16,8 +16,8 @@ from dataclasses import dataclass
 
 import pytest
 import torch
-
 import ttnn
+
 from tt_transformers.sampling.generator import SamplingGenerator, SamplingParams, format_sampling_params
 from tt_transformers.sampling.tt_sampling import TTSampling
 
@@ -342,9 +342,9 @@ def run_ttsampling_once(
     user-facing temperature, and 0.0 is not "greedy" here. For greedy, pass
     'top_k=1' with 'temperature=1.0'.
     """
-    assert all(
-        t > 0 for t in broadcast(temperature)
-    ), f"temperature is the device-side inverse temperature (1/T) and must be > 0, got {temperature}"
+    assert all(t > 0 for t in broadcast(temperature)), (
+        f"temperature is the device-side inverse temperature (1/T) and must be > 0, got {temperature}"
+    )
     effective_batch_size = infer_effective_batch_size(torch_logits, batch_size, max_batch_size=BATCH_SIZE)
     padded_logits = pad_logits_to_max_batch(torch_logits, max_batch_size=BATCH_SIZE)
 
@@ -502,9 +502,9 @@ def run_sampling_generator(
 
 
 def assert_tokens_in_vocab(tokens: list[int], vocab_size: int = VOCAB_SIZE):
-    assert all(
-        0 <= tok < vocab_size for tok in tokens
-    ), f"Found out-of-range token(s) for vocab_size={vocab_size}: {tokens}"
+    assert all(0 <= tok < vocab_size for tok in tokens), (
+        f"Found out-of-range token(s) for vocab_size={vocab_size}: {tokens}"
+    )
 
 
 def flatten_steps(outputs: list[list[int]]) -> list[int]:
@@ -1069,7 +1069,7 @@ class TestSeededSamplingPerRequest:
             assert_tokens_in_vocab(outputs, args.vocab_size)
             unexpected = [tok for tok in outputs if tok not in hot_token_set]
             assert not unexpected, (
-                f"Sampled tokens outside expected hot set {sorted(hot_token_set)}: {unexpected}. " f"outputs={outputs}"
+                f"Sampled tokens outside expected hot set {sorted(hot_token_set)}: {unexpected}. outputs={outputs}"
             )
 
     @pytest.mark.device
@@ -1344,9 +1344,9 @@ class TestBatchIsolation:
             mesh_device, args, logits, params, num_steps=1, advance_seeds=True, seed_values=seeds
         )[0]
         for i, tok in enumerate(tokens):
-            assert (
-                tok in expected_sets[i]
-            ), f"User {i} token leaked across users: tok={tok}, expected={expected_sets[i]}"
+            assert tok in expected_sets[i], (
+                f"User {i} token leaked across users: tok={tok}, expected={expected_sets[i]}"
+            )
 
         for device_idx in representative_device_indices(mesh_device)[1:]:
             device_tokens = run_sampling_generator(
@@ -1382,12 +1382,12 @@ class TestBatchIsolation:
         greedy_tokens = run_sampling_generator(
             mesh_device, args, logits, greedy_params, num_steps=1, advance_seeds=False
         )[0]
-        assert (
-            len(set(greedy_tokens)) == 1
-        ), f"All users with the same prompt under greedy should pick the same token, got {greedy_tokens}"
-        assert (
-            greedy_tokens[0] == hot_tokens[0]
-        ), f"Greedy should pick the highest-logit token {hot_tokens[0]}, got {greedy_tokens[0]}"
+        assert len(set(greedy_tokens)) == 1, (
+            f"All users with the same prompt under greedy should pick the same token, got {greedy_tokens}"
+        )
+        assert greedy_tokens[0] == hot_tokens[0], (
+            f"Greedy should pick the highest-logit token {hot_tokens[0]}, got {greedy_tokens[0]}"
+        )
 
         # --- Stochastic with different seeds: should see variation. ---
         # Use full-length lists (like the greedy sub-case above) so temperature applies
@@ -1409,9 +1409,9 @@ class TestBatchIsolation:
             seed_values=diverse_seeds,
         )
         all_tokens = flatten_steps(out_diverse)
-        assert (
-            len(set(all_tokens)) >= 2
-        ), f"Different seeds on the same prompt should produce variation, got {set(all_tokens)}"
+        assert len(set(all_tokens)) >= 2, (
+            f"Different seeds on the same prompt should produce variation, got {set(all_tokens)}"
+        )
         assert_tokens_in_vocab(all_tokens, args.vocab_size)
         unexpected = [tok for tok in all_tokens if tok not in set(hot_tokens)]
         assert not unexpected, f"Sampled tokens outside expected hot set: {unexpected}"
@@ -1800,9 +1800,9 @@ class TestSingleGreedyLaneInStochasticBatch:
             f"Making lane {greedy_lane} greedy changed other lanes (user, expected, got): {perturbed}. "
             f"reference={out_reference}, mixed={out_mixed}"
         )
-        assert (
-            out_mixed[greedy_lane] == bands[greedy_lane][0]
-        ), f"Greedy lane {greedy_lane} should pick {bands[greedy_lane][0]}, got {out_mixed[greedy_lane]}"
+        assert out_mixed[greedy_lane] == bands[greedy_lane][0], (
+            f"Greedy lane {greedy_lane} should pick {bands[greedy_lane][0]}, got {out_mixed[greedy_lane]}"
+        )
 
     @pytest.mark.device
     @pytest.mark.parametrize("mesh_device", [1], indirect=True)
@@ -1834,8 +1834,7 @@ class TestSingleGreedyLaneInStochasticBatch:
                 if user == stochastic_lane:
                     continue
                 assert tokens[user] == bands[user][0], (
-                    f"Greedy lane {user} must pick {bands[user][0]} at every step, "
-                    f"got {tokens[user]} at step {step}"
+                    f"Greedy lane {user} must pick {bands[user][0]} at every step, got {tokens[user]} at step {step}"
                 )
 
         sampled = [step[stochastic_lane] for step in outputs]
@@ -1995,12 +1994,12 @@ class TestTracedSampling:
             mesh_device, args, logits, params, num_steps=3, advance_seeds=True, enable_trace=True
         )
 
-        assert all(
-            tok == hot_tokens[0] for tok in untraced
-        ), f"Eager greedy should pick the max-logit token {hot_tokens[0]}, got {untraced}"
+        assert all(tok == hot_tokens[0] for tok in untraced), (
+            f"Eager greedy should pick the max-logit token {hot_tokens[0]}, got {untraced}"
+        )
         for step, tokens in enumerate(traced):
             assert tokens == untraced, (
-                f"Traced step {step} diverged from the eager result. " f"traced={tokens}, untraced={untraced}"
+                f"Traced step {step} diverged from the eager result. traced={tokens}, untraced={untraced}"
             )
 
     @pytest.mark.device

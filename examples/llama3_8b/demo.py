@@ -9,20 +9,20 @@ Uses executors directly — no vLLM adapter needed.
 Usage:
     # Token accuracy test
     MESH_DEVICE=N150 HF_MODEL=meta-llama/Llama-3.1-8B-Instruct \
-    python_env/bin/pytest models/common/tests/demos/llama3_8b/demo.py -k "token-accuracy" -v
+    python_env/bin/pytest tests/hardware/models/llama3_8b/test_demo.py -k "token-accuracy" -v
 
     # Blackhole P150 token accuracy test
     MESH_DEVICE=P150 HF_MODEL=meta-llama/Llama-3.1-8B-Instruct \
-    python_env/bin/pytest models/common/tests/demos/llama3_8b/demo.py \
+    python_env/bin/pytest tests/hardware/models/llama3_8b/test_demo.py \
       -k "blackhole-performance-token-accuracy" -v
 
     # Batch-1 latency test
     MESH_DEVICE=N150 HF_MODEL=meta-llama/Llama-3.1-8B-Instruct \
-    python_env/bin/pytest models/common/tests/demos/llama3_8b/demo.py -k "batch-1" -v
+    python_env/bin/pytest tests/hardware/models/llama3_8b/test_demo.py -k "batch-1" -v
 
     # Batch-32 throughput test
     MESH_DEVICE=T3K HF_MODEL=meta-llama/Llama-3.1-8B-Instruct \
-    python_env/bin/pytest models/common/tests/demos/llama3_8b/demo.py -k "batch-32" -v
+    python_env/bin/pytest tests/hardware/models/llama3_8b/test_demo.py -k "batch-32" -v
 """
 
 import json
@@ -32,35 +32,34 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import torch
+import ttnn
 from loguru import logger
 from transformers import AutoConfig
 
-import ttnn
-from examples.common.runtime import TemporaryPathFactory, UnsupportedConfiguration, open_mesh_device
-from tt_transformers.device_utils import get_device_name
-from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
-from tt_transformers.llm_runtime.lane_group import LaneGroupExecutor
-from tt_transformers.models.llama3_8b.executor import Llama3ExecutorConfig, build_llama3_executor
-from tt_transformers.models.llama3_8b.hf_adaptor import from_pretrained, load_converted_state_dict
-from tt_transformers.models.llama3_8b.model import Llama31_8BPagedAttentionConfig
-from tt_transformers.sampling.sampling_params import SamplingParams
-from tt_transformers.device_utils import cleanup_model_case
-from examples.llama3_8b.demo_utils import (
-    evaluate_seeded_cross_cardinality_consistency,
-    load_input_prompts,
-    preprocess_llama3_8b_chat_prompts,
-)
+from examples.common.benchmarking_utils import BenchmarkProfiler
+from examples.common.llm_demo_utils import create_benchmark_data
+from examples.common.model_targets import resolve_accuracy_targets
 from examples.common.run_helpers import (
     PerfBenchmarkResult,
     assert_no_special_tokens,
     run_perf_benchmark,
     run_teacher_forcing,
 )
-from qualification.tools.llm_demo_utils import create_benchmark_data
-from qualification.tools.model_targets import resolve_accuracy_targets
-from qualification.tools.trace_region_sizes import hf_model_name_candidates, resolve_trace_region_size
-from qualification.tools.benchmarking_utils import BenchmarkProfiler
+from examples.common.runtime import UnsupportedConfiguration, open_mesh_device
+from examples.common.trace_region_sizes import hf_model_name_candidates, resolve_trace_region_size
+from examples.llama3_8b.demo_utils import (
+    evaluate_seeded_cross_cardinality_consistency,
+    load_input_prompts,
+    preprocess_llama3_8b_chat_prompts,
+)
+from tt_transformers.device_utils import cleanup_model_case, get_device_name
+from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
+from tt_transformers.llm_runtime.lane_group import LaneGroupExecutor
 from tt_transformers.mesh_utils import create_submeshes
+from tt_transformers.models.llama3_8b.executor import Llama3ExecutorConfig, build_llama3_executor
+from tt_transformers.models.llama3_8b.hf_adaptor import from_pretrained, load_converted_state_dict
+from tt_transformers.models.llama3_8b.model import Llama31_8BPagedAttentionConfig
+from tt_transformers.sampling.sampling_params import SamplingParams
 
 # =============================================================================
 # Expected metrics
@@ -124,6 +123,7 @@ EXPECTED_METRICS = {
 
 PERF_TOLERANCE = 0.05
 DEMO_DIR = Path(__file__).parent
+REPO_ROOT = DEMO_DIR.parents[1]
 _BH_DEVICE_NAMES = frozenset({"P150", "P300", "P150x4"})
 
 
@@ -214,9 +214,9 @@ DEMO_CASES = {
 
 def load_reference_data(model_name: str):
     """Load reference tokens and top-5 predictions from .refpt file."""
-    ref_path = DEMO_DIR / "reference_outputs" / f"{model_name}.refpt"
+    ref_path = REPO_ROOT / "tests/assets/reference_outputs/llama3_8b" / f"{model_name}.refpt"
     if not ref_path.exists():
-        raise UnsupportedConfiguration(f'Reference file not found: {ref_path}')
+        raise UnsupportedConfiguration(f"Reference file not found: {ref_path}")
 
     ref_data = torch.load(ref_path, map_location="cpu")
     reference_tokens = ref_data["reference_tokens"]
@@ -244,24 +244,28 @@ def _validate_tp_topology(mesh_device, *, num_devices: int | None = None) -> Non
     num_devices = mesh_device.get_num_devices() if num_devices is None else int(num_devices)
     n_heads, n_kv_heads = _resolve_llama_head_counts()
     if not (n_heads % num_devices == 0):
-        raise AssertionError(f'n_heads={n_heads} must be divisible by num_devices={num_devices}')
+        raise AssertionError(f"n_heads={n_heads} must be divisible by num_devices={num_devices}")
     if not (n_kv_heads % num_devices == 0):
-        raise AssertionError(f'n_kv_heads={n_kv_heads} must be divisible by num_devices={num_devices}')
+        raise AssertionError(f"n_kv_heads={n_kv_heads} must be divisible by num_devices={num_devices}")
 
 
 def _skip_unsupported_case(case: DemoCase, mesh_device) -> None:
     device_name = get_device_name(mesh_device)
     if case.use_prefetcher:
-        raise UnsupportedConfiguration('TTTv2 does not support the TTTv1 DRAM prefetcher')
+        raise UnsupportedConfiguration("TTTv2 does not support the TTTv1 DRAM prefetcher")
     expected_repeat_batches = 1 if case.report_perf or case.name != "eval-32" else 3
     if case.repeat_batches != expected_repeat_batches:
-        raise UnsupportedConfiguration(f'{case.name} requires repeat_batches={expected_repeat_batches}; got {case.repeat_batches}')
+        raise UnsupportedConfiguration(
+            f"{case.name} requires repeat_batches={expected_repeat_batches}; got {case.repeat_batches}"
+        )
     if case.name == "batch-32-ci" and device_name == "N150":
-        raise UnsupportedConfiguration('batch-32-ci max_seq_len=2048 capacity is not enabled for N150 until verified')
+        raise UnsupportedConfiguration("batch-32-ci max_seq_len=2048 capacity is not enabled for N150 until verified")
     if case.data_parallel > 1:
         num_devices = mesh_device.get_num_devices()
         if num_devices % case.data_parallel != 0:
-            raise UnsupportedConfiguration(f'{case.name} requires device count divisible by DP={case.data_parallel}; got {num_devices}')
+            raise UnsupportedConfiguration(
+                f"{case.name} requires device count divisible by DP={case.data_parallel}; got {num_devices}"
+            )
         per_lane_devices = num_devices // case.data_parallel
         _validate_tp_topology(mesh_device, num_devices=per_lane_devices)
 
@@ -364,8 +368,6 @@ def _load_dp_converted_state_dict():
         n_kv_heads=int(text_config.num_key_value_heads),
         n_layers=n_layers,
     )
-
-
 
 
 # =============================================================================
@@ -492,7 +494,7 @@ def _run_seeded_cross_cardinality_batch(
         # and normal demo paths continue to force sequential prefill whenever
         # device sampling is enabled.
         if not (executor.prefill_runtime.config.disable_batched_prefill is not allow_batched_prefill):
-            raise AssertionError('condition failed at line 547')
+            raise AssertionError("condition failed at line 547")
         kv_cache = executor.allocate_kv_cache()
         page_table = _contiguous_page_table(llm.model.config.max_batch_size, llm.model.config.max_seq_len)
         return _execute_seeded_cross_cardinality_shape(
@@ -546,7 +548,7 @@ def _execute_seeded_cross_cardinality_shape(
         pipeline_readback=False,
     )
     if not (len(result.generated_token_ids) == len(request_indexes)):
-        raise AssertionError('condition failed at line 600')
+        raise AssertionError("condition failed at line 600")
     return [list(token_ids) for token_ids in result.generated_token_ids]
 
 
@@ -555,8 +557,8 @@ def _run_seeded_batch1_controls(llm, prompts: list[str], *, num_decode_tokens: i
 
     executor = _build_demo_executor(llm, trace_mode="none", device_sampling_enabled=True)
     try:
-        if not (executor.prefill_runtime.config.disable_batched_prefill is True):
-            raise AssertionError('condition failed at line 609')
+        if executor.prefill_runtime.config.disable_batched_prefill is not True:
+            raise AssertionError("condition failed at line 609")
         kv_cache = executor.allocate_kv_cache()
         page_table = _contiguous_page_table(llm.model.config.max_batch_size, llm.model.config.max_seq_len)
         controls = {}
@@ -586,11 +588,11 @@ def run_llama3_8b_bh_seeded_cross_cardinality(ttnn_mesh_device, optimizations):
     mesh_device = ttnn_mesh_device
     device_name = get_device_name(mesh_device)
     if device_name not in {"P150", "P150x4"}:
-        raise UnsupportedConfiguration('BH seeded cross-cardinality qualification requires P150 or P150x4')
+        raise UnsupportedConfiguration("BH seeded cross-cardinality qualification requires P150 or P150x4")
 
     num_decode_tokens = int(os.environ.get("LLAMA3_8B_CROSS_CARDINALITY_DECODE_TOKENS", "32"))
     if not (num_decode_tokens > 0):
-        raise AssertionError('cross-cardinality qualification requires at least one decode token')
+        raise AssertionError("cross-cardinality qualification requires at least one decode token")
     llm = None
     try:
         _validate_tp_topology(mesh_device)
@@ -600,11 +602,11 @@ def run_llama3_8b_bh_seeded_cross_cardinality(ttnn_mesh_device, optimizations):
             max_batch_size=32,
             max_seq_len=1024,
         )
-        if not (llm.runtime_config.disable_batched_prefill is True):
-            raise AssertionError('BH qualification must enter with the production sequential-prefill policy retained')
+        if llm.runtime_config.disable_batched_prefill is not True:
+            raise AssertionError("BH qualification must enter with the production sequential-prefill policy retained")
         prompts = _eval_repeat_prompts(len(_BH_CROSS_CARDINALITY_REQUEST_IDS))
         if not (len(prompts) == len(_BH_CROSS_CARDINALITY_REQUEST_IDS)):
-            raise AssertionError('condition failed at line 658')
+            raise AssertionError("condition failed at line 658")
 
         sequential_controls = _run_seeded_batch1_controls(
             llm,
@@ -652,8 +654,8 @@ def run_llama3_8b_bh_seeded_cross_cardinality(ttnn_mesh_device, optimizations):
         # A completed BATCHED_PREFILL_REJECTED experiment is not an invariance
         # pass.  Its acceptance independently requires production to retain the
         # sequential-prefill policy; the diagnostic override above never edits it.
-        if not (llm.runtime_config.disable_batched_prefill is True):
-            raise AssertionError('BH production must remain sequential after the experiment disposition')
+        if llm.runtime_config.disable_batched_prefill is not True:
+            raise AssertionError("BH production must remain sequential after the experiment disposition")
     finally:
         cleanup_model_case(llm.model if llm is not None else None, mesh_device)
 
@@ -759,7 +761,7 @@ def _assert_performance_targets(result, expected, *, case_name: str) -> None:
         if not passed
     ]
     if not (not failures):
-        raise AssertionError(f'{case_name}: ' + '; '.join(failures))
+        raise AssertionError(f"{case_name}: " + "; ".join(failures))
 
 
 def _run_token_accuracy(llm, mesh_device, expected, optimizations: str):
@@ -786,12 +788,16 @@ def _run_token_accuracy(llm, mesh_device, expected, optimizations: str):
 
     if "top1" in expected:
         measured_top1 = math.ceil(top1)
-        if not (measured_top1 >= expected['top1']):
-            raise AssertionError(f"Top-1 accuracy {top1:.1f}% (ceil {measured_top1}) below threshold {expected['top1']:.1f}%")
+        if not (measured_top1 >= expected["top1"]):
+            raise AssertionError(
+                f"Top-1 accuracy {top1:.1f}% (ceil {measured_top1}) below threshold {expected['top1']:.1f}%"
+            )
     if "top5" in expected:
         measured_top5 = math.ceil(top5)
-        if not (measured_top5 >= expected['top5']):
-            raise AssertionError(f"Top-5 accuracy {top5:.1f}% (ceil {measured_top5}) below threshold {expected['top5']:.1f}%")
+        if not (measured_top5 >= expected["top5"]):
+            raise AssertionError(
+                f"Top-5 accuracy {top5:.1f}% (ceil {measured_top5}) below threshold {expected['top5']:.1f}%"
+            )
 
 
 def _measure_teacher_forcing_accuracy(llm, mesh_device, *, optimizations: str, log_text=False):
@@ -1066,7 +1072,7 @@ def _report_performance(
 
 def _run_perf_benchmark(llm, mesh_device, expected, batch_size, case_name, num_decode_tokens=None):
     """Run performance benchmark (TTFT + tok/s/u)."""
-    prompts_path = DEMO_DIR / "sample_prompts" / "input_data_questions_prefill_128.json"
+    prompts_path = REPO_ROOT / "examples/assets/sample_prompts/input_data_questions_prefill_128.json"
     prompts = load_input_prompts(prompts_path, batch_size)
     default_decode_tokens = 200 if num_decode_tokens is None else int(num_decode_tokens)
     num_decode_tokens = int(os.environ.get("LLAMA3_8B_TTTV2_DECODE_TOKENS", str(default_decode_tokens)))
@@ -1100,9 +1106,7 @@ def _contiguous_page_table(max_batch_size: int, max_seq_len: int, *, repeat_per_
 
 
 def _eval_repeat_prompts(batch_size: int) -> list[str]:
-    return load_input_prompts(
-        Path("qualification/assets/sample_prompts/eval_repeat_prompts_batch32.json"), batch_size
-    )
+    return load_input_prompts(Path("examples/assets/sample_prompts/eval_repeat_prompts_batch32.json"), batch_size)
 
 
 def _rotate(items: list, amount: int) -> list:
@@ -1157,7 +1161,7 @@ def _run_eval_repeat_batches(
             if left != right:
                 failures.append(user)
     if not (not failures):
-        raise AssertionError(f'eval-{batch_size} generated token IDs differed for users {failures[:10]}')
+        raise AssertionError(f"eval-{batch_size} generated token IDs differed for users {failures[:10]}")
     return reported_batch
 
 
@@ -1171,10 +1175,10 @@ def _run_dp_smoke(mesh_device, optimizations: str, case: DemoCase) -> None:
     data_parallel = case.data_parallel
     per_lane_batch_size = case.batch_size // data_parallel
     if not (per_lane_batch_size == 1):
-        raise AssertionError(f'{case.name} expects one active user per DP lane')
+        raise AssertionError(f"{case.name} expects one active user per DP lane")
     submeshes = list(create_submeshes(mesh_device, data_parallel))
     if not (len(submeshes) == data_parallel):
-        raise AssertionError(f'Expected {data_parallel} submeshes, got {len(submeshes)}')
+        raise AssertionError(f"Expected {data_parallel} submeshes, got {len(submeshes)}")
     converted_state_dict = _load_dp_converted_state_dict()
 
     llms = []
@@ -1218,7 +1222,7 @@ def _run_dp_smoke(mesh_device, optimizations: str, case: DemoCase) -> None:
         )
 
         prompts = load_input_prompts(
-            DEMO_DIR / "sample_prompts" / "input_data_questions_prefill_128.json", case.batch_size
+            REPO_ROOT / "examples/assets/sample_prompts/input_data_questions_prefill_128.json", case.batch_size
         )
         input_tokens, prompt_lens = preprocess_llama3_8b_chat_prompts(
             prompts,
@@ -1246,9 +1250,9 @@ def _run_dp_smoke(mesh_device, optimizations: str, case: DemoCase) -> None:
         # Match TTTv1's correctness-before-telemetry ordering: a failed DP run
         # must not leave a benchmark partial for post-failure artifact processing.
         if not (len(result.generated_token_ids) == data_parallel):
-            raise AssertionError('condition failed at line 1298')
+            raise AssertionError("condition failed at line 1298")
         if not (all(result.generated_token_ids)):
-            raise AssertionError(f'{case.name}: every DP lane must return output')
+            raise AssertionError(f"{case.name}: every DP lane must return output")
         assert_no_special_tokens(result.generated_token_ids, llms[0].tokenizer, case_name=case.name)
         _report_performance(
             llms[0],
@@ -1277,11 +1281,25 @@ def _run_dp_smoke(mesh_device, optimizations: str, case: DemoCase) -> None:
 
 def ttnn_mesh_device_param_from_env() -> dict:
     mesh_name = os.environ.get("MESH_DEVICE", "").strip().upper()
-    shapes = {"P150": (1, 1), "P300": (1, 2), "P150X4": (1, 4), "N150": (1, 1), "N300": (1, 2), "T3K": (1, 8), "TG": (4, 8)}
+    shapes = {
+        "P150": (1, 1),
+        "P300": (1, 2),
+        "P150X4": (1, 4),
+        "N150": (1, 1),
+        "N300": (1, 2),
+        "T3K": (1, 8),
+        "TG": (4, 8),
+    }
     shape = shapes.get(mesh_name)
     if shape is None:
-        raise UnsupportedConfiguration(f"Unsupported MESH_DEVICE={mesh_name!r}; use P150, P300, P150x4, N150, N300, T3K, or TG")
-    params = {"mesh_shape": shape, "trace_region_size": resolve_trace_region_size("llama3.1-8b", mesh_name), "num_command_queues": 1}
+        raise UnsupportedConfiguration(
+            f"Unsupported MESH_DEVICE={mesh_name!r}; use P150, P300, P150x4, N150, N300, T3K, or TG"
+        )
+    params = {
+        "mesh_shape": shape,
+        "trace_region_size": resolve_trace_region_size("llama3.1-8b", mesh_name),
+        "num_command_queues": 1,
+    }
     if mesh_name in {"P300", "P150X4"}:
         params["fabric_config"] = ttnn.FabricConfig.FABRIC_1D_RING
     return params
@@ -1289,10 +1307,22 @@ def ttnn_mesh_device_param_from_env() -> dict:
 
 RUN_MAIN_CASE = run_llama3_8b
 SPECIAL_CASE_RUNNERS = {
-    'bh-seeded-cross-cardinality': run_llama3_8b_bh_seeded_cross_cardinality,
+    "bh-seeded-cross-cardinality": run_llama3_8b_bh_seeded_cross_cardinality,
 }
 
-EXAMPLE_CASES = ('token-accuracy', 'batch-1', 'batch-32', 'batch-32-ci', 'eval-32-repeat-3', 'eval-32-repeat-1', 'ci-b1-DP-2', 'ci-b1-DP-4', 'ci-b1-DP-8', 'ci-b1-DP-16', 'ci-b1-DP-32')
+EXAMPLE_CASES = (
+    "token-accuracy",
+    "batch-1",
+    "batch-32",
+    "batch-32-ci",
+    "eval-32-repeat-3",
+    "eval-32-repeat-1",
+    "ci-b1-DP-2",
+    "ci-b1-DP-4",
+    "ci-b1-DP-8",
+    "ci-b1-DP-16",
+    "ci-b1-DP-32",
+)
 
 
 def main(argv=None):

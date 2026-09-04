@@ -4,8 +4,8 @@
 from dataclasses import FrozenInstanceError, fields
 
 import pytest
-
 import ttnn
+
 from tt_transformers.llm_runtime import config as runtime_config
 from tt_transformers.llm_runtime.config import PagedKVCacheConfig, PageTableLayout, TraceConfig, WarmupConfig
 from tt_transformers.models.llama3_8b.executor import Llama3ExecutorConfig

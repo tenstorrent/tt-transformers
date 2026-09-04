@@ -11,9 +11,9 @@ from pathlib import Path
 from typing import Any
 
 import torch
+import ttnn
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
-import ttnn
 from tt_transformers.cache_environment import (
     environment_flag,
     offline_mode,
@@ -290,7 +290,7 @@ def from_pretrained(
     cache_dtype = dtype
     if mesh_device.get_num_devices() not in (2, 4, 8):
         raise ValueError(
-            f"DeepSeek-R1-Distill-Qwen-14B supports logical TP2/TP4/TP8, " f"got TP{mesh_device.get_num_devices()}"
+            f"DeepSeek-R1-Distill-Qwen-14B supports logical TP2/TP4/TP8, got TP{mesh_device.get_num_devices()}"
         )
     hf_config = AutoConfig.from_pretrained(
         hf_model,

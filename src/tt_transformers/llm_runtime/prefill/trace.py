@@ -5,8 +5,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from tt_transformers.llm_runtime.prefill.inputs import (
     PrefillDeviceInputs,

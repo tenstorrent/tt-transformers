@@ -8,7 +8,6 @@ import os
 import time
 
 import pytest
-
 from tests.conftest import DeviceLockTimeout, tt_device_lock
 
 
@@ -68,9 +67,9 @@ class TestDeviceLock:
         w2_acquire = next(e for e in events if e[0] == 2 and e[1] == "acquired")
 
         # Worker 2 should only acquire AFTER worker 1 releases
-        assert (
-            w2_acquire[2] >= w1_release[2]
-        ), f"Worker 2 acquired at {w2_acquire[2]} but worker 1 released at {w1_release[2]}"
+        assert w2_acquire[2] >= w1_release[2], (
+            f"Worker 2 acquired at {w2_acquire[2]} but worker 1 released at {w1_release[2]}"
+        )
 
     @pytest.mark.host
     def test_lock_timeout_raises(self, tmp_path):

@@ -6,7 +6,7 @@ Host-side HF weight layout helpers for Qwen3-32B (TTTv2 port).
 
 Q/K linear weights use HuggingFace head layout; TTNN RoPE expects Meta layout.
 This duplicates the small permute helpers from ``load_checkpoints.reverse_permute``
-without importing ``models/tt_transformers``. Logic is shape-agnostic and mirrors
+without importing the legacy tt-metal model tree. Logic is shape-agnostic and mirrors
 ``get_attention_weights_from_ref_model`` in ``test_attention_1d.py``.
 
 Qwen3 specifics vs the Qwen2.5 family this was forked from:
@@ -23,8 +23,8 @@ from pathlib import Path
 from typing import Any
 
 import torch
-
 import ttnn
+
 from tt_transformers.modules.lazy_weight import LazyWeight
 
 

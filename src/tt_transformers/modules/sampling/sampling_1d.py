@@ -7,7 +7,7 @@ Sampling1D: Top-k/top-p/temperature sampling for 1D mesh topologies.
 TTTv2 module — declarative config, lazy buffer allocation, k/p/temp as per-call args.
 No mutable sampling state stored on the module.
 
-See also: models/common/sampling/tt_sampling.py (TTTv1 source)
+See also: src/tt_transformers/sampling/tt_sampling.py (TTTv1 source)
 """
 
 from __future__ import annotations
@@ -15,14 +15,14 @@ from __future__ import annotations
 import inspect
 import sys
 from dataclasses import dataclass, replace
-from typing import Any, Optional
-
-from loguru import logger
+from typing import Any
 
 import ttnn
+from loguru import logger
+
 from tt_transformers.device_ownership import compatibility_default_device
-from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.modules.lazy_buffer import LazyBuffer, resolve_lazy_buffer
+from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.modules.tt_ccl import get_tt_ccl
 from tt_transformers.sampling.vocab_padding import (
     build_invalid_vocab_mask,
@@ -59,19 +59,19 @@ class Sampling1DConfig:
     """
 
     vocab_size: int  # Required. Padded logits width; caller pre-pads to be divisible by num_devices.
-    valid_vocab_size: Optional[int] = None  # Real token vocabulary size. Defaults to vocab_size.
-    mesh_device: Optional[ttnn.MeshDevice] = None  # None → audited compatibility default
+    valid_vocab_size: int | None = None  # Real token vocabulary size. Defaults to vocab_size.
+    mesh_device: ttnn.MeshDevice | None = None  # None → audited compatibility default
     tt_ccl: Any = None  # None → get_tt_ccl(mesh_device) if multi-device
     max_batch_size: int = 32
     max_top_k: int = 32
     sub_core_grids: Any = None
     sub_core_grid_topk: Any = None
-    start_core: Optional[ttnn.CoreCoord] = None  # None → CoreCoord(0,0)
+    start_core: ttnn.CoreCoord | None = None  # None → CoreCoord(0,0)
     num_gather_links: int = 1
-    sampling_memory_config: Optional[ttnn.MemoryConfig] = None  # None → DRAM_MEMORY_CONFIG
+    sampling_memory_config: ttnn.MemoryConfig | None = None  # None → DRAM_MEMORY_CONFIG
     allow_force_argmax: bool = False
-    num_argmax_gather_links: Optional[int] = None  # None → same as num_gather_links
-    ag_topology: Optional[ttnn.Topology] = None  # None → Topology.Linear
+    num_argmax_gather_links: int | None = None  # None → same as num_gather_links
+    ag_topology: ttnn.Topology | None = None  # None → Topology.Linear
     argmax_chunks_per_sync: int = 10
     argmax_num_workers_per_link: int = 1
     # Pad each per-device logit shard up to the next power of 2 before ttnn.topk. Big device-perf
@@ -670,7 +670,6 @@ class Sampling1D(LightweightModule):
         )
 
     # -- (Backward compat) Model args factory ----------------------------------
-
 
 
 # ---------------------------------------------------------------------------

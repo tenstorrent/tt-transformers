@@ -5,13 +5,12 @@ from types import SimpleNamespace
 
 import pytest
 import torch
+import ttnn
 from transformers import LlamaConfig, LlamaForCausalLM
 from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding
 
-import ttnn
-from tt_transformers.models.llama33_70b import hf_adaptor
+from tt_transformers.models.llama33_70b import hf_adaptor, weight_utils
 from tt_transformers.models.llama33_70b import model as llama_model
-from tt_transformers.models.llama33_70b import weight_utils
 from tt_transformers.models.llama33_70b.hf_adaptor import (
     Llama33_70BForCausalLM,
     Llama33_70BRuntimeConfig,

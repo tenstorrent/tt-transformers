@@ -8,33 +8,66 @@ from __future__ import annotations
 from importlib import import_module
 
 _EXPORTS = {
-    'DEEPSEEK_R1_14B_ACCURACY': ('tt_transformers.models.deepseek_r1_distill_qwen_14b.model', 'DEEPSEEK_R1_14B_ACCURACY'),
-    'DEEPSEEK_R1_14B_PERFORMANCE': ('tt_transformers.models.deepseek_r1_distill_qwen_14b.model', 'DEEPSEEK_R1_14B_PERFORMANCE'),
-    'DeepSeekR1Qwen14B': ('tt_transformers.models.deepseek_r1_distill_qwen_14b.model', 'DeepSeekR1Qwen14B'),
-    'DeepSeekR1Qwen14BPrecisionConfig': ('tt_transformers.models.deepseek_r1_distill_qwen_14b.model', 'DeepSeekR1Qwen14BPrecisionConfig'),
-    'DeepSeekR1Qwen14BTransformerConfig': ('tt_transformers.models.deepseek_r1_distill_qwen_14b.model', 'DeepSeekR1Qwen14BTransformerConfig'),
-    'DeepSeekR1Qwen14BExecutor': ('tt_transformers.models.deepseek_r1_distill_qwen_14b.executor', 'DeepSeekR1Qwen14BExecutor'),
-    'DeepSeekR1Qwen14BExecutorConfig': ('tt_transformers.models.deepseek_r1_distill_qwen_14b.executor', 'DeepSeekR1Qwen14BExecutorConfig'),
-    'DeepSeekR1Qwen14BForCausalLM': ('tt_transformers.models.deepseek_r1_distill_qwen_14b.hf_adaptor', 'DeepSeekR1Qwen14BForCausalLM'),
-    'DeepSeekR1Qwen14BPagedAttentionConfig': ('tt_transformers.models.deepseek_r1_distill_qwen_14b.model', 'DeepSeekR1Qwen14BPagedAttentionConfig'),
-    'DeepSeekR1Qwen14BGenerator': ('tt_transformers.models.deepseek_r1_distill_qwen_14b.generator', 'DeepSeekR1Qwen14BGenerator'),
-    'DeepSeekR1Qwen14BGeneratorConfig': ('tt_transformers.models.deepseek_r1_distill_qwen_14b.generator', 'DeepSeekR1Qwen14BGeneratorConfig'),
-    'DeepSeekR1Qwen14BRuntimeConfig': ('tt_transformers.models.deepseek_r1_distill_qwen_14b.hf_adaptor', 'DeepSeekR1Qwen14BRuntimeConfig'),
+    "DEEPSEEK_R1_14B_ACCURACY": (
+        "tt_transformers.models.deepseek_r1_distill_qwen_14b.model",
+        "DEEPSEEK_R1_14B_ACCURACY",
+    ),
+    "DEEPSEEK_R1_14B_PERFORMANCE": (
+        "tt_transformers.models.deepseek_r1_distill_qwen_14b.model",
+        "DEEPSEEK_R1_14B_PERFORMANCE",
+    ),
+    "DeepSeekR1Qwen14B": ("tt_transformers.models.deepseek_r1_distill_qwen_14b.model", "DeepSeekR1Qwen14B"),
+    "DeepSeekR1Qwen14BPrecisionConfig": (
+        "tt_transformers.models.deepseek_r1_distill_qwen_14b.model",
+        "DeepSeekR1Qwen14BPrecisionConfig",
+    ),
+    "DeepSeekR1Qwen14BTransformerConfig": (
+        "tt_transformers.models.deepseek_r1_distill_qwen_14b.model",
+        "DeepSeekR1Qwen14BTransformerConfig",
+    ),
+    "DeepSeekR1Qwen14BExecutor": (
+        "tt_transformers.models.deepseek_r1_distill_qwen_14b.executor",
+        "DeepSeekR1Qwen14BExecutor",
+    ),
+    "DeepSeekR1Qwen14BExecutorConfig": (
+        "tt_transformers.models.deepseek_r1_distill_qwen_14b.executor",
+        "DeepSeekR1Qwen14BExecutorConfig",
+    ),
+    "DeepSeekR1Qwen14BForCausalLM": (
+        "tt_transformers.models.deepseek_r1_distill_qwen_14b.hf_adaptor",
+        "DeepSeekR1Qwen14BForCausalLM",
+    ),
+    "DeepSeekR1Qwen14BPagedAttentionConfig": (
+        "tt_transformers.models.deepseek_r1_distill_qwen_14b.model",
+        "DeepSeekR1Qwen14BPagedAttentionConfig",
+    ),
+    "DeepSeekR1Qwen14BGenerator": (
+        "tt_transformers.models.deepseek_r1_distill_qwen_14b.generator",
+        "DeepSeekR1Qwen14BGenerator",
+    ),
+    "DeepSeekR1Qwen14BGeneratorConfig": (
+        "tt_transformers.models.deepseek_r1_distill_qwen_14b.generator",
+        "DeepSeekR1Qwen14BGeneratorConfig",
+    ),
+    "DeepSeekR1Qwen14BRuntimeConfig": (
+        "tt_transformers.models.deepseek_r1_distill_qwen_14b.hf_adaptor",
+        "DeepSeekR1Qwen14BRuntimeConfig",
+    ),
 }
 
 __all__ = [
-    'DEEPSEEK_R1_14B_ACCURACY',
-    'DEEPSEEK_R1_14B_PERFORMANCE',
-    'DeepSeekR1Qwen14B',
-    'DeepSeekR1Qwen14BPrecisionConfig',
-    'DeepSeekR1Qwen14BTransformerConfig',
-    'DeepSeekR1Qwen14BExecutor',
-    'DeepSeekR1Qwen14BExecutorConfig',
-    'DeepSeekR1Qwen14BForCausalLM',
-    'DeepSeekR1Qwen14BPagedAttentionConfig',
-    'DeepSeekR1Qwen14BGenerator',
-    'DeepSeekR1Qwen14BGeneratorConfig',
-    'DeepSeekR1Qwen14BRuntimeConfig',
+    "DEEPSEEK_R1_14B_ACCURACY",
+    "DEEPSEEK_R1_14B_PERFORMANCE",
+    "DeepSeekR1Qwen14B",
+    "DeepSeekR1Qwen14BPrecisionConfig",
+    "DeepSeekR1Qwen14BTransformerConfig",
+    "DeepSeekR1Qwen14BExecutor",
+    "DeepSeekR1Qwen14BExecutorConfig",
+    "DeepSeekR1Qwen14BForCausalLM",
+    "DeepSeekR1Qwen14BPagedAttentionConfig",
+    "DeepSeekR1Qwen14BGenerator",
+    "DeepSeekR1Qwen14BGeneratorConfig",
+    "DeepSeekR1Qwen14BRuntimeConfig",
 ]
 
 

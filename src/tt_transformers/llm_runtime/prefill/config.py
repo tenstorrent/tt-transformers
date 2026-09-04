@@ -5,8 +5,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import Any, Callable
+from typing import Any
 
 from tt_transformers.llm_runtime.config import PageTableLayout
 from tt_transformers.llm_runtime.output_reader import OutputReader
@@ -59,7 +60,7 @@ class PrefillRuntimeConfig:
         trace_capture_prime_sequence_lengths: tuple[int, ...] = (),
         sampling_state_controller: Any = None,
         sampling_state: Any = None,
-    ) -> "PrefillRuntimeConfig":
+    ) -> PrefillRuntimeConfig:
         """Validate construction inputs and derive every static capability."""
 
         _require_positive_int("max_batch_size", max_batch_size)
@@ -223,7 +224,7 @@ class PrefillRuntimeConfig:
             if not callable(getattr(self.sampling_state_controller, "admit", None)):
                 raise TypeError("sampling state controller must provide admit()")
 
-    def with_page_table_layout(self, layout: PageTableLayout) -> "PrefillRuntimeConfig":
+    def with_page_table_layout(self, layout: PageTableLayout) -> PrefillRuntimeConfig:
         """Return the same resolved policy with a smaller final KV geometry."""
 
         if not isinstance(layout, PageTableLayout):

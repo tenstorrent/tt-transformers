@@ -26,11 +26,11 @@ CI cases (parity with TTTv1 ``simple_text_demo.py``):
 Usage:
     # Token accuracy (gates against the committed book ``.refpt``)
     MESH_DEVICE=T3K HF_MODEL=Qwen/Qwen2.5-72B-Instruct \\
-      pytest models/common/tests/demos/qwen25_72b/demo.py -k "token-accuracy" -v
+      pytest tests/hardware/models/qwen25_72b/test_demo.py -k "token-accuracy" -v
 
     # On-device sampling perf sweep (the T3K headline / TTTv1-comparable path)
     SAMPLING_MODE=on_device_topk MESH_DEVICE=T3K HF_MODEL=Qwen/Qwen2.5-72B-Instruct \\
-      pytest models/common/tests/demos/qwen25_72b/demo.py -k "batch-32-ci" -v
+      pytest tests/hardware/models/qwen25_72b/test_demo.py -k "batch-32-ci" -v
 
 LazyWeight tensor cache: ``TT_CACHE_PATH/<device_name>`` when ``TT_CACHE_PATH`` is set, otherwise
 the versioned standalone cache policy under `TT_TRANSFORMERS_CACHE`, `XDG_CACHE_HOME`, or the user cache.
@@ -42,18 +42,12 @@ import os
 from pathlib import Path
 
 import torch
+import ttnn
 from loguru import logger
 
-import ttnn
-from tt_transformers.cache_environment import resolve_model_cache_path
-from tt_transformers.models.qwen25_72b.hf_adaptor import DEFAULT_HF_REVISION as DEMO_HF_REVISION
-from examples.common.runtime import TemporaryPathFactory, UnsupportedConfiguration, open_mesh_device
-from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
-from tt_transformers.models.qwen25_72b.executor import Qwen25_72BExecutor, Qwen25_72BExecutorConfig
-from tt_transformers.models.qwen25_72b.hf_adaptor import encode_prompt, from_pretrained, load_tokenizer
-from tt_transformers.models.qwen25_72b.model import QWEN25_72B_ACCURACY, QWEN25_72B_PERFORMANCE, Qwen25_72B
-from tt_transformers.sampling.sampling_params import SamplingParams
-from tt_transformers.device_utils import cleanup_model_case
+from examples.common.benchmarking_utils import BenchmarkProfiler
+from examples.common.llm_demo_utils import create_benchmark_data
+from examples.common.model_targets import resolve_accuracy_targets
 from examples.common.run_helpers import (
     assert_no_special_tokens,
     load_eval_repeat_prompts_batch32,
@@ -62,9 +56,15 @@ from examples.common.run_helpers import (
     run_perf_benchmark,
     run_teacher_forcing,
 )
-from qualification.tools.llm_demo_utils import create_benchmark_data
-from qualification.tools.model_targets import resolve_accuracy_targets
-from qualification.tools.benchmarking_utils import BenchmarkProfiler
+from examples.common.runtime import UnsupportedConfiguration, open_mesh_device
+from tt_transformers.cache_environment import resolve_model_cache_path
+from tt_transformers.device_utils import cleanup_model_case
+from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
+from tt_transformers.models.qwen25_72b.executor import Qwen25_72BExecutor, Qwen25_72BExecutorConfig
+from tt_transformers.models.qwen25_72b.hf_adaptor import DEFAULT_HF_REVISION as DEMO_HF_REVISION
+from tt_transformers.models.qwen25_72b.hf_adaptor import encode_prompt, from_pretrained, load_tokenizer
+from tt_transformers.models.qwen25_72b.model import QWEN25_72B_ACCURACY, QWEN25_72B_PERFORMANCE, Qwen25_72B
+from tt_transformers.sampling.sampling_params import SamplingParams
 
 # =============================================================================
 # Expected metrics — perf gates set from a same-box TTTv1-vs-TTTv2 sweep (on-device sampling),
@@ -198,7 +198,9 @@ _MIN_TP_DEVICES = 8
 def _skip_below_min_tp_devices(n_devices: int) -> None:
     """Skip when fewer than ``_MIN_TP_DEVICES`` devices are available for tensor parallelism."""
     if n_devices < _MIN_TP_DEVICES:
-        raise UnsupportedConfiguration(f'Qwen2.5-72B requires >={_MIN_TP_DEVICES}-device tensor parallelism: the 72B weights + KV cache need 8-way sharding to fit. TTTv1/PERF.md publish this checkpoint T3K-only. Have {n_devices} device(s) — use MESH_DEVICE=T3K.')
+        raise UnsupportedConfiguration(
+            f"Qwen2.5-72B requires >={_MIN_TP_DEVICES}-device tensor parallelism: the 72B weights + KV cache need 8-way sharding to fit. TTTv1/PERF.md publish this checkpoint T3K-only. Have {n_devices} device(s) — use MESH_DEVICE=T3K."
+        )
 
 
 # Mesh topology comes only from ``MESH_DEVICE`` (same naming as vLLM / other tt demos).
@@ -210,10 +212,12 @@ _MESH_DEVICE_TO_SHAPE: dict[str, tuple[int, int]] = {
 def ttnn_mesh_device_param_from_env() -> dict:
     env = os.environ.get("MESH_DEVICE", "").strip()
     if not env:
-        raise UnsupportedConfiguration('MESH_DEVICE must be set to T3K. See module docstring.')
+        raise UnsupportedConfiguration("MESH_DEVICE must be set to T3K. See module docstring.")
     shape = _MESH_DEVICE_TO_SHAPE.get(env)
     if shape is None:
-        raise UnsupportedConfiguration(f'Unsupported MESH_DEVICE={env!r} for Qwen2.5-72B-Instruct; only T3K is supported (64 attn heads / 8 KV heads ⇒ 8 devices).')
+        raise UnsupportedConfiguration(
+            f"Unsupported MESH_DEVICE={env!r} for Qwen2.5-72B-Instruct; only T3K is supported (64 attn heads / 8 KV heads ⇒ 8 devices)."
+        )
     param = {
         "mesh_shape": shape,
         # 80-layer 72B + 152k vocab + the seq=1024 batched-prefill trace (eval-32's numeric prompts
@@ -229,16 +233,14 @@ def ttnn_mesh_device_param_from_env() -> dict:
     return param
 
 
-
-
-
-
 def _skip_unless_heads_divide_mesh(mesh_device: ttnn.MeshDevice, hf_model_id: str) -> None:
     """Attention1D TP requires n_heads and n_kv_heads divisible by device count."""
     n_dev = mesh_device.get_num_devices()
     if 64 % n_dev == 0 and 8 % n_dev == 0:
         return
-    raise UnsupportedConfiguration(f'Incompatible mesh for {hf_model_id}: {n_dev} devices need num_attention_heads (64) and num_key_value_heads (8) each divisible by {n_dev}.')
+    raise UnsupportedConfiguration(
+        f"Incompatible mesh for {hf_model_id}: {n_dev} devices need num_attention_heads (64) and num_key_value_heads (8) each divisible by {n_dev}."
+    )
 
 
 def get_device_name(mesh_device):
@@ -273,9 +275,9 @@ def _load_tokenizer(hf_model_id: str):
 def load_reference_data(hf_model_id: str):
     """Load reference tensors and optional metadata from ``.refpt``."""
     name = ref_basename_for_hf(hf_model_id)
-    ref_path = Path("qualification/assets/reference_outputs/qwen25_72b") / f"{name}.refpt"
+    ref_path = Path("tests/assets/reference_outputs/qwen25_72b") / f"{name}.refpt"
     if not ref_path.exists():
-        raise UnsupportedConfiguration(f'Reference file not found: {ref_path}')
+        raise UnsupportedConfiguration(f"Reference file not found: {ref_path}")
 
     ref_data = torch.load(ref_path, map_location="cpu", weights_only=False)
     reference_tokens = ref_data["reference_tokens"]
@@ -287,7 +289,7 @@ def load_reference_data(hf_model_id: str):
 
 def load_input_prompts(batch_size: int) -> list[str]:
     """Load input prompts for performance testing."""
-    prompts_path = Path("qualification/assets/sample_prompts/input_data_questions_prefill_128.json")
+    prompts_path = Path("examples/assets/sample_prompts/input_data_questions_prefill_128.json")
     if not prompts_path.exists():
         return ["What is the meaning of life?"] * batch_size
 
@@ -561,7 +563,7 @@ def create_dp_submeshes(mesh_device: ttnn.MeshDevice, data_parallel: int) -> lis
         return [mesh_device]
     n = mesh_device.get_num_devices()
     if not (n % data_parallel == 0):
-        raise AssertionError(f'{n} devices not divisible by data_parallel={data_parallel}')
+        raise AssertionError(f"{n} devices not divisible by data_parallel={data_parallel}")
     return mesh_device.create_submeshes(ttnn.MeshShape(1, n // data_parallel))
 
 
@@ -569,9 +571,13 @@ def _dp_or_skip(mesh_device: ttnn.MeshDevice, data_parallel: int) -> None:
     """Skip unless the mesh has exactly ``data_parallel`` single-device DP groups."""
     n = mesh_device.get_num_devices()
     if n % data_parallel != 0 or (n // data_parallel) != 1:
-        raise UnsupportedConfiguration(f'DP-{data_parallel} needs {data_parallel} single-device groups; have {n} devices')
+        raise UnsupportedConfiguration(
+            f"DP-{data_parallel} needs {data_parallel} single-device groups; have {n} devices"
+        )
     if n // data_parallel < _MIN_TP_DEVICES:
-        raise UnsupportedConfiguration(f'DP-{data_parallel} cannot provide the {_MIN_TP_DEVICES}-device TP group required by Qwen2.5-72B')
+        raise UnsupportedConfiguration(
+            f"DP-{data_parallel} cannot provide the {_MIN_TP_DEVICES}-device TP group required by Qwen2.5-72B"
+        )
 
 
 def _run_dp_smoke(
@@ -628,7 +634,7 @@ def _run_dp_smoke(
                     optimizations=precision,
                 )
             except Exception as e:
-                raise UnsupportedConfiguration(f'Could not build Qwen2.5-72B model (weights / memory / mesh): {e}')
+                raise UnsupportedConfiguration(f"Could not build Qwen2.5-72B model (weights / memory / mesh): {e}")
             model = llm.model
             models.append((model, sm))
 
@@ -641,7 +647,7 @@ def _run_dp_smoke(
 
             ma = model.model_args
             if not (ma is not None):
-                raise AssertionError('condition failed at line 673')
+                raise AssertionError("condition failed at line 673")
 
             kv_cache = traced_executor.allocate_kv_cache()
             page_table = make_contiguous_page_table(ma.max_batch_size, ma.max_seq_len, 32)
@@ -807,7 +813,7 @@ def _run_token_accuracy(model, mesh_device, expected):
     executor = create_executor(model, traced=False, device_sampling_enabled=False)
     ma = model.model_args
     if not (ma is not None):
-        raise AssertionError('condition failed at line 854')
+        raise AssertionError("condition failed at line 854")
 
     max_batch_size = ma.max_batch_size
     prompt_tokens = prompt_tokens.repeat(max_batch_size, 1)
@@ -908,9 +914,9 @@ def _run_token_accuracy(model, mesh_device, expected):
     meas_top1 = math.ceil(top1)
     meas_top5 = math.ceil(top5)
     if not (meas_top1 >= min_top1):
-        raise AssertionError(f'Top-1 accuracy {top1:.1f}% (ceil {meas_top1}) below threshold {min_top1:.1f}%')
+        raise AssertionError(f"Top-1 accuracy {top1:.1f}% (ceil {meas_top1}) below threshold {min_top1:.1f}%")
     if not (meas_top5 >= min_top5):
-        raise AssertionError(f'Top-5 accuracy {top5:.1f}% (ceil {meas_top5}) below threshold {min_top5:.1f}%')
+        raise AssertionError(f"Top-5 accuracy {top5:.1f}% (ceil {meas_top5}) below threshold {min_top5:.1f}%")
 
 
 def _run_perf_benchmark(
@@ -972,7 +978,7 @@ def _run_perf_benchmark(
     try:
         ma = model.model_args
         if not (ma is not None):
-            raise AssertionError('condition failed at line 1016')
+            raise AssertionError("condition failed at line 1016")
 
         max_seq_len = ma.max_seq_len
         max_batch_size = ma.max_batch_size
@@ -1071,7 +1077,7 @@ def _run_perf_benchmark(
                 if result.ttft_ms > tgt:
                     failures.append(f"ttft_ms {result.ttft_ms:.1f} > target {expected['ttft_ms']}")
             if not (not failures):
-                raise AssertionError(f'{case_name}: ' + '; '.join(failures))
+                raise AssertionError(f"{case_name}: " + "; ".join(failures))
     finally:
         traced_executor.cleanup()
 
@@ -1118,7 +1124,7 @@ def _run_eval_repeat_batch32(model, mesh_device):
 
     ma = model.model_args
     if not (ma is not None):
-        raise AssertionError('condition failed at line 1160')
+        raise AssertionError("condition failed at line 1160")
 
     # Batched-prefill A/B knob (parity caveat #12): DISABLE_BATCHED_PREFILL=1 forces the pure per-bucket
     # sequential prefill so eval-32 can be validated both ON and OFF.
@@ -1185,10 +1191,20 @@ def _run_eval_repeat_batch32(model, mesh_device):
 
 
 RUN_MAIN_CASE = run_qwen25_72b
-SPECIAL_CASE_RUNNERS = {
-}
+SPECIAL_CASE_RUNNERS = {}
 
-EXAMPLE_CASES = ('token-accuracy', 'batch-1', 'batch-32', 'batch-32-ci', 'eval-32', 'ci-b1-DP-2', 'ci-b1-DP-4', 'ci-b1-DP-8', 'ci-b1-DP-16', 'ci-b1-DP-32')
+EXAMPLE_CASES = (
+    "token-accuracy",
+    "batch-1",
+    "batch-32",
+    "batch-32-ci",
+    "eval-32",
+    "ci-b1-DP-2",
+    "ci-b1-DP-4",
+    "ci-b1-DP-8",
+    "ci-b1-DP-16",
+    "ci-b1-DP-32",
+)
 
 
 def main(argv=None):

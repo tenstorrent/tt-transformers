@@ -43,7 +43,7 @@ def add_mesh_device_args(parser: argparse.ArgumentParser) -> None:
 
 def open_readiness_mesh_device(mesh_device_label: str, fabric_config: str | None = None) -> Any:
     """Open a mesh device, optionally enabling fabric first."""
-    import ttnn  # noqa: WPS433 — lazy
+    import ttnn
 
     shape = MESH_SHAPES.get(mesh_device_label)
     if shape is None:
@@ -65,7 +65,7 @@ def open_readiness_mesh_device(mesh_device_label: str, fabric_config: str | None
 
 def close_readiness_mesh_device(mesh_device: Any, fabric_config: str | None = None) -> None:
     """Close a mesh device and reset fabric when it was enabled."""
-    import ttnn  # noqa: WPS433 — lazy
+    import ttnn
 
     ttnn.close_mesh_device(mesh_device)
     if fabric_config is not None:

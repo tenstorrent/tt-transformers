@@ -8,10 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from qualification.extraction.apply_example_runtime_policy import MANIFEST, ROOT, apply_policy
 from tt_transformers.device_ownership import default_device_scope
 
-
+ROOT = Path(__file__).resolve().parents[2]
 SMOKE_PATHS = (
     ROOT / "examples/qwen25_coder_32b/smoke.py",
     ROOT / "examples/qwen3_32b/smoke.py",
@@ -53,7 +52,11 @@ def test_demo_cache_helpers_use_standalone_policy_and_preserve_tt_cache_topology
     for path in sorted((ROOT / "examples").glob("*/demo.py")):
         tree = ast.parse(path.read_text(), filename=str(path))
         function = next(
-            (node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "lazy_weight_cache_dir_for_demo"),
+            (
+                node
+                for node in tree.body
+                if isinstance(node, ast.FunctionDef) and node.name == "lazy_weight_cache_dir_for_demo"
+            ),
             None,
         )
         if function is None:
@@ -62,7 +65,9 @@ def test_demo_cache_helpers_use_standalone_policy_and_preserve_tt_cache_topology
         calls = [
             node
             for node in ast.walk(function)
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "resolve_model_cache_path"
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "resolve_model_cache_path"
         ]
         assert len(calls) == 1
         keywords = {keyword.arg: keyword.value for keyword in calls[0].keywords}
@@ -86,7 +91,10 @@ def test_qwen_smoke_runners_are_scoped_and_cli_signature_aware(path):
     runners = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name.startswith("run_")]
     assert len(runners) == 6
     assert all(
-        any(isinstance(decorator, ast.Name) and decorator.id == "_scoped_default_device" for decorator in node.decorator_list)
+        any(
+            isinstance(decorator, ast.Name) and decorator.id == "_scoped_default_device"
+            for decorator in node.decorator_list
+        )
         for node in runners
     )
     assert "tuple(inspect.signature(runner).parameters)" in path.read_text()
@@ -97,9 +105,7 @@ def test_qwen25_coder_smoke_uses_attested_cache_and_t3k_ring(monkeypatch, tmp_pa
     path = ROOT / "examples/qwen25_coder_32b/smoke.py"
     source = path.read_text()
     tree = ast.parse(source, filename=str(path))
-    helper = next(
-        node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_weight_cache_dir"
-    )
+    helper = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_weight_cache_dir")
     namespace = {"os": os, "Path": Path}
     exec(compile(ast.Module(body=[helper], type_ignores=[]), str(path), "exec"), namespace)
 
@@ -119,7 +125,9 @@ def test_qwen25_coder_smoke_uses_attested_cache_and_t3k_ring(monkeypatch, tmp_pa
 @pytest.mark.parametrize("path", SMOKE_PATHS, ids=lambda path: path.parent.name)
 def test_qwen_smoke_scope_restores_exact_prior_device_on_success_and_failure(path):
     tree = ast.parse(path.read_text(), filename=str(path))
-    helper = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_scoped_default_device")
+    helper = next(
+        node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_scoped_default_device"
+    )
 
     class FakeTTNN:
         def __init__(self):
@@ -159,9 +167,3 @@ def test_qwen_smoke_scope_restores_exact_prior_device_on_success_and_failure(pat
     with pytest.raises(RuntimeError, match="body failure"):
         wrapped(device, 8, fail=True)
     assert fake.current is previous and observed[-1] is device
-
-
-@pytest.mark.host
-def test_example_policy_generator_and_manifest_are_idempotent():
-    assert apply_policy(write=False) == 0
-    assert MANIFEST.is_file()

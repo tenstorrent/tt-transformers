@@ -17,18 +17,11 @@ from unittest.mock import MagicMock
 
 import pytest
 import torch
-from loguru import logger
-from transformers import AutoConfig, AutoModelForCausalLM
-
-# transformers 5.x moved no_init_weights to transformers.initialization; fall back
-# to the old location for transformers < 5.x.
-try:
-    from transformers.initialization import no_init_weights
-except ImportError:
-    from transformers.modeling_utils import no_init_weights
-
 import ttnn
-from qualification.tools.auto_compose import to_torch_auto_compose
+from examples.common.auto_compose import to_torch_auto_compose
+from loguru import logger
+from tests.support.comparison import comp_allclose, comp_pcc
+
 from tt_transformers.modules.lazy_weight import LazyWeight
 from tt_transformers.modules.rmsnorm import rmsnorm_1d
 from tt_transformers.modules.rmsnorm.rmsnorm_1d import (
@@ -38,7 +31,6 @@ from tt_transformers.modules.rmsnorm.rmsnorm_1d import (
     _create_sharded_norm_program_config,
     resolve_rmsnorm_1d_arch_config,
 )
-from tests.support.comparison import comp_allclose, comp_pcc
 
 # 1D module suites target the T3K; skip when the host system is a Galaxy.
 pytestmark = pytest.mark.usefixtures("skip_on_galaxy_system")
@@ -811,9 +803,9 @@ def test_rmsnorm_1d_vs_reference(
         assert cfg.decode_in_sharded == in_sharded, f"Expected decode_in_sharded={in_sharded}"
         assert cfg.decode_out_sharded == out_sharded, f"Expected decode_out_sharded={out_sharded}"
         # in_sharded/out_sharded should match (decode either shards both or neither externally)
-        assert (
-            in_sharded == out_sharded
-        ), f"Decode in_sharded and out_sharded should match, got in={in_sharded}, out={out_sharded}"
+        assert in_sharded == out_sharded, (
+            f"Decode in_sharded and out_sharded should match, got in={in_sharded}, out={out_sharded}"
+        )
 
     # Run TT model - wrap input in LazyWeight, forward() handles conversion
     tt_input = LazyWeight(source=torch_input, dtype=ttnn.bfloat16)
@@ -1013,7 +1005,9 @@ HF_MODEL_NAME = os.environ.get("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
 def test_rmsnorm_1d_vs_reference_from_model_args(
     ttnn_mesh_device: ttnn.MeshDevice, seq_len: int, monkeypatch: pytest.MonkeyPatch
 ):
-    pytest.skip("TTTv1 compatibility characterization retired; standalone constructor coverage lives in tests/host/test_foundation_boundary.py")
+    pytest.skip(
+        "TTTv1 compatibility characterization retired; standalone constructor coverage lives in tests/host/test_foundation_boundary.py"
+    )
 
 
 @pytest.mark.host

@@ -69,11 +69,7 @@ def test_model_initializer_is_lazy_and_export_map_matches_all(model_name):
     path = ROOT / "src/tt_transformers/models" / model_name / "__init__.py"
     tree = ast.parse(path.read_text(), filename=str(path))
     exports = _literal_assignment(tree, "__all__")
-    import_roots = {
-        (node.module or "").split(".", 1)[0]
-        for node in tree.body
-        if isinstance(node, ast.ImportFrom)
-    }
+    import_roots = {(node.module or "").split(".", 1)[0] for node in tree.body if isinstance(node, ast.ImportFrom)}
     assert not ({"transformers", "tqdm", "tt_transformers"} & import_roots)
 
     export_maps = [
@@ -165,7 +161,9 @@ def test_core_model_module_has_no_eager_optional_import(model_name):
     optional = []
     for node in tree.body:
         if isinstance(node, ast.Import):
-            optional.extend(alias.name for alias in node.names if alias.name.split(".", 1)[0] in {"transformers", "tqdm"})
+            optional.extend(
+                alias.name for alias in node.names if alias.name.split(".", 1)[0] in {"transformers", "tqdm"}
+            )
         elif isinstance(node, ast.ImportFrom) and (node.module or "").split(".", 1)[0] in {"transformers", "tqdm"}:
             optional.append(node.module)
     assert optional == []

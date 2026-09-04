@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_MATRIX = ROOT / "qualification/manifests/hardware-matrix.json"
+DEFAULT_MATRIX = ROOT / "tests/hardware/hardware-matrix.json"
 ALLOWED_STAGES = {"module", "runtime", "smoke", "e2e"}
 ALLOWED_ARCHITECTURES = {"wormhole", "blackhole"}
 ALLOWED_MESH_DEVICES = {"N150", "N300", "T3K", "P150", "P150x4"}
@@ -146,14 +146,10 @@ def validate_matrix(matrix: dict[str, Any], root: Path = ROOT) -> dict[str, int]
         if any(machines[machine]["architecture"] != node["architecture"] for machine in pools):
             raise MatrixError(f"machine architecture mismatch for {node_id}")
         unsupported_machines = [
-            machine
-            for machine in pools
-            if mesh not in machines[machine].get("supported_mesh_devices", [])
+            machine for machine in pools if mesh not in machines[machine].get("supported_mesh_devices", [])
         ]
         if unsupported_machines:
-            raise MatrixError(
-                f"machine mesh support mismatch for {node_id}: {unsupported_machines}"
-            )
+            raise MatrixError(f"machine mesh support mismatch for {node_id}: {unsupported_machines}")
         argv = selector_argv(node)
         if contains_parallel_pytest_args(argv):
             raise MatrixError(f"parallel pytest option forbidden for {node_id}")
@@ -177,9 +173,7 @@ def select_node(matrix: dict[str, Any], node_id: str) -> dict[str, Any]:
         raise MatrixError(f"unknown or duplicate node id: {node_id}")
     node = matches[0]
     if not node.get("enabled", True):
-        raise MatrixError(
-            f"node {node_id} is disabled: {node.get('disabled_classification') or 'unimplemented_gate'}"
-        )
+        raise MatrixError(f"node {node_id} is disabled: {node.get('disabled_classification') or 'unimplemented_gate'}")
     return node
 
 
@@ -200,14 +194,10 @@ def validate_attestation(
         raise MatrixError("branch identity is required")
     candidate_machines = node["machine_pool"]
     matched = [
-        name
-        for name in candidate_machines
-        if machine_identity in matrix["machines"][name]["allowed_identities"]
+        name for name in candidate_machines if machine_identity in matrix["machines"][name]["allowed_identities"]
     ]
     if len(matched) != 1:
-        raise MatrixError(
-            f"machine identity {machine_identity!r} is not valid for node {node['id']}"
-        )
+        raise MatrixError(f"machine identity {machine_identity!r} is not valid for node {node['id']}")
     return matched[0]
 
 
@@ -252,27 +242,17 @@ def validate_physical_inventory(
     expected_inventory = machine.get("expected_inventory", {})
     expected_count = expected_inventory.get("device_count")
     if expected_count is not None and inventory["device_count"] != expected_count:
-        raise MatrixError(
-            f"physical device count mismatch: {inventory['device_count']} != {expected_count}"
-        )
+        raise MatrixError(f"physical device count mismatch: {inventory['device_count']} != {expected_count}")
     observed_boards = {str(value).lower() for value in inventory["board_types"]}
-    expected_boards = {
-        str(value).lower() for value in expected_inventory.get("board_types", [])
-    }
+    expected_boards = {str(value).lower() for value in expected_inventory.get("board_types", [])}
     if not expected_boards <= observed_boards:
-        raise MatrixError(
-            f"physical board types mismatch: missing {sorted(expected_boards - observed_boards)}"
-        )
+        raise MatrixError(f"physical board types mismatch: missing {sorted(expected_boards - observed_boards)}")
     for field in ("system_mesh",):
         expected_value = expected_inventory.get(field)
         if expected_value is not None and inventory[field] != expected_value:
-            raise MatrixError(
-                f"physical {field} mismatch: {inventory[field]!r} != {expected_value!r}"
-            )
+            raise MatrixError(f"physical {field} mismatch: {inventory[field]!r} != {expected_value!r}")
     if node["mesh_device"] == "P150":
-        allowed_clusters = node["physical_sku_provenance"][
-            "allowed_physical_cluster_types"
-        ]
+        allowed_clusters = node["physical_sku_provenance"]["allowed_physical_cluster_types"]
         if inventory["cluster_type"] not in allowed_clusters:
             raise MatrixError(f"P150 requires physical cluster provenance in {allowed_clusters}")
         if machine_name == "bh-qb-05" and inventory["tt_visible_devices"] not in {
@@ -280,15 +260,12 @@ def validate_physical_inventory(
             "",
         }:
             raise MatrixError(
-                "bh-qb-05 P150 requires TT_VISIBLE_DEVICES unset; "
-                "MESH_DEVICE=P150 is the sole topology selector"
+                "bh-qb-05 P150 requires TT_VISIBLE_DEVICES unset; MESH_DEVICE=P150 is the sole topology selector"
             )
     if node["mesh_device"] == "P150x4":
         allowed_clusters = node["physical_sku_provenance"]["required_cluster_types"]
         if inventory["cluster_type"] not in allowed_clusters:
-            raise MatrixError(
-                f"P150x4 requires physical cluster provenance in {allowed_clusters}"
-            )
+            raise MatrixError(f"P150x4 requires physical cluster provenance in {allowed_clusters}")
         if machine_name == "bh-lb-11":
             required = {
                 "0000:01:00.0",
@@ -324,9 +301,7 @@ def environment_for(
     if cache["kind"] == "writable_node_local":
         values["TT_CACHE_PATH"] = cache["path"]
     return {
-        key: expand(value, checkout=checkout, run_root=run_root, node=node)
-        if isinstance(value, str)
-        else None
+        key: expand(value, checkout=checkout, run_root=run_root, node=node) if isinstance(value, str) else None
         for key, value in values.items()
     }
 
@@ -397,9 +372,7 @@ def classify_failure(exit_code: int | None, output: str, timed_out: bool = False
     # false signature (for example, an early Metal initialization message and
     # a later functional assertion containing "timeout").
     if any(
-        re.search(pattern, line, re.IGNORECASE)
-        for line in output.splitlines()
-        for pattern in HARDWARE_FAILURE_PATTERNS
+        re.search(pattern, line, re.IGNORECASE) for line in output.splitlines() for pattern in HARDWARE_FAILURE_PATTERNS
     ):
         return "hardware_lifecycle_failure"
     return "functional_failure"
@@ -411,12 +384,8 @@ def collect_metrics(output: str) -> list[str]:
 
 def local_checkout_identity(checkout: Path) -> tuple[str, str]:
     try:
-        branch = subprocess.check_output(
-            ["git", "-C", str(checkout), "branch", "--show-current"], text=True
-        ).strip()
-        sha = subprocess.check_output(
-            ["git", "-C", str(checkout), "rev-parse", "HEAD"], text=True
-        ).strip()
+        branch = subprocess.check_output(["git", "-C", str(checkout), "branch", "--show-current"], text=True).strip()
+        sha = subprocess.check_output(["git", "-C", str(checkout), "rev-parse", "HEAD"], text=True).strip()
     except subprocess.CalledProcessError as error:
         raise MatrixError(f"cannot read local checkout identity: {error}") from error
     return branch, sha
@@ -436,13 +405,9 @@ def preview(
         machine_identity=args.machine_identity,
         sync_gate_passed=args.sync_gate_passed,
     )
-    validate_physical_inventory(
-        matrix, node, machine_name, args.machine_identity, inventory
-    )
+    validate_physical_inventory(matrix, node, machine_name, args.machine_identity, inventory)
     run_root = args.output_dir.resolve()
-    environment = environment_for(
-        node, machine_name, checkout=args.checkout.resolve(), run_root=run_root
-    )
+    environment = environment_for(node, machine_name, checkout=args.checkout.resolve(), run_root=run_root)
     return {
         "classification": "not_executed_dry_run",
         "node": node["id"],
@@ -468,9 +433,7 @@ def execute(
     refuse_parallel_environment(dict(os.environ))
     actual_branch, actual_sha = local_checkout_identity(args.checkout.resolve())
     if (actual_branch, actual_sha) != (args.branch, args.common_sha):
-        raise MatrixError(
-            "local checkout does not match caller-attested branch/common SHA"
-        )
+        raise MatrixError("local checkout does not match caller-attested branch/common SHA")
 
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -544,11 +507,7 @@ def execute(
     exit_code = process.returncode
     classification = classify_failure(exit_code, output, timed_out)
     metrics = collect_metrics(output)
-    if (
-        classification == "passed"
-        and node["stage"] == "e2e"
-        and not metrics
-    ):
+    if classification == "passed" and node["stage"] == "e2e" and not metrics:
         classification = "missing_acceptance_data"
     evidence.update(
         {
@@ -556,9 +515,7 @@ def execute(
             "exit_code": exit_code,
             "failure_classification": classification,
             "metrics": metrics,
-            "teardown_status": (
-                "process_exited; fixture teardown not independently hardware-verified"
-            ),
+            "teardown_status": ("process_exited; fixture teardown not independently hardware-verified"),
         }
     )
     evidence_path.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n")
@@ -581,10 +538,8 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--sync-gate-passed", action="store_true")
     result.add_argument("--physical-inventory", type=Path)
     result.add_argument("--checkout", type=Path, default=ROOT)
-    result.add_argument("--output-dir", type=Path, default=Path("hardware-results"))
-    result.add_argument(
-        "--lock-file", type=Path, default=Path("/tmp/tt-transformers-hardware.lock")
-    )
+    result.add_argument("--output-dir", type=Path, default=Path(".artifacts/hardware"))
+    result.add_argument("--lock-file", type=Path, default=Path("/tmp/tt-transformers-hardware.lock"))
     result.add_argument("--python", default=sys.executable)
     result.add_argument("--exit-code", type=int)
     result.add_argument("--timed-out", action="store_true")
@@ -607,10 +562,7 @@ def main() -> int:
         return 0
     if args.list:
         for node in sorted(matrix["nodes"], key=lambda item: item["priority"]):
-            print(
-                f"{node['priority']:02d} {node['id']} "
-                f"{node['architecture']} {node['mesh_device']} {node['stage']}"
-            )
+            print(f"{node['priority']:02d} {node['id']} {node['architecture']} {node['mesh_device']} {node['stage']}")
         return 0
 
     required = {
@@ -625,11 +577,7 @@ def main() -> int:
         raise MatrixError(f"missing required execution arguments: {missing}")
     node = select_node(matrix, args.node)
     inventory = load_json(args.physical_inventory)
-    result = (
-        preview(matrix, node, args, inventory)
-        if args.dry_run
-        else execute(matrix, node, args, inventory)
-    )
+    result = preview(matrix, node, args, inventory) if args.dry_run else execute(matrix, node, args, inventory)
     print(json.dumps(result, indent=2, sort_keys=True))
     if args.execute:
         return int(result["failure_classification"] != "passed")

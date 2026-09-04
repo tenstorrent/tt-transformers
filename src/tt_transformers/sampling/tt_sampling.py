@@ -6,9 +6,9 @@ import inspect
 import sys
 
 import torch
+import ttnn
 from loguru import logger
 
-import ttnn
 from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.sampling._utils import (
     is_default_value,

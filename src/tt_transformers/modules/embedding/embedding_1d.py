@@ -16,9 +16,10 @@ This module replaces both TTTv1 Embedding and ScaledEmbedding classes.
 from dataclasses import dataclass, replace
 
 import ttnn
+
 from tt_transformers.device_ownership import compatibility_default_device
-from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.modules.lazy_weight import LazyWeight, resolve_lazy_weight
+from tt_transformers.modules.lightweightmodule import LightweightModule
 
 # =============================================================================
 # Top-level config dataclass

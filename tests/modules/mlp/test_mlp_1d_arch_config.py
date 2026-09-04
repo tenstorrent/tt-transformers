@@ -8,8 +8,8 @@ from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
-
 import ttnn
+
 from tt_transformers.modules.mlp import mlp_1d
 from tt_transformers.modules.mlp.mlp_1d import MLP1DConfig, _resolve_mlp1d_config, resolve_mlp1d_arch_config
 

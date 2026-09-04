@@ -2,9 +2,7 @@
 from __future__ import annotations
 
 # SPDX-FileCopyrightText: © 2023 Tenstorrent USA, Inc.
-
 # SPDX-License-Identifier: Apache-2.0
-
 import contextlib
 import json
 import os
@@ -18,9 +16,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
+from examples.common.trace_region_sizes import TRACE_MODEL_KEY_PARAM, resolve_trace_region_size
 from loguru import logger
 
-from qualification.tools.trace_region_sizes import TRACE_MODEL_KEY_PARAM, resolve_trace_region_size
 from tests.support.fixture_policy import get_logical_sku, get_supported_trace_region_size, get_updated_device_params
 
 # Constants for device configurations
@@ -118,9 +116,9 @@ class CIv2ModelDownloadUtils_:
     ):
         assert model_path, f"model_path cannot be empty when downloading - what is wrong with you?: {model_path}"
 
-        assert isinstance(
-            timeout_in_s, int
-        ), f"{timeout_in_s} is not an integer, which it should be because it's a timeout duration"
+        assert isinstance(timeout_in_s, int), (
+            f"{timeout_in_s} is not an integer, which it should be because it's a timeout duration"
+        )
 
         # RK: Will this be portable? LOL
         download_dir = Path("/tmp/ttnn_model_cache/") / download_dir_suffix
@@ -267,12 +265,12 @@ def model_location_generator(is_ci_v2_env):
         download_from_ci_v2 = download_if_ci_v2 and is_ci_v2_env
 
         if download_from_ci_v2:
-            assert (
-                not has_internal_weka
-            ), "For some reason, we see a file existing at the expected MLPerf location: {internal_weka_path} on CIv2. Please use the opportunity to clean up your model and get rid of MLPerf if you're moving to CIv2"
-            assert (
-                not model_subdir
-            ), f"model_subdir is set to {model_subdir}, but we don't support further levels of directories in the large file cache in CIv2"
+            assert not has_internal_weka, (
+                "For some reason, we see a file existing at the expected MLPerf location: {internal_weka_path} on CIv2. Please use the opportunity to clean up your model and get rid of MLPerf if you're moving to CIv2"
+            )
+            assert not model_subdir, (
+                f"model_subdir is set to {model_subdir}, but we don't support further levels of directories in the large file cache in CIv2"
+            )
             civ2_download_path = CIv2ModelDownloadUtils_.download_from_ci_v2_cache(
                 model_version,
                 download_dir_suffix=download_dir_suffix,
@@ -783,7 +781,7 @@ def bh_2d_mesh_device_context(device_params):
     import ttnn
 
     if ttnn.get_num_devices() not in [1, 2, 4, 8, 32]:
-        raise RuntimeError("bh_2d_mesh_device requires 1, 2, 4, 8, or 32 devices (got %s)" % ttnn.get_num_devices())
+        raise RuntimeError(f"bh_2d_mesh_device requires 1, 2, 4, 8, or 32 devices (got {ttnn.get_num_devices()})")
     updated_device_params = get_updated_device_params(device_params)
     fabric_config = updated_device_params.pop("fabric_config", None)
     fabric_tensix_config = updated_device_params.pop("fabric_tensix_config", None)
@@ -1190,7 +1188,7 @@ def pytest_generate_tests(metafunc):
         json_path = metafunc.config.getoption("--input-path")
         if not json_path:
             raise ValueError("Please provide a valid JSON path using --input-path option.")
-        with open(json_path, "r") as f:
+        with open(json_path) as f:
             data = json.load(f)
         metafunc.parametrize("user_input", [data])
     elif input_method == "cli":
@@ -1314,13 +1312,15 @@ def pytest_configure(config):
         new_xmlpath = os.path.join(directory, new_filename)
         config.option.xmlpath = new_xmlpath
 
+
 import gc
 
 
 def ensure_gc():
     gc.collect()
 
-# --- Pinned source segment: models/common/tests/conftest.py @ 40ddbac9a91e704e684fbece8cc9becc017d50ed ---
+
+# --- Extracted shared fixture segment; source blob 40ddbac9a91e704e684fbece8cc9becc017d50ed ---
 # SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
@@ -1335,6 +1335,7 @@ import pytest
 try:
     import ttnn
 except ModuleNotFoundError:
+
     class _MissingTTNN:
         def __getattr__(self, name):
             pytest.skip(f"TTNN is required for device fixture attribute {name}")
@@ -1394,15 +1395,13 @@ def tt_device_lock(lock_path: str = _TT_DEVICE_LOCK_PATH, timeout: float = _TT_D
                 pass  # Lock held by another process
 
             if not logged_waiting:
-                print(f"[tt_device_lock] Waiting for device lock (held by another process)...")
+                print("[tt_device_lock] Waiting for device lock (held by another process)...")
                 print(f"[tt_device_lock] Debug with: lsof {lock_path}")
                 logged_waiting = True
 
             if time.monotonic() - start_time >= timeout:
                 lock_file.close()
-                raise DeviceLockTimeout(
-                    f"Timed out after {timeout}s waiting for device lock. " f"Check: lsof {lock_path}"
-                )
+                raise DeviceLockTimeout(f"Timed out after {timeout}s waiting for device lock. Check: lsof {lock_path}")
 
             time.sleep(1)  # sleep for 1 second to avoid busy-waiting
 

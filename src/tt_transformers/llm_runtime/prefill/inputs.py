@@ -5,12 +5,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, Callable, Sequence
+from typing import Any
 
 import torch
-
 import ttnn
+
 from tt_transformers.llm_runtime.prefill.plan import PrefillChunk, PrefillRequest
 from tt_transformers.llm_runtime.prefill.sampling_helpers import _TILE_SIZE
 from tt_transformers.llm_runtime.tensor_resources import (

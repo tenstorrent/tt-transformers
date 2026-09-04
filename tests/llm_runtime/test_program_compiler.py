@@ -5,9 +5,9 @@ from dataclasses import dataclass, field
 
 import pytest
 import torch
+import ttnn
 
 import tt_transformers.llm_runtime.program_compiler as program_compiler_module
-import ttnn
 from tt_transformers.llm_runtime.program_compiler import OutputSpec, ProgramCompiler, ProgramKey
 
 

@@ -6,9 +6,9 @@ from itertools import permutations
 
 import pytest
 import torch
+import ttnn
 
 import tt_transformers.llm_runtime.trace_compiler as trace_compiler_module
-import ttnn
 from tt_transformers.llm_runtime.decode import DecodeDeviceInputs, DecodePersistentInputs
 from tt_transformers.llm_runtime.prefill.inputs import PrefillDeviceInputs, PrefillPositionInputs
 from tt_transformers.llm_runtime.prefill.trace import PrefillHiddenPersistentInputs, PrefillReplayState

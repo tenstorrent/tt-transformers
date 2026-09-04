@@ -1,17 +1,14 @@
-
-import pytest
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 # SPDX-License-Identifier: Apache-2.0
-
 from types import SimpleNamespace
 
+import pytest
 import torch
 from transformers import Qwen2Config, Qwen2ForCausalLM
 from transformers.models.qwen2.modeling_qwen2 import Qwen2RotaryEmbedding
 
-from tt_transformers.models.qwen25_7b import hf_adaptor
+from tt_transformers.models.qwen25_7b import hf_adaptor, weight_utils
 from tt_transformers.models.qwen25_7b import model as qwen_model
-from tt_transformers.models.qwen25_7b import weight_utils
 from tt_transformers.models.qwen25_7b.hf_adaptor import Qwen25ForCausalLM as Qwen25Product
 from tt_transformers.models.qwen25_7b.hf_adaptor import Qwen25RuntimeConfig, _trace_seq_lens, convert_hf_model_weights
 

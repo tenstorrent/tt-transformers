@@ -25,13 +25,13 @@ QUALIFICATION_DIR = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = QUALIFICATION_DIR.parent
 DEFAULT_SCHEMA = QUALIFICATION_DIR / "schemas/bh_required_capabilities.schema.json"
 DEFAULT_CONTRACTS = (
-    QUALIFICATION_DIR / "manifests/llama3_8b/bh_required_capabilities.json",
-    QUALIFICATION_DIR / "manifests/qwen3_32b/bh_required_capabilities.json",
-    QUALIFICATION_DIR / "manifests/llama33_70b/bh_required_capabilities.json",
+    REPOSITORY_ROOT / "tests/hardware/capabilities/llama3_8b.json",
+    REPOSITORY_ROOT / "tests/hardware/capabilities/qwen3_32b.json",
+    REPOSITORY_ROOT / "tests/hardware/capabilities/llama33_70b.json",
 )
 
 _DRAFT_2020_12 = "https://json-schema.org/draft/2020-12/schema"
-_INSTANCE_SCHEMA = "../../schemas/bh_required_capabilities.schema.json"
+_INSTANCE_SCHEMA = "../../../qualification/schemas/bh_required_capabilities.schema.json"
 _RESOLUTION = "PASS_OR_APPROVED_UNSUPPORTED_GEOMETRY"
 _OPTIMIZATION_PROFILES = {"performance", "accuracy"}
 _TRACE_MODES = {"none", "decode_only", "all"}
@@ -905,7 +905,7 @@ def _semantic_errors(contract: Mapping[str, Any]) -> list[str]:
 
         cross_rows = [item for item in demos if item["demo_case"] == "seeded-cross-cardinality"]
         expected_cross_node = (
-            "tests/hardware/models/qwen3_32b/test_demo.py::" "test_qwen3_32b_p150x4_seeded_cross_cardinality[P150x4]"
+            "tests/hardware/models/qwen3_32b/test_demo.py::test_qwen3_32b_p150x4_seeded_cross_cardinality[P150x4]"
         )
         if len(cross_rows) != 1:
             errors.append("qwen3_32b must declare one canonical seeded cross-cardinality node")

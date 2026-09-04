@@ -75,7 +75,7 @@ class VllmGeneratorAdapter(Protocol):
         tt_data_parallel: int = 1,
         optimizations: str | None = None,
         **kwargs: Any,
-    ) -> "VllmGeneratorAdapter":
+    ) -> VllmGeneratorAdapter:
         """
         Build the adapter and underlying generator/model for vLLM serving.
 

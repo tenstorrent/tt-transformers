@@ -6,10 +6,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from examples.common.model_targets import resolve_metric_tolerance
+from examples.common.trace_region_sizes import resolve_trace_region_size
 
 from tt_transformers.models.qwen3_32b import executor as qwen3_executor
-from qualification.tools.model_targets import resolve_metric_tolerance
-from qualification.tools.trace_region_sizes import resolve_trace_region_size
 
 _DEMO_PATH = "examples/qwen3_32b/demo.py"
 _HARDWARE_DEMO_PATH = "tests/hardware/models/qwen3_32b/test_demo.py"
@@ -103,8 +103,8 @@ def test_cross_cardinality_experiment_is_one_canonical_exact_token_node():
     source = ast.unparse(function)
     assert "get_device_name(mesh_device) != 'P150x4'" in source
     assert "_require_cross_cardinality_environment()" in source
-    assert "ma.disable_batched_prefill is True" in source
-    assert "ma.batched_prefill_batched_extract is True" in source
+    assert "ma.disable_batched_prefill is not True" in source
+    assert "ma.batched_prefill_batched_extract is not True" in source
     assert "sampling_params=sampling_params" in source
     assert "prefill_sampling_params=None" in source
     assert "ondevice_decode_loop=True" in source
@@ -348,8 +348,12 @@ def test_demo_exposes_p150x4_and_uses_canonical_device_naming():
     assert '"P150x4": (1, 4)' in _DEMO_SOURCE
     assert "bh_hardware" not in _DEMO_SOURCE
     assert not any(isinstance(node, ast.FunctionDef) and node.name == "get_device_name" for node in _DEMO_TREE.body)
-    imports = [ast.unparse(node) for node in _DEMO_TREE.body if isinstance(node, (ast.Import, ast.ImportFrom))]
-    assert any("tt_transformers.device_utils import get_device_name" in statement for statement in imports)
+    assert any(
+        isinstance(node, ast.ImportFrom)
+        and node.module == "tt_transformers.device_utils"
+        and any(alias.name == "get_device_name" for alias in node.names)
+        for node in _DEMO_TREE.body
+    )
 
 
 @pytest.mark.host

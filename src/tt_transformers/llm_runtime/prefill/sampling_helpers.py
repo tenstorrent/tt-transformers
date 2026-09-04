@@ -8,8 +8,8 @@ from __future__ import annotations
 from typing import Literal
 
 import torch
-
 import ttnn
+
 from tt_transformers.modules.sampling.params import prepare_sampling_params, slice_sampling_params
 
 _TILE_SIZE = 32

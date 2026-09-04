@@ -37,7 +37,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import torch
 
@@ -66,7 +66,7 @@ class ReferenceEntry:
             )
         if self.tf_prompt_len != self.prompt_tokens.shape[1]:
             raise ValueError(
-                f"tf_prompt_len ({self.tf_prompt_len}) must equal prompt length " f"({self.prompt_tokens.shape[1]})"
+                f"tf_prompt_len ({self.tf_prompt_len}) must equal prompt length ({self.prompt_tokens.shape[1]})"
             )
 
     @property
@@ -82,8 +82,8 @@ class ReferenceEntry:
 class Reference:
     k: int
     hf_model_id: str
-    entries: List[ReferenceEntry]
-    token_ids_meta: Dict[str, Optional[int]] = field(default_factory=dict)
+    entries: list[ReferenceEntry]
+    token_ids_meta: dict[str, int | None] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.entries:
@@ -96,7 +96,7 @@ class Reference:
 def save_reference(reference: Reference, path: Path | str) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "format_version": FORMAT_VERSION,
         "k": reference.k,
         "hf_model_id": reference.hf_model_id,
@@ -121,7 +121,7 @@ def load_reference(path: Path | str) -> Reference:
     payload = torch.load(path, weights_only=True)
     fmt = payload.get("format_version")
     if fmt != FORMAT_VERSION:
-        raise ValueError(f"Unsupported reference format_version={fmt!r} in {path}; " f"expected {FORMAT_VERSION!r}")
+        raise ValueError(f"Unsupported reference format_version={fmt!r} in {path}; expected {FORMAT_VERSION!r}")
     raw_entries = payload.get("entries")
     if not isinstance(raw_entries, list) or not raw_entries:
         raise ValueError(f"Reference {path} missing non-empty 'entries' list")

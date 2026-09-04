@@ -7,7 +7,7 @@
   },
   "status": "experimental",
   "software": {
-    "tt_transformers": "0.1.0.dev0",
+    "tt_transformers": "2.0.0.dev0",
     "ttnn": "0.77.0",
     "python": [
       "3.10",
@@ -47,7 +47,7 @@
     }
   ],
   "assets": {
-    "reference_root": "qualification/assets/reference_outputs/deepseek_r1_distill_qwen_14b",
+    "reference_root": "tests/assets/reference_outputs/deepseek_r1_distill_qwen_14b",
     "hf_assets_external": true,
     "offline_environment": [
       "HF_HOME",
@@ -61,7 +61,7 @@
     "tt_cache_path_semantics": "append topology exactly once"
   },
   "known_gaps": [
-    "No hardware evidence is attributable to the pinned extraction revision",
+    "Current regression evidence does not qualify the complete declared model contract",
     "N150/TP1",
     "N300 accuracy eval-32 and batch-32-ci",
     "any geometry not declared in support.json"

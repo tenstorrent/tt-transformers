@@ -91,7 +91,7 @@ class FakeSeedManager:
         changed = [slot for slot in active_slots if not state.active[slot] or state.seeds[slot] != seeds[slot]]
         if changed and not reset_batch:
             raise RuntimeError(
-                "new or changed active seed slots require reset_batch=True or an explicit admit() call: " f"{changed}"
+                f"new or changed active seed slots require reset_batch=True or an explicit admit() call: {changed}"
             )
         active = set(active_slots)
         for slot in range(state.capacity):
@@ -138,6 +138,7 @@ class FakeSeedManager:
     def get_seed_device_buffer(self):
         self.events.append(("seed.handle",))
         return self.seed_buffer.handle
+
 
 class FakePenalties:
     _BUFFER_NAMES = (
@@ -603,10 +604,7 @@ def test_single_nonprefix_prefill_source_is_rejected_before_mutation(expect_erro
     assert events == []
     assert state.seed_state.active == [False, False, False, False]
     assert state.seed_state.seeds == [None, None, None, None]
-    assert all(
-        torch.equal(getattr(penalties.config, name).source, source)
-        for name, source in penalty_sources.items()
-    )
+    assert all(torch.equal(getattr(penalties.config, name).source, source) for name, source in penalty_sources.items())
 
 
 @pytest.mark.host

@@ -4,9 +4,10 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Sequence
 from dataclasses import replace
 from types import SimpleNamespace
-from typing import Any, Sequence
+from typing import Any
 
 import pytest
 import torch
@@ -134,7 +135,14 @@ def make_runtime_configs(
         config=SimpleNamespace(max_batch_size=lane_capacity, mesh_device=mesh, num_devices=1),
         sampling=SimpleNamespace(
             config=sampling_config,
-            decode_forward=lambda logits, *, k=None, p=None, temp=None, seeds=None, tt_out_tok=None, enable_log_probs=False: None,
+            decode_forward=lambda logits,
+            *,
+            k=None,
+            p=None,
+            temp=None,
+            seeds=None,
+            tt_out_tok=None,
+            enable_log_probs=False: None,
         ),
         vocab_size=128,
     )

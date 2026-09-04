@@ -11,10 +11,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import torch
+import ttnn
 from loguru import logger
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
-import ttnn
 from tt_transformers.cache_environment import (
     environment_flag,
     environment_int,
@@ -25,7 +25,6 @@ from tt_transformers.cache_environment import (
 )
 from tt_transformers.device_utils import get_device_name
 from tt_transformers.tensor_utils import nearest_multiple
-
 
 DEFAULT_HF_MODEL = "meta-llama/Llama-3.1-8B-Instruct"
 DEFAULT_HF_REVISION = "0e9e39f249a16976918f6564b8830bc894c89659"

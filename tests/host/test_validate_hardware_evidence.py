@@ -15,7 +15,6 @@ from jsonschema import Draft202012Validator
 from qualification.tools import run_hardware_matrix as runner
 from qualification.tools import validate_hardware_evidence as evidence_validator
 
-
 pytestmark = pytest.mark.host
 CANDIDATE_SHA = "a" * 40
 
@@ -86,8 +85,8 @@ def _write_record(
         "metrics": ["PCC 0.999"] if "PCC" in log_text else [],
         "teardown_status": "process_exited; fixture teardown not independently hardware-verified",
         "reset": {"performed": False, "automatic": False, "reason": "runner never resets hardware"},
-        "stdout_log_path": f"/remote/hardware-results/{log_path.name}",
-        "evidence_json_path": f"/remote/hardware-results/{evidence_path.name}",
+        "stdout_log_path": f"/remote/hardware-evidence/{log_path.name}",
+        "evidence_json_path": f"/remote/hardware-evidence/{evidence_path.name}",
     }
     evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
     log_path.write_text(log_text, encoding="utf-8")
@@ -108,9 +107,7 @@ def test_builds_schema_valid_index_with_hash_bound_pair_and_summaries(tmp_path):
 
     index = _build(tmp_path)
 
-    Draft202012Validator(
-        json.loads(evidence_validator.DEFAULT_SCHEMA.read_text(encoding="utf-8"))
-    ).validate(index)
+    Draft202012Validator(json.loads(evidence_validator.DEFAULT_SCHEMA.read_text(encoding="utf-8"))).validate(index)
     assert index["summary"]["total"] == 1
     assert index["summary"]["outcomes"]["passed"] == 1
     assert index["summary"]["by_stage"][0]["name"] == "module"
@@ -121,9 +118,7 @@ def test_builds_schema_valid_index_with_hash_bound_pair_and_summaries(tmp_path):
     log_hash = hashlib.sha256(log_path.read_bytes()).hexdigest()
     assert source["evidence_json"]["sha256"] == evidence_hash
     assert source["stdout_log"]["sha256"] == log_hash
-    assert source["pair_sha256"] == hashlib.sha256(
-        (evidence_hash + "\0" + log_hash).encode("ascii")
-    ).hexdigest()
+    assert source["pair_sha256"] == hashlib.sha256((evidence_hash + "\0" + log_hash).encode("ascii")).hexdigest()
 
 
 @pytest.mark.parametrize(
@@ -184,16 +179,12 @@ def test_rejects_candidate_sha_and_matrix_binding_mismatches(tmp_path):
 @pytest.mark.host
 def test_requires_runner_derived_node_local_cache_path(tmp_path):
     evidence_path, _, evidence = _write_record(tmp_path)
-    assert evidence["environment"]["TT_CACHE_PATH"] == str(
-        tmp_path / "cache/wh-n150-rmsnorm-prefill"
-    )
+    assert evidence["environment"]["TT_CACHE_PATH"] == str(tmp_path / "cache/wh-n150-rmsnorm-prefill")
     evidence["environment"].pop("TT_CACHE_PATH")
     evidence["cache_paths"]["TT_CACHE_PATH"] = None
     evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
 
-    with pytest.raises(
-        evidence_validator.EvidenceError, match="environment keys differ from matrix"
-    ):
+    with pytest.raises(evidence_validator.EvidenceError, match="environment keys differ from matrix"):
         _build(tmp_path)
 
 
@@ -246,7 +237,7 @@ def test_rejects_missing_or_mispaired_log(tmp_path):
         _build(tmp_path)
 
     log_path.write_text("1 passed\n", encoding="utf-8")
-    evidence["stdout_log_path"] = "/remote/hardware-results/different.log"
+    evidence["stdout_log_path"] = "/remote/hardware-evidence/different.log"
     evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
     with pytest.raises(evidence_validator.EvidenceError, match="does not name paired log"):
         _build(tmp_path)

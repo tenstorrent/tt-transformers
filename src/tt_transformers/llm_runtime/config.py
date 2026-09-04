@@ -112,7 +112,7 @@ class PageTableLayout:
         model_max_sequence_length: int,
         physical_num_blocks: int,
         max_prefill_chunk_size: int,
-    ) -> "PageTableLayout":
+    ) -> PageTableLayout:
         values = {
             "block_size": block_size,
             "model_max_sequence_length": model_max_sequence_length,

@@ -11,8 +11,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import torch
-
 import ttnn
+
 from tt_transformers.modules.lazy_weight import (
     LazyWeight,
     _auto_pad_for_sharded_tiles,

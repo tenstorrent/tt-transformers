@@ -45,11 +45,13 @@ def tokenize_prompts_to_batch(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     max_prefill_len = max_seq_len
     if not (max_prefill_len <= max_context_len):
-        raise AssertionError(f'max_prefill_len {max_prefill_len} cannot exceed max_context_len {max_context_len}')
+        raise AssertionError(f"max_prefill_len {max_prefill_len} cannot exceed max_context_len {max_context_len}")
 
     max_prefill_len -= reserve_decode_tokens
     if not (max_prefill_len > 0):
-        raise AssertionError(f'max_prefill_len ({max_prefill_len + reserve_decode_tokens}) must be greater than max_generated_tokens ({reserve_decode_tokens})')
+        raise AssertionError(
+            f"max_prefill_len ({max_prefill_len + reserve_decode_tokens}) must be greater than max_generated_tokens ({reserve_decode_tokens})"
+        )
 
     encoded_prompts = [encode_fn(prompt, instruct) for prompt in prompts]
     logger.info("Encoded prompt lengths:" + ", ".join(str(len(prompt)) for prompt in encoded_prompts))
@@ -76,8 +78,10 @@ def tokenize_prompts_to_batch(
                 shortened.append(decode_fn(raw_prompt[-raw_budget:]))
 
             encoded_prompts = [encode_fn(prompt, instruct) for prompt in shortened]
-            if not (all((len(encoded) == max_prefill_len for encoded in encoded_prompts))):
-                raise AssertionError(f'Clipped prompts are not of the correct length, expected {max_prefill_len} but got {[len(e) for e in encoded_prompts]}')
+            if not (all(len(encoded) == max_prefill_len for encoded in encoded_prompts)):
+                raise AssertionError(
+                    f"Clipped prompts are not of the correct length, expected {max_prefill_len} but got {[len(e) for e in encoded_prompts]}"
+                )
         else:
             encoded_prompts = [encoded[-max_prefill_len:] for encoded in encoded_prompts]
 
@@ -86,11 +90,11 @@ def tokenize_prompts_to_batch(
         max_prompt_len = max(prompt_lens)
 
     if not (max_prompt_len <= max_seq_len):
-        raise AssertionError(f'Max prompt length {max_prompt_len} exceeds model max seq len {max_seq_len}')
+        raise AssertionError(f"Max prompt length {max_prompt_len} exceeds model max seq len {max_seq_len}")
     if not (min_prompt_len > 0):
-        raise AssertionError('Minimum prompt length must be greater than 0')
+        raise AssertionError("Minimum prompt length must be greater than 0")
     if not (min_prompt_len <= max_prompt_len):
-        raise AssertionError(f'Minimum prompt length {min_prompt_len} exceeds max len {max_prompt_len}')
+        raise AssertionError(f"Minimum prompt length {min_prompt_len} exceeds max len {max_prompt_len}")
 
     logger.info(f"# of users: {len(encoded_prompts)}")
     input_tokens = torch.full((len(encoded_prompts), max_prompt_len), pad_id, dtype=torch.int32)

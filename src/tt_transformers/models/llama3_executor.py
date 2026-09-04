@@ -4,16 +4,17 @@
 """Llama 3 family policy over the shared model executor lifecycle.
 
 The four public executor types in this module are composition facades.  Each
-owns one :class:`~models.common.models.executor.ModelExecutor` and supplies
+owns one :class:`~tt_transformers.models.executor.ModelExecutor` and supplies
 only the warmup, sampling-state, and prefill policy that differs across the
 Llama 3 products.  The facades deliberately do not subclass ``ModelExecutor``.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Callable, Sequence
+from typing import Any
 
 import torch
 

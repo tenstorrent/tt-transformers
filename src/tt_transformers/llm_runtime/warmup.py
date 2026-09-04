@@ -5,9 +5,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
-from typing import Any, Callable, Iterator
+from typing import Any
 
 import torch
 from loguru import logger
@@ -131,7 +132,7 @@ class WarmupCoordinatorConfig:
         prefill: PrefillRuntimeConfig,
         decode: DecodeRuntimeConfig,
         prefill_sequence_lengths: tuple[int, ...],
-    ) -> "WarmupCoordinatorConfig":
+    ) -> WarmupCoordinatorConfig:
         """Validate resolved runtimes and derive both static coverage plans."""
 
         if not isinstance(warmup, WarmupConfig):
@@ -196,7 +197,7 @@ class WarmupCoordinatorConfig:
             page_table_layout_ceiling=prefill.page_table_layout_ceiling,
         )
 
-    def with_page_table_layout(self, layout: PageTableLayout) -> "WarmupCoordinatorConfig":
+    def with_page_table_layout(self, layout: PageTableLayout) -> WarmupCoordinatorConfig:
         """Return the same policy with final geometry within original ceilings."""
 
         if not isinstance(layout, PageTableLayout):
@@ -332,7 +333,7 @@ class WarmupCoordinator:
         return self._captured
 
     @contextmanager
-    def defer_capture(self) -> Iterator["WarmupCoordinator"]:
+    def defer_capture(self) -> Iterator[WarmupCoordinator]:
         """Stage readiness without capturing until a multi-lane barrier commits."""
 
         if self._capture_deferred:

@@ -4,14 +4,16 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Sequence
 from types import SimpleNamespace
-from typing import Any, Sequence
+from typing import Any
 from unittest.mock import create_autospec
 
 import pytest
 import torch
-
 import ttnn
+from examples.llama3_8b import demo as llama_demo
+
 from tt_transformers.llm_runtime.config import PagedKVCacheConfig, PageTableLayout, TraceConfig, WarmupConfig
 from tt_transformers.llm_runtime.execution import EagerExecutor, TracedExecutor
 from tt_transformers.llm_runtime.lane_group import LaneGroupExecutor
@@ -20,7 +22,6 @@ from tt_transformers.models import llama3_executor as llama3_family_executor
 from tt_transformers.models.llama3_8b import executor as llama_executor
 from tt_transformers.models.llama3_8b import generator as llama_generator
 from tt_transformers.models.llama3_8b import model as llama_model
-from examples.llama3_8b import demo as llama_demo
 
 
 class _Mesh:
@@ -752,7 +753,7 @@ def test_configured_path_has_no_legacy_or_common_aggregate_surface():
     source = inspect.getsource(llama_executor)
     assert not hasattr(llama_executor, "EagerLlamaExecutor")
     assert not hasattr(llama_executor, "TracedLlamaExecutor")
-    assert "models.common.models.executor" not in source
+    assert "tt_transformers.models.executor" not in source
     assert "llm_runtime.executor" not in source
     assert "class LLMExecutor" not in source
     assert EagerExecutor not in TracedExecutor.__mro__

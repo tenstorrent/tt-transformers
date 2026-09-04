@@ -13,7 +13,7 @@ from qualification.readiness.contract_vllm import (
     ModelCapabilities,
     VllmGeneratorAdapter,
 )
-from qualification.readiness.generate import generate_reference, DEFAULT_K
+from qualification.readiness.generate import DEFAULT_K, generate_reference
 from qualification.readiness.schema import (
     FORMAT_VERSION,
     Reference,

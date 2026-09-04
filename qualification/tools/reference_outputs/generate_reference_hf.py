@@ -88,13 +88,15 @@ def generate_reference_outputs(total_length, output_file, model_name):
                 global_pos = chunk_start + i
                 next_token = chunk_next_tokens[i]
 
-                sanitize = lambda x: x.replace("\n", "").replace("\r", "").replace("\x0c", "")
+                def sanitize(value):
+                    return value.replace("\n", "").replace("\r", "").replace("\x0c", "")
+
                 actual_token = sanitize(tokenizer.decode([next_token]))
                 top5_tokens = [sanitize(tokenizer.decode([t.item()])) for t in chunk_top5_tokens[i]]
                 correct = "x" if chunk_top1_correct[i] else ("-" if chunk_top5_correct[i] else " ")
                 top5_str = " ".join(f"{t:<14}" for t in top5_tokens)
 
-                progress_str = f"{global_pos+1}/{total_length-1}"
+                progress_str = f"{global_pos + 1}/{total_length - 1}"
                 print(f"{progress_str:<15}{correct:<8}{actual_token:<15}{top5_str}")
 
                 # Calculate and store segment accuracies every 100 tokens

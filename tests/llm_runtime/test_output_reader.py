@@ -3,12 +3,12 @@
 
 from __future__ import annotations
 
-import pytest
 import weakref
 
+import pytest
 import torch
-
 import ttnn
+
 from tt_transformers.llm_runtime.output_reader import OutputReader, PendingRead
 
 

@@ -5,14 +5,12 @@ from __future__ import annotations
 
 import argparse
 import ast
-import csv
 import json
 import os
 import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parents[2]
 TESTS = ROOT / "tests"
@@ -84,7 +82,9 @@ def audit() -> dict:
             counts.update(node_marks & TAXONOMY)
             lane = node_marks & {"host", "device"}
             if len(lane) != 1:
-                errors.append(f"{relative}:{node.lineno}:{node.name}: expected exactly one of host/device, got {sorted(lane)}")
+                errors.append(
+                    f"{relative}:{node.lineno}:{node.name}: expected exactly one of host/device, got {sorted(lane)}"
+                )
             if relative.startswith(("tests/models/", "tests/hardware/models/")) and "model" not in node_marks:
                 errors.append(f"{relative}:{node.lineno}:{node.name}: concrete model test lacks model mark")
             if relative.startswith("tests/hardware/models/") and "slow" not in node_marks:
@@ -102,25 +102,9 @@ def audit() -> dict:
     missing_config = TAXONOMY - configured_markers()
     if missing_config:
         errors.append(f"pyproject marker registry is missing {sorted(missing_config)}")
-    baseline = {}
-    for name, key in (
-        ("marker_inventory.csv", "phase0_marker_tokens"),
-        ("test_inventory.csv", "phase0_test_definitions"),
-        ("hardware_coverage.csv", "phase0_hardware_rows"),
-    ):
-        path = ROOT / "qualification/analysis/support" / name
-        with path.open(newline="") as stream:
-            baseline[key] = sum(1 for _row in csv.DictReader(stream))
-    if baseline != {
-        "phase0_marker_tokens": 23,
-        "phase0_test_definitions": 1368,
-        "phase0_hardware_rows": 53,
-    }:
-        errors.append(f"Phase 0 taxonomy inputs drifted: {baseline}")
     return {
         "functions": functions,
         "counts": dict(sorted(counts.items())),
-        "phase0_inputs": baseline,
         "errors": errors,
     }
 

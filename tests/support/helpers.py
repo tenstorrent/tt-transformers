@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Shared helpers for models/common tests."""
+"""Shared helpers for standalone TT Transformers tests."""
 
 from __future__ import annotations
 

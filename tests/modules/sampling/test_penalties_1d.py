@@ -7,8 +7,9 @@ from types import SimpleNamespace
 
 import pytest
 import torch
-
 import ttnn
+from tests.support.comparison import comp_pcc
+
 from tt_transformers.modules.sampling.penalties_1d import (
     Penalties1D,
     Penalties1DConfig,
@@ -17,7 +18,6 @@ from tt_transformers.modules.sampling.penalties_1d import (
     _materialize,
     _resolve_penalties1d_config,
 )
-from tests.support.comparison import comp_pcc
 
 # 1D module suites target the T3K; skip when the host system is a Galaxy.
 pytestmark = pytest.mark.usefixtures("skip_on_galaxy_system")

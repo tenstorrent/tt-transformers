@@ -19,7 +19,7 @@ Exercise the concrete small Llama tensor model, shared Llama executor, accuracy,
 
 This is the declared qualification candidate, not a passing verdict:
 
-- `tt-transformers==0.1.0.dev0`
+- `tt-transformers==2.0.0.dev0`
 - `ttnn==0.77.0`
 - Python `3.10, 3.12`
 - `torch==2.11.0`
@@ -54,7 +54,7 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 - Set a writable `TT_CACHE_PATH` (the example appends topology exactly once), or use the versioned standalone root selected by `TT_TRANSFORMERS_CACHE`, `XDG_CACHE_HOME`, or the user cache.
 - Examples use built-in Transformers loading behavior; `trust_remote_code` is not enabled by default.
 - For offline runs set `HF_HOME`, `HF_HUB_OFFLINE=1`, and `TRANSFORMERS_OFFLINE=1` after populating the exact snapshot.
-- Reference asset root: `qualification/assets/reference_outputs/llama32_1b`.
+- Reference asset root: `tests/assets/reference_outputs/llama32_1b`.
 
 ### Install, run, and collect
 
@@ -85,16 +85,15 @@ PYTHONPATH=src MESH_DEVICE=N150 pytest --collect-only -q tests/hardware/models/l
 - Evidence: **none attributable to pinned source revision `00748e6ac7b65f50e5c2af07f6e7c1c535c7f4c0`**.
 - [Machine-readable manifest](support.json)
 - [Hardware gate](../../tests/hardware/models/llama32_1b/test_demo.py)
-- [Pinned support baseline](../../qualification/analysis/support/support_baseline.md)
-- [Phase 3 boundary evidence](../../qualification/extraction/support_boundary.md)
-- [Historical evidence ledger](../../qualification/analysis/support/hardware_evidence.csv)
+- [Support matrix](../../SUPPORT.md)
+- [Validation summary](../../docs/validation.md)
 
 ### Known and unsupported gaps
 
 - TP4 lanes.
 - N150 batch-32-ci sequence 2048.
 - any geometry not declared in support.json.
-- No hardware evidence is attributable to the pinned extraction revision.
+- Current regression evidence does not qualify the complete declared model contract.
 
 <!-- END GENERATED SUPPORT -->
 
@@ -118,8 +117,8 @@ remain model-owned.
 
 The model-local `executor.py` exports the historical
 `Llama32_1BExecutor`/config/builder names. The implementation lives in
-`models/common/models/llama3_executor.py`, which supplies Llama-family Q128
-warmup policy and composes `models/common/models/executor.py::ModelExecutor`.
+`src/tt_transformers/models/llama3_executor.py`, which supplies Llama-family Q128
+warmup policy and composes `src/tt_transformers/models/executor.py::ModelExecutor`.
 
 The shared executor owns:
 
@@ -145,9 +144,9 @@ dispatch policy only.
 
 ## Tests
 
-- `models/common/tests/models/llama32_1b/test_hf_adaptor.py`
-- `models/common/tests/models/llama32_1b/test_batched_prefill_postprocess.py`
-- `models/common/tests/models/llama32_1b/test_demo_warmup.py`
-- `models/common/tests/demos/llama32_1b/demo.py`
-- `models/common/tests/llm_runtime/test_executor_integration.py`
-- `models/common/tests/llm_runtime/test_model_executor.py`
+- `tests/models/llama32_1b/test_hf_adaptor.py`
+- `tests/models/llama32_1b/test_batched_prefill_postprocess.py`
+- `tests/models/llama32_1b/test_demo_warmup.py`
+- `tests/hardware/models/llama32_1b/test_demo.py`
+- `tests/llm_runtime/test_executor_integration.py`
+- `tests/llm_runtime/test_model_executor.py`

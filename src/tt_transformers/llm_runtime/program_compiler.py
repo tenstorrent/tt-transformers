@@ -14,8 +14,8 @@ from enum import Enum
 from typing import Any
 
 import torch
-
 import ttnn
+
 from tt_transformers.llm_runtime.tensor_resources import (
     TensorResourceOrphan,
     attach_cleanup_failures,
@@ -37,7 +37,7 @@ class ProgramKey:
         validate_sha256_digest(self.digest, "program")
 
     @classmethod
-    def from_signature(cls, signature: Any) -> "ProgramKey":
+    def from_signature(cls, signature: Any) -> ProgramKey:
         return cls(signature_digest(_PROGRAM_KEY_DOMAIN, _PROGRAM_KEY_SCHEMA_VERSION, signature))
 
 
@@ -49,7 +49,7 @@ class OutputSpec:
     memory_config: Any = None
 
     @classmethod
-    def from_value(cls, value: Any) -> "OutputSpec":
+    def from_value(cls, value: Any) -> OutputSpec:
         if isinstance(value, tuple):
             if not value:
                 raise ValueError("Cannot derive an output specification from an empty tuple")

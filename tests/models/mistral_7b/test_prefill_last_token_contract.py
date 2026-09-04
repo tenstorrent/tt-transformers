@@ -1,9 +1,8 @@
-
-import pytest
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 # SPDX-License-Identifier: Apache-2.0
-
 from types import SimpleNamespace
+
+import pytest
 
 from tt_transformers.models.mistral_7b import model as mistral_model
 

@@ -1,9 +1,8 @@
-
-import pytest
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 # SPDX-License-Identifier: Apache-2.0
-
 from types import SimpleNamespace
+
+import pytest
 
 from tt_transformers.modules.lazy_buffer import LazyBuffer
 from tt_transformers.modules.sampling import sampling_1d

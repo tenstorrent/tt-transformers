@@ -8,8 +8,8 @@ from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
-
 import ttnn
+
 from tt_transformers.modules.attention import attention_1d
 from tt_transformers.modules.attention.attention_1d import Attention1DConfig, resolve_attention1d_arch_config
 

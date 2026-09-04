@@ -8,11 +8,11 @@ On-device penalties module with persistent buffers, mirroring TTSampling.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, List, Optional
+from typing import Any
 
 import torch
-
 import ttnn
+
 from tt_transformers.modules.lightweightmodule import LightweightModule
 
 
@@ -29,7 +29,7 @@ class PenaltyContext:
     sub_core_grids: Any | None = None
 
 
-def apply_penalties(logits: ttnn.Tensor, context: Optional[PenaltyContext]) -> ttnn.Tensor:
+def apply_penalties(logits: ttnn.Tensor, context: PenaltyContext | None) -> ttnn.Tensor:
     if context is None:
         return logits
 
@@ -121,9 +121,9 @@ class TTPenalties(LightweightModule):
         # For row-sharded mode (sampling_dp > 1), also shard the batch dimension
         # across mesh rows so each row gets its own per-user penalty state.
         if self._sampling_dp > 1:
-            assert (
-                mesh_device.shape[-1] == self.num_devices
-            ), "Row-sharded penalties require vocab sharding along mesh columns"
+            assert mesh_device.shape[-1] == self.num_devices, (
+                "Row-sharded penalties require vocab sharding along mesh columns"
+            )
             shard_dims = (0, 1)  # batch across rows, vocab across cols
             shard_dims_gathered = (0, None)  # batch across rows, vocab replicated
             shard_dims_bf16 = (0, None)  # per-row penalty params
@@ -222,7 +222,7 @@ class TTPenalties(LightweightModule):
         counts.scatter_add_(1, token_ids, valid.to(torch.int32))
         return counts
 
-    def reset_params(self, presence: List[float], frequency: List[float], repetition: List[float]):
+    def reset_params(self, presence: list[float], frequency: list[float], repetition: list[float]):
         presence_tensor = self._pad_params(presence)
         frequency_tensor = self._pad_params(frequency)
         repetition_tensor = self._pad_params(repetition)
@@ -233,7 +233,7 @@ class TTPenalties(LightweightModule):
         self._copy_host_to_device(self.repetition_penalties, repetition_tensor)
         self._copy_host_to_device(self.inverse_repetition_penalties, inverse_repetition_tensor)
 
-    def _pad_params(self, values: List[float]) -> torch.Tensor:
+    def _pad_params(self, values: list[float]) -> torch.Tensor:
         tensor = torch.tensor(values, dtype=torch.float32)
         if tensor.numel() < self._total_batch:
             pad_value = tensor[-1] if tensor.numel() > 0 else torch.tensor(0.0)

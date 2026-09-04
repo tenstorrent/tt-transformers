@@ -6,8 +6,9 @@ from types import SimpleNamespace
 import pytest
 import torch
 import torch.nn.functional as F
-
 import ttnn
+from tests.support.comparison import comp_pcc
+
 from tt_transformers.sampling import (
     LogProbsCalculator,
     SamplingGenerator,
@@ -24,7 +25,6 @@ from tt_transformers.sampling.generator import (
     _mark_trace_buffers_corruptible,
 )
 from tt_transformers.sampling.tt_log_probs import MAX_TOP_LOGPROBS, LogProbsResult
-from tests.support.comparison import comp_pcc
 
 
 @pytest.mark.host

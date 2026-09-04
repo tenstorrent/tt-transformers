@@ -4,16 +4,17 @@
 """Qwen2/Qwen2.5 family policy over the shared model executor lifecycle.
 
 The four public executor types are composition façades. Each owns one
-:class:`~models.common.models.executor.ModelExecutor`; none subclasses it.
+:class:`~tt_transformers.models.executor.ModelExecutor`; none subclasses it.
 Only the narrow pre-history request contract and the 7B Q128 warmup policy
 remain family-owned here.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Callable, Sequence
+from typing import Any
 
 import torch
 

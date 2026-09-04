@@ -13,11 +13,11 @@ import json
 import logging
 import os
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Any, Literal, Mapping
-
+from typing import Any, Literal
 
 CONVERSION_SCHEMA = "tttv2-lazy-weight-v1"
 CACHE_NAMESPACE_PREFIX = "identity"
@@ -58,12 +58,8 @@ ENVIRONMENT_SPECS: dict[str, EnvironmentVariableSpec] = {
     "QWEN25_CODER_32B_NUMDIV_LAYERS": EnvironmentVariableSpec(
         "QWEN25_CODER_32B_NUMDIV_LAYERS", "int", production=False
     ),
-    "QWEN25_CODER_32B_NUMDIV_OUT": EnvironmentVariableSpec(
-        "QWEN25_CODER_32B_NUMDIV_OUT", "path", production=False
-    ),
-    "QWEN25_CODER_32B_NUMDIV_SEQ": EnvironmentVariableSpec(
-        "QWEN25_CODER_32B_NUMDIV_SEQ", "int", production=False
-    ),
+    "QWEN25_CODER_32B_NUMDIV_OUT": EnvironmentVariableSpec("QWEN25_CODER_32B_NUMDIV_OUT", "path", production=False),
+    "QWEN25_CODER_32B_NUMDIV_SEQ": EnvironmentVariableSpec("QWEN25_CODER_32B_NUMDIV_SEQ", "int", production=False),
     "QWEN3_32B_DEMO_NUM_LAYERS": EnvironmentVariableSpec("QWEN3_32B_DEMO_NUM_LAYERS", "int", production=False),
     "QWEN3_32B_NUMDIV_LAYERS": EnvironmentVariableSpec("QWEN3_32B_NUMDIV_LAYERS", "int", production=False),
     "QWEN3_32B_NUMDIV_OUT": EnvironmentVariableSpec("QWEN3_32B_NUMDIV_OUT", "path", production=False),
@@ -186,10 +182,10 @@ class CacheIdentity:
         layout_inputs: Mapping[str, Any] | None,
         sharding_inputs: Mapping[str, Any] | None,
         conversion_schema: str = CONVERSION_SCHEMA,
-    ) -> "CacheIdentity":
+    ) -> CacheIdentity:
         return cls(
             schema_version=1,
-            tt_transformers_version=_installed_version("tt-transformers", "0.1.0.dev0"),
+            tt_transformers_version=_installed_version("tt-transformers", "2.0.0.dev0"),
             ttnn_version=_installed_version("ttnn", "unknown"),
             hf_model_id=hf_model_id,
             hf_revision=hf_revision or "unversioned",
@@ -288,7 +284,7 @@ def resolve_model_cache(
     )
     identity_applied_to_path = False
     release_warning = None
-    if explicit:
+    if cache_dir is not None:
         path = Path(cache_dir).expanduser()
         source = "cache_dir"
     else:
@@ -356,15 +352,15 @@ def resolve_model_cache_path(**kwargs: Any) -> Path:
 def _mesh_identity(mesh_device: Any) -> tuple[Any, dict[str, Any]]:
     arch = mesh_device.arch() if callable(getattr(mesh_device, "arch", None)) else getattr(mesh_device, "arch", None)
     shape = getattr(mesh_device, "shape", None)
-    try:
-        mesh_shape = tuple(int(value) for value in shape)
-    except (TypeError, ValueError):
+    mesh_shape: tuple[int, ...] | str
+    if shape is None:
         mesh_shape = _stable_value(shape)
-    num_devices = (
-        mesh_device.get_num_devices()
-        if callable(getattr(mesh_device, "get_num_devices", None))
-        else None
-    )
+    else:
+        try:
+            mesh_shape = tuple(int(value) for value in shape)
+        except (TypeError, ValueError):
+            mesh_shape = _stable_value(shape)
+    num_devices = mesh_device.get_num_devices() if callable(getattr(mesh_device, "get_num_devices", None)) else None
     return arch, {"mesh_shape": mesh_shape, "num_devices": num_devices}
 
 
@@ -464,11 +460,15 @@ def model_preflight_report(
         )
         cache_source = _cache_source_for_report(cache_path, cache_dir=cache_dir, environ=env)
         identity_component = f"{CACHE_NAMESPACE_PREFIX}-{identity.schema_version}-{identity.digest}"
-        identity_applied_to_path = cache_source in {
-            "TT_TRANSFORMERS_CACHE",
-            "XDG_CACHE_HOME",
-            "user_cache",
-        } and identity_component in cache_path.parts
+        identity_applied_to_path = (
+            cache_source
+            in {
+                "TT_TRANSFORMERS_CACHE",
+                "XDG_CACHE_HOME",
+                "user_cache",
+            }
+            and identity_component in cache_path.parts
+        )
         release_warning = None
         if cache_source in {"cache_dir", "TT_CACHE_PATH", "permission_fallback"}:
             release_warning = (

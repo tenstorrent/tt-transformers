@@ -19,7 +19,7 @@ Run the concrete Qwen3 model on T3K TP8 or declared Blackhole P150x4 TP4, includ
 
 This is the declared qualification candidate, not a passing verdict:
 
-- `tt-transformers==0.1.0.dev0`
+- `tt-transformers==2.0.0.dev0`
 - `ttnn==0.77.0`
 - Python `3.10, 3.12`
 - `torch==2.11.0`
@@ -49,7 +49,7 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 - Set a writable `TT_CACHE_PATH` (the example appends topology exactly once), or use the versioned standalone root selected by `TT_TRANSFORMERS_CACHE`, `XDG_CACHE_HOME`, or the user cache.
 - Examples use built-in Transformers loading behavior; `trust_remote_code` is not enabled by default.
 - For offline runs set `HF_HOME`, `HF_HUB_OFFLINE=1`, and `TRANSFORMERS_OFFLINE=1` after populating the exact snapshot.
-- Reference asset root: `qualification/assets/reference_outputs/qwen3_32b`.
+- Reference asset root: `tests/assets/reference_outputs/qwen3_32b`.
 
 ### Install, run, and collect
 
@@ -86,9 +86,8 @@ PYTHONPATH=src MESH_DEVICE=T3K pytest --collect-only -q tests/hardware/models/qw
 - Evidence: **none attributable to pinned source revision `00748e6ac7b65f50e5c2af07f6e7c1c535c7f4c0`**.
 - [Machine-readable manifest](support.json)
 - [Hardware gate](../../tests/hardware/models/qwen3_32b/test_demo.py)
-- [Pinned support baseline](../../qualification/analysis/support/support_baseline.md)
-- [Phase 3 boundary evidence](../../qualification/extraction/support_boundary.md)
-- [Historical evidence ledger](../../qualification/analysis/support/hardware_evidence.csv)
+- [Support matrix](../../SUPPORT.md)
+- [Validation summary](../../docs/validation.md)
 
 ### Known and unsupported gaps
 
@@ -96,12 +95,12 @@ PYTHONPATH=src MESH_DEVICE=T3K pytest --collect-only -q tests/hardware/models/qw
 - DP greater than 1.
 - noncanonical P150x4 orientations.
 - any geometry not declared in support.json.
-- No hardware evidence is attributable to the pinned extraction revision.
+- Current regression evidence does not qualify the complete declared model contract.
 
 <!-- END GENERATED SUPPORT -->
 
 This directory contains the model-owned Qwen3-32B TTTv2 product path.
-Qwen3-32B is currently the only Qwen3 model in `models/common/models`, so its
+Qwen3-32B is currently the only Qwen3 model in `src/tt_transformers/models`, so its
 sampling and trace policy remains here rather than in a speculative Qwen3
 family module.
 
@@ -136,7 +135,7 @@ precision, and device tuning remain in `model.py` and its configuration.
 ## Executor construction
 
 `Qwen3_32BExecutor` is a composition facade over
-`models/common/models/executor.py::ModelExecutor`. It does not subclass the
+`src/tt_transformers/models/executor.py::ModelExecutor`. It does not subclass the
 shared executor and does not duplicate its resource lifecycle.
 
 The shared owner composes:
@@ -162,7 +161,7 @@ The model-owned facade supplies only Qwen3-32B policy:
 - T3K trace-capture prime sequence lengths; and
 - legacy eager/traced wrappers, trace bookkeeping, and direct-run helpers.
 
-There is intentionally no `models/common/models/qwen3_executor.py`. A Qwen3
+There is intentionally no `src/tt_transformers/models/qwen3_executor.py`. A Qwen3
 family layer should be introduced only after another Qwen3 model demonstrates
 the same policy.
 
@@ -187,11 +186,11 @@ then releases sampling and KV resources with retryable failure reporting.
 
 Relevant entry points include:
 
-- `models/common/tests/models/qwen3_32b/test_hf_adaptor.py`
-- `models/common/tests/models/qwen3_32b/test_model_runtime_surface.py`
-- `models/common/tests/models/qwen3_32b/test_module_profiles.py`
-- `models/common/tests/models/qwen3_32b/test_demo_contract.py`
-- `models/common/tests/models/qwen3_32b/test_p150x4_smoke.py`
-- `models/common/tests/demos/qwen3_32b/demo.py`
-- `models/common/tests/llm_runtime/test_executor_integration.py`
-- `models/common/tests/llm_runtime/test_model_executor.py`
+- `tests/models/qwen3_32b/test_hf_adaptor.py`
+- `tests/models/qwen3_32b/test_model_runtime_surface.py`
+- `tests/models/qwen3_32b/test_module_profiles.py`
+- `tests/models/qwen3_32b/test_demo_contract.py`
+- `tests/models/qwen3_32b/test_p150x4_smoke.py`
+- `tests/hardware/models/qwen3_32b/test_demo.py`
+- `tests/llm_runtime/test_executor_integration.py`
+- `tests/llm_runtime/test_model_executor.py`

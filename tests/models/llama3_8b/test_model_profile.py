@@ -10,8 +10,8 @@ from unittest.mock import MagicMock
 
 import pytest
 import torch
-
 import ttnn
+
 from tt_transformers.models.llama3_8b.model import (
     LazyWeight,
     Llama31DecoderPrecision,

@@ -43,7 +43,6 @@ Every TTTv2 module is a `LightweightModule` subclass that exposes the same surfa
 - a **simple constructor** (90% path) that takes only weights + essential dimensions and derives everything else;
 - a **`from_config(cfg)`** classmethod (10% path) for full customization;
 - a **`forward(...)`** that is a straight line of compute (no static if-else — see Zen #2);
-- a **`from_model_args(...)`** bridge used by the retiring TTTv1 stack. It exists for backward compatibility and most users can ignore it.
 
 Current module inventory:
 
@@ -215,7 +214,7 @@ Each module has its own test directory under `tests/modules/`:
 pytest tests/modules/mlp/test_mlp_1d.py -v
 
 # Include slow tests for full coverage
-pytest tests/modules/mlp/test_mlp_1d.py -v --slow
+pytest tests/modules/mlp/test_mlp_1d.py -v -m slow
 
 # Run a specific test
 pytest tests/modules/mlp/test_mlp_1d.py::test_mlp_1d_config_creation -v

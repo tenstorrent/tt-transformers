@@ -8,27 +8,27 @@ from __future__ import annotations
 from importlib import import_module
 
 _EXPORTS = {
-    'LLAMA32_3B_ACCURACY': ('tt_transformers.models.llama32_3b.model', 'LLAMA32_3B_ACCURACY'),
-    'LLAMA32_3B_PERFORMANCE': ('tt_transformers.models.llama32_3b.model', 'LLAMA32_3B_PERFORMANCE'),
-    'Llama32_3BExecutor': ('tt_transformers.models.llama32_3b.executor', 'Llama32_3BExecutor'),
-    'Llama32_3BExecutorConfig': ('tt_transformers.models.llama32_3b.executor', 'Llama32_3BExecutorConfig'),
-    'Llama32_3BForCausalLM': ('tt_transformers.models.llama32_3b.hf_adaptor', 'Llama32_3BForCausalLM'),
-    'Llama32_3BPrecisionConfig': ('tt_transformers.models.llama32_3b.model', 'Llama32_3BPrecisionConfig'),
-    'Llama32_3BRuntimeConfig': ('tt_transformers.models.llama32_3b.hf_adaptor', 'Llama32_3BRuntimeConfig'),
-    'Llama32_3BTransformer1D': ('tt_transformers.models.llama32_3b.model', 'Llama32_3BTransformer1D'),
-    'Llama32_3BTransformer1DConfig': ('tt_transformers.models.llama32_3b.model', 'Llama32_3BTransformer1DConfig'),
+    "LLAMA32_3B_ACCURACY": ("tt_transformers.models.llama32_3b.model", "LLAMA32_3B_ACCURACY"),
+    "LLAMA32_3B_PERFORMANCE": ("tt_transformers.models.llama32_3b.model", "LLAMA32_3B_PERFORMANCE"),
+    "Llama32_3BExecutor": ("tt_transformers.models.llama32_3b.executor", "Llama32_3BExecutor"),
+    "Llama32_3BExecutorConfig": ("tt_transformers.models.llama32_3b.executor", "Llama32_3BExecutorConfig"),
+    "Llama32_3BForCausalLM": ("tt_transformers.models.llama32_3b.hf_adaptor", "Llama32_3BForCausalLM"),
+    "Llama32_3BPrecisionConfig": ("tt_transformers.models.llama32_3b.model", "Llama32_3BPrecisionConfig"),
+    "Llama32_3BRuntimeConfig": ("tt_transformers.models.llama32_3b.hf_adaptor", "Llama32_3BRuntimeConfig"),
+    "Llama32_3BTransformer1D": ("tt_transformers.models.llama32_3b.model", "Llama32_3BTransformer1D"),
+    "Llama32_3BTransformer1DConfig": ("tt_transformers.models.llama32_3b.model", "Llama32_3BTransformer1DConfig"),
 }
 
 __all__ = [
-    'LLAMA32_3B_ACCURACY',
-    'LLAMA32_3B_PERFORMANCE',
-    'Llama32_3BExecutor',
-    'Llama32_3BExecutorConfig',
-    'Llama32_3BForCausalLM',
-    'Llama32_3BPrecisionConfig',
-    'Llama32_3BRuntimeConfig',
-    'Llama32_3BTransformer1D',
-    'Llama32_3BTransformer1DConfig',
+    "LLAMA32_3B_ACCURACY",
+    "LLAMA32_3B_PERFORMANCE",
+    "Llama32_3BExecutor",
+    "Llama32_3BExecutorConfig",
+    "Llama32_3BForCausalLM",
+    "Llama32_3BPrecisionConfig",
+    "Llama32_3BRuntimeConfig",
+    "Llama32_3BTransformer1D",
+    "Llama32_3BTransformer1DConfig",
 ]
 
 

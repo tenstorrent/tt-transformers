@@ -1,10 +1,9 @@
-
-import pytest
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 # SPDX-License-Identifier: Apache-2.0
-
 import errno
 from pathlib import Path
+
+import pytest
 
 from tt_transformers.models.llama3_8b import hf_adaptor
 from tt_transformers.models.llama3_8b.hf_adaptor import (

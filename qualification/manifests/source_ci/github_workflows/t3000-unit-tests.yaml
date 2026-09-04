@@ -1,7 +1,0 @@
-schema_version: 1
-source_path: .github/workflows/t3000-unit-tests.yaml
-source_revision: 00748e6ac7b65f50e5c2af07f6e7c1c535c7f4c0
-evidence_kind: tttv2_matching_source_lines
-matches:
-- line: 13
-  text: '          - tttv2 modules'

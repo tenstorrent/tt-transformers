@@ -10,9 +10,9 @@ from typing import Any
 
 import pytest
 import torch
+import ttnn
 
 import tt_transformers.llm_runtime.decode as decode_module
-import ttnn
 from tt_transformers.llm_runtime.config import PageTableLayout
 from tt_transformers.llm_runtime.decode import (
     DecodeDeviceInputs,

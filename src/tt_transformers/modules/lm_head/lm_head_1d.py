@@ -17,13 +17,15 @@ Execution path:
 
 import math
 from dataclasses import dataclass, replace
-from typing import List
 
 import ttnn
+
 from tt_transformers.device_ownership import compatibility_default_device
-from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.modules.lazy_weight import LazyWeight, resolve_lazy_weight
-from tt_transformers.tensor_utils import TILE_SIZE, nearest_32 as _nearest_32
+from tt_transformers.modules.lightweightmodule import LightweightModule
+from tt_transformers.tensor_utils import TILE_SIZE, nearest_32
+
+_nearest_32 = nearest_32
 
 # =============================================================================
 # Config dataclass
@@ -42,7 +44,7 @@ class LMHead1DConfig:
     """
 
     # Required: output projection weights (already split for L1 fit)
-    output_weights: List[LazyWeight]
+    output_weights: list[LazyWeight]
 
     # Optional: device
     mesh_device: ttnn.MeshDevice | None = None
@@ -54,11 +56,11 @@ class LMHead1DConfig:
     max_batch_size: int = 32
 
     # Optional: power-user overrides
-    program_configs: List | None = None
+    program_configs: list | None = None
     compute_kernel_config: ttnn.DeviceComputeKernelConfig | None = None
     # Logical output width for each split on one device. A physical weight shard
     # may be tile-padded beyond this width; forward trims it before concat.
-    output_split_sizes: List[int] | None = None
+    output_split_sizes: list[int] | None = None
     lm_head_dtype: ttnn.DataType = ttnn.bfloat8_b
     output_memcfg: ttnn.MemoryConfig | None = None
 
@@ -66,7 +68,7 @@ class LMHead1DConfig:
     input_memcfg: ttnn.MemoryConfig | None = None
 
     # Weight memory configs (None = auto-compute)
-    weights_memcfgs: List[ttnn.MemoryConfig] | None = None
+    weights_memcfgs: list[ttnn.MemoryConfig] | None = None
 
     def is_resolved(self) -> bool:
         return all(getattr(self, f) is not None for f in self.__dataclass_fields__)
@@ -96,7 +98,7 @@ class LMHead1D(LightweightModule):
       for each (w, pc): linear(x, w) → sharded_to_interleaved → concat
     """
 
-    def __init__(self, output_weights: List[LazyWeight]):
+    def __init__(self, output_weights: list[LazyWeight]):
         super().__init__()
         self.config = resolve_lm_head_1d_arch_config(LMHead1DConfig(output_weights=output_weights))
         self._device_weights_loaded = False

@@ -15,13 +15,16 @@ Design principles:
 - Explicit parameters over hidden closures (IDE-friendly)
 - Duck typing for source tensors (no torch import)
 
-See also: LazyWeight in models/common/modules/lazy_weight.py
+See also: LazyWeight in src/tt_transformers/modules/lazy_weight.py
 """
 
 from dataclasses import dataclass, field, replace
-from typing import Optional
+from typing import TYPE_CHECKING
 
 import ttnn
+
+if TYPE_CHECKING:
+    import torch
 
 
 @dataclass
@@ -45,7 +48,7 @@ class LazyBuffer:
     and no disk caching. If a buffer becomes read-only in a future refactor, it can be
     promoted to a LazyWeight with caching enabled.
 
-    See also: LazyWeight in models/common/modules/lazy_weight.py
+    See also: LazyWeight in src/tt_transformers/modules/lazy_weight.py
 
     Example usage:
         # Fully specified at construction
@@ -73,14 +76,14 @@ class LazyBuffer:
     # from_torch() parameters — same fields as LazyWeight (minus cache_dir_weight_name, pad_value).
     # Unlike LazyWeight, mesh_mapper stores a pre-built mapper (e.g., ShardTensor2dMesh)
     # rather than a MeshMapperConfig, because LazyBuffer has no caching/fingerprinting.
-    dtype: Optional[ttnn.DataType] = ttnn.int32
-    layout: Optional[ttnn.Layout] = ttnn.TILE_LAYOUT
-    device: Optional[ttnn.MeshDevice] = None
+    dtype: ttnn.DataType | None = ttnn.int32
+    layout: ttnn.Layout | None = ttnn.TILE_LAYOUT
+    device: ttnn.MeshDevice | None = None
     mesh_mapper: object = None  # Pre-built mapper (ShardTensor2dMesh, etc.) or None for replicate
-    memory_config: Optional[ttnn.MemoryConfig] = None
+    memory_config: ttnn.MemoryConfig | None = None
 
     # Cached device tensor handle (allocated once, device data mutated in-place)
-    _value: Optional[ttnn.Tensor] = field(default=None, repr=False)
+    _value: ttnn.Tensor | None = field(default=None, repr=False)
 
     def _get_mesh_mapper(self):
         """Get mesh mapper for from_torch(). Shared by get_device_buffer() and update()."""

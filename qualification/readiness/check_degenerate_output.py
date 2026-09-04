@@ -49,9 +49,10 @@ import argparse
 import json
 import re
 import sys
+from collections.abc import Iterable, Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any
 
 # A completion shorter than this many words is too small for a stable
 # duplication rate; it is skipped rather than judged.

@@ -12,9 +12,9 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import torch
+import ttnn
 from loguru import logger
 
-import ttnn
 from tt_transformers.llm_runtime.config import PageTableLayout
 from tt_transformers.llm_runtime.output_reader import OutputReader, PendingRead
 from tt_transformers.llm_runtime.tensor_resources import (
@@ -24,6 +24,7 @@ from tt_transformers.llm_runtime.tensor_resources import (
     raise_cleanup_failures,
     release_orphans,
 )
+from tt_transformers.modules.rope.rope_1d import prepare_rot_idxs
 from tt_transformers.modules.sampling.params import (
     PreparedSamplingParams,
     place_prepared_sampling_params,
@@ -31,7 +32,6 @@ from tt_transformers.modules.sampling.params import (
     slice_sampling_params,
 )
 from tt_transformers.modules.sampling.seed_manager_1d import SeedManager1D
-from tt_transformers.modules.rope.rope_1d import prepare_rot_idxs
 from tt_transformers.sampling.sampling_params import SamplingParams
 
 
@@ -228,7 +228,7 @@ class DecodeRuntimeConfig:
         force_greedy_top_k: bool = False,
         sampling_state_controller: Any = None,
         sampling_state: Any = None,
-    ) -> "DecodeRuntimeConfig":
+    ) -> DecodeRuntimeConfig:
         if not isinstance(output_reader, OutputReader):
             raise TypeError("output_reader must be an OutputReader")
         mesh_device = output_reader.mesh_device
@@ -306,7 +306,7 @@ class DecodeRuntimeConfig:
             page_table_layout_ceiling=page_table_layout,
         )
 
-    def with_page_table_layout(self, layout: PageTableLayout) -> "DecodeRuntimeConfig":
+    def with_page_table_layout(self, layout: PageTableLayout) -> DecodeRuntimeConfig:
         """Return a validated geometry replacement within the original ceiling."""
 
         _validate_page_table_layout(layout)

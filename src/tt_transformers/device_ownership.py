@@ -8,9 +8,10 @@ allowed mutation scope; every scope restores the exact previous object.
 from __future__ import annotations
 
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Iterator
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -87,9 +88,7 @@ def compatibility_default_device(ttnn_api: Any, *, owner: str) -> Any:
         raise ValueError(f"unregistered TTNN default-device fallback owner: {owner}")
     device = ttnn_api.GetDefaultDevice()
     if device is None:
-        raise ValueError(
-            f"{owner} requires an explicit mesh_device; no scoped TTNN compatibility default is active"
-        )
+        raise ValueError(f"{owner} requires an explicit mesh_device; no scoped TTNN compatibility default is active")
     return device
 
 

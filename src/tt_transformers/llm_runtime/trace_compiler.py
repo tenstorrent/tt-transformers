@@ -10,9 +10,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+import ttnn
 from loguru import logger
 
-import ttnn
 from tt_transformers.llm_runtime.program_compiler import (
     ProgramCompiler,
     ProgramKey,
@@ -41,7 +41,7 @@ class TraceKey:
         validate_sha256_digest(self.digest, "trace")
 
     @classmethod
-    def from_signature(cls, signature: Any) -> "TraceKey":
+    def from_signature(cls, signature: Any) -> TraceKey:
         return cls(signature_digest(_TRACE_KEY_DOMAIN, _TRACE_KEY_SCHEMA_VERSION, signature))
 
 

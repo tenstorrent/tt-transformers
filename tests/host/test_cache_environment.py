@@ -10,8 +10,8 @@ import pytest
 
 from tt_transformers import cache_environment as cache_policy
 from tt_transformers.cache_environment import (
-    CacheIdentity,
     ENVIRONMENT_SPECS,
+    CacheIdentity,
     environment_flag,
     environment_int,
     model_preflight_report,
@@ -20,7 +20,6 @@ from tt_transformers.cache_environment import (
     resolve_model_cache,
 )
 from tt_transformers.cache_environment import report_model_preflight as shared_report_model_preflight
-
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -93,10 +92,7 @@ def test_default_cache_is_home_scoped_and_never_cwd_relative(tmp_path):
         environ={"HOME": str(tmp_path / "home")},
     )
     assert resolution.path == (
-        tmp_path
-        / "home/.cache/tt-transformers/owner/model"
-        / f"identity-1-{resolution.cache_identity.digest}"
-        / "N300"
+        tmp_path / "home/.cache/tt-transformers/owner/model" / f"identity-1-{resolution.cache_identity.digest}" / "N300"
     )
     assert resolution.source == "user_cache"
     assert resolution.identity_applied_to_path is True
@@ -235,7 +231,17 @@ def test_implicit_namespace_invalidates_on_checkpoint_dtype_architecture_and_ver
     baseline = resolve()
     assert baseline.path.name == "N300"
     assert baseline.path.parent.name == f"identity-1-{baseline.cache_identity.digest}"
-    assert len({baseline.path, resolve(revision="revision-b").path, resolve(dtype="bfloat16").path, resolve(arch="blackhole").path}) == 4
+    assert (
+        len(
+            {
+                baseline.path,
+                resolve(revision="revision-b").path,
+                resolve(dtype="bfloat16").path,
+                resolve(arch="blackhole").path,
+            }
+        )
+        == 4
+    )
     versions["tt-transformers"] = "1.1"
     package_changed = resolve()
     versions["ttnn"] = "0.78.0"
@@ -350,9 +356,7 @@ def test_all_twelve_hf_adaptors_use_the_shared_policy():
         cache_calls = [
             node
             for node in ast.walk(tree)
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "resolve_model_cache"
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "resolve_model_cache"
         ]
         assert len(cache_calls) == 1
         cache_keywords = {keyword.arg for keyword in cache_calls[0].keywords}

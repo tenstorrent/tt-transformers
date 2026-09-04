@@ -5,8 +5,8 @@
 
 import pytest
 import torch
-
 import ttnn
+
 from tt_transformers.modules.lazy_buffer import LazyBuffer, resolve_lazy_buffer
 
 # ==============================================================================
@@ -177,9 +177,9 @@ class TestLazyBufferDevice:
 
         # Readback and verify
         readback = ttnn.to_torch(buf.get_device_buffer()).float()
-        assert torch.allclose(
-            readback[:32, :1], new_source, atol=0.01
-        ), f"Readback mismatch: expected ones, got {readback[:4, :1].flatten()}"
+        assert torch.allclose(readback[:32, :1], new_source, atol=0.01), (
+            f"Readback mismatch: expected ones, got {readback[:4, :1].flatten()}"
+        )
 
     @pytest.mark.device
     def test_update_before_materialize_uses_new_source(self, ttnn_mesh_device):

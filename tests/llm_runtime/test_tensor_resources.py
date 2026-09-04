@@ -1,9 +1,8 @@
-
-import pytest
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 # SPDX-License-Identifier: Apache-2.0
-
 from dataclasses import dataclass
+
+import pytest
 
 from tt_transformers.llm_runtime import tensor_resources
 from tt_transformers.llm_runtime.decode import DecodeDeviceInputs, DecodePersistentInputs

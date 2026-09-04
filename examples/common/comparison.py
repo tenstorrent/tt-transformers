@@ -1,7 +1,6 @@
 """Narrow PCC helper used by diagnostic examples."""
 
 import torch
-from loguru import logger
 
 
 def comp_pcc(golden, calculated, pcc=0.99, rtol=1e-5, atol=1e-4):

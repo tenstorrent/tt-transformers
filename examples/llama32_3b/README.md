@@ -19,7 +19,7 @@ Exercise the concrete 3B Llama tensor model, shared Llama executor, accuracy, pe
 
 This is the declared qualification candidate, not a passing verdict:
 
-- `tt-transformers==0.1.0.dev0`
+- `tt-transformers==2.0.0.dev0`
 - `ttnn==0.77.0`
 - Python `3.10, 3.12`
 - `torch==2.11.0`
@@ -53,7 +53,7 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 - Set a writable `TT_CACHE_PATH` (the example appends topology exactly once), or use the versioned standalone root selected by `TT_TRANSFORMERS_CACHE`, `XDG_CACHE_HOME`, or the user cache.
 - Examples use built-in Transformers loading behavior; `trust_remote_code` is not enabled by default.
 - For offline runs set `HF_HOME`, `HF_HUB_OFFLINE=1`, and `TRANSFORMERS_OFFLINE=1` after populating the exact snapshot.
-- Reference asset root: `qualification/assets/reference_outputs/llama32_3b`.
+- Reference asset root: `tests/assets/reference_outputs/llama32_3b`.
 
 ### Install, run, and collect
 
@@ -84,16 +84,15 @@ PYTHONPATH=src MESH_DEVICE=N150 pytest --collect-only -q tests/hardware/models/l
 - Evidence: **none attributable to pinned source revision `00748e6ac7b65f50e5c2af07f6e7c1c535c7f4c0`**.
 - [Machine-readable manifest](support.json)
 - [Hardware gate](../../tests/hardware/models/llama32_3b/test_demo.py)
-- [Pinned support baseline](../../qualification/analysis/support/support_baseline.md)
-- [Phase 3 boundary evidence](../../qualification/extraction/support_boundary.md)
-- [Historical evidence ledger](../../qualification/analysis/support/hardware_evidence.csv)
+- [Support matrix](../../SUPPORT.md)
+- [Validation summary](../../docs/validation.md)
 
 ### Known and unsupported gaps
 
 - TP4 lanes.
 - traced prefill on N150.
 - any geometry not declared in support.json.
-- No hardware evidence is attributable to the pinned extraction revision.
+- Current regression evidence does not qualify the complete declared model contract.
 
 <!-- END GENERATED SUPPORT -->
 
@@ -117,12 +116,12 @@ in this model package.
 
 The model-local `executor.py` retains the public
 `Llama32_3BExecutor`/config/builder names while delegating to
-`models/common/models/llama3_executor.py`. The family module configures the
-family-neutral `models/common/models/executor.py::ModelExecutor`.
+`src/tt_transformers/models/llama3_executor.py`. The family module configures the
+family-neutral `src/tt_transformers/models/executor.py::ModelExecutor`.
 
 That owner composes paged-KV management, output reading, prefill/decode
 runtimes, eager/trace compilation, warmup, and deterministic cleanup from
-`models/common/llm_runtime`.
+`src/tt_transformers/llm_runtime`.
 
 Llama 3.2 3B preserves the same narrow request signatures and Q128
 priming-before-prefill policy as before the extraction. It does not gain the
@@ -136,9 +135,9 @@ all TT tensors and cleanup; the generator owns no TT resources.
 
 ## Tests
 
-- `models/common/tests/models/llama32_3b/test_hf_adaptor.py`
-- `models/common/tests/models/llama32_3b/test_batched_prefill_postprocess.py`
-- `models/common/tests/models/llama32_3b/test_demo_warmup.py`
-- `models/common/tests/demos/llama32_3b/demo.py`
-- `models/common/tests/llm_runtime/test_executor_integration.py`
-- `models/common/tests/llm_runtime/test_model_executor.py`
+- `tests/models/llama32_3b/test_hf_adaptor.py`
+- `tests/models/llama32_3b/test_batched_prefill_postprocess.py`
+- `tests/models/llama32_3b/test_demo_warmup.py`
+- `tests/hardware/models/llama32_3b/test_demo.py`
+- `tests/llm_runtime/test_executor_integration.py`
+- `tests/llm_runtime/test_model_executor.py`

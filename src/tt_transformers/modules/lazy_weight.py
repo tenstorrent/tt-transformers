@@ -19,12 +19,15 @@ import hashlib
 import pathlib
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Optional
-
-from loguru import logger
+from typing import TYPE_CHECKING
 
 import ttnn
+from loguru import logger
+
 from tt_transformers.tensor_utils import get_padded_hidden_dim, pad_to_shape, parse_shard_dims_from_mesh_mapper_config
+
+if TYPE_CHECKING:
+    import torch
 
 
 # todo)) maybe useful to support a mechanism that can be used to disable the cache for every LazyWeight instance
@@ -69,18 +72,18 @@ class LazyWeight:
     source: "torch.Tensor"
 
     # All other fields are optional at construction time.
-    cache_dir_weight_name: Optional[tuple[Path, str]] = None  # do not cache if None
-    pad_value: Optional[float] = 0.0
-    dtype: Optional[ttnn.DataType] = ttnn.bfloat16
+    cache_dir_weight_name: tuple[Path, str] | None = None  # do not cache if None
+    pad_value: float | None = 0.0
+    dtype: ttnn.DataType | None = ttnn.bfloat16
     # Lazy fields that can be materialize at get_weight time;
     # Still named as public fields to allow users to override at construction time (be proactive if you want).
-    device: Optional[ttnn.MeshDevice] = None
-    mesh_mapper_config: Optional[ttnn.MeshMapperConfig] = None
-    memory_config: Optional[ttnn.MemoryConfig] = None
-    layout: Optional[ttnn.Layout] = None
+    device: ttnn.MeshDevice | None = None
+    mesh_mapper_config: ttnn.MeshMapperConfig | None = None
+    memory_config: ttnn.MemoryConfig | None = None
+    layout: ttnn.Layout | None = None
 
     # Private fields
-    _value: Optional[ttnn.Tensor] = field(default=None, repr=False)
+    _value: ttnn.Tensor | None = field(default=None, repr=False)
 
     def __post_init__(self):
         assert self.source.shape is not None and len(self.source.shape) > 0, "source must have a shape"
@@ -161,9 +164,9 @@ class LazyWeight:
 
     def _get_cache_fill_path(
         self,
-        cache_dir: Optional[Path],
-        weight_name: Optional[str],
-    ) -> Optional[Path]:
+        cache_dir: Path | None,
+        weight_name: str | None,
+    ) -> Path | None:
         """Generate the cache file path based on configuration fingerprint."""
         if cache_dir is None or weight_name is None:
             return None
@@ -288,14 +291,14 @@ def _auto_pad_for_sharded_tiles(
 
 def _from_torch_and_dump(
     tensor: "torch.Tensor",
-    device: Optional[ttnn.MeshDevice],
-    dtype: Optional[ttnn.DataType],
-    layout: Optional[ttnn.Layout],
-    memory_config: Optional[ttnn.MemoryConfig],
-    mesh_mapper: Optional[ttnn.CppTensorToMesh],
+    device: ttnn.MeshDevice | None,
+    dtype: ttnn.DataType | None,
+    layout: ttnn.Layout | None,
+    memory_config: ttnn.MemoryConfig | None,
+    mesh_mapper: ttnn.CppTensorToMesh | None,
     is_replicated: bool,
     pad_value: float,
-    cache_file_name: Optional[str],
+    cache_file_name: str | None,
 ):
     """
     Convert a torch tensor to TTNN format and optionally cache it.

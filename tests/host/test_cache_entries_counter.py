@@ -3,21 +3,14 @@
 
 from __future__ import annotations
 
-import csv
-import hashlib
 from pathlib import Path
 
 import pytest
-
 from tests.support.cache_entries_counter import CacheEntriesCounter
-
 
 pytestmark = pytest.mark.host
 
 ROOT = Path(__file__).resolve().parents[2]
-SOURCE_PATH = "tests/tests_common/cache_entries_counter.py"
-DESTINATION_PATH = "tests/support/cache_entries_counter.py"
-SOURCE_BLOB = "028364b7e8c6fe1a5d8a5d60f804443b69030b67"
 
 
 class FakeDevice:
@@ -70,38 +63,6 @@ def test_measure_preserves_source_exception_behavior_without_a_post_read():
 
     assert counter.total == 0
     assert device.reads == 1
-
-
-@pytest.mark.host
-def test_pinned_helper_has_complete_standalone_provenance():
-    with (ROOT / "qualification/provenance/source_inventory.csv").open(newline="", encoding="utf-8") as stream:
-        inventory = {row["source_path"]: row for row in csv.DictReader(stream)}
-    row = inventory[SOURCE_PATH]
-    assert row == {
-        "source_path": SOURCE_PATH,
-        "destination_path": DESTINATION_PATH,
-        "git_blob_sha": SOURCE_BLOB,
-        "disposition": "renamed",
-        "reason": (
-            "Move the cache-entry accounting helper required by standalone device fixtures "
-            "into repository-owned test support."
-        ),
-        "category": "test_support",
-        "boundary_cleanup": "true",
-    }
-
-    with (ROOT / "qualification/extraction/support_copy_manifest.csv").open(newline="", encoding="utf-8") as stream:
-        manifest = {
-            (entry["source_path"], entry["destination_path"]): entry
-            for entry in csv.DictReader(stream)
-        }
-    copied = manifest[(SOURCE_PATH, DESTINATION_PATH)]
-    destination = ROOT / DESTINATION_PATH
-    assert copied["source_blob_sha"] == SOURCE_BLOB
-    assert copied["destination_sha256"] == hashlib.sha256(destination.read_bytes()).hexdigest()
-    assert copied["destination_size"] == str(destination.stat().st_size)
-    assert copied["exact_raw_copy"] == "true"
-    assert copied["transformation"] == "content_preserving_path_move"
 
 
 @pytest.mark.host

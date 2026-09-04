@@ -16,11 +16,13 @@ Key design:
 """
 
 from dataclasses import dataclass, replace
+
 import ttnn
+
 from tt_transformers.device_ownership import compatibility_default_device
-from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.modules.lazy_weight import LazyWeight, resolve_lazy_weight
-from tt_transformers.modules.tt_ccl import get_tt_ccl
+from tt_transformers.modules.lightweightmodule import LightweightModule
+from tt_transformers.modules.tt_ccl import TT_CCL, get_tt_ccl
 from tt_transformers.tensor_utils import TILE_SIZE
 
 # =============================================================================
@@ -63,7 +65,7 @@ class RMSNorm2DConfig:
 
     # Device and collectives
     mesh_device: ttnn.MeshDevice | None = None
-    tt_ccl: "TT_CCL | None" = None  # type: ignore
+    tt_ccl: TT_CCL | None = None
 
     # Batch size for decode
     max_batch_size: int = 32
@@ -273,7 +275,6 @@ class RMSNorm2D(LightweightModule):
     # =========================================================================
 
 
-
 # =============================================================================
 # Config resolution
 # =============================================================================
@@ -306,9 +307,9 @@ def _resolve_2d_config(config: RMSNorm2DConfig) -> RMSNorm2DConfig:
         cluster_shape = tuple(mesh_device.shape)
         to_set["cluster_shape"] = cluster_shape
 
-    assert len(cluster_shape) == 2 and all(
-        d > 1 for d in cluster_shape
-    ), f"cluster_shape must be 2D with both dims > 1, got {cluster_shape}"
+    assert len(cluster_shape) == 2 and all(d > 1 for d in cluster_shape), (
+        f"cluster_shape must be 2D with both dims > 1, got {cluster_shape}"
+    )
 
     num_rows, num_cols = cluster_shape
 

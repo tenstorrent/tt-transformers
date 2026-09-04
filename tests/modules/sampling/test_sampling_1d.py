@@ -5,9 +5,9 @@
 
 import pytest
 import torch
-
 import ttnn
-from qualification.tools.auto_compose import to_torch_auto_compose
+from examples.common.auto_compose import to_torch_auto_compose
+
 from tt_transformers.modules.sampling.sampling_1d import Sampling1D, Sampling1DConfig, _resolve_sampling1d_config
 
 # 1D module suites target the T3K; skip when the host system is a Galaxy.
@@ -177,9 +177,9 @@ class TestSampling1DDevice:
         tokens_flat = tokens_host.flatten()[:B].long()
         expected_flat = expected_argmax.flatten()[:B].long()
 
-        assert torch.equal(
-            tokens_flat, expected_flat
-        ), f"Argmax mismatch: got {tokens_flat[:5]} vs expected {expected_flat[:5]}"
+        assert torch.equal(tokens_flat, expected_flat), (
+            f"Argmax mismatch: got {tokens_flat[:5]} vs expected {expected_flat[:5]}"
+        )
 
     @pytest.mark.device
     @pytest.mark.parametrize("vocab_size", [1024])
@@ -694,9 +694,9 @@ def test_sampling1d_argmax_vs_reference(ttnn_mesh_device):
     tokens_host = to_torch_auto_compose(tokens_tt).flatten()[:B].long()
     expected = logits_host.float().argmax(dim=-1).flatten()[:B].long()
 
-    assert torch.equal(
-        tokens_host, expected
-    ), f"argmax path mismatch:\n  got:      {tokens_host[:8]}\n  expected: {expected[:8]}"
+    assert torch.equal(tokens_host, expected), (
+        f"argmax path mismatch:\n  got:      {tokens_host[:8]}\n  expected: {expected[:8]}"
+    )
 
 
 @pytest.mark.device
@@ -968,9 +968,9 @@ def test_sampling1d_deterministic_with_same_seed(ttnn_mesh_device):
     tokens2, _ = sampler.decode_forward(logits_tt2, k=k, p=p, temp=temp, seeds=seed_tensor)
     tokens2_host = to_torch_auto_compose(tokens2).flatten()[:B]
 
-    assert torch.equal(
-        tokens1_host, tokens2_host
-    ), f"Same seed produced different tokens:\n  call1: {tokens1_host[:8]}\n  call2: {tokens2_host[:8]}"
+    assert torch.equal(tokens1_host, tokens2_host), (
+        f"Same seed produced different tokens:\n  call1: {tokens1_host[:8]}\n  call2: {tokens2_host[:8]}"
+    )
 
 
 # ==============================================================================

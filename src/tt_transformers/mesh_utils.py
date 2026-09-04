@@ -6,9 +6,8 @@
 from __future__ import annotations
 
 import torch
-from loguru import logger
-
 import ttnn
+from loguru import logger
 
 
 def make_contiguous_page_table(batch_size: int, max_seq_len: int, block_size: int = 32) -> torch.Tensor:

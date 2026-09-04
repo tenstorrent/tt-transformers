@@ -18,8 +18,9 @@ from __future__ import annotations
 import copy
 import random
 import secrets
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, Iterable, Sequence
+from typing import TYPE_CHECKING
 
 import torch
 
@@ -129,7 +130,7 @@ class SeedState:
         capacity: int,
         *,
         entropy_factory: Callable[[int], int] = secrets.randbits,
-    ) -> "SeedState":
+    ) -> SeedState:
         """Create empty caller-owned state with independent unseeded RNGs."""
 
         capacity = int(capacity)
@@ -173,7 +174,7 @@ class SeedManager1D:
 
     def __init__(
         self,
-        sampling_config: "Sampling1DConfig",
+        sampling_config: Sampling1DConfig,
         *,
         entropy_factory: Callable[[int], int] = secrets.randbits,
     ) -> None:
@@ -274,7 +275,7 @@ class SeedManager1D:
         changed = [slot for slot in active if not state.active[slot] or state.request_seeds[slot] != desired[slot]]
         if changed and not reset_batch:
             raise RuntimeError(
-                "new or changed active seed slots require reset_batch=True or an explicit admit() call: " f"{changed}"
+                f"new or changed active seed slots require reset_batch=True or an explicit admit() call: {changed}"
             )
 
         live = set(active)
@@ -363,9 +364,7 @@ class SeedManager1D:
             raise ValueError("prefill slots cannot be empty")
         normalized_positions = self._request_ordered_positions(positions, len(destinations))
         position_by_slot = (
-            None
-            if normalized_positions is None
-            else dict(zip(destinations, normalized_positions, strict=True))
+            None if normalized_positions is None else dict(zip(destinations, normalized_positions, strict=True))
         )
         slot_values = self._advance_seed_values(state, destinations, positions=position_by_slot)
         request_values = list(self._default_values)

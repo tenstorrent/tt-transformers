@@ -5,7 +5,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from tt_transformers.llm_runtime.prefill.inputs import PrefillDeviceInputs, PrefillInputStager, PrefillPositionInputs
 from tt_transformers.llm_runtime.prefill.plan import PrefillChunk, PrefillRequest

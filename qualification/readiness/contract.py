@@ -58,7 +58,8 @@ If `next_input is None`, the generator feeds its own prediction back
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Callable, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 import torch
 
@@ -115,7 +116,7 @@ class Generator(ABC):
         *,
         page_table: torch.Tensor,
         kv_cache: Any,
-        prompt_lens: List[int],
+        prompt_lens: list[int],
         return_all_logits: bool = False,
         **kwargs: Any,
     ) -> torch.Tensor:
@@ -174,7 +175,7 @@ class Generator(ABC):
         """
 
     @abstractmethod
-    def prefill_logits(self, prompt_token_ids: List[int]) -> torch.Tensor:
+    def prefill_logits(self, prompt_token_ids: list[int]) -> torch.Tensor:
         """
         High-level prefill driver used by the readiness check.
 
@@ -192,13 +193,13 @@ class Generator(ABC):
     @abstractmethod
     def generate(
         self,
-        prompt_token_ids: List[int],
+        prompt_token_ids: list[int],
         max_new_tokens: int,
         *,
-        next_input: Optional[NextInputFn] = None,
+        next_input: NextInputFn | None = None,
         enable_trace: bool = True,
         **kwargs: Any,
-    ) -> List[int]:
+    ) -> list[int]:
         """
         High-level HF-style host driver. Manages KV cache + page table
         internally so the caller only sees token IDs.

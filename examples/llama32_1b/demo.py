@@ -19,21 +19,21 @@ Usage::
 
     # Token accuracy test
     MESH_DEVICE=N300 HF_MODEL=meta-llama/Llama-3.2-1B-Instruct \\
-      pytest models/common/tests/demos/llama32_1b/demo.py -k "token-accuracy" -v
+      pytest tests/hardware/models/llama32_1b/test_demo.py -k "token-accuracy" -v
 
     # Batch-1 latency test
     MESH_DEVICE=N300 HF_MODEL=meta-llama/Llama-3.2-1B-Instruct \\
-      pytest models/common/tests/demos/llama32_1b/demo.py -k "batch-1" -v
+      pytest tests/hardware/models/llama32_1b/test_demo.py -k "batch-1" -v
 
     # Batch-32 throughput test
     MESH_DEVICE=N300 HF_MODEL=meta-llama/Llama-3.2-1B-Instruct \\
-      pytest models/common/tests/demos/llama32_1b/demo.py -k "batch-32" -v
+      pytest tests/hardware/models/llama32_1b/test_demo.py -k "batch-32" -v
 
 LazyWeight tensor cache: ``TT_CACHE_PATH/<device_name>`` when set, otherwise
 the versioned standalone cache policy under `TT_TRANSFORMERS_CACHE`, `XDG_CACHE_HOME`, or the user cache.
 
 Reference artifact (``.refpt``): the accuracy test gates against the committed book
-reference at ``models/tt_transformers/tests/reference_outputs/<basename(HF_MODEL)>.refpt``
+reference at ``tests/assets/reference_outputs/llama32_1b/<basename(HF_MODEL)>.refpt``
 (ground-truth real-text targets, PERF.md-comparable). The loader supports both the
 legacy half-split format and a metadata-rich format carrying ``prompt_len``.
 """
@@ -44,19 +44,13 @@ import os
 from pathlib import Path
 
 import torch
+import ttnn
 from loguru import logger
 
-import ttnn
-from tt_transformers.cache_environment import resolve_model_cache_path
-from tt_transformers.models.llama32_1b.hf_adaptor import DEFAULT_HF_REVISION as DEMO_HF_REVISION
-from examples.common.runtime import TemporaryPathFactory, UnsupportedConfiguration, open_mesh_device
-from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
-from tt_transformers.llm_runtime.lane_group import LaneGroupExecutor
-from tt_transformers.models.llama32_1b.executor import Llama32_1BExecutor, Llama32_1BExecutorConfig
-from tt_transformers.models.llama32_1b.hf_adaptor import from_pretrained
-from tt_transformers.models.llama32_1b.model import LLAMA32_1B_ACCURACY, LLAMA32_1B_PERFORMANCE, Llama32_1BTransformer1D
-from tt_transformers.sampling.sampling_params import SamplingParams
-from tt_transformers.device_utils import cleanup_dp_model_case, cleanup_model_case
+from examples.common.benchmarking_utils import BenchmarkProfiler
+from examples.common.llm_demo_utils import create_benchmark_data
+from examples.common.model_targets import resolve_accuracy_targets
+from examples.common.prompting import encode_prompt_hf
 from examples.common.run_helpers import (
     assert_no_special_tokens,
     load_eval_repeat_prompts_batch32,
@@ -65,10 +59,16 @@ from examples.common.run_helpers import (
     run_perf_benchmark,
     run_teacher_forcing,
 )
-from qualification.tools.llm_demo_utils import create_benchmark_data
-from qualification.tools.model_targets import resolve_accuracy_targets
-from qualification.tools.benchmarking_utils import BenchmarkProfiler
-from examples.common.prompting import encode_prompt_hf
+from examples.common.runtime import UnsupportedConfiguration, open_mesh_device
+from tt_transformers.cache_environment import resolve_model_cache_path
+from tt_transformers.device_utils import cleanup_dp_model_case, cleanup_model_case
+from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
+from tt_transformers.llm_runtime.lane_group import LaneGroupExecutor
+from tt_transformers.models.llama32_1b.executor import Llama32_1BExecutor, Llama32_1BExecutorConfig
+from tt_transformers.models.llama32_1b.hf_adaptor import DEFAULT_HF_REVISION as DEMO_HF_REVISION
+from tt_transformers.models.llama32_1b.hf_adaptor import from_pretrained
+from tt_transformers.models.llama32_1b.model import LLAMA32_1B_ACCURACY, LLAMA32_1B_PERFORMANCE, Llama32_1BTransformer1D
+from tt_transformers.sampling.sampling_params import SamplingParams
 
 # =============================================================================
 # Expected metrics — perf gates set from an exhaustive TTTv1-vs-TTTv2 performance sweep
@@ -228,10 +228,10 @@ _MESH_DEVICE_TO_SHAPE: dict[str, tuple[int, int]] = {
 def ttnn_mesh_device_param_from_env() -> dict:
     env = os.environ.get("MESH_DEVICE", "").strip()
     if not env:
-        raise UnsupportedConfiguration('MESH_DEVICE must be set (e.g. N150, N300 or T3K). See module docstring.')
+        raise UnsupportedConfiguration("MESH_DEVICE must be set (e.g. N150, N300 or T3K). See module docstring.")
     shape = _MESH_DEVICE_TO_SHAPE.get(env)
     if shape is None:
-        raise UnsupportedConfiguration(f'Unsupported MESH_DEVICE={env!r} for Llama-3.2-1B; use N150, N300 or T3K.')
+        raise UnsupportedConfiguration(f"Unsupported MESH_DEVICE={env!r} for Llama-3.2-1B; use N150, N300 or T3K.")
     param = {
         "mesh_shape": shape,
         "trace_region_size": 50_000_000,
@@ -239,21 +239,19 @@ def ttnn_mesh_device_param_from_env() -> dict:
     }
     # TTTv2 multi-device executor dispatch (and the on-device sampling all-gather) stalls without
     # an explicit 1D fabric; the root conftest does not auto-enable it. Mirror the sibling
-    # models/common/models/llama32_1b/demo.py wiring: FABRIC_1D on any >1-device mesh.
+    # src/tt_transformers/models/llama32_1b/demo.py wiring: FABRIC_1D on any >1-device mesh.
     if shape != (1, 1):
         param["fabric_config"] = ttnn.FabricConfig.FABRIC_1D
     return param
-
-
-
-
 
 
 def _skip_unless_heads_divide_mesh(mesh_device: ttnn.MeshDevice, hf_model_id: str) -> None:
     n_dev = mesh_device.get_num_devices()
     if n_dev in (1, 2, 8):
         return
-    raise UnsupportedConfiguration(f'Incompatible mesh for {hf_model_id}: Llama-3.2-1B supports 1, 2, or 8 devices, got {n_dev}')
+    raise UnsupportedConfiguration(
+        f"Incompatible mesh for {hf_model_id}: Llama-3.2-1B supports 1, 2, or 8 devices, got {n_dev}"
+    )
 
 
 def get_device_name(mesh_device: ttnn.MeshDevice) -> str:
@@ -286,9 +284,9 @@ def load_reference_data(hf_model_id: str):
     the legacy half-split book format.
     """
     name = hf_model_id.strip("/").split("/")[-1]
-    ref_path = Path("qualification/assets/reference_outputs/llama32_1b") / f"{name}.refpt"
+    ref_path = Path("tests/assets/reference_outputs/llama32_1b") / f"{name}.refpt"
     if not ref_path.exists():
-        raise UnsupportedConfiguration(f'Reference file not found: {ref_path}')
+        raise UnsupportedConfiguration(f"Reference file not found: {ref_path}")
 
     ref_data = torch.load(ref_path, map_location="cpu", weights_only=False)
     reference_tokens = ref_data["reference_tokens"]
@@ -299,7 +297,7 @@ def load_reference_data(hf_model_id: str):
 
 
 def load_input_prompts(batch_size: int) -> list[str]:
-    prompts_path = Path("qualification/assets/sample_prompts/input_data_questions_prefill_128.json")
+    prompts_path = Path("examples/assets/sample_prompts/input_data_questions_prefill_128.json")
     if not prompts_path.exists():
         return ["What is the meaning of life?"] * batch_size
     with open(prompts_path) as f:
@@ -426,7 +424,7 @@ def create_model(
             optimizations=precision,
         )
     except Exception as e:
-        raise UnsupportedConfiguration(f'Could not build Llama-3.2-1B model (weights / memory / mesh): {e}')
+        raise UnsupportedConfiguration(f"Could not build Llama-3.2-1B model (weights / memory / mesh): {e}")
 
     model = llm.model
     model.demo_tokenizer = llm.tokenizer
@@ -529,7 +527,7 @@ def create_dp_submeshes(mesh_device: ttnn.MeshDevice, data_parallel: int) -> lis
         return [mesh_device]
     n = mesh_device.get_num_devices()
     if not (n % data_parallel == 0):
-        raise AssertionError(f'{n} devices not divisible by data_parallel={data_parallel}')
+        raise AssertionError(f"{n} devices not divisible by data_parallel={data_parallel}")
     return mesh_device.create_submeshes(ttnn.MeshShape(1, n // data_parallel))
 
 
@@ -537,10 +535,14 @@ def _dp_tp_devices_or_skip(mesh_device: ttnn.MeshDevice, data_parallel: int) -> 
     """Return devices per DP lane, skipping unsupported parent/lane topologies."""
     n = mesh_device.get_num_devices()
     if n % data_parallel != 0:
-        raise UnsupportedConfiguration(f'DP-{data_parallel} needs a device count divisible by {data_parallel}; have {n} devices')
+        raise UnsupportedConfiguration(
+            f"DP-{data_parallel} needs a device count divisible by {data_parallel}; have {n} devices"
+        )
     tp_devices = n // data_parallel
     if tp_devices not in (1, 2, 8):
-        raise UnsupportedConfiguration(f'DP-{data_parallel} on {n} devices creates TP{tp_devices} lanes, but Llama-3.2-1B supports TP1, TP2, or TP8')
+        raise UnsupportedConfiguration(
+            f"DP-{data_parallel} on {n} devices creates TP{tp_devices} lanes, but Llama-3.2-1B supports TP1, TP2, or TP8"
+        )
     return tp_devices
 
 
@@ -596,7 +598,7 @@ def _run_dp_smoke(
                 model = llm.model
                 model.demo_tokenizer = llm.tokenizer
             except Exception as e:
-                raise UnsupportedConfiguration(f'Could not build Llama-3.2-1B model (weights / memory / mesh): {e}')
+                raise UnsupportedConfiguration(f"Could not build Llama-3.2-1B model (weights / memory / mesh): {e}")
             models.append((model, sm))
             lanes.append(
                 create_executor(
@@ -637,9 +639,9 @@ def _run_dp_smoke(
             prefill_sampling_params=None,
         )
         if not (len(result.generated_token_ids) == data_parallel):
-            raise AssertionError('condition failed at line 657')
+            raise AssertionError("condition failed at line 657")
         if not (all(result.generated_token_ids)):
-            raise AssertionError(f'ci-b1-DP-{data_parallel}: every DP lane must return output')
+            raise AssertionError(f"ci-b1-DP-{data_parallel}: every DP lane must return output")
         log_generated_text(prompts, result.generated_token_ids, tokenizer)
         assert_no_special_tokens(result.generated_token_ids, tokenizer, case_name=f"ci-b1-DP-{data_parallel}")
     finally:
@@ -857,9 +859,9 @@ def _run_token_accuracy(model: Llama32_1BTransformer1D, mesh_device, expected):
     meas_top1 = math.ceil(top1)
     meas_top5 = math.ceil(top5)
     if not (meas_top1 >= min_top1):
-        raise AssertionError(f'Top-1 accuracy {top1:.1f}% (ceil {meas_top1}) below threshold {min_top1:.1f}%')
+        raise AssertionError(f"Top-1 accuracy {top1:.1f}% (ceil {meas_top1}) below threshold {min_top1:.1f}%")
     if not (meas_top5 >= min_top5):
-        raise AssertionError(f'Top-5 accuracy {top5:.1f}% (ceil {meas_top5}) below threshold {min_top5:.1f}%')
+        raise AssertionError(f"Top-5 accuracy {top5:.1f}% (ceil {meas_top5}) below threshold {min_top5:.1f}%")
 
 
 def _run_perf_benchmark(
@@ -1008,7 +1010,7 @@ def _run_perf_benchmark(
                 if result.ttft_ms > tgt:
                     failures.append(f"ttft_ms {result.ttft_ms:.1f} > target {expected['ttft_ms']}")
             if not (not failures):
-                raise AssertionError(f'{case_name}: ' + '; '.join(failures))
+                raise AssertionError(f"{case_name}: " + "; ".join(failures))
     finally:
         traced_executor.cleanup()
 
@@ -1090,10 +1092,20 @@ def _run_eval_repeat_batch32(model: Llama32_1BTransformer1D, mesh_device):
 
 
 RUN_MAIN_CASE = run_llama32_1b
-SPECIAL_CASE_RUNNERS = {
-}
+SPECIAL_CASE_RUNNERS = {}
 
-EXAMPLE_CASES = ('token-accuracy', 'batch-1', 'batch-32', 'batch-32-ci', 'eval-32', 'ci-b1-DP-2', 'ci-b1-DP-4', 'ci-b1-DP-8', 'ci-b1-DP-16', 'ci-b1-DP-32')
+EXAMPLE_CASES = (
+    "token-accuracy",
+    "batch-1",
+    "batch-32",
+    "batch-32-ci",
+    "eval-32",
+    "ci-b1-DP-2",
+    "ci-b1-DP-4",
+    "ci-b1-DP-8",
+    "ci-b1-DP-16",
+    "ci-b1-DP-32",
+)
 
 
 def main(argv=None):

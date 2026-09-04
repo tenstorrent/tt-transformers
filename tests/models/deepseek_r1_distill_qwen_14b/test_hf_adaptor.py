@@ -1,19 +1,18 @@
-
-import pytest
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 # SPDX-License-Identifier: Apache-2.0
-
 import inspect
 from types import SimpleNamespace
 
+import pytest
 import torch
 from transformers import Qwen2Config, Qwen2ForCausalLM
 from transformers.models.qwen2.modeling_qwen2 import Qwen2RotaryEmbedding
 
-from tt_transformers.models.deepseek_r1_distill_qwen_14b import generator, hf_adaptor
+from tt_transformers.models.deepseek_r1_distill_qwen_14b import generator, hf_adaptor, weight_utils
 from tt_transformers.models.deepseek_r1_distill_qwen_14b import model as qwen_model
-from tt_transformers.models.deepseek_r1_distill_qwen_14b import weight_utils
-from tt_transformers.models.deepseek_r1_distill_qwen_14b.hf_adaptor import DeepSeekR1Qwen14BForCausalLM as DeepSeekProduct
+from tt_transformers.models.deepseek_r1_distill_qwen_14b.hf_adaptor import (
+    DeepSeekR1Qwen14BForCausalLM as DeepSeekProduct,
+)
 from tt_transformers.models.deepseek_r1_distill_qwen_14b.hf_adaptor import (
     DeepSeekR1Qwen14BRuntimeConfig,
     _trace_seq_lens,

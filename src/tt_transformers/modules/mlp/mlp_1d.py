@@ -16,14 +16,15 @@ Execution paths:
 """
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from functools import lru_cache
-from typing import Callable, Optional
 
 import ttnn
+
 from tt_transformers.device_ownership import compatibility_default_device
-from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.modules.lazy_weight import LazyWeight, resolve_lazy_weight
+from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.modules.mode import Mode, normalize_mode
 from tt_transformers.modules.tt_ccl import (
     CCL_CHUNKS_PER_SYNC,
@@ -68,7 +69,7 @@ class MLP1DConfig:
     # Optional: device and collectives
     mesh_device: ttnn.MeshDevice | None = None
     tt_ccl: TT_CCL | None = None
-    topology: Optional[ttnn.Topology] = None  # None = auto-detect
+    topology: ttnn.Topology | None = None  # None = auto-detect
     num_reduce_scatter_links: int = 1
     decode_rs_memory_config: ttnn.MemoryConfig = ttnn.L1_MEMORY_CONFIG
     decode_rs_chunks_per_sync: int = 1
@@ -320,9 +321,9 @@ class MLP1D(LightweightModule):
 
         # Seq_len-dependent: reshape for long sequences
         if seq_len >= cfg.prefill_len_cutoff:
-            assert (
-                seq_len % cfg.prefill_len_cutoff == 0
-            ), f"seq_len ({seq_len}) must be divisible by prefill_len_cutoff ({cfg.prefill_len_cutoff})"
+            assert seq_len % cfg.prefill_len_cutoff == 0, (
+                f"seq_len ({seq_len}) must be divisible by prefill_len_cutoff ({cfg.prefill_len_cutoff})"
+            )
             x = ttnn.reshape(x, [1, seq_len // cfg.prefill_len_cutoff, cfg.prefill_len_cutoff, -1])
 
         # Seq_len-dependent: get program configs by calling methods on config
@@ -626,8 +627,10 @@ def _compute_kernel_config_hifi2_fp16(arch) -> ttnn.DeviceComputeKernelConfig:
 
 
 def _resolve_mlp1d_mesh(config: MLP1DConfig):
-    mesh_device = config.mesh_device or getattr(config.w1, "device", None) or compatibility_default_device(
-        ttnn, owner="modules.mlp._resolve_mlp1d_mesh"
+    mesh_device = (
+        config.mesh_device
+        or getattr(config.w1, "device", None)
+        or compatibility_default_device(ttnn, owner="modules.mlp._resolve_mlp1d_mesh")
     )
     if mesh_device is None:
         raise ValueError("MLP1D requires a mesh_device or a weight associated with a mesh device")

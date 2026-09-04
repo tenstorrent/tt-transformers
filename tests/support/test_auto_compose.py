@@ -15,9 +15,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import torch
-
 import ttnn
-from qualification.tools.auto_compose import _infer_mesh_composer_from_topology, to_torch_auto_compose
+from examples.common.auto_compose import _infer_mesh_composer_from_topology, to_torch_auto_compose
 
 # ======================================================================================
 # Test Parameters (for device-dependent tests)
@@ -389,9 +388,8 @@ def test_to_torch_auto_compose_no_device_error():
     # Tensor on host
     mock_tensor.device.return_value = None
 
-    with patch("ttnn.GetDefaultDevice", return_value=None):
-        with pytest.raises(RuntimeError, match="Tensor is on host and no mesh_device provided"):
-            to_torch_auto_compose(mock_tensor)
+    with pytest.raises(RuntimeError, match="Tensor is on host and no mesh_device was provided"):
+        to_torch_auto_compose(mock_tensor)
 
 
 @pytest.mark.host

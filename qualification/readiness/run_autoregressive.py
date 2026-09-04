@@ -29,7 +29,7 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -78,10 +78,10 @@ def _import_build_generator(model_dir: Path) -> BuildGeneratorFn:
 def _hf_generate_greedy(
     *,
     hf_model_id: str,
-    prompt_token_ids: List[int],
+    prompt_token_ids: list[int],
     max_new_tokens: int,
     device: torch.device,
-) -> List[int]:
+) -> list[int]:
     """
     Greedy autoregressive decode via HF. Returns only the generated tokens
     (prompt stripped). Stops early on EOS; HF handles multi-EOS configs
@@ -121,8 +121,8 @@ def run_autoregressive(
     mesh_device,
     output_dir: Path,
     max_new_tokens: int = DEFAULT_MAX_NEW_TOKENS,
-    build_kwargs: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Path]:
+    build_kwargs: dict[str, Any] | None = None,
+) -> dict[str, Path]:
     """
     Programmatic entry point. Generates a completion from HF and from the TT
     generator, writes both to `output_dir`, returns the paths written.
@@ -134,7 +134,7 @@ def run_autoregressive(
         raise ValueError(f"Prompt file {prompt_file} is empty")
 
     tokenizer = AutoTokenizer.from_pretrained(hf_model_id, trust_remote_code=True)
-    prompt_token_ids: List[int] = tokenizer.encode(prompt_text, add_special_tokens=True)
+    prompt_token_ids: list[int] = tokenizer.encode(prompt_text, add_special_tokens=True)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     print(f"Prompt ({len(prompt_token_ids)} tokens):\n{prompt_text}\n")

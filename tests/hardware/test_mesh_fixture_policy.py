@@ -2,15 +2,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import pytest
-
 import ttnn
-from tt_transformers.modules.tt_ccl import default_topology
 from tests.conftest import (
     _allowed_req_shapes_for_system,
     _default_fabric_config,
     _is_physical_p150x4_cluster,
     _pick_parent_shape_for_submesh,
 )
+
+from tt_transformers.modules.tt_ccl import default_topology
 
 
 @pytest.mark.host

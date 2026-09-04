@@ -1,10 +1,10 @@
-
 import pytest
+
+from tests.support.helpers import stable_model_seed
+
 # SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
-
 from tt_transformers.tensor_utils import align_shape_to_tile
-from tests.support.helpers import stable_model_seed
 
 
 @pytest.mark.host

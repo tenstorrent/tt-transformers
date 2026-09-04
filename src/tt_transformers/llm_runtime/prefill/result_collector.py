@@ -5,12 +5,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable
+from typing import Any
 
 import torch
-
 import ttnn
+
 from tt_transformers.llm_runtime.prefill.config import PrefillRuntimeConfig
 from tt_transformers.llm_runtime.prefill.postprocess import PrefillPostprocessor
 from tt_transformers.llm_runtime.prefill.sampling_helpers import _TILE_SIZE, _merge_log_probs, _select_sample_log_prob

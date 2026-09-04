@@ -1,10 +1,8 @@
-
 import pytest
+
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 # SPDX-License-Identifier: Apache-2.0
-
 import torch
-
 from tests.models.llama33_70b.logits_oracle import assert_rowwise_logits_parity
 
 

@@ -12,9 +12,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import torch
-from loguru import logger
-
 import ttnn
+from loguru import logger
 
 _SAME_SAMPLING_PARAMS = object()
 
@@ -134,9 +133,9 @@ def _compile_prefill_and_decode(
 ) -> None:
     """Compile the concrete prefill and decode cases through the public target surface."""
     if not (prefill_tokens.dim() == 2):
-        raise AssertionError(f'prefill_tokens must be [batch_size, seq_len], got {prefill_tokens.dim()}D')
+        raise AssertionError(f"prefill_tokens must be [batch_size, seq_len], got {prefill_tokens.dim()}D")
     if not (prefill_page_table.dim() == 2):
-        raise AssertionError(f'prefill_page_table must be [batch_size, max_blocks], got {prefill_page_table.dim()}D')
+        raise AssertionError(f"prefill_page_table must be [batch_size, max_blocks], got {prefill_page_table.dim()}D")
 
     batch_size = prefill_tokens.shape[0]
     if decode_tokens is None:
@@ -216,7 +215,9 @@ def run_teacher_forcing(
     execution_target = executor
     batch_size = prompt_tokens.shape[0]
     if not (batch_size == max_batch_size):
-        raise AssertionError(f'Teacher forcing expects active batch to match max_batch_size, got {batch_size} vs {max_batch_size}')
+        raise AssertionError(
+            f"Teacher forcing expects active batch to match max_batch_size, got {batch_size} vs {max_batch_size}"
+        )
     prompt_len = prompt_tokens.shape[-1]
     num_target = len(reference_tokens) - prompt_len
     prompt_lens = torch.tensor([prompt_len] * batch_size)
@@ -676,7 +677,7 @@ def assert_no_special_tokens(
 
 def load_eval_repeat_prompts_batch32() -> list[str]:
     """The 32 numeric sequence-continuation prompts TTTv1's ci-eval-32 uses (parity)."""
-    path = Path("qualification/assets/sample_prompts/eval_repeat_prompts_batch32.json")
+    path = Path("examples/assets/sample_prompts/eval_repeat_prompts_batch32.json")
     with open(path) as f:
         data = json.load(f)
     return [entry["prompt"] for entry in data]
@@ -798,7 +799,7 @@ def assert_cross_cardinality_consistency(
     """Require each fixed request's decoded output to be invariant as batch cardinality grows."""
     if tuple(outputs_by_cardinality) != expected_cardinalities:
         raise AssertionError(
-            f"cross-cardinality experiment expected {expected_cardinalities}, " f"got {tuple(outputs_by_cardinality)}"
+            f"cross-cardinality experiment expected {expected_cardinalities}, got {tuple(outputs_by_cardinality)}"
         )
     reference: dict[str, tuple[int, str]] = {}
     for cardinality, outputs in outputs_by_cardinality.items():
@@ -832,7 +833,7 @@ def assert_cross_batch_consistency(
     """
     num_batches = len(per_repeat_outputs)
     if not (num_batches >= 2):
-        raise AssertionError('cross-batch consistency needs >=2 repeats')
+        raise AssertionError("cross-batch consistency needs >=2 repeats")
     n = len(per_repeat_outputs[0])
     failed, total = 0, 0
     first_failure = None
@@ -883,7 +884,9 @@ def assert_cross_batch_consistency(
                         length_detail,
                     )
     if not (failed == 0):
-        raise AssertionError(f'ci-eval-32: {failed}/{total} cross-batch consistency checks failed (first at repeat {first_failure[0]} slot {first_failure[2]} -> repeat {first_failure[0] + 1} slot {first_failure[1]}, prompt index {first_failure[3]}{first_failure[6]}{first_failure[7]}; decoded outputs {first_failure[4][:80]!r} != {first_failure[5][:80]!r})')
+        raise AssertionError(
+            f"ci-eval-32: {failed}/{total} cross-batch consistency checks failed (first at repeat {first_failure[0]} slot {first_failure[2]} -> repeat {first_failure[0] + 1} slot {first_failure[1]}, prompt index {first_failure[3]}{first_failure[6]}{first_failure[7]}; decoded outputs {first_failure[4][:80]!r} != {first_failure[5][:80]!r})"
+        )
 
 
 def assert_within_batch_slot_consistency(
@@ -911,8 +914,7 @@ def assert_within_batch_slot_consistency(
         margin_detail = ""
         if argmax_margins is not None:
             margin_detail = (
-                f"; top2 margins {argmax_margins[0][common_tokens]:.6g} "
-                f"and {argmax_margins[slot][common_tokens]:.6g}"
+                f"; top2 margins {argmax_margins[0][common_tokens]:.6g} and {argmax_margins[slot][common_tokens]:.6g}"
             )
         raise AssertionError(
             f"ci-eval-32 identical-request diagnostic: prompt index {prompt_index} differs between "
@@ -977,7 +979,7 @@ def run_eval_repeat_batch32(
             complicate prompt-rotation semantics.
     """
     if not (len(prompts) == max_batch_size):
-        raise AssertionError(f'ci-eval-32 expects len(prompts)==max_batch_size; got {len(prompts)} vs {max_batch_size}')
+        raise AssertionError(f"ci-eval-32 expects len(prompts)==max_batch_size; got {len(prompts)} vs {max_batch_size}")
     if active_batch_size is not None:
         if identical_prompt_index is None:
             raise ValueError("active_batch_size requires identical_prompt_index")
@@ -1029,7 +1031,7 @@ def run_eval_repeat_batch32(
         for u, ids in enumerate(truncated):
             bad = set(ids) & garbage_ids
             if not (not bad):
-                raise AssertionError(f'ci-eval-32: user {u} produced special token(s) {sorted(bad)} mid-stream')
+                raise AssertionError(f"ci-eval-32: user {u} produced special token(s) {sorted(bad)} mid-stream")
         decoded = [decode_eval_output(tokenizer, ids, stop_ids) for ids in result.generated_token_ids]
         per_repeat.append(decoded)
         per_repeat_token_ids.append(result.generated_token_ids)
@@ -1063,5 +1065,5 @@ def run_eval_repeat_batch32(
             f"is invariant across all {len(prompts)} logical slots"
         )
     if not (first_result is not None):
-        raise AssertionError('condition failed at line 1070')
+        raise AssertionError("condition failed at line 1070")
     return first_result

@@ -6,7 +6,7 @@ Host-side HF weight layout helpers for DeepSeek-R1-Distill-Qwen-14B (TTTv2 port)
 
 Q/K linear weights use HuggingFace head layout; TTNN RoPE expects Meta layout.
 This duplicates the small permute helpers from ``load_checkpoints.reverse_permute``
-without importing ``models/tt_transformers``. The checkpoint is a Qwen2-architecture
+without importing the legacy tt-metal model tree. The checkpoint is a Qwen2-architecture
 distill (``Qwen2Config``): QKV biases present, no ``q_norm`` / ``k_norm``.
 """
 
@@ -17,8 +17,8 @@ from pathlib import Path
 from typing import Any
 
 import torch
-
 import ttnn
+
 from tt_transformers.modules.lazy_weight import LazyWeight
 
 

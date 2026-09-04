@@ -5,13 +5,13 @@
 
 from __future__ import annotations
 
-import pytest
-
 import copy
 import json
 import tempfile
 import unittest
 from pathlib import Path
+
+import pytest
 
 from qualification.tools.validate_bh_required_capabilities import (
     _QWEN_DEMO_MANIFEST_SHA256,

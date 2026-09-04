@@ -6,12 +6,10 @@ import copy
 import random
 import secrets
 from dataclasses import dataclass, fields, replace
-from typing import List, Optional
 
 import torch
-from loguru import logger
-
 import ttnn
+from loguru import logger
 
 from ._utils import clamp, is_default_value, split_list
 from .sampling_params import SamplingParams
@@ -267,7 +265,7 @@ class SamplingGenerator:
             )
         self._log_probs_active = self.tt_sampling.log_probs_calculator.enable_log_probs
 
-    def _validate_trace_inputs(self, slot, logits: ttnn.Tensor, tt_out_tok: Optional[ttnn.Tensor]):
+    def _validate_trace_inputs(self, slot, logits: ttnn.Tensor, tt_out_tok: ttnn.Tensor | None):
         if slot["input"] is None or slot["output"] is None:
             raise RuntimeError("Trace metadata missing. Call capture_trace first.")
 
@@ -294,7 +292,7 @@ class SamplingGenerator:
         logits,
         *,
         penalties_on: bool,
-        tt_out_tok: Optional[ttnn.Tensor],
+        tt_out_tok: ttnn.Tensor | None,
         count_tokens: bool = True,
     ):
         if penalties_on:
@@ -327,7 +325,7 @@ class SamplingGenerator:
         self,
         logits: ttnn.Tensor,
         *,
-        tt_out_tok: Optional[ttnn.Tensor] = None,
+        tt_out_tok: ttnn.Tensor | None = None,
     ) -> None:
         """Run the sampling pipeline once without capturing, to compile it and size its scratch.
 
@@ -349,7 +347,7 @@ class SamplingGenerator:
         self,
         logits: ttnn.Tensor,
         *,
-        tt_out_tok: Optional[ttnn.Tensor] = None,
+        tt_out_tok: ttnn.Tensor | None = None,
         skip_precompile: bool = False,
     ) -> ttnn.Tensor:
         """
@@ -412,7 +410,7 @@ class SamplingGenerator:
         logits: ttnn.Tensor,
         *,
         enable_trace: bool = True,
-        tt_out_tok: Optional[ttnn.Tensor] = None,
+        tt_out_tok: ttnn.Tensor | None = None,
         skip_precompile: bool = False,
         count_tokens: bool = True,
     ) -> ttnn.Tensor:
@@ -477,7 +475,7 @@ def format_sampling_params(sampling_params, max_batch_size):
 
     Returns a **new** SamplingParams — the input is never mutated.
     """
-    if not isinstance(sampling_params.temperature, List):
+    if not isinstance(sampling_params.temperature, list):
         update_dict = {field.name: [getattr(sampling_params, field.name)] for field in fields(sampling_params)}
         sampling_params = replace(sampling_params, **update_dict)
 
@@ -512,7 +510,7 @@ def format_sampling_params(sampling_params, max_batch_size):
         if value is None:
             # Only reachable for the penalties, whose defaults are no-ops.
             return _pad([defaults[name]], name)
-        if not isinstance(value, List):
+        if not isinstance(value, list):
             # Scalar: the caller means "this value, for every lane I am describing".
             return _pad([value] * active_len, name)
         lst = list(value)
@@ -563,7 +561,7 @@ def format_sampling_params(sampling_params, max_batch_size):
     seed_value = getattr(sampling_params, "seed", None)
     if seed_value is None:
         seed = _pad([defaults["seed"]], "seed")
-    elif isinstance(seed_value, List):
+    elif isinstance(seed_value, list):
         seed = _pad(list(seed_value), "seed")
     else:
         seed = _pad([seed_value], "seed")
@@ -626,7 +624,7 @@ def broadcast_sampling_params(
     kwargs = {}
     for f in fields(formatted_sampling_params):
         value = getattr(formatted_sampling_params, f.name)
-        value_is_list = isinstance(value, List)
+        value_is_list = isinstance(value, list)
         if value_is_list:
             chosen = value[idx] if idx < len(value) else value[0]
         else:
@@ -664,7 +662,7 @@ def scatter_sampling_params_to_slots(
     slots = [int(s) for s in empty_slots]
 
     def _scatter(values):
-        if not isinstance(values, List):
+        if not isinstance(values, list):
             return values
         values = list(values)
         if len(values) == 1 and len(slots) > 1:
@@ -732,9 +730,9 @@ def chunk_sampling_params(sampling_params, sampling_dp: int) -> list:
             else:
                 raise
         if isinstance(val, list):
-            assert (
-                len(val) % sampling_dp == 0
-            ), f"Sampling param '{field_name}' length {len(val)} not divisible by sampling_dp {sampling_dp}"
+            assert len(val) % sampling_dp == 0, (
+                f"Sampling param '{field_name}' length {len(val)} not divisible by sampling_dp {sampling_dp}"
+            )
             chunked_fields[field_name] = split_list(val, sampling_dp)
         else:
             chunked_fields[field_name] = [val] * sampling_dp

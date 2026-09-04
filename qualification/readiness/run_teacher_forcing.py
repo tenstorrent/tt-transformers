@@ -20,7 +20,7 @@ contract in `contract.py`, and a reference file produced by
 CLI:
     python -m qualification.readiness.run_teacher_forcing \\
         --model-dir models/autoports/<model_name> \\
-        --reference models/common/readiness_check/references/<model>.refpt \\
+        --reference qualification/readiness/references/<model>.refpt \\
         --mesh-device N150
 """
 
@@ -32,7 +32,7 @@ import inspect
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from qualification.readiness.contract import (
     BUILD_GENERATOR_FUNCTION_NAME,
@@ -84,10 +84,10 @@ def _run_one_entry(
     generator: Generator,
     acc: TokenAccuracy,
     entry_idx: int,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     prompt_ids = acc.get_prompt_token_ids(entry_idx)
     n_steps = acc.num_gt_tokens(entry_idx)
-    timing: Dict[str, Any] = {
+    timing: dict[str, Any] = {
         "start_s": None,
         "first_token_s": None,
         "last_decode_token_s": None,
@@ -162,11 +162,11 @@ def _require_explicit_generate_kwarg(generator: Generator, name: str) -> None:
     )
 
 
-def _compute_perf_stats(*, timing: Dict[str, Any], end_s: float, token_count: int) -> Dict[str, float]:
+def _compute_perf_stats(*, timing: dict[str, Any], end_s: float, token_count: int) -> dict[str, float]:
     start_s = timing["start_s"]
     first_token_s = timing["first_token_s"]
     elapsed_s = max(end_s - start_s, 0.0)
-    perf: Dict[str, float] = {
+    perf: dict[str, float] = {
         "elapsed_s": elapsed_s,
         "e2e_t/s/u": (token_count / elapsed_s) if elapsed_s > 0 else 0.0,
     }
@@ -188,7 +188,7 @@ def _compute_perf_stats(*, timing: Dict[str, Any], end_s: float, token_count: in
     return perf
 
 
-def _format_row(label: str, stats: Dict[str, Any]) -> str:
+def _format_row(label: str, stats: dict[str, Any]) -> str:
     row = (
         f"{label:<20} "
         f"top1={stats['top1']:.3f} ({stats['matches_top1']}/{stats['total']})  "
@@ -212,8 +212,8 @@ def run_teacher_forcing(
     model_dir: Path,
     reference_path: Path,
     mesh_device,
-    build_kwargs: Dict[str, Any] | None = None,
-) -> List[Dict[str, Any]]:
+    build_kwargs: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
     """
     Programmatic entry point. Builds the generator, runs teacher forcing
     over all reference entries, and returns the per-entry accuracy dicts.
@@ -225,7 +225,7 @@ def run_teacher_forcing(
     generator: Generator = build_generator(model_dir=model_dir, mesh_device=mesh_device, **build_kwargs)
 
     acc = TokenAccuracy(reference_path)
-    per_entry: List[Dict[str, Any]] = []
+    per_entry: list[dict[str, Any]] = []
     try:
         for entry_idx in range(acc.num_entries):
             if entry_idx > 0:

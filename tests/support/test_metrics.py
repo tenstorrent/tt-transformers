@@ -11,11 +11,10 @@ Requires: TTNN hardware/installation, pytest
 
 import pytest
 import torch
-
 import ttnn
 
 # Import metric functions from the validation framework
-from qualification.tools.metrics import comp_allclose, compute_max_abs_error, compute_mean_abs_error, compute_pcc
+from tests.support.metrics import comp_allclose, compute_max_abs_error, compute_mean_abs_error, compute_pcc
 
 pytestmark = [
     pytest.mark.parametrize(
@@ -175,72 +174,72 @@ def test_abs_metrics_vs_pytorch(ttnn_mesh_device, layout, dtype, name, tensor_a_
     # Verify max_abs_error
     if max_spec is not None:
         expected_max, tolerance_max = max_spec
-        assert (
-            abs(max_error_ttnn - expected_max) < tolerance_max
-        ), f"max_abs_error: expected {expected_max}, got {max_error_ttnn}"
+        assert abs(max_error_ttnn - expected_max) < tolerance_max, (
+            f"max_abs_error: expected {expected_max}, got {max_error_ttnn}"
+        )
         # Check TTNN matches PyTorch
-        assert (
-            abs(max_error_ttnn - max_error_torch) < tolerance_max
-        ), f"max_abs_error TTNN vs PyTorch: {max_error_ttnn} vs {max_error_torch}"
+        assert abs(max_error_ttnn - max_error_torch) < tolerance_max, (
+            f"max_abs_error TTNN vs PyTorch: {max_error_ttnn} vs {max_error_torch}"
+        )
         # Mixed variants also match expected and PyTorch
-        assert (
-            abs(max_error_mixed_torch_ttnn - expected_max) < tolerance_max
-        ), f"max_abs_error (torch,ttnn): expected {expected_max}, got {max_error_mixed_torch_ttnn}"
-        assert (
-            abs(max_error_mixed_ttnn_torch - expected_max) < tolerance_max
-        ), f"max_abs_error (ttnn,torch): expected {expected_max}, got {max_error_mixed_ttnn_torch}"
-        assert (
-            abs(max_error_mixed_torch_ttnn - max_error_torch) < tolerance_max
-        ), f"max_abs_error (torch,ttnn) vs PyTorch: {max_error_mixed_torch_ttnn} vs {max_error_torch}"
-        assert (
-            abs(max_error_mixed_ttnn_torch - max_error_torch) < tolerance_max
-        ), f"max_abs_error (ttnn,torch) vs PyTorch: {max_error_mixed_ttnn_torch} vs {max_error_torch}"
+        assert abs(max_error_mixed_torch_ttnn - expected_max) < tolerance_max, (
+            f"max_abs_error (torch,ttnn): expected {expected_max}, got {max_error_mixed_torch_ttnn}"
+        )
+        assert abs(max_error_mixed_ttnn_torch - expected_max) < tolerance_max, (
+            f"max_abs_error (ttnn,torch): expected {expected_max}, got {max_error_mixed_ttnn_torch}"
+        )
+        assert abs(max_error_mixed_torch_ttnn - max_error_torch) < tolerance_max, (
+            f"max_abs_error (torch,ttnn) vs PyTorch: {max_error_mixed_torch_ttnn} vs {max_error_torch}"
+        )
+        assert abs(max_error_mixed_ttnn_torch - max_error_torch) < tolerance_max, (
+            f"max_abs_error (ttnn,torch) vs PyTorch: {max_error_mixed_ttnn_torch} vs {max_error_torch}"
+        )
     else:
         # No expected value, just check TTNN matches PyTorch with default tolerance
-        assert (
-            abs(max_error_ttnn - max_error_torch) < default_tolerance
-        ), f"max_abs_error TTNN vs PyTorch: {max_error_ttnn} vs {max_error_torch}"
-        assert (
-            abs(max_error_mixed_torch_ttnn - max_error_torch) < default_tolerance
-        ), f"max_abs_error (torch,ttnn) vs PyTorch: {max_error_mixed_torch_ttnn} vs {max_error_torch}"
-        assert (
-            abs(max_error_mixed_ttnn_torch - max_error_torch) < default_tolerance
-        ), f"max_abs_error (ttnn,torch) vs PyTorch: {max_error_mixed_ttnn_torch} vs {max_error_torch}"
+        assert abs(max_error_ttnn - max_error_torch) < default_tolerance, (
+            f"max_abs_error TTNN vs PyTorch: {max_error_ttnn} vs {max_error_torch}"
+        )
+        assert abs(max_error_mixed_torch_ttnn - max_error_torch) < default_tolerance, (
+            f"max_abs_error (torch,ttnn) vs PyTorch: {max_error_mixed_torch_ttnn} vs {max_error_torch}"
+        )
+        assert abs(max_error_mixed_ttnn_torch - max_error_torch) < default_tolerance, (
+            f"max_abs_error (ttnn,torch) vs PyTorch: {max_error_mixed_ttnn_torch} vs {max_error_torch}"
+        )
 
     # Verify mean_abs_error
     if mean_spec is not None:
         expected_mean, tolerance_mean = mean_spec
-        assert (
-            abs(mean_error_ttnn - expected_mean) < tolerance_mean
-        ), f"mean_abs_error: expected {expected_mean}, got {mean_error_ttnn}"
+        assert abs(mean_error_ttnn - expected_mean) < tolerance_mean, (
+            f"mean_abs_error: expected {expected_mean}, got {mean_error_ttnn}"
+        )
         # Check TTNN matches PyTorch
-        assert (
-            abs(mean_error_ttnn - mean_error_torch) < tolerance_mean
-        ), f"mean_abs_error TTNN vs PyTorch: {mean_error_ttnn} vs {mean_error_torch}"
+        assert abs(mean_error_ttnn - mean_error_torch) < tolerance_mean, (
+            f"mean_abs_error TTNN vs PyTorch: {mean_error_ttnn} vs {mean_error_torch}"
+        )
         # Mixed variants also match expected and PyTorch
-        assert (
-            abs(mean_error_mixed_torch_ttnn - expected_mean) < tolerance_mean
-        ), f"mean_abs_error (torch,ttnn): expected {expected_mean}, got {mean_error_mixed_torch_ttnn}"
-        assert (
-            abs(mean_error_mixed_ttnn_torch - expected_mean) < tolerance_mean
-        ), f"mean_abs_error (ttnn,torch): expected {expected_mean}, got {mean_error_mixed_ttnn_torch}"
-        assert (
-            abs(mean_error_mixed_torch_ttnn - mean_error_torch) < tolerance_mean
-        ), f"mean_abs_error (torch,ttnn) vs PyTorch: {mean_error_mixed_torch_ttnn} vs {mean_error_torch}"
-        assert (
-            abs(mean_error_mixed_ttnn_torch - mean_error_torch) < tolerance_mean
-        ), f"mean_abs_error (ttnn,torch) vs PyTorch: {mean_error_mixed_ttnn_torch} vs {mean_error_torch}"
+        assert abs(mean_error_mixed_torch_ttnn - expected_mean) < tolerance_mean, (
+            f"mean_abs_error (torch,ttnn): expected {expected_mean}, got {mean_error_mixed_torch_ttnn}"
+        )
+        assert abs(mean_error_mixed_ttnn_torch - expected_mean) < tolerance_mean, (
+            f"mean_abs_error (ttnn,torch): expected {expected_mean}, got {mean_error_mixed_ttnn_torch}"
+        )
+        assert abs(mean_error_mixed_torch_ttnn - mean_error_torch) < tolerance_mean, (
+            f"mean_abs_error (torch,ttnn) vs PyTorch: {mean_error_mixed_torch_ttnn} vs {mean_error_torch}"
+        )
+        assert abs(mean_error_mixed_ttnn_torch - mean_error_torch) < tolerance_mean, (
+            f"mean_abs_error (ttnn,torch) vs PyTorch: {mean_error_mixed_ttnn_torch} vs {mean_error_torch}"
+        )
     else:
         # No expected value, just check TTNN matches PyTorch with default tolerance
-        assert (
-            abs(mean_error_ttnn - mean_error_torch) < default_tolerance
-        ), f"mean_abs_error TTNN vs PyTorch: {mean_error_ttnn} vs {mean_error_torch}"
-        assert (
-            abs(mean_error_mixed_torch_ttnn - mean_error_torch) < default_tolerance
-        ), f"mean_abs_error (torch,ttnn) vs PyTorch: {mean_error_mixed_torch_ttnn} vs {mean_error_torch}"
-        assert (
-            abs(mean_error_mixed_ttnn_torch - mean_error_torch) < default_tolerance
-        ), f"mean_abs_error (ttnn,torch) vs PyTorch: {mean_error_mixed_ttnn_torch} vs {mean_error_torch}"
+        assert abs(mean_error_ttnn - mean_error_torch) < default_tolerance, (
+            f"mean_abs_error TTNN vs PyTorch: {mean_error_ttnn} vs {mean_error_torch}"
+        )
+        assert abs(mean_error_mixed_torch_ttnn - mean_error_torch) < default_tolerance, (
+            f"mean_abs_error (torch,ttnn) vs PyTorch: {mean_error_mixed_torch_ttnn} vs {mean_error_torch}"
+        )
+        assert abs(mean_error_mixed_ttnn_torch - mean_error_torch) < default_tolerance, (
+            f"mean_abs_error (ttnn,torch) vs PyTorch: {mean_error_mixed_ttnn_torch} vs {mean_error_torch}"
+        )
 
 
 # check pcc computed on device against known good pcc values on host

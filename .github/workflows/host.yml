@@ -5,6 +5,10 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: host-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -12,13 +16,13 @@ jobs:
   host:
     name: CPython ${{ matrix.python }} full host
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     env:
       PIP_INDEX_URL: https://pypi.org/simple
       PIP_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
       TT_TRANSFORMERS_OFFLINE: "1"
       HF_HUB_OFFLINE: "1"
       TRANSFORMERS_OFFLINE: "1"
-      SOURCE_DATE_EPOCH: "1788213269"
     strategy:
       fail-fast: false
       matrix:
@@ -28,10 +32,12 @@ jobs:
           - python: "3.12.13"
             tag: "312"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ matrix.python }}
+      - name: Set reproducible source epoch
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> "${GITHUB_ENV}"
       - name: Install hash-locked host dependencies and build tools
         run: |
           python -m pip install --require-hashes -r "constraints/locks/host-py${{ matrix.tag }}.txt"
@@ -40,39 +46,50 @@ jobs:
           "${RUNNER_TEMP}/build-tools/bin/python" -m pip install \
             --require-hashes -r "constraints/locks/build-dev-py${{ matrix.tag }}.txt"
           "${RUNNER_TEMP}/build-tools/bin/python" -m pip check
-      - name: Validate source policy
+      - name: Validate source and repository policy
         run: |
-          python -B qualification/tools/validate_constraints.py
-          python -B qualification/tools/validate_dependency_locks.py
-          python -B qualification/tools/validate_static_quality_baseline.py
+          python -B tools/validate_lockfiles.py
           python -B qualification/tools/audit_test_taxonomy.py --collect-host
           python -B tools/check_import_boundaries.py
           python -B qualification/tools/validate_support_docs.py
-          python -B qualification/analysis/check_public_api_policy.py
-          python -B qualification/extraction/normalize_host_support_tests.py --check
-          python -B qualification/extraction/extract_production_documentation.py
-          python -B qualification/extraction/apply_example_runtime_policy.py
           python -B qualification/tools/validate_bh_required_capabilities.py
           python -B qualification/tools/run_hardware_matrix.py --validate
-          python -B qualification/tools/validate_ttnn_077_compatibility.py
+          "${RUNNER_TEMP}/build-tools/bin/ruff" check src tests examples tools qualification
+          "${RUNNER_TEMP}/build-tools/bin/ruff" format --check src tests examples tools qualification
+          "${RUNNER_TEMP}/build-tools/bin/mypy" \
+            --python-executable "$(command -v python)"
+          git diff --exit-code
       - name: Build and audit distributions
         run: |
           "${RUNNER_TEMP}/build-tools/bin/python" -m build --no-isolation --outdir dist
-          python -B tools/normalize_sdist.py \
-            dist/tt_transformers-0.1.0.dev0.tar.gz
+          python -B tools/normalize_sdist.py dist/tt_transformers-2.0.0.dev0.tar.gz
           mkdir -p "${RUNNER_TEMP}/artifact-audit"
           python -B tools/audit_package_artifacts.py \
-            dist/tt_transformers-0.1.0.dev0-py3-none-any.whl \
-            dist/tt_transformers-0.1.0.dev0.tar.gz \
+            dist/tt_transformers-2.0.0.dev0-py3-none-any.whl \
+            dist/tt_transformers-2.0.0.dev0.tar.gz \
             --source-root src \
             --output-dir "${RUNNER_TEMP}/artifact-audit"
           "${RUNNER_TEMP}/build-tools/bin/python" -m twine check --strict \
-            dist/tt_transformers-0.1.0.dev0-py3-none-any.whl \
-            dist/tt_transformers-0.1.0.dev0.tar.gz
-          python -B qualification/tools/validate_release_readiness.py
+            dist/tt_transformers-2.0.0.dev0-py3-none-any.whl \
+            dist/tt_transformers-2.0.0.dev0.tar.gz
+      - name: Build and test from the unpacked sdist
+        run: |
+          mkdir -p "${RUNNER_TEMP}/sdist" "${RUNNER_TEMP}/sdist-wheel"
+          tar -xzf dist/tt_transformers-2.0.0.dev0.tar.gz -C "${RUNNER_TEMP}/sdist"
+          cd "${RUNNER_TEMP}/sdist/tt_transformers-2.0.0.dev0"
+          "${RUNNER_TEMP}/build-tools/bin/python" -m build \
+            --wheel --no-isolation --outdir "${RUNNER_TEMP}/sdist-wheel"
+          cmp \
+            "${GITHUB_WORKSPACE}/dist/tt_transformers-2.0.0.dev0-py3-none-any.whl" \
+            "${RUNNER_TEMP}/sdist-wheel/tt_transformers-2.0.0.dev0-py3-none-any.whl"
+          python -m pip install --force-reinstall --no-deps \
+            "${RUNNER_TEMP}/sdist-wheel/tt_transformers-2.0.0.dev0-py3-none-any.whl"
+          python -m pytest -q -m host
       - name: Install final wheel non-editably
         run: |
-          python -m pip install --force-reinstall --no-deps dist/tt_transformers-0.1.0.dev0-py3-none-any.whl
+          cd "${GITHUB_WORKSPACE}"
+          python -m pip install --force-reinstall --no-deps \
+            dist/tt_transformers-2.0.0.dev0-py3-none-any.whl
           python -m pip check
       - name: Run the complete host selector
         run: python -m pytest -q -m host
@@ -82,7 +99,7 @@ jobs:
           "${RUNNER_TEMP}/base-only/bin/python" -m pip install \
             --require-hashes -r "constraints/locks/base-py${{ matrix.tag }}.txt"
           "${RUNNER_TEMP}/base-only/bin/python" -m pip install \
-            --no-deps dist/tt_transformers-0.1.0.dev0-py3-none-any.whl
+            --no-deps dist/tt_transformers-2.0.0.dev0-py3-none-any.whl
           cp tools/probe_installed_package.py "${RUNNER_TEMP}/probe_installed_package.py"
           cd "${RUNNER_TEMP}"
           base-only/bin/python -I probe_installed_package.py
@@ -90,9 +107,10 @@ jobs:
   device-policy:
     name: Device suites remain serialized and unexecuted
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.10.19"
       - name: Validate scheduling policy without importing TTNN

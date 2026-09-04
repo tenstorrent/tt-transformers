@@ -28,10 +28,9 @@ from pathlib import Path
 from typing import Any
 
 import torch
+import ttnn
 from loguru import logger
 
-import ttnn
-from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.models.phi4 import weight_utils
 from tt_transformers.modules.attention.attention_1d import (
     Attention1D,
@@ -41,6 +40,7 @@ from tt_transformers.modules.attention.attention_1d import (
 )
 from tt_transformers.modules.embedding.embedding_1d import Embedding1D, Embedding1DConfig
 from tt_transformers.modules.lazy_weight import LazyWeight
+from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.modules.lm_head.lm_head_1d import LMHead1D, LMHead1DConfig, _nearest_32
 from tt_transformers.modules.mlp.mlp_1d import MLP1D, MLP1DConfig, _dram_shard_core_grid_k_n
 from tt_transformers.modules.rmsnorm.rmsnorm_1d import RMSNorm1D, RMSNorm1DConfig, _create_sharded_norm_program_config
@@ -475,8 +475,7 @@ def build_phi4_transformer_config(
     num_devices = mesh_device.get_num_devices()
     if params.n_heads % num_devices or params.n_kv_heads % num_devices:
         raise ValueError(
-            f"Checkpoint heads ({params.n_heads}/{params.n_kv_heads}) "
-            f"must be divisible by device count ({num_devices})"
+            f"Checkpoint heads ({params.n_heads}/{params.n_kv_heads}) must be divisible by device count ({num_devices})"
         )
     if len(weights.layers) != n_layers:
         raise ValueError(f"Expected {n_layers} decoder layer weight sets, got {len(weights.layers)}")

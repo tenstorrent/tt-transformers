@@ -6,8 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 import torch
-
 import ttnn
+
 from tt_transformers.llm_runtime.config import PagedKVCacheConfig
 from tt_transformers.llm_runtime.paged_kv_cache import PagedKVCacheManager, torch_dtype_for_ttnn
 

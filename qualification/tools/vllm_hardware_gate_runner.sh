@@ -11,8 +11,8 @@ set -u
 set -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VLLM_DIR="${VLLM_DIR:-/localdev/gwang/vllm_duo/vllm}"
-PY="${PY:-/localdev/gwang/vllm_duo/tt-metal-too/python_env/bin/python}"
+: "${VLLM_DIR:?set VLLM_DIR to the vLLM checkout}"
+: "${PY:?set PY to the qualified Python interpreter}"
 VALIDATOR=""
 RUNNER_PATH="$(realpath "$0")"
 HOST="${HOST:-127.0.0.1}"

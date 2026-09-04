@@ -92,7 +92,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any
 
 try:
     import openai
@@ -125,7 +125,7 @@ DEFAULT_STAGES: tuple[str, ...] = ALL_STAGES
 DEFAULT_BENCH_PROMPT_LEN = 128
 DEFAULT_BENCH_OUTPUT_LEN = 128
 DEFAULT_BENCH_NUM_REQUESTS = 1
-DEFAULT_BENCH_CONCURRENCY: Optional[int] = 1
+DEFAULT_BENCH_CONCURRENCY: int | None = 1
 DEFAULT_BENCH_TEMPERATURE = 0.0
 
 # Secondary serving-burst profile matching `.github/workflows/vllm-nightly-tests-impl.yaml`.
@@ -133,7 +133,7 @@ DEFAULT_CI_SERVING_BENCHMARK = True
 DEFAULT_CI_BENCH_PROMPT_LEN = 100
 DEFAULT_CI_BENCH_OUTPUT_LEN = 100
 DEFAULT_CI_BENCH_NUM_REQUESTS = 32
-DEFAULT_CI_BENCH_CONCURRENCY: Optional[int] = None
+DEFAULT_CI_BENCH_CONCURRENCY: int | None = None
 
 SAMPLING_PROFILE_FULL = "full"
 SAMPLING_PROFILE_SMOKE = "smoke"
@@ -172,7 +172,7 @@ _MESH_SHAPES: dict[str, tuple[int, int]] = {
 
 def _find_plugin_tests_dir() -> Path:
     """Locate the TT vLLM pytest suite in either old plugin or in-tree layouts."""
-    candidates: List[Path] = []
+    candidates: list[Path] = []
 
     plugin_spec = importlib.util.find_spec("vllm_tt_plugin")
     if plugin_spec is not None and plugin_spec.origin is not None:
@@ -214,9 +214,9 @@ def _launch_server(
     block_size: int,
     port: int,
     log_file: Path,
-    max_model_len: Optional[int],
+    max_model_len: int | None,
     tt_config: dict[str, Any],
-    additional_args: List[str],
+    additional_args: list[str],
 ) -> subprocess.Popen:
     """
     Launch vLLM via `python -m vllm.entrypoints.openai.api_server`.
@@ -224,7 +224,7 @@ def _launch_server(
     Mirrors `vllm-tt-plugin/examples/server_example_tt.py` (which is what the
     nightly CI runs) but inlined — the example is just argv-munging + runpy.
     """
-    cmd: List[str] = [
+    cmd: list[str] = [
         sys.executable,
         "-m",
         "vllm.entrypoints.openai.api_server",
@@ -260,7 +260,7 @@ def _launch_server(
     return subprocess.Popen(cmd, stdout=log_handle, stderr=subprocess.STDOUT, env=env)
 
 
-def _scan_log_for_fatal(log_file: Path) -> Optional[str]:
+def _scan_log_for_fatal(log_file: Path) -> str | None:
     if not log_file.exists():
         return None
     try:
@@ -324,7 +324,7 @@ def _probe_external_server(server_url: str) -> None:
         resp = requests.get(health, timeout=5)
     except requests.exceptions.RequestException as e:
         raise RuntimeError(
-            f"Server not reachable at {health} ({e}). Start it first with `--stages serve` " "or check --server-url."
+            f"Server not reachable at {health} ({e}). Start it first with `--stages serve` or check --server-url."
         ) from e
     if resp.status_code != 200:
         raise RuntimeError(f"Server at {health} returned {resp.status_code}; expected 200.")
@@ -351,7 +351,7 @@ def _run_plugin_sampling_tests(
     """
     tests_dir = _find_plugin_tests_dir()
     if sampling_profile == SAMPLING_PROFILE_FULL:
-        test_targets: List[str] = [str(tests_dir)]
+        test_targets: list[str] = [str(tests_dir)]
     elif sampling_profile == SAMPLING_PROFILE_SMOKE:
         test_targets = []
         for rel_nodeid in _SMOKE_SAMPLING_TESTS:
@@ -424,7 +424,7 @@ def _run_qualitative_prompts(
     prompt_mode = _qualitative_prompt_mode(hf_model)
     print(f"  Prompt mode: {prompt_mode}")
 
-    results: List[dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
     for i, prompt in enumerate(prompts, 1):
         print(f"\n  Prompt {i}/{len(prompts)}: {prompt[:60]}...")
 
@@ -477,7 +477,7 @@ def _request_qualitative_completion(
     prompt: str,
     prompt_mode: str,
     temperature: float,
-    top_p: Optional[float] = None,
+    top_p: float | None = None,
 ) -> str:
     request_args: dict[str, Any] = {
         "model": hf_model,
@@ -501,7 +501,7 @@ def _request_qualitative_completion(
     raise ValueError(f"Unsupported qualitative prompt mode: {prompt_mode!r}")
 
 
-def _vllm_cli_command() -> List[str]:
+def _vllm_cli_command() -> list[str]:
     """Return a vLLM CLI invocation in the active Python environment."""
     vllm_exe = shutil.which("vllm")
     if vllm_exe is not None:
@@ -509,22 +509,22 @@ def _vllm_cli_command() -> List[str]:
     return [sys.executable, "-m", "vllm.entrypoints.cli.main"]
 
 
-def _quoted_cmd(cmd: List[str]) -> str:
+def _quoted_cmd(cmd: list[str]) -> str:
     return " ".join(shlex.quote(part) for part in cmd)
 
 
-def _json_number(data: dict[str, Any], key: str) -> Optional[float]:
+def _json_number(data: dict[str, Any], key: str) -> float | None:
     value = data.get(key)
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
     return float(value)
 
 
-def _decode_tps_from_ms(ms: Optional[float]) -> Optional[float]:
+def _decode_tps_from_ms(ms: float | None) -> float | None:
     return (1000.0 / ms) if ms and ms > 0 else None
 
 
-def _metric_summary(raw: dict[str, Any], metric: str) -> dict[str, Optional[float]]:
+def _metric_summary(raw: dict[str, Any], metric: str) -> dict[str, float | None]:
     return {
         "p50": _json_number(raw, f"median_{metric}_ms"),
         "p99": _json_number(raw, f"p99_{metric}_ms"),
@@ -537,14 +537,14 @@ def _write_normalized_vllm_benchmark_summary(
     raw: dict[str, Any],
     output_file: Path,
     raw_result_file: Path,
-    command: List[str],
+    command: list[str],
     profile_name: str,
     comparison_scope: str,
     prompt_len: int,
     output_len: int,
     num_requests: int,
-    concurrency: Optional[int],
-    temperature: Optional[float],
+    concurrency: int | None,
+    temperature: float | None,
 ) -> dict[str, Any]:
     total_output_tokens = _json_number(raw, "total_output_tokens")
     requested_output_tokens = output_len * num_requests
@@ -620,9 +620,9 @@ def _run_serving_benchmark(
     prompt_len: int,
     output_len: int,
     num_requests: int,
-    concurrency: Optional[int],
-    temperature: Optional[float],
-    additional_args: List[str],
+    concurrency: int | None,
+    temperature: float | None,
+    additional_args: list[str],
 ) -> dict[str, Any]:
     """
     Run one vLLM serving benchmark profile.
@@ -644,7 +644,7 @@ def _run_serving_benchmark(
         if stale_file.exists():
             stale_file.unlink()
 
-    cmd: List[str] = [
+    cmd: list[str] = [
         *_vllm_cli_command(),
         "bench",
         "serve",
@@ -712,7 +712,7 @@ def _run_serving_benchmark(
         temperature=temperature,
     )
 
-    def _fmt(v: Optional[float], unit: str) -> str:
+    def _fmt(v: float | None, unit: str) -> str:
         return f"{v:.1f}{unit}" if v is not None else "n/a"
 
     print(f"\n=== Serving benchmark summary: {profile_name} ===")
@@ -773,14 +773,14 @@ def _hold_until_signal(proc: subprocess.Popen, log_file: Path) -> None:
         pass
 
 
-def _parse_stages(raw: str) -> List[str]:
+def _parse_stages(raw: str) -> list[str]:
     stages = [s.strip() for s in raw.split(",") if s.strip()]
     if not stages:
         raise argparse.ArgumentTypeError("--stages must list at least one stage")
     unknown = [s for s in stages if s not in ALL_STAGES]
     if unknown:
         raise argparse.ArgumentTypeError(f"Unknown stages {unknown}. Valid stages: {list(ALL_STAGES)}")
-    deduped: List[str] = []
+    deduped: list[str] = []
     for s in stages:
         if s not in deduped:
             deduped.append(s)
@@ -795,7 +795,7 @@ def _main() -> None:
         "--stages",
         type=_parse_stages,
         default=list(DEFAULT_STAGES),
-        help=("Comma-separated stages to run. Valid: " f"{','.join(ALL_STAGES)}. Default: {','.join(DEFAULT_STAGES)}."),
+        help=(f"Comma-separated stages to run. Valid: {','.join(ALL_STAGES)}. Default: {','.join(DEFAULT_STAGES)}."),
     )
     parser.add_argument(
         "--server-url",
@@ -869,8 +869,7 @@ def _main() -> None:
         type=int,
         default=DEFAULT_BENCH_PROMPT_LEN,
         help=(
-            "Tokens per synthetic prompt for the primary single-user benchmark "
-            f"(default {DEFAULT_BENCH_PROMPT_LEN})."
+            f"Tokens per synthetic prompt for the primary single-user benchmark (default {DEFAULT_BENCH_PROMPT_LEN})."
         ),
     )
     parser.add_argument(
@@ -878,15 +877,14 @@ def _main() -> None:
         type=int,
         default=DEFAULT_BENCH_OUTPUT_LEN,
         help=(
-            "Tokens to generate per request in the primary single-user benchmark "
-            f"(default {DEFAULT_BENCH_OUTPUT_LEN})."
+            f"Tokens to generate per request in the primary single-user benchmark (default {DEFAULT_BENCH_OUTPUT_LEN})."
         ),
     )
     parser.add_argument(
         "--benchmark-num-requests",
         type=int,
         default=DEFAULT_BENCH_NUM_REQUESTS,
-        help=("Total requests sent in the primary single-user benchmark " f"(default {DEFAULT_BENCH_NUM_REQUESTS})."),
+        help=(f"Total requests sent in the primary single-user benchmark (default {DEFAULT_BENCH_NUM_REQUESTS})."),
     )
     parser.add_argument(
         "--benchmark-concurrency",
@@ -974,7 +972,7 @@ def _main() -> None:
     )
     args = parser.parse_args()
 
-    stages: List[str] = args.stages
+    stages: list[str] = args.stages
     serve_locally = STAGE_SERVE in stages
 
     if serve_locally and args.server_url is not None:
@@ -1002,7 +1000,7 @@ def _main() -> None:
     server_log = output_dir / "server.log"
     sampling_log = output_dir / "sampling_tests.log"
 
-    server_proc: Optional[subprocess.Popen] = None
+    server_proc: subprocess.Popen | None = None
     try:
         if serve_locally:
             _check_port_available(args.port)

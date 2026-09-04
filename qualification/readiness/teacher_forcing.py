@@ -22,7 +22,6 @@ Usage:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional
 
 import torch
 
@@ -48,21 +47,21 @@ class TokenAccuracy:
         self.k = self.reference.k
 
         # Flattened per-user views.
-        self.prompt_1d: List[torch.Tensor] = [
+        self.prompt_1d: list[torch.Tensor] = [
             e.prompt_tokens[0].to(torch.long).contiguous() for e in self.reference.entries
         ]
-        self.gt_gen_1d: List[torch.Tensor] = [
+        self.gt_gen_1d: list[torch.Tensor] = [
             e.generated_tokens[0].to(torch.long).contiguous() for e in self.reference.entries
         ]
-        self.topk: List[torch.Tensor] = [e.topk_tokens.to(torch.long).contiguous() for e in self.reference.entries]
-        self.tf_prompt_len: List[int] = [int(e.tf_prompt_len) for e in self.reference.entries]
+        self.topk: list[torch.Tensor] = [e.topk_tokens.to(torch.long).contiguous() for e in self.reference.entries]
+        self.tf_prompt_len: list[int] = [int(e.tf_prompt_len) for e in self.reference.entries]
 
         meta = self.reference.token_ids_meta or {}
-        self.eos_id: Optional[int] = int(meta["eos_id"]) if meta.get("eos_id") is not None else None
+        self.eos_id: int | None = int(meta["eos_id"]) if meta.get("eos_id") is not None else None
 
         # Per-user runtime state.
-        self.pred_tokens: List[List[int]] = [[] for _ in range(self.entry_count)]
-        self.cursor: List[int] = [0] * self.entry_count
+        self.pred_tokens: list[list[int]] = [[] for _ in range(self.entry_count)]
+        self.cursor: list[int] = [0] * self.entry_count
 
     # Bounds + reset.
 
@@ -84,7 +83,7 @@ class TokenAccuracy:
 
     # Accessors.
 
-    def get_prompt_token_ids(self, user_idx: int = 0) -> List[int]:
+    def get_prompt_token_ids(self, user_idx: int = 0) -> list[int]:
         return self.prompt_1d[self._check_idx(user_idx)].tolist()
 
     def num_gt_tokens(self, user_idx: int = 0) -> int:
@@ -93,7 +92,7 @@ class TokenAccuracy:
     def num_pred_tokens(self, user_idx: int = 0) -> int:
         return len(self.pred_tokens[self._check_idx(user_idx)])
 
-    def get_predicted_tokens(self, user_idx: int = 0) -> List[int]:
+    def get_predicted_tokens(self, user_idx: int = 0) -> list[int]:
         return list(self.pred_tokens[self._check_idx(user_idx)])
 
     # Core teacher-forcing interface.
@@ -122,7 +121,7 @@ class TokenAccuracy:
         self.cursor[idx] = cursor + 1
         return forced
 
-    def compute_accuracy(self, user_idx: int = 0) -> Dict[str, float]:
+    def compute_accuracy(self, user_idx: int = 0) -> dict[str, float]:
         """
         Top-1 / top-5 / top-K hit rate for `user_idx`:
 

@@ -30,11 +30,11 @@ CI cases (parity with TTTv1 ``simple_text_demo.py``):
 Usage:
     # Token accuracy (gates against the committed book ``.refpt``)
     MESH_DEVICE=T3K HF_MODEL=Qwen/Qwen3-32B \\
-      pytest models/common/tests/demos/qwen3_32b/demo.py -k "token-accuracy" -v
+      pytest tests/hardware/models/qwen3_32b/test_demo.py -k "token-accuracy" -v
 
     # On-device sampling perf sweep (the T3K headline / TTTv1-comparable path)
     SAMPLING_MODE=on_device_topk MESH_DEVICE=T3K HF_MODEL=Qwen/Qwen3-32B \\
-      pytest models/common/tests/demos/qwen3_32b/demo.py -k "batch-32-ci" -v
+      pytest tests/hardware/models/qwen3_32b/test_demo.py -k "batch-32-ci" -v
 
 LazyWeight tensor cache: ``TT_CACHE_PATH/<device_name>`` when ``TT_CACHE_PATH`` is set, otherwise
 the versioned standalone cache policy under `TT_TRANSFORMERS_CACHE`, `XDG_CACHE_HOME`, or the user cache.
@@ -46,18 +46,14 @@ import os
 from pathlib import Path
 
 import torch
+import ttnn
 from loguru import logger
 from transformers import AutoConfig, AutoTokenizer
 
-import ttnn
-from tt_transformers.cache_environment import resolve_model_cache_path
-from tt_transformers.models.qwen3_32b.hf_adaptor import DEFAULT_HF_REVISION as DEMO_HF_REVISION
-from examples.common.runtime import TemporaryPathFactory, UnsupportedConfiguration, open_mesh_device
-from tt_transformers.device_utils import get_device_name
-from tt_transformers.models.qwen3_32b.executor import EagerQwen3_32BExecutor, TracedQwen3_32BExecutor
-from tt_transformers.models.qwen3_32b.model import QWEN3_32B_ACCURACY, QWEN3_32B_PERFORMANCE, Qwen3_32B
-from tt_transformers.sampling.sampling_params import SamplingParams
-from tt_transformers.device_utils import cleanup_model_case
+from examples.common.benchmarking_utils import BenchmarkProfiler
+from examples.common.llm_demo_utils import create_benchmark_data
+from examples.common.model_targets import resolve_accuracy_targets, resolve_metric_tolerance, resolve_perf_targets
+from examples.common.prompting import encode_prompt_hf
 from examples.common.run_helpers import (
     eval_decode_trace_mode,
     load_eval_repeat_prompts_batch32,
@@ -66,11 +62,14 @@ from examples.common.run_helpers import (
     run_perf_benchmark,
     run_teacher_forcing,
 )
-from qualification.tools.llm_demo_utils import create_benchmark_data
-from qualification.tools.model_targets import resolve_accuracy_targets, resolve_metric_tolerance, resolve_perf_targets
-from qualification.tools.trace_region_sizes import resolve_trace_region_size
-from qualification.tools.benchmarking_utils import BenchmarkProfiler
-from examples.common.prompting import encode_prompt_hf
+from examples.common.runtime import UnsupportedConfiguration, open_mesh_device
+from examples.common.trace_region_sizes import resolve_trace_region_size
+from tt_transformers.cache_environment import resolve_model_cache_path
+from tt_transformers.device_utils import cleanup_model_case, get_device_name
+from tt_transformers.models.qwen3_32b.executor import EagerQwen3_32BExecutor, TracedQwen3_32BExecutor
+from tt_transformers.models.qwen3_32b.hf_adaptor import DEFAULT_HF_REVISION as DEMO_HF_REVISION
+from tt_transformers.models.qwen3_32b.model import QWEN3_32B_ACCURACY, QWEN3_32B_PERFORMANCE, Qwen3_32B
+from tt_transformers.sampling.sampling_params import SamplingParams
 
 # =============================================================================
 # Expected metrics — perf gates set from a same-box TTTv1-vs-TTTv2 sweep (on-device sampling),
@@ -253,7 +252,7 @@ def _assert_eval32_perf_target(result, expected: dict, *, case_name: str) -> Non
     if result.ttft_ms > ttft_target * (1 + ttft_tolerance):
         failures.append(f"ttft_ms {result.ttft_ms:.1f} > target {ttft_target}")
     if not (not failures):
-        raise AssertionError(f'{case_name}: ' + '; '.join(failures))
+        raise AssertionError(f"{case_name}: " + "; ".join(failures))
 
 
 def _resolve_local_perf_floor(device_name: str, expected: dict, *, case_name: str) -> dict | None:
@@ -276,7 +275,7 @@ def _assert_local_perf_target(result, expected: dict, *, case_name: str) -> None
     if result.ttft_ms > expected["ttft_ms"] * (1 + PERF_TOLERANCE):
         failures.append(f"ttft_ms {result.ttft_ms:.1f} > target {expected['ttft_ms']}")
     if not (not failures):
-        raise AssertionError(f'{case_name}: ' + '; '.join(failures))
+        raise AssertionError(f"{case_name}: " + "; ".join(failures))
 
 
 # batch-32-ci per-SKU max_seq_len (TTTv1 ci-32 parity is seq2048). Qwen3-32B is capped at 4096
@@ -303,7 +302,9 @@ _MIN_TP_DEVICES = 4
 def _skip_below_min_tp_devices(n_devices: int) -> None:
     """Skip when fewer than ``_MIN_TP_DEVICES`` devices are available for tensor parallelism."""
     if n_devices < _MIN_TP_DEVICES:
-        raise UnsupportedConfiguration(f'Qwen3-32B requires >={_MIN_TP_DEVICES}-device tensor parallelism: the 32B weights + KV cache require T3K TP8 or P150x4 TP4. Have {n_devices} device(s) — use MESH_DEVICE=T3K or MESH_DEVICE=P150x4.')
+        raise UnsupportedConfiguration(
+            f"Qwen3-32B requires >={_MIN_TP_DEVICES}-device tensor parallelism: the 32B weights + KV cache require T3K TP8 or P150x4 TP4. Have {n_devices} device(s) — use MESH_DEVICE=T3K or MESH_DEVICE=P150x4."
+        )
 
 
 # Mesh topology comes only from ``MESH_DEVICE`` (same naming as vLLM / other tt demos).
@@ -316,10 +317,10 @@ _MESH_DEVICE_TO_SHAPE: dict[str, tuple[int, int]] = {
 def ttnn_mesh_device_param_from_env() -> dict:
     env = os.environ.get("MESH_DEVICE", "").strip()
     if not env:
-        raise UnsupportedConfiguration('MESH_DEVICE must be set to T3K or P150x4. See module docstring.')
+        raise UnsupportedConfiguration("MESH_DEVICE must be set to T3K or P150x4. See module docstring.")
     shape = _MESH_DEVICE_TO_SHAPE.get(env)
     if shape is None:
-        raise UnsupportedConfiguration(f'Unsupported MESH_DEVICE={env!r} for Qwen3-32B; use T3K or P150x4.')
+        raise UnsupportedConfiguration(f"Unsupported MESH_DEVICE={env!r} for Qwen3-32B; use T3K or P150x4.")
     param = {
         "mesh_shape": shape,
         "trace_region_size": resolve_trace_region_size("qwen3-32b", env),
@@ -332,10 +333,6 @@ def ttnn_mesh_device_param_from_env() -> dict:
     return param
 
 
-
-
-
-
 def _skip_unless_heads_divide_mesh(mesh_device: ttnn.MeshDevice, hf_model_id: str) -> None:
     """Attention1D TP requires n_heads and n_kv_heads divisible by device count."""
     n_dev = mesh_device.get_num_devices()
@@ -345,7 +342,9 @@ def _skip_unless_heads_divide_mesh(mesh_device: ttnn.MeshDevice, hf_model_id: st
     n_h, n_kv = cfg.num_attention_heads, cfg.num_key_value_heads
     if n_h % n_dev == 0 and n_kv % n_dev == 0:
         return
-    raise UnsupportedConfiguration(f'Incompatible mesh for {hf_model_id}: {n_dev} devices need num_attention_heads ({n_h}) and num_key_value_heads ({n_kv}) each divisible by {n_dev}.')
+    raise UnsupportedConfiguration(
+        f"Incompatible mesh for {hf_model_id}: {n_dev} devices need num_attention_heads ({n_h}) and num_key_value_heads ({n_kv}) each divisible by {n_dev}."
+    )
 
 
 def lazy_weight_cache_dir_for_demo(mesh_device: ttnn.MeshDevice, hf_model_id: str) -> Path:
@@ -421,7 +420,7 @@ def _load_tokenizer(hf_model_id: str):
             raise
         fallback = os.environ.get("TT_TOKENIZER_FALLBACK_CACHE", str(Path.home() / ".cache" / "huggingface"))
         logger.warning(
-            f"Default HF cache not writable for tokenizer download ({e!s:.120}); " f"retrying with cache_dir={fallback}"
+            f"Default HF cache not writable for tokenizer download ({e!s:.120}); retrying with cache_dir={fallback}"
         )
         Path(fallback).mkdir(parents=True, exist_ok=True)
         return AutoTokenizer.from_pretrained(hf_model_id, cache_dir=fallback)
@@ -430,9 +429,9 @@ def _load_tokenizer(hf_model_id: str):
 def load_reference_data(hf_model_id: str):
     """Load reference tensors and optional metadata from ``.refpt``."""
     name = ref_basename_for_hf(hf_model_id)
-    ref_path = Path("qualification/assets/reference_outputs/qwen3_32b") / f"{name}.refpt"
+    ref_path = Path("tests/assets/reference_outputs/qwen3_32b") / f"{name}.refpt"
     if not ref_path.exists():
-        raise UnsupportedConfiguration(f'Reference file not found: {ref_path}')
+        raise UnsupportedConfiguration(f"Reference file not found: {ref_path}")
 
     ref_data = torch.load(ref_path, map_location="cpu", weights_only=False)
     reference_tokens = ref_data["reference_tokens"]
@@ -444,7 +443,7 @@ def load_reference_data(hf_model_id: str):
 
 def load_input_prompts(batch_size: int) -> list[str]:
     """Load input prompts for performance testing."""
-    prompts_path = Path("qualification/assets/sample_prompts/input_data_questions_prefill_128.json")
+    prompts_path = Path("examples/assets/sample_prompts/input_data_questions_prefill_128.json")
     if not prompts_path.exists():
         return ["What is the meaning of life?"] * batch_size
 
@@ -612,7 +611,7 @@ def create_model(
         # not be converted into environmental skips. Preserve the established T3K skip behavior.
         if get_device_name(mesh_device) == "P150x4":
             raise
-        raise UnsupportedConfiguration(f'Could not build Qwen3-32B model (weights / memory / mesh): {e}')
+        raise UnsupportedConfiguration(f"Could not build Qwen3-32B model (weights / memory / mesh): {e}")
 
     return model
 
@@ -658,7 +657,7 @@ def create_dp_submeshes(mesh_device: ttnn.MeshDevice, data_parallel: int) -> lis
         return [mesh_device]
     n = mesh_device.get_num_devices()
     if not (n % data_parallel == 0):
-        raise AssertionError(f'{n} devices not divisible by data_parallel={data_parallel}')
+        raise AssertionError(f"{n} devices not divisible by data_parallel={data_parallel}")
     return mesh_device.create_submeshes(ttnn.MeshShape(1, n // data_parallel))
 
 
@@ -666,7 +665,9 @@ def _dp_or_skip(mesh_device: ttnn.MeshDevice, data_parallel: int) -> None:
     """Skip unless the mesh has exactly ``data_parallel`` single-device DP groups."""
     n = mesh_device.get_num_devices()
     if n % data_parallel != 0 or (n // data_parallel) != 1:
-        raise UnsupportedConfiguration(f'DP-{data_parallel} needs {data_parallel} single-device groups; have {n} devices')
+        raise UnsupportedConfiguration(
+            f"DP-{data_parallel} needs {data_parallel} single-device groups; have {n} devices"
+        )
 
 
 def assert_no_special_tokens(
@@ -712,7 +713,7 @@ def assert_no_special_tokens(
         logger.warning(f"[{case_name}] model produced special tokens ({offenders}/{len(generated_token_ids)} users)")
         if is_ci_env:
             if not (False):
-                raise AssertionError(f'model produced special tokens ({offenders} users)')
+                raise AssertionError(f"model produced special tokens ({offenders} users)")
 
 
 def _run_dp_smoke(
@@ -770,7 +771,7 @@ def _run_dp_smoke(
                     executor_mode=True,
                 )
             except Exception as e:
-                raise UnsupportedConfiguration(f'Could not build Qwen3-32B model (weights / memory / mesh): {e}')
+                raise UnsupportedConfiguration(f"Could not build Qwen3-32B model (weights / memory / mesh): {e}")
             models.append((model, sm))
 
             traced_executor = TracedQwen3_32BExecutor(model, sm)
@@ -778,7 +779,7 @@ def _run_dp_smoke(
 
             ma = model.model_args
             if not (ma is not None):
-                raise AssertionError('condition failed at line 806')
+                raise AssertionError("condition failed at line 806")
 
             block_size = 32
             n_dev_sm = sm.get_num_devices()
@@ -1100,7 +1101,7 @@ def run_qwen3_32b_p150x4_seeded_cross_cardinality(mesh_device):
     invariant result emits ``INVARIANT``; neither verdict silently changes the checked-in policy.
     """
     if get_device_name(mesh_device) != "P150x4":
-        raise UnsupportedConfiguration('cross-cardinality qualification requires a physical P150x4')
+        raise UnsupportedConfiguration("cross-cardinality qualification requires a physical P150x4")
 
     _require_cross_cardinality_environment()
     hf_model = os.environ.get("HF_MODEL", "Qwen/Qwen3-32B")
@@ -1116,17 +1117,17 @@ def run_qwen3_32b_p150x4_seeded_cross_cardinality(mesh_device):
         )
         ma = model.model_args
         if not (ma is not None):
-            raise AssertionError('condition failed at line 1160')
-        if not (ma.disable_batched_prefill is True):
-            raise AssertionError('P150x4 must enter qualification with sequential policy retained')
-        if not (ma.batched_prefill_batched_extract is True):
-            raise AssertionError('batched qualification requires batched last-token extract')
+            raise AssertionError("condition failed at line 1160")
+        if ma.disable_batched_prefill is not True:
+            raise AssertionError("P150x4 must enter qualification with sequential policy retained")
+        if ma.batched_prefill_batched_extract is not True:
+            raise AssertionError("batched qualification requires batched last-token extract")
 
         tokenizer = _load_tokenizer(hf_model)
         corpus_prompts = load_eval_repeat_prompts_batch32()
         prompts = [corpus_prompts[index] for index in _CROSS_CARDINALITY_PROMPT_ORDER]
         if not (len(prompts) == len(_CROSS_CARDINALITY_REQUEST_IDS) == 32):
-            raise AssertionError('condition failed at line 1167')
+            raise AssertionError("condition failed at line 1167")
         block_size = 32
         blocks_per_user = ma.max_seq_len // block_size
         num_blocks = blocks_per_user * ma.max_batch_size
@@ -1147,8 +1148,8 @@ def run_qwen3_32b_p150x4_seeded_cross_cardinality(mesh_device):
                 # for production's per-request seed refresh. Reuse limits the test to two captures.
                 trace_mode=eval_decode_trace_mode("traced"),
             )
-            if not (executor.prefill_runtime.config.disable_batched_prefill is expected_disable_batched_prefill):
-                raise AssertionError('executor prefill policy snapshot disagrees with the requested experiment arm')
+            if executor.prefill_runtime.config.disable_batched_prefill is not expected_disable_batched_prefill:
+                raise AssertionError("executor prefill policy snapshot disagrees with the requested experiment arm")
             kv_cache = executor.allocate_kv_cache(kv_cache_shape, torch.bfloat16, ma.n_layers)
             return executor, kv_cache
 
@@ -1186,8 +1187,8 @@ def run_qwen3_32b_p150x4_seeded_cross_cardinality(mesh_device):
             )
 
         def activate_decode_trace(executor, kv_cache):
-            if not (executor.config.warmup.include_decode_top_k is True):
-                raise AssertionError('condition failed at line 1228')
+            if executor.config.warmup.include_decode_top_k is not True:
+                raise AssertionError("condition failed at line 1228")
             decode_kwargs = {
                 "kv_cache": kv_cache,
                 "max_batch_size": ma.max_batch_size,
@@ -1201,31 +1202,31 @@ def run_qwen3_32b_p150x4_seeded_cross_cardinality(mesh_device):
             compiler = executor.trace_compiler
             traced = executor.traced_executor
             if not (compiler is not None and traced is not None):
-                raise AssertionError('condition failed at line 1241')
+                raise AssertionError("condition failed at line 1241")
             coverage = compiler.registered_coverage("decode")
-            if not (executor.warmup.trace_activated is True):
-                raise AssertionError('condition failed at line 1243')
-            if not (compiler.trace_active is True):
-                raise AssertionError('condition failed at line 1244')
+            if executor.warmup.trace_activated is not True:
+                raise AssertionError("condition failed at line 1243")
+            if compiler.trace_active is not True:
+                raise AssertionError("condition failed at line 1244")
             if not (compiler.trace_count == len(coverage) >= 1):
-                raise AssertionError('condition failed at line 1245')
+                raise AssertionError("condition failed at line 1245")
             records = tuple(compiler.get(trace_key) for trace_key, _signature in coverage)
-            if not (all((record is not None and record.artifact is not None for record in records))):
-                raise AssertionError('condition failed at line 1247')
+            if not (all(record is not None and record.artifact is not None for record in records)):
+                raise AssertionError("condition failed at line 1247")
             topk_coverage = tuple(
                 (trace_key, signature) for trace_key, signature in coverage if signature.sampling_path == "topk"
             )
             if not (len(topk_coverage) == 1):
-                raise AssertionError('condition failed at line 1251')
+                raise AssertionError("condition failed at line 1251")
             topk_trace_key, _topk_signature = topk_coverage[0]
             if not (compiler.get(topk_trace_key).artifact is not None):
-                raise AssertionError('condition failed at line 1253')
+                raise AssertionError("condition failed at line 1253")
             if not (compiler.trace_association_count >= 1):
-                raise AssertionError('condition failed at line 1254')
+                raise AssertionError("condition failed at line 1254")
             if not (compiler.replay_count == 0):
-                raise AssertionError('condition failed at line 1255')
+                raise AssertionError("condition failed at line 1255")
             if not (traced.coverage_miss_count == 0):
-                raise AssertionError('condition failed at line 1256')
+                raise AssertionError("condition failed at line 1256")
             return {
                 "semantic_trace_count": compiler.trace_count,
                 "trace_association_count": compiler.trace_association_count,
@@ -1241,7 +1242,7 @@ def run_qwen3_32b_p150x4_seeded_cross_cardinality(mesh_device):
             compiler = executor.trace_compiler
             traced = executor.traced_executor
             if not (compiler is not None and traced is not None and compiler.trace_active):
-                raise AssertionError('condition failed at line 1271')
+                raise AssertionError("condition failed at line 1271")
             prepared_decode = executor.decode_runtime.prepare(
                 torch.zeros(ma.max_batch_size, dtype=torch.long),
                 torch.zeros(ma.max_batch_size, dtype=torch.long),
@@ -1249,15 +1250,15 @@ def run_qwen3_32b_p150x4_seeded_cross_cardinality(mesh_device):
                 sampling_params=sampling_params,
                 reset_batch=True,
             )
-            if not (prepared_decode.sampling_path == 'topk'):
-                raise AssertionError('condition failed at line 1279')
+            if not (prepared_decode.sampling_path == "topk"):
+                raise AssertionError("condition failed at line 1279")
             decode_program_key = executor.program_compiler.key_for(
                 executor.decode_runtime.program_signature(prepared_decode)
             )
             if not (compiler.trace_key_for_program(decode_program_key) == expected_topk_trace_key):
-                raise AssertionError('condition failed at line 1283')
+                raise AssertionError("condition failed at line 1283")
             if not (compiler.get(expected_topk_trace_key).artifact is not None):
-                raise AssertionError('condition failed at line 1284')
+                raise AssertionError("condition failed at line 1284")
             replay_before = compiler.replay_count
             decode_replays_before = compiler.replay_counts["decode"]
             result = run_perf_benchmark(
@@ -1283,16 +1284,16 @@ def run_qwen3_32b_p150x4_seeded_cross_cardinality(mesh_device):
                     f"cardinality {len(prompt_lens)} expected {_CROSS_CARDINALITY_DECODE_TOKENS} decode trace "
                     f"replays, observed total={replay_delta}, decode={decode_replay_delta}"
                 )
-            if not (compiler.replay_counts['prefill'] == 0):
-                raise AssertionError('condition failed at line 1310')
+            if not (compiler.replay_counts["prefill"] == 0):
+                raise AssertionError("condition failed at line 1310")
             if not (compiler.trace_count == expected_semantic_trace_count and compiler.trace_active):
-                raise AssertionError('condition failed at line 1311')
+                raise AssertionError("condition failed at line 1311")
             if not (compiler.get(expected_topk_trace_key).artifact is not None):
-                raise AssertionError('condition failed at line 1312')
+                raise AssertionError("condition failed at line 1312")
             if not (traced.coverage_miss_count == 0):
-                raise AssertionError('condition failed at line 1313')
+                raise AssertionError("condition failed at line 1313")
             if not (executor.program_compiler.post_activation_compile_rejections == 0):
-                raise AssertionError('condition failed at line 1314')
+                raise AssertionError("condition failed at line 1314")
             return (
                 generated,
                 geometry,
@@ -1333,8 +1334,11 @@ def run_qwen3_32b_p150x4_seeded_cross_cardinality(mesh_device):
                 control_geometry.append(geometry)
                 control_replay_evidence.append(replay_evidence)
             control_trace_lifecycle["replay_count_after_requests"] = sequential_executor.trace_compiler.replay_count
-            if not (control_trace_lifecycle['replay_count_after_requests'] == len(_CROSS_CARDINALITY_REQUEST_IDS) * _CROSS_CARDINALITY_DECODE_TOKENS):
-                raise AssertionError('condition failed at line 1355')
+            if not (
+                control_trace_lifecycle["replay_count_after_requests"]
+                == len(_CROSS_CARDINALITY_REQUEST_IDS) * _CROSS_CARDINALITY_DECODE_TOKENS
+            ):
+                raise AssertionError("condition failed at line 1355")
         finally:
             sequential_executor.cleanup()
 
@@ -1375,11 +1379,14 @@ def run_qwen3_32b_p150x4_seeded_cross_cardinality(mesh_device):
                             _CROSS_CARDINALITY_REQUEST_IDS[:cardinality], generated, strict=True
                         )
                     }
-                candidate_trace_lifecycle[
-                    "replay_count_after_requests"
-                ] = candidate_executor.trace_compiler.replay_count
-                if not (candidate_trace_lifecycle['replay_count_after_requests'] == len(_CROSS_CARDINALITIES) * _CROSS_CARDINALITY_DECODE_TOKENS):
-                    raise AssertionError('condition failed at line 1401')
+                candidate_trace_lifecycle["replay_count_after_requests"] = (
+                    candidate_executor.trace_compiler.replay_count
+                )
+                if not (
+                    candidate_trace_lifecycle["replay_count_after_requests"]
+                    == len(_CROSS_CARDINALITIES) * _CROSS_CARDINALITY_DECODE_TOKENS
+                ):
+                    raise AssertionError("condition failed at line 1401")
             finally:
                 candidate_executor.cleanup()
         finally:
@@ -1409,8 +1416,8 @@ def run_qwen3_32b_p150x4_seeded_cross_cardinality(mesh_device):
                 sort_keys=True,
             )
         )
-        if not (ma.disable_batched_prefill is True):
-            raise AssertionError('qualification must retain sequential P150x4 policy')
+        if ma.disable_batched_prefill is not True:
+            raise AssertionError("qualification must retain sequential P150x4 policy")
     finally:
         cleanup_model_case(model, mesh_device)
 
@@ -1446,7 +1453,7 @@ def _run_token_accuracy(model, mesh_device, expected):
     executor = EagerQwen3_32BExecutor(model, mesh_device)
     ma = model.model_args
     if not (ma is not None):
-        raise AssertionError('condition failed at line 1468')
+        raise AssertionError("condition failed at line 1468")
 
     max_batch_size = ma.max_batch_size
     prompt_tokens = prompt_tokens.repeat(max_batch_size, 1)
@@ -1552,9 +1559,9 @@ def _run_token_accuracy(model, mesh_device, expected):
     meas_top1 = math.ceil(top1)
     meas_top5 = math.ceil(top5)
     if not (meas_top1 >= min_top1):
-        raise AssertionError(f'Top-1 accuracy {top1:.1f}% (ceil {meas_top1}) below threshold {min_top1:.1f}%')
+        raise AssertionError(f"Top-1 accuracy {top1:.1f}% (ceil {meas_top1}) below threshold {min_top1:.1f}%")
     if not (meas_top5 >= min_top5):
-        raise AssertionError(f'Top-5 accuracy {top5:.1f}% (ceil {meas_top5}) below threshold {min_top5:.1f}%')
+        raise AssertionError(f"Top-5 accuracy {top5:.1f}% (ceil {meas_top5}) below threshold {min_top5:.1f}%")
 
 
 def _run_perf_benchmark(
@@ -1612,7 +1619,7 @@ def _run_perf_benchmark(
     try:
         ma = model.model_args
         if not (ma is not None):
-            raise AssertionError('condition failed at line 1631')
+            raise AssertionError("condition failed at line 1631")
 
         block_size = 32
         max_seq_len = ma.max_seq_len
@@ -1804,7 +1811,7 @@ def _run_eval_repeat_batch32(
 
     ma = model.model_args
     if not (ma is not None):
-        raise AssertionError('condition failed at line 1822')
+        raise AssertionError("condition failed at line 1822")
 
     if perf_report:
         _require_eval_perf_prefill_trace_parity(ma)
@@ -1941,10 +1948,22 @@ def _run_eval_repeat_batch32(
 
 RUN_MAIN_CASE = run_qwen3_32b
 SPECIAL_CASE_RUNNERS = {
-    'p150x4-seeded-cross-cardinality': run_qwen3_32b_p150x4_seeded_cross_cardinality,
+    "p150x4-seeded-cross-cardinality": run_qwen3_32b_p150x4_seeded_cross_cardinality,
 }
 
-EXAMPLE_CASES = ('token-accuracy', 'batch-1', 'batch-32', 'batch-32-ci', 'eval-32', 'eval-32-perf-report', 'ci-b1-DP-2', 'ci-b1-DP-4', 'ci-b1-DP-8', 'ci-b1-DP-16', 'ci-b1-DP-32')
+EXAMPLE_CASES = (
+    "token-accuracy",
+    "batch-1",
+    "batch-32",
+    "batch-32-ci",
+    "eval-32",
+    "eval-32-perf-report",
+    "ci-b1-DP-2",
+    "ci-b1-DP-4",
+    "ci-b1-DP-8",
+    "ci-b1-DP-16",
+    "ci-b1-DP-32",
+)
 
 
 def main(argv=None):

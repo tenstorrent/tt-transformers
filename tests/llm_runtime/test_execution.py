@@ -1,16 +1,14 @@
-
-import pytest
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 # SPDX-License-Identifier: Apache-2.0
-
 import inspect
 from dataclasses import dataclass
 from types import SimpleNamespace
 
+import pytest
 import torch
+import ttnn
 
 import tt_transformers.llm_runtime.execution as execution_module
-import ttnn
 from tt_transformers.llm_runtime.decode import DecodeRuntime
 from tt_transformers.llm_runtime.decode import InvocationResult as DecodeInvocationResult
 from tt_transformers.llm_runtime.execution import EagerExecutor, TracedExecutor
@@ -440,10 +438,13 @@ def test_prefill_replay_does_not_interpret_request_eligibility(monkeypatch):
     artifact = SimpleNamespace(persistent_inputs=SimpleNamespace(values=persistent))
     record = SimpleNamespace(artifact=artifact)
     trace_compiler.replay = (
-        lambda program_key, refresh_inputs, *, reset_batch=False, device_feedback_enabled=False, feedback_compatible=False, page_table_changed=False: refresh_inputs(
-            artifact, object()
-        )
-        or hidden
+        lambda program_key,
+        refresh_inputs,
+        *,
+        reset_batch=False,
+        device_feedback_enabled=False,
+        feedback_compatible=False,
+        page_table_changed=False: refresh_inputs(artifact, object()) or hidden
     )
     trace_compiler.trace_key_for_program = lambda program_key: "trace-key"
     trace_compiler.get = lambda trace_key: record
@@ -526,10 +527,13 @@ def test_prefill_missing_trace_artifact_is_an_error_without_eager_reinvocation(m
     trace_compiler = _trace_compiler(program_compiler)
     artifact = SimpleNamespace(persistent_inputs=SimpleNamespace(values=()))
     trace_compiler.replay = (
-        lambda program_key, refresh_inputs, *, reset_batch=False, device_feedback_enabled=False, feedback_compatible=False, page_table_changed=False: refresh_inputs(
-            artifact, object()
-        )
-        or "hidden"
+        lambda program_key,
+        refresh_inputs,
+        *,
+        reset_batch=False,
+        device_feedback_enabled=False,
+        feedback_compatible=False,
+        page_table_changed=False: refresh_inputs(artifact, object()) or "hidden"
     )
     trace_compiler.trace_key_for_program = lambda program_key: "missing"
     trace_compiler.get = lambda trace_key: None
@@ -772,10 +776,13 @@ def test_decode_replay_prepares_once_and_uses_same_object_for_refresh_submission
     trace_compiler.trace_key_for_program = lambda key: trace_key
     trace_compiler.get = lambda key: SimpleNamespace(artifact=object())
     trace_compiler.replay = (
-        lambda program_key, refresh_inputs, *, reset_batch=False, device_feedback_enabled=False, feedback_compatible=False, page_table_changed=False: refresh_inputs(
-            object(), object()
-        )
-        or "token"
+        lambda program_key,
+        refresh_inputs,
+        *,
+        reset_batch=False,
+        device_feedback_enabled=False,
+        feedback_compatible=False,
+        page_table_changed=False: refresh_inputs(object(), object()) or "token"
     )
     traced = TracedExecutor(eager=eager, trace_compiler=trace_compiler)
     sampling_params = object()

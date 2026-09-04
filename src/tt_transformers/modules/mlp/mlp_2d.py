@@ -16,13 +16,16 @@ Execution paths:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import Any, Callable, Optional
+from typing import Any
 
 import ttnn
+
 from tt_transformers.device_ownership import compatibility_default_device
-from tt_transformers.modules.lightweightmodule import LightweightModule
+from tt_transformers.device_utils import is_blackhole
 from tt_transformers.modules.lazy_weight import LazyWeight, resolve_lazy_weight
+from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.modules.tt_ccl import (
     CCL_CHUNKS_PER_SYNC,
     CCL_NUM_BUFFERS_PER_CHANNEL,
@@ -31,7 +34,6 @@ from tt_transformers.modules.tt_ccl import (
     default_topology,
     get_tt_ccl,
 )
-from tt_transformers.device_utils import is_blackhole
 
 # =============================================================================
 # Top-level config dataclass
@@ -69,7 +71,7 @@ class MLP2DConfig:
     # Optional: device and collectives
     mesh_device: ttnn.MeshDevice | None = None
     tt_ccl: TT_CCL | None = None
-    topology: Optional[ttnn.Topology] = None  # None = auto-detect
+    topology: ttnn.Topology | None = None  # None = auto-detect
     num_reduce_scatter_links: int = 1
     num_all_gather_links: int = 2
 
@@ -390,9 +392,9 @@ class MLP2D(LightweightModule):
 
         # Seq_len-dependent: reshape for long sequences
         if seq_len >= cfg.prefill_len_cutoff:
-            assert (
-                seq_len % cfg.prefill_len_cutoff == 0
-            ), f"seq_len ({seq_len}) must be divisible by prefill_len_cutoff ({cfg.prefill_len_cutoff})"
+            assert seq_len % cfg.prefill_len_cutoff == 0, (
+                f"seq_len ({seq_len}) must be divisible by prefill_len_cutoff ({cfg.prefill_len_cutoff})"
+            )
             x = ttnn.reshape(x, [1, seq_len // cfg.prefill_len_cutoff, cfg.prefill_len_cutoff, -1])
 
         # Seq_len-dependent: get program configs (None = let TTNN pick defaults)
@@ -477,7 +479,6 @@ class MLP2D(LightweightModule):
             return self.decode_forward(x)
         else:
             return self.prefill_forward(x)
-
 
 
 # =============================================================================

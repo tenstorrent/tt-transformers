@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 import torch
+import ttnn
 
 import tt_transformers.llm_runtime.prefill.inputs as prefill_inputs_module
 import tt_transformers.llm_runtime.prefill.postprocess as postprocess_module
@@ -20,7 +21,6 @@ import tt_transformers.llm_runtime.prefill.runtime as prefill_module
 import tt_transformers.llm_runtime.prefill.sampling_helpers as sampling_helpers
 import tt_transformers.llm_runtime.tensor_resources as tensor_resources_module
 import tt_transformers.llm_runtime.trace_compiler as trace_compiler_module
-import ttnn
 from tt_transformers.llm_runtime.config import PageTableLayout
 from tt_transformers.llm_runtime.output_reader import OutputReader
 from tt_transformers.llm_runtime.prefill.config import PrefillRuntimeConfig
@@ -2086,7 +2086,6 @@ def test_regular_logits_and_argmax_preserve_operation_order(
 def test_cached_one_chunk_stages_planned_chunk_metadata(monkeypatch):
     runtime = _runtime()
     request = _plan(prompt_length=160, cached_tokens=32)[0]
-    prepared = SimpleNamespace(request=request)
     chunk = request.chunks[0]
     seen = []
 
@@ -2171,10 +2170,14 @@ def test_chunk_sequence_allocates_kpt_before_steps_and_reuses_final_position(mon
     monkeypatch.setattr(
         runtime.postprocessor,
         "finish_prefill_sequence",
-        lambda prepared, final_step_output, kpt, position_inputs, *, sampled_output, owned, count_tokens=True: events.append(
-            "finish"
-        )
-        or final_step_output,
+        lambda prepared,
+        final_step_output,
+        kpt,
+        position_inputs,
+        *,
+        sampled_output,
+        owned,
+        count_tokens=True: events.append("finish") or final_step_output,
     )
 
     runtime.sequence_runner.run(prepared)
@@ -2237,7 +2240,14 @@ def test_sequence_preserves_sampling_output_preallocation_matrix(
     monkeypatch.setattr(
         runtime.postprocessor,
         "finish_prefill_sequence",
-        lambda prepared, final_step_output, kpt, position_inputs, *, sampled_output, owned, count_tokens=True: final_step_output,
+        lambda prepared,
+        final_step_output,
+        kpt,
+        position_inputs,
+        *,
+        sampled_output,
+        owned,
+        count_tokens=True: final_step_output,
     )
 
     runtime.sequence_runner.run(prepared)

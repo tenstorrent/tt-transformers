@@ -5,11 +5,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Iterable
+from collections.abc import Callable, Iterable
+from typing import Any
 
 import torch
-
 import ttnn
+
 from tt_transformers.llm_runtime.prefill.config import PrefillRuntimeConfig
 from tt_transformers.llm_runtime.prefill.inputs import PrefillPositionInputs
 from tt_transformers.llm_runtime.prefill.plan import PrefillRequest

@@ -27,9 +27,8 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 from loguru import logger
-from transformers import AutoConfig, AutoModelForCausalLM, LlamaConfig, LlamaForCausalLM
-
 from tests.support.comparison import hf_cache_layer_kv, hf_cache_num_layers
+from transformers import AutoConfig, AutoModelForCausalLM, LlamaConfig, LlamaForCausalLM
 
 # transformers 5.x moved no_init_weights to transformers.initialization; fall back
 # to the old location for transformers < 5.x.
@@ -39,7 +38,10 @@ except ImportError:
     from transformers.modeling_utils import no_init_weights
 
 import ttnn
-from qualification.tools.auto_compose import to_torch_auto_compose
+from examples.common.auto_compose import to_torch_auto_compose
+from tests.support.comparison import comp_allclose, comp_pcc
+from tests.support.helpers import stable_model_seed
+
 from tt_transformers.modules.attention import attention_1d as attention_1d_module
 from tt_transformers.modules.attention.attention_1d import Attention1D, Attention1DConfig, _resolve_attention1d_config
 from tt_transformers.modules.lazy_weight import LazyWeight
@@ -51,8 +53,6 @@ from tt_transformers.tensor_utils import (
     zeros_like_kv_cache,
     zeros_like_paged_cache,
 )
-from tests.support.helpers import stable_model_seed
-from tests.support.comparison import comp_allclose, comp_pcc
 
 # 1D module suites target the T3K; skip when the host system is a Galaxy.
 pytestmark = pytest.mark.usefixtures("skip_on_galaxy_system")
@@ -1408,17 +1408,6 @@ def test_attention_1d_vs_reference(
             prefill_distributed=False,
         )
 
-    # Create TT_CCL for multi-device
-    tt_ccl = TT_CCL(ttnn_mesh_device) if num_devices > 1 else None
-
-    # Determine topology
-    if num_devices == 1:
-        topology = None
-    elif num_devices == 2:
-        topology = ttnn.Topology.Linear
-    else:
-        topology = ttnn.Topology.Ring
-
     # Setup paged attention config and page table if enabled
     paged_attention_config = None
     page_table_tt = None
@@ -2491,7 +2480,9 @@ def test_attention_1d_wormhole_common_config_paged_prefill_decode_transition_cac
 )
 @pytest.mark.parametrize("seq_len", (512, 32))
 def test_attention_1d_vs_reference_from_model_args(ttnn_mesh_device: ttnn.MeshDevice, seq_len):
-    pytest.skip("TTTv1 compatibility characterization retired; standalone constructor coverage lives in tests/host/test_foundation_boundary.py")
+    pytest.skip(
+        "TTTv1 compatibility characterization retired; standalone constructor coverage lives in tests/host/test_foundation_boundary.py"
+    )
 
 
 @pytest.mark.host

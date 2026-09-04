@@ -6,9 +6,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
+from examples.common.trace_region_sizes import resolve_trace_region_size
 from tests.models.llama3_8b.demo_utils import evaluate_seeded_cross_cardinality_consistency
-from qualification.tools.trace_region_sizes import resolve_trace_region_size
 
 _DEMO_PATH = "examples/llama3_8b/demo.py"
 _HARDWARE_DEMO_PATH = "tests/hardware/models/llama3_8b/test_demo.py"
@@ -64,7 +63,13 @@ def test_p150_batch32_uses_dynamic_trace_allocation():
 @pytest.mark.model
 def test_demo_exposes_seeded_bh_cross_cardinality_qualification_node():
     assert "def test_llama3_8b_bh_seeded_cross_cardinality(ttnn_mesh_device, optimizations):" in _DEMO_SOURCE
-    assert "@pytest.mark.parametrize('optimizations', ['performance', 'accuracy'])" in _DEMO_SOURCE
+    function = next(
+        node
+        for node in _DEMO_TREE.body
+        if isinstance(node, ast.FunctionDef) and node.name == "test_llama3_8b_bh_seeded_cross_cardinality"
+    )
+    decorators = [ast.unparse(decorator) for decorator in function.decorator_list]
+    assert "pytest.mark.parametrize('optimizations', ['performance', 'accuracy'])" in decorators
     assert "_BH_CROSS_CARDINALITIES = (1, 2, 4, 32)" in _DEMO_SOURCE
     assert 'device_name not in {"P150", "P150x4"}' in _DEMO_SOURCE
     assert "_BH_CROSS_CARDINALITY_SEEDS" in _DEMO_SOURCE
@@ -76,7 +81,7 @@ def test_demo_exposes_seeded_bh_cross_cardinality_qualification_node():
     assert '("DISABLE_BATCHED_PREFILL", "DISABLE_BATCHED_EXTRACT")' in _DEMO_SOURCE
     assert "not a serving policy" in _DEMO_SOURCE
     assert "LLAMA3_8B_CROSS_CARDINALITY_VERDICT=" in _DEMO_SOURCE
-    assert "llm.runtime_config.disable_batched_prefill is True" in _DEMO_SOURCE
+    assert "llm.runtime_config.disable_batched_prefill is not True" in _DEMO_SOURCE
 
 
 @pytest.mark.host

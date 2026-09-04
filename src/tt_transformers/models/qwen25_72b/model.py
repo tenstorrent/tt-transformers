@@ -25,13 +25,12 @@ import os
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, List
+from typing import Any
 
 import torch
+import ttnn
 from loguru import logger
 
-import ttnn
-from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.models.qwen25_72b import weight_utils
 from tt_transformers.modules.attention.attention_1d import (
     Attention1D,
@@ -41,6 +40,7 @@ from tt_transformers.modules.attention.attention_1d import (
 )
 from tt_transformers.modules.embedding.embedding_1d import Embedding1D, Embedding1DConfig
 from tt_transformers.modules.lazy_weight import LazyWeight
+from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.modules.lm_head.lm_head_1d import LMHead1D, LMHead1DConfig, _nearest_32
 from tt_transformers.modules.mlp.mlp_1d import MLP1D, MLP1DConfig, _dram_shard_core_grid_k_n
 from tt_transformers.modules.rmsnorm.rmsnorm_1d import RMSNorm1D, RMSNorm1DConfig, _create_sharded_norm_program_config
@@ -618,8 +618,7 @@ def build_qwen25_72b_model(
         )
     if config.n_heads % num_devices != 0 or config.n_kv_heads % num_devices != 0:
         raise ValueError(
-            f"Checkpoint heads ({config.n_heads}/{config.n_kv_heads}) must be divisible by "
-            f"device count ({num_devices})"
+            f"Checkpoint heads ({config.n_heads}/{config.n_kv_heads}) must be divisible by device count ({num_devices})"
         )
     if len(weights.layers) != config.num_hidden_layers:
         raise ValueError(f"Expected {config.num_hidden_layers} decoder layer weights, got {len(weights.layers)}")
@@ -780,7 +779,7 @@ class Qwen25_72B(LightweightModule):
         cfg: Qwen25_72BConfig,
         embed: Embedding1D,
         rope_setup: RotarySetup1D,
-        layers: List[Qwen25_72BDecoderLayer],
+        layers: list[Qwen25_72BDecoderLayer],
         norm: RMSNorm1D,
         lm_head: LMHead1D,
         mesh_device: ttnn.MeshDevice,

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-TTTv2 Llama 3.3-70B-Instruct — native stack (no ``models/tt_transformers`` imports).
+TTTv2 Llama 3.3-70B-Instruct — native stack with no legacy model-tree imports.
 
 Architecture: standard Llama 1D transformer, same topology as Llama 3.1-8B / 3.2-3B
 (no QKV bias, no Q/K norm, GPT-NeoX rotate_half RoPE with llama3 scaling).
@@ -15,7 +15,7 @@ the exact product, device count, logical mesh shape, Ring topology, and P150 DRA
 width before composing modules.
 
 TTTv1 source for precision recipes:
-  ``models/tt_transformers/tt/model_config.py :: DecodersPrecision``.
+  the legacy tt-metal ``DecodersPrecision`` policy.
   ``get_base_model_name("…/Llama-3.3-70B-Instruct") == "Llama-3.3-70B"`` is NOT in the
   ``Llama-3.1-70B`` special-case list (model_config.py:119), so it resolves to the generic
   Llama-3 branch — identical recipe to Llama-3.2-3B: ``accuracy()`` BFP8 attention/KV/MLP +
@@ -32,9 +32,8 @@ from pathlib import Path
 from typing import Any
 
 import torch
-
 import ttnn
-from tt_transformers.modules.lightweightmodule import LightweightModule
+
 from tt_transformers.modules.attention.attention_1d import (
     Attention1D,
     Attention1DConfig,
@@ -43,6 +42,7 @@ from tt_transformers.modules.attention.attention_1d import (
 )
 from tt_transformers.modules.embedding.embedding_1d import Embedding1D, Embedding1DConfig
 from tt_transformers.modules.lazy_weight import LazyWeight
+from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.modules.lm_head.lm_head_1d import LMHead1D, LMHead1DConfig, _nearest_32
 from tt_transformers.modules.mlp.mlp_1d import MLP1D, MLP1DConfig, _dram_shard_core_grid_k_n, _find_prefill_grid
 from tt_transformers.modules.rmsnorm.rmsnorm_1d import RMSNorm1D, RMSNorm1DConfig, _create_sharded_norm_program_config
@@ -532,9 +532,7 @@ def _resolve_llama33_70b_profile(
         decode_create_qkv_head_grid=None if is_wh else ttnn.CoreGrid(y=4, x=8),
         decode_transformation_core_grid=ttnn.CoreCoord(8, 8),
         lm_head_max_columns_per_device=8192 if is_wh else 128256 // 4 // 8,
-        prefill_minimal_matmul=(
-            precision.prefill_minimal_matmul and not os.environ.get("DISABLE_MINIMAL_MATMUL")
-        ),
+        prefill_minimal_matmul=(precision.prefill_minimal_matmul and not os.environ.get("DISABLE_MINIMAL_MATMUL")),
     )
     return _Llama33_70BComposition(model=model, sku=sku)
 

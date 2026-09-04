@@ -1,10 +1,8 @@
-
-import pytest
 # SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
-
 from types import SimpleNamespace
 
+import pytest
 import torch
 from transformers import Phi3Config, Phi3ForCausalLM
 

@@ -1,9 +1,9 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import Optional
 
 import ttnn
+
 from tt_transformers.device_utils import get_device_name
 
 # =============================================================================
@@ -41,7 +41,7 @@ def clear_tt_ccl_cache():
     _tt_ccl_cache.clear()
 
 
-def _get_local_num_devices(mesh_device: Optional[ttnn.MeshDevice]) -> int:
+def _get_local_num_devices(mesh_device: ttnn.MeshDevice | None) -> int:
     """Return the number of devices visible to the current host process."""
     if mesh_device is None:
         raise ValueError("mesh_device is required to determine CCL link counts")
@@ -133,7 +133,7 @@ class TT_CCL:
 
 
 # todo)) work with the CCL team to find opportunity to simplify this --> e.g., build into TTNN APIs?
-def default_topology(mesh_device: ttnn.MeshDevice) -> Optional[ttnn.Topology]:
+def default_topology(mesh_device: ttnn.MeshDevice) -> ttnn.Topology | None:
     """Auto-detect CCL topology based on cluster type and device count."""
     num_devices = mesh_device.get_num_devices()
     cluster_type = ttnn.cluster.get_cluster_type()

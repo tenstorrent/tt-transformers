@@ -9,7 +9,6 @@ from types import SimpleNamespace
 
 import pytest
 
-
 ROOT = Path(__file__).resolve().parents[2]
 CHECKPOINTS = {
     "llama32_1b": ("meta-llama/Llama-3.2-1B-Instruct", "9213176726f574b556790deb65791e0c5aa438b6"),
@@ -171,11 +170,7 @@ def _uses_revision(call: ast.Call, keyword: str = "revision") -> bool:
 def test_config_model_cache_preflight_and_tokenizer_share_resolved_revision(model):
     path = ROOT / f"src/tt_transformers/models/{model}/hf_adaptor.py"
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    functions = {
-        node.name: node
-        for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    }
+    functions = {node.name: node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
     loader = functions["from_pretrained"]
     calls = {_call_name(node): node for node in ast.walk(loader) if isinstance(node, ast.Call)}
 

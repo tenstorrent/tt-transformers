@@ -9,8 +9,8 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-
 import ttnn
+
 from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
 from tt_transformers.models import executor as executor_module
 from tt_transformers.models.executor import ModelExecutor, ModelExecutorConfig

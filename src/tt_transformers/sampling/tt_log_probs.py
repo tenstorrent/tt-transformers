@@ -4,12 +4,11 @@
 
 import inspect
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
+import ttnn
 from loguru import logger
 
-import ttnn
 from tt_transformers.sampling._utils import filter_none
 
 # Maximum number of top logprobs that can be requested (OpenAI API limit)
@@ -38,10 +37,10 @@ class LogProbsResult:
             containing global vocabulary indices for the gathered top-k tokens after moving to host.
     """
 
-    topk_logprobs: Optional[ttnn.Tensor]
-    topk_indices: Optional[ttnn.Tensor]
-    topk_logprobs_host: Optional[ttnn.Tensor]
-    topk_indices_host: Optional[ttnn.Tensor]
+    topk_logprobs: ttnn.Tensor | None
+    topk_indices: ttnn.Tensor | None
+    topk_logprobs_host: ttnn.Tensor | None
+    topk_indices_host: ttnn.Tensor | None
 
     def cpu(self, blocking: bool = True) -> "LogProbsResult":
         """Transfer device tensors to host CPU.

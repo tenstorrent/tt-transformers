@@ -10,14 +10,14 @@ from pathlib import Path
 
 import pytest
 import torch
-
 import ttnn
+from tests.integration.cleanup_utils import cleanup_model_case
+from tests.integration.run_helpers import make_contiguous_page_table
+
 from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
 from tt_transformers.models.llama33_70b.executor import Llama33_70BExecutor, Llama33_70BExecutorConfig
 from tt_transformers.models.llama33_70b.hf_adaptor import from_pretrained
 from tt_transformers.models.llama33_70b.model import LLAMA33_70B_ACCURACY, LLAMA33_70B_BH_TP4_CLUSTER_TYPES
-from tests.integration.cleanup_utils import cleanup_model_case
-from tests.integration.run_helpers import make_contiguous_page_table
 
 _HF_MODEL = "meta-llama/Llama-3.3-70B-Instruct"
 _BLOCK_SIZE = 32
@@ -46,9 +46,9 @@ pytestmark = [
 
 def _assert_physical_bh_tp4(mesh_device: ttnn.MeshDevice) -> None:
     assert ttnn.device.is_blackhole(), "BlackHole TP4 smoke requires BlackHole"
-    assert (
-        ttnn.cluster.get_cluster_type() in LLAMA33_70B_BH_TP4_CLUSTER_TYPES
-    ), "BlackHole TP4 smoke requires a physical P150_X4 or P300_X2 product"
+    assert ttnn.cluster.get_cluster_type() in LLAMA33_70B_BH_TP4_CLUSTER_TYPES, (
+        "BlackHole TP4 smoke requires a physical P150_X4 or P300_X2 product"
+    )
     assert mesh_device.get_num_devices() == 4
     assert tuple(mesh_device.shape) == (1, 4)
 

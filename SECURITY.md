@@ -6,4 +6,4 @@ exploit details, credentials, model access tokens, or proprietary checkpoints.
 
 The package never bundles firmware, drivers, model weights, tokenizers, or
 caches. Only versions explicitly listed in current support manifests and
-qualification reports are considered supported.
+`SUPPORT.md` are considered supported.

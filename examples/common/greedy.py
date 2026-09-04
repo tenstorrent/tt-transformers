@@ -1,9 +1,9 @@
 """Greedy conversion helpers owned by focused example smoke paths."""
 
 import torch
-
 import ttnn
-from qualification.tools.auto_compose import to_torch_auto_compose
+
+from examples.common.auto_compose import to_torch_auto_compose
 
 
 def greedy_argmax_from_logits(logits: ttnn.Tensor, *, mesh_device: ttnn.MeshDevice) -> int:

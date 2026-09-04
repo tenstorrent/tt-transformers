@@ -3,7 +3,7 @@
 
 """Family-neutral model execution composition and cleanup root.
 
-This module composes the reusable owners in :mod:`models.common.llm_runtime`.
+This module composes the reusable owners in :mod:`tt_transformers.llm_runtime`.
 Model and family entry points resolve their warmup and sampling policy before
 constructing :class:`ModelExecutor`; this module never identifies or dispatches
 on a concrete model.
@@ -11,8 +11,9 @@ on a concrete model.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
-from typing import Any, Callable, Sequence
+from typing import Any
 
 import torch
 

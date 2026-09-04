@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Any
 
 import torch
-
 import ttnn
+
 from tt_transformers.llm_runtime.config import PagedKVCacheConfig
 
 
@@ -303,8 +303,7 @@ class PagedKVCacheManager:
                 )
             if paged.max_num_blocks != config.max_num_blocks:
                 raise ValueError(
-                    f"Model layer {layer} max_num_blocks {paged.max_num_blocks} does not match "
-                    f"{config.max_num_blocks}"
+                    f"Model layer {layer} max_num_blocks {paged.max_num_blocks} does not match {config.max_num_blocks}"
                 )
 
         model_dtypes = self.per_layer_dtypes

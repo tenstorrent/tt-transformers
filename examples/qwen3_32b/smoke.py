@@ -11,13 +11,13 @@ Run (T3K, internal KV smoke, 1-layer fast iteration)::
 
     MESH_DEVICE=T3K HF_MODEL=Qwen/Qwen3-32B \\
       QWEN3_32B_DEMO_NUM_LAYERS=1 \\
-      pytest models/common/models/qwen3_32b/demo.py -v -k prefill_smoke
+      pytest src/tt_transformers/models/qwen3_32b/demo.py -v -k prefill_smoke
 
 Executor + paged KV::
 
     MESH_DEVICE=T3K HF_MODEL=Qwen/Qwen3-32B \\
       QWEN3_32B_DEMO_NUM_LAYERS=1 \\
-      pytest models/common/models/qwen3_32b/demo.py -v -k executor_prefill
+      pytest src/tt_transformers/models/qwen3_32b/demo.py -v -k executor_prefill
 
 ``Attention1D`` shards heads across the mesh: 64 / 8 = 8 attention heads per device and
 8 / 8 = 1 KV head per device.
@@ -25,43 +25,46 @@ Executor + paged KV::
 
 from __future__ import annotations
 
-from functools import wraps
 import inspect
-
 import os
+from functools import wraps
 
 import torch
+import ttnn
 from transformers import AutoConfig, AutoModelForCausalLM
 
-import ttnn
-from tt_transformers.device_ownership import default_device_scope
+from examples.common.comparison import comp_pcc
+from examples.common.greedy import greedy_argmax_from_logits, greedy_decode_one_step
+from examples.common.run_helpers import make_contiguous_page_table
 from examples.common.runtime import TemporaryPathFactory, UnsupportedConfiguration, open_mesh_device
+from tt_transformers.device_ownership import default_device_scope
+from tt_transformers.device_utils import cleanup_model_case
 from tt_transformers.models.qwen3_32b.executor import (
     EagerQwen3_32BExecutor,
     TracedQwen3_32BExecutor,
     run_lm_head,
     run_prefill,
 )
-from examples.common.greedy import greedy_argmax_from_logits, greedy_decode_one_step
 from tt_transformers.models.qwen3_32b.model import Qwen3_32B
-from tt_transformers.device_utils import cleanup_model_case
-from examples.common.run_helpers import make_contiguous_page_table
-from examples.common.comparison import comp_pcc
 
 
 def _skip_unless_t3k(mesh_device: ttnn.MeshDevice, hf_model_id: str) -> None:
     """Port targets T3K only; head divisibility is satisfied (64/8, 8/8)."""
     n_dev = mesh_device.get_num_devices()
     if n_dev != 8:
-        raise UnsupportedConfiguration(f'Qwen3-32B port targets T3K (8 devices) only; got {n_dev}. Set MESH_DEVICE=T3K.')
+        raise UnsupportedConfiguration(
+            f"Qwen3-32B port targets T3K (8 devices) only; got {n_dev}. Set MESH_DEVICE=T3K."
+        )
     cfg = AutoConfig.from_pretrained(hf_model_id)
     n_h, n_kv = cfg.num_attention_heads, cfg.num_key_value_heads
     if n_h % n_dev != 0 or n_kv % n_dev != 0:
-        raise UnsupportedConfiguration(f'Incompatible mesh for {hf_model_id}: {n_dev} devices need num_attention_heads ({n_h}) and num_key_value_heads ({n_kv}) each divisible by {n_dev}.')
+        raise UnsupportedConfiguration(
+            f"Incompatible mesh for {hf_model_id}: {n_dev} devices need num_attention_heads ({n_h}) and num_key_value_heads ({n_kv}) each divisible by {n_dev}."
+        )
 
 
 def resolve_device_params(request, galaxy_type):
-    """Match ``models/tt_transformers/conftest.py`` so ``fabric_config: True`` maps to a real fabric."""
+    """Match ``tests/conftest.py`` so ``fabric_config: True`` maps to a real fabric."""
     params = getattr(request, "param", {}).copy()
 
     mesh_device = {"N150": (1, 1), "N300": (1, 2), "N150x4": (1, 4), "T3K": (1, 8), "TG": (8, 4)}.get(
@@ -80,12 +83,8 @@ def resolve_device_params(request, galaxy_type):
     return params
 
 
-
-
 def default_hf_model_id():
     return os.environ.get("HF_MODEL", "Qwen/Qwen3-32B")
-
-
 
 
 def _scoped_default_device(function):
@@ -118,7 +117,7 @@ def run_qwen3_32b_prefill_smoke(mesh_device, hf_model_id, seq_len: int, tmp_path
             executor_mode=False,
         )
     except Exception as e:
-        raise UnsupportedConfiguration(f'Could not build model (weights / memory): {e}')
+        raise UnsupportedConfiguration(f"Could not build model (weights / memory): {e}")
 
     try:
         toks = torch.zeros(1, 1, 1, seq_len, dtype=torch.int32)
@@ -161,7 +160,7 @@ def run_qwen3_32b_decode_one_step(mesh_device, hf_model_id, tmp_path_factory):
             executor_mode=False,
         )
     except Exception as e:
-        raise UnsupportedConfiguration(f'Could not build model (weights / memory): {e}')
+        raise UnsupportedConfiguration(f"Could not build model (weights / memory): {e}")
 
     try:
         toks = torch.zeros(1, 1, 1, seq_len, dtype=torch.int32)
@@ -197,11 +196,11 @@ def run_qwen3_32b_executor_prefill_smoke(mesh_device, hf_model_id, seq_len: int,
             executor_mode=True,
         )
     except Exception as e:
-        raise UnsupportedConfiguration(f'Could not build model: {e}')
+        raise UnsupportedConfiguration(f"Could not build model: {e}")
 
     ma = model.model_args
     if not (ma is not None):
-        raise AssertionError('condition failed at line 207')
+        raise AssertionError("condition failed at line 207")
     block_size = 32
     max_num_blocks = (ma.max_seq_len // block_size) * ma.max_batch_size
     kv_shape = (max_num_blocks, ma.n_kv_heads // mesh_device.get_num_devices(), block_size, ma.head_dim)
@@ -215,13 +214,13 @@ def run_qwen3_32b_executor_prefill_smoke(mesh_device, hf_model_id, seq_len: int,
         toks[0, :4] = torch.tensor([1, 2, 3, 4], dtype=torch.long)
         logits = ex.prefill_forward(toks, page_table=page_table, kv_cache=kv)
     except Exception as e:
-        raise UnsupportedConfiguration(f'Executor prefill not runnable: {e}')
+        raise UnsupportedConfiguration(f"Executor prefill not runnable: {e}")
     finally:
         cleanup_model_case(model, mesh_device)
     # Assert OUTSIDE the try so a real shape regression fails the test instead of being
     # swallowed into a skip by the broad `except` above.
     if not (logits.shape[0] == 1 and logits.shape[-1] == model.vocab_size):
-        raise AssertionError('condition failed at line 228')
+        raise AssertionError("condition failed at line 228")
 
 
 @_scoped_default_device
@@ -240,7 +239,9 @@ def run_qwen3_32b_teacher_forcing_prefill_vs_hf(mesh_device, hf_model_id, tmp_pa
     if env_layers is not None:
         num_layers = int(env_layers)
         if num_layers != n_hf:
-            raise UnsupportedConfiguration(f'Teacher-forcing PCC is defined against the full HF forward; unset QWEN3_32B_DEMO_NUM_LAYERS to use all {n_hf} layers (currently QWEN3_32B_DEMO_NUM_LAYERS={num_layers}).')
+            raise UnsupportedConfiguration(
+                f"Teacher-forcing PCC is defined against the full HF forward; unset QWEN3_32B_DEMO_NUM_LAYERS to use all {n_hf} layers (currently QWEN3_32B_DEMO_NUM_LAYERS={num_layers})."
+            )
     else:
         num_layers = n_hf
     seq_len = 128
@@ -257,7 +258,7 @@ def run_qwen3_32b_teacher_forcing_prefill_vs_hf(mesh_device, hf_model_id, tmp_pa
             executor_mode=True,
         )
     except Exception as e:
-        raise UnsupportedConfiguration(f'Could not build model: {e}')
+        raise UnsupportedConfiguration(f"Could not build model: {e}")
 
     ma = model.model_args
     block_size = 32
@@ -283,13 +284,13 @@ def run_qwen3_32b_teacher_forcing_prefill_vs_hf(mesh_device, hf_model_id, tmp_pa
 
         ok, pcc = comp_pcc(hf_out, tt_vec, pcc=0.85)
     except Exception as e:
-        raise UnsupportedConfiguration(f'Teacher-forcing PCC check not runnable: {e}')
+        raise UnsupportedConfiguration(f"Teacher-forcing PCC check not runnable: {e}")
     finally:
         cleanup_model_case(model, mesh_device)
     # Assert OUTSIDE the try so a genuine PCC regression — the whole point of this test — fails
     # instead of being converted into a skip by the broad `except` above.
     if not (ok):
-        raise AssertionError(f'Prefill last-token PCC too low: {pcc}')
+        raise AssertionError(f"Prefill last-token PCC too low: {pcc}")
 
 
 @_scoped_default_device
@@ -325,11 +326,11 @@ def run_qwen3_32b_eager_traced_prefill_logits_match(mesh_device, hf_model_id, tm
             executor_mode=True,
         )
     except Exception as e:
-        raise UnsupportedConfiguration(f'Could not build models: {e}')
+        raise UnsupportedConfiguration(f"Could not build models: {e}")
 
     ma = m_e.model_args
     if not (ma is not None):
-        raise AssertionError('condition failed at line 340')
+        raise AssertionError("condition failed at line 340")
     block_size = 32
     max_num_blocks = (ma.max_seq_len // block_size) * ma.max_batch_size
     kv_shape = (max_num_blocks, ma.n_kv_heads // mesh_device.get_num_devices(), block_size, ma.head_dim)
@@ -346,7 +347,7 @@ def run_qwen3_32b_eager_traced_prefill_logits_match(mesh_device, hf_model_id, tm
         lt = traced_ex.prefill_forward(toks, page_table=page_table, kv_cache=kv_t)
         diff = (le.float() - lt.float()).abs().max().item()
         if not (diff < 0.25):
-            raise AssertionError(f'eager/traced prefill logits max abs diff too large: {diff}')
+            raise AssertionError(f"eager/traced prefill logits max abs diff too large: {diff}")
     finally:
         cleanup_model_case(m_e, mesh_device)
         cleanup_model_case(m_t, mesh_device)
@@ -383,7 +384,7 @@ def run_qwen3_32b_numerical_divergence_vs_hf(mesh_device, hf_model_id, tmp_path_
         num_layers = n_hf
     seq_len = int(os.environ.get("QWEN3_32B_NUMDIV_SEQ", "128"))
     if not (seq_len % 128 == 0):
-        raise AssertionError(f'seq_len must be multiple of 128, got {seq_len}')
+        raise AssertionError(f"seq_len must be multiple of 128, got {seq_len}")
 
     out_csv = os.environ.get("QWEN3_32B_NUMDIV_OUT", "/tmp/qwen3_32b_numdiv.csv")
     cache = tmp_path_factory.mktemp("qwen3_32b_numdiv")
@@ -451,7 +452,7 @@ def run_qwen3_32b_numerical_divergence_vs_hf(mesh_device, hf_model_id, tmp_path_
             executor_mode=False,
         )
     except Exception as e:
-        raise UnsupportedConfiguration(f'Could not build TT model: {e}')
+        raise UnsupportedConfiguration(f"Could not build TT model: {e}")
 
     # ---------- Instrument TT decoder layer prefill_forward ----------
     tt_intermediates: dict[str, torch.Tensor] = {}
@@ -590,12 +591,12 @@ def run_qwen3_32b_numerical_divergence_vs_hf(mesh_device, hf_model_id, tmp_path_
 
 
 SMOKE_CASE_RUNNERS = {
-    'qwen3-32b-prefill-smoke': run_qwen3_32b_prefill_smoke,
-    'qwen3-32b-decode-one-step': run_qwen3_32b_decode_one_step,
-    'qwen3-32b-executor-prefill-smoke': run_qwen3_32b_executor_prefill_smoke,
-    'qwen3-32b-teacher-forcing-prefill-vs-hf': run_qwen3_32b_teacher_forcing_prefill_vs_hf,
-    'qwen3-32b-eager-traced-prefill-logits-match': run_qwen3_32b_eager_traced_prefill_logits_match,
-    'qwen3-32b-numerical-divergence-vs-hf': run_qwen3_32b_numerical_divergence_vs_hf,
+    "qwen3-32b-prefill-smoke": run_qwen3_32b_prefill_smoke,
+    "qwen3-32b-decode-one-step": run_qwen3_32b_decode_one_step,
+    "qwen3-32b-executor-prefill-smoke": run_qwen3_32b_executor_prefill_smoke,
+    "qwen3-32b-teacher-forcing-prefill-vs-hf": run_qwen3_32b_teacher_forcing_prefill_vs_hf,
+    "qwen3-32b-eager-traced-prefill-logits-match": run_qwen3_32b_eager_traced_prefill_logits_match,
+    "qwen3-32b-numerical-divergence-vs-hf": run_qwen3_32b_numerical_divergence_vs_hf,
 }
 
 
@@ -611,7 +612,12 @@ def main(argv=None):
     try:
         with open_mesh_device(params) as mesh:
             runner = SMOKE_CASE_RUNNERS[args.case]
-            available = {"mesh_device": mesh, "hf_model_id": default_hf_model_id(), "seq_len": args.seq_len, "tmp_path_factory": factory}
+            available = {
+                "mesh_device": mesh,
+                "hf_model_id": default_hf_model_id(),
+                "seq_len": args.seq_len,
+                "tmp_path_factory": factory,
+            }
             names = tuple(inspect.signature(runner).parameters)
             runner(**{name: available[name] for name in names})
     except UnsupportedConfiguration as error:

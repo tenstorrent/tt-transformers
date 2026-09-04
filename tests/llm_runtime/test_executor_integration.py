@@ -11,8 +11,8 @@ from unittest.mock import MagicMock, create_autospec
 
 import pytest
 import torch
-
 import ttnn
+
 from tt_transformers.llm_runtime.config import PagedKVCacheConfig, PageTableLayout, TraceConfig, WarmupConfig
 from tt_transformers.llm_runtime.decode import DecodeTraceSignature
 from tt_transformers.llm_runtime.execution import EagerExecutor

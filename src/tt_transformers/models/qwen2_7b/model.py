@@ -21,10 +21,9 @@ from pathlib import Path
 from typing import Any
 
 import torch
+import ttnn
 from loguru import logger
 
-import ttnn
-from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.modules.attention.attention_1d import (
     Attention1D,
     Attention1DConfig,
@@ -33,6 +32,7 @@ from tt_transformers.modules.attention.attention_1d import (
 )
 from tt_transformers.modules.embedding.embedding_1d import Embedding1D, Embedding1DConfig
 from tt_transformers.modules.lazy_weight import LazyWeight
+from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.modules.lm_head.lm_head_1d import LMHead1D, LMHead1DConfig, _nearest_32
 from tt_transformers.modules.mlp.mlp_1d import MLP1D, MLP1DConfig, _dram_shard_core_grid_k_n
 from tt_transformers.modules.rmsnorm.rmsnorm_1d import RMSNorm1D, RMSNorm1DConfig, _create_sharded_norm_program_config
@@ -214,7 +214,7 @@ def _qwen_wh_attn_hifi4_kernel() -> ttnn.WormholeComputeKernelConfig:
 
     Matches the TTTv1 ``ModelArgs.compute_kernel_config_hifi4`` used by both
     ``ModelOptimizations.performance`` and ``ModelOptimizations.accuracy`` for
-    Qwen2-7B (see ``models/tt_transformers/tt/model_config.py``).
+    Qwen2-7B (retained from the legacy tt-metal model policy).
     The TTTv2 ``Attention1D`` defaults are HiFi2 with fp16 accumulation; that
     silently downgrades attention prefill QKV/WO and decode QKV/SDPA/WO matmul
     precision for this model, producing a broad per-layer divergence vs HF.
@@ -640,8 +640,7 @@ def build_qwen2_7b_transformer_config(
         raise ValueError(f"Qwen2-7B supports TP2/N300 only, got {num_devices} devices")
     if params.n_heads % num_devices or params.n_kv_heads % num_devices:
         raise ValueError(
-            f"Checkpoint heads ({params.n_heads}/{params.n_kv_heads}) "
-            f"must be divisible by device count ({num_devices})"
+            f"Checkpoint heads ({params.n_heads}/{params.n_kv_heads}) must be divisible by device count ({num_devices})"
         )
     if len(weights.layers) != n_layers:
         raise ValueError(f"Expected {n_layers} decoder layer weight sets, got {len(weights.layers)}")

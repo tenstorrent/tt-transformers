@@ -8,18 +8,22 @@ TTTv2 module — declarative config, lazy buffer allocation, no mutable module s
 Penalty state (PenaltyParams, PenaltyAccumulator) is caller-constructed and passed
 as arguments to forward methods.
 
-See also: models/common/sampling/tt_penalties.py (TTTv1 source)
+See also: src/tt_transformers/sampling/tt_penalties.py (TTTv1 source)
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any
 
 import ttnn
+
 from tt_transformers.device_ownership import compatibility_default_device
-from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.modules.lazy_buffer import LazyBuffer, resolve_lazy_buffer
+from tt_transformers.modules.lightweightmodule import LightweightModule
+
+if TYPE_CHECKING:
+    import torch
 
 # ---------------------------------------------------------------------------
 # Caller-constructed penalty state dataclasses
@@ -70,7 +74,7 @@ class Penalties1DConfig:
     """
 
     vocab_size: int  # Required. Caller pre-pads to be divisible by num_devices.
-    mesh_device: Optional[ttnn.MeshDevice] = None  # None → audited compatibility default
+    mesh_device: ttnn.MeshDevice | None = None  # None → audited compatibility default
     max_batch_size: int = 32
     sub_core_grids: Any = None  # From args.sub_core_grids; passed to ttnn ops via op_kwargs
 
@@ -144,7 +148,6 @@ class Penalties1D(LightweightModule):
         instance.config = _resolve_penalties1d_config(config)
         instance._device_buffers_loaded = False
         return instance
-
 
     # -- Device buffers (idempotent) ------------------------------------------
 
@@ -234,7 +237,7 @@ class Penalties1D(LightweightModule):
         self,
         params: PenaltyParams,
         accum: PenaltyAccumulator,
-        prompt_tokens: "torch.Tensor",
+        prompt_tokens: torch.Tensor,
     ) -> None:
         """Record prompt token positions into params.prompt_mask via scatter_add.
 
@@ -371,7 +374,7 @@ class Penalties1D(LightweightModule):
             mask=accum.output_mask,
         )
 
-    def reset_output_tokens(self, accum: PenaltyAccumulator, tokens: "torch.Tensor | None" = None) -> None:
+    def reset_output_tokens(self, accum: PenaltyAccumulator, tokens: torch.Tensor | None = None) -> None:
         """Zero out accumulator buffers. Optionally re-initialize from provided tokens.
 
         Port of TTPenalties.reset_output_tokens (tt_penalties.py:214-245).
@@ -475,7 +478,7 @@ class Penalties1D(LightweightModule):
             raise
         return slice_start, slice_end
 
-    def _pad_batch_to_max(self, tokens_2d: "torch.Tensor", pad_value: int) -> "torch.Tensor":
+    def _pad_batch_to_max(self, tokens_2d: torch.Tensor, pad_value: int) -> torch.Tensor:
         """Pad/truncate first dim to max_batch_size."""
         # todo)) can we get rid of the torch import here? --> will rethink the boundaries of the module when active development is done on the TTTv1 side
         import torch
@@ -616,7 +619,10 @@ def _resolve_penalties1d_config(config: Penalties1DConfig) -> Penalties1DConfig:
         mesh_mapper=shard_mapper,
         memory_config=ttnn.DRAM_MEMORY_CONFIG,
     )
-    zeros_BV = lambda: torch.zeros(B, V, dtype=torch.int32)
+
+    def zeros_BV():
+        return torch.zeros(B, V, dtype=torch.int32)
+
     to_set["prompt_mask"] = _resolve_buf(config.prompt_mask, sharded_vocab_defaults, zeros_BV)
     to_set["output_mask"] = _resolve_buf(config.output_mask, sharded_vocab_defaults, zeros_BV)
     to_set["output_counts"] = _resolve_buf(config.output_counts, sharded_vocab_defaults, zeros_BV)
@@ -660,7 +666,10 @@ def _resolve_penalties1d_config(config: Penalties1DConfig) -> Penalties1DConfig:
         mesh_mapper=replicate_mapper,
         memory_config=ttnn.DRAM_MEMORY_CONFIG,
     )
-    zeros_B1 = lambda: torch.zeros(B, 1, dtype=torch.float32)
+
+    def zeros_B1():
+        return torch.zeros(B, 1, dtype=torch.float32)
+
     for field_name in (
         "presence_penalties",
         "frequency_penalties",

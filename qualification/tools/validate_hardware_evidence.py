@@ -22,8 +22,7 @@ if str(ROOT) not in sys.path:
 
 from qualification.tools import run_hardware_matrix as runner
 
-
-DEFAULT_MATRIX = ROOT / "qualification/manifests/hardware-matrix.json"
+DEFAULT_MATRIX = ROOT / "tests/hardware/hardware-matrix.json"
 DEFAULT_SCHEMA = ROOT / "qualification/schemas/hardware-evidence.schema.json"
 FINAL_CLASSIFICATIONS = {
     "passed",
@@ -119,28 +118,20 @@ def resolve_machine(matrix: dict[str, Any], node: dict[str, Any], caller: Any, p
     if not isinstance(machines, dict):
         raise EvidenceError("matrix machines must be an object")
     matches = [
-        name
-        for name in node.get("machine_pool", [])
-        if caller in machines.get(name, {}).get("allowed_identities", [])
+        name for name in node.get("machine_pool", []) if caller in machines.get(name, {}).get("allowed_identities", [])
     ]
     if len(matches) != 1:
-        raise EvidenceError(
-            f"{path}: caller identity {caller!r} does not select exactly one node machine: {matches}"
-        )
+        raise EvidenceError(f"{path}: caller identity {caller!r} does not select exactly one node machine: {matches}")
     return matches[0]
 
 
-def validate_actual_fqdn(
-    matrix: dict[str, Any], machine_name: str, actual_fqdn: Any, *, path: Path
-) -> None:
+def validate_actual_fqdn(matrix: dict[str, Any], machine_name: str, actual_fqdn: Any, *, path: Path) -> None:
     if not isinstance(actual_fqdn, str) or not actual_fqdn:
         raise EvidenceError(f"{path}: actual_fqdn must be non-empty")
     allowed = matrix["machines"][machine_name].get("allowed_identities", [])
     reservation_identity = actual_fqdn.startswith(f"{machine_name}-special-")
     if actual_fqdn not in allowed and not reservation_identity:
-        raise EvidenceError(
-            f"{path}: actual_fqdn {actual_fqdn!r} is not attributable to {machine_name}"
-        )
+        raise EvidenceError(f"{path}: actual_fqdn {actual_fqdn!r} is not attributable to {machine_name}")
 
 
 def template_matches(template: Any, actual: Any, *, node: dict[str, Any]) -> bool:
@@ -164,9 +155,7 @@ def template_matches(template: Any, actual: Any, *, node: dict[str, Any]) -> boo
     return re.fullmatch("".join(pieces), actual) is not None
 
 
-def validate_environment(
-    node: dict[str, Any], machine_name: str, evidence: dict[str, Any], *, path: Path
-) -> None:
+def validate_environment(node: dict[str, Any], machine_name: str, evidence: dict[str, Any], *, path: Path) -> None:
     expected = dict(node.get("environment", {}))
     expected.update(node.get("machine_environment_overrides", {}).get(machine_name, {}))
     cache = node.get("cache_requirement", {})
@@ -402,9 +391,7 @@ def build_index(
     for evidence_path, evidence in discover_records(evidence_root):
         node_id = evidence.get("node")
         if isinstance(node_id, str) and node_id in seen_nodes:
-            raise EvidenceError(
-                f"duplicate evidence for node {node_id}: {seen_nodes[node_id]} and {evidence_path}"
-            )
+            raise EvidenceError(f"duplicate evidence for node {node_id}: {seen_nodes[node_id]} and {evidence_path}")
         if isinstance(node_id, str):
             seen_nodes[node_id] = evidence_path
         records.append(

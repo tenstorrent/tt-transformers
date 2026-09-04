@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "../../schemas/bh_required_capabilities.schema.json",
+  "$id": "../../../qualification/schemas/bh_required_capabilities.schema.json",
   "title": "TTTv2 BlackHole required-capability contract",
   "type": "object",
   "additionalProperties": false,

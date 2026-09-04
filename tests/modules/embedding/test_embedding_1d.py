@@ -16,13 +16,13 @@ from pathlib import Path
 
 import pytest
 import torch
-from loguru import logger
-
 import ttnn
-from qualification.tools.auto_compose import to_torch_auto_compose
+from examples.common.auto_compose import to_torch_auto_compose
+from loguru import logger
+from tests.support.comparison import comp_allclose, comp_pcc
+
 from tt_transformers.modules.embedding.embedding_1d import Embedding1D, Embedding1DConfig
 from tt_transformers.modules.lazy_weight import LazyWeight
-from tests.support.comparison import comp_allclose, comp_pcc
 
 # 1D module suites target the T3K; skip when the host system is a Galaxy.
 pytestmark = pytest.mark.usefixtures("skip_on_galaxy_system")
@@ -386,7 +386,9 @@ def test_embedding_1d_vs_reference(
 )
 @pytest.mark.parametrize("seq_len", [32, 128])
 def test_embedding_1d_vs_reference_from_model_args(ttnn_mesh_device: ttnn.MeshDevice, seq_len):
-    pytest.skip("TTTv1 compatibility characterization retired; standalone constructor coverage lives in tests/host/test_foundation_boundary.py")
+    pytest.skip(
+        "TTTv1 compatibility characterization retired; standalone constructor coverage lives in tests/host/test_foundation_boundary.py"
+    )
 
 
 # ============================================================================

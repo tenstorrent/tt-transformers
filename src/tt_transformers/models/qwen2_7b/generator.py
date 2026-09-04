@@ -10,8 +10,8 @@ from dataclasses import dataclass
 from typing import Any
 
 import torch
-
 import ttnn
+
 from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, TraceMode, WarmupConfig
 from tt_transformers.llm_runtime.lane_group import LaneGroupExecutor
 from tt_transformers.llm_runtime.vllm_adapter import NormalizedPrefillKwargs, VLLMAdapter, VLLMAdapterConfig
@@ -49,8 +49,7 @@ class Qwen2GeneratorConfig:
             _validate_positive_int("n_layers", self.n_layers)
         if self.max_batch_size % self.tt_data_parallel != 0:
             raise ValueError(
-                f"max_batch_size={self.max_batch_size} must be divisible by "
-                f"tt_data_parallel={self.tt_data_parallel}"
+                f"max_batch_size={self.max_batch_size} must be divisible by tt_data_parallel={self.tt_data_parallel}"
             )
         if not isinstance(self.device_sampling_enabled, bool):
             raise TypeError("device_sampling_enabled must be bool")

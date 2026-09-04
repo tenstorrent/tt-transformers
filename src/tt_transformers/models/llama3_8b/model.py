@@ -7,7 +7,7 @@ TTTv2 Llama 3.1-8B Transformer model.
 Model:
     Llama3Transformer1D — pure forward methods, no input/output processing
 
-Executor wrappers live in models/common/models/llama3_8b/executor.py.
+Executor wrappers live in src/tt_transformers/models/llama3_8b/executor.py.
 
 Architecture:
     Llama3Transformer1D (1D only — non-TG)
@@ -23,7 +23,7 @@ Architecture:
     └── Sampling1D (optional)
 
 Loop policy functions (run_teacher_forcing, run_perf_benchmark) are in
-models/common/models/executor.py.
+src/tt_transformers/models/executor.py.
 """
 
 import math
@@ -32,20 +32,26 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import torch
-
 import ttnn
+
 from tt_transformers.device_utils import get_device_name
-from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.modules.attention.attention_1d import Attention1D, Attention1DConfig
 from tt_transformers.modules.embedding.embedding_1d import Embedding1D, Embedding1DConfig
 from tt_transformers.modules.lazy_weight import LazyWeight as CommonLazyWeight
+from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.modules.lm_head.lm_head_1d import LMHead1D, LMHead1DConfig, _compute_kernel_config_hifi2
 from tt_transformers.modules.mlp.mlp_1d import MLP1D, MLP1DConfig, _create_dram_sharded_mem_config
 from tt_transformers.modules.rmsnorm.rmsnorm_1d import SHARD_HEIGHT, RMSNorm1D, RMSNorm1DConfig
 from tt_transformers.modules.rope.rope_1d import Rope1DConfig, RotarySetup1D
 from tt_transformers.modules.sampling.sampling_1d import Sampling1D, Sampling1DConfig
 from tt_transformers.modules.tt_ccl import TT_CCL, default_topology, get_tt_ccl
-from tt_transformers.tensor_utils import TILE_SIZE, get_out_subblock_w, nearest_32, num_to_core_range_set, pad_dim_to_size
+from tt_transformers.tensor_utils import (
+    TILE_SIZE,
+    get_out_subblock_w,
+    nearest_32,
+    num_to_core_range_set,
+    pad_dim_to_size,
+)
 
 
 class LazyWeight(CommonLazyWeight):

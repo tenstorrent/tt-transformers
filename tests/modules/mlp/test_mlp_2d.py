@@ -26,9 +26,10 @@ except ImportError:
     from transformers.modeling_utils import no_init_weights
 
 import ttnn
+from tests.support.comparison import comp_allclose, comp_pcc
+
 from tt_transformers.modules.lazy_weight import LazyWeight
 from tt_transformers.modules.mlp.mlp_2d import MLP2D, MLP2DConfig, _resolve_mlp2d_config
-from tests.support.comparison import comp_allclose, comp_pcc
 
 # ============================================================================
 # Unit Tests - No device required
@@ -456,4 +457,6 @@ def test_mlp_2d_vs_reference(
     strict=True,  # Fail if the 8x4 fabric path is accidentally fixed (so we know to update)
 )
 def test_mlp_2d_vs_reference_from_model_args(ttnn_mesh_device: ttnn.MeshDevice, seq_len):
-    pytest.skip("TTTv1 compatibility characterization retired; standalone constructor coverage lives in tests/host/test_foundation_boundary.py")
+    pytest.skip(
+        "TTTv1 compatibility characterization retired; standalone constructor coverage lives in tests/host/test_foundation_boundary.py"
+    )

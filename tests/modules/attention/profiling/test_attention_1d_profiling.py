@@ -33,11 +33,7 @@ except ImportError:
     from transformers.modeling_utils import no_init_weights
 
 import ttnn
-from qualification.tools.auto_compose import to_torch_auto_compose
-from tt_transformers.modules.attention.attention_1d import Attention1D, Attention1DConfig
-from tt_transformers.modules.lazy_weight import LazyWeight
-from tt_transformers.modules.rmsnorm.rmsnorm_1d import RMSNorm1DConfig
-from tt_transformers.modules.tt_ccl import TT_CCL
+from examples.common.auto_compose import to_torch_auto_compose
 
 # Reuse helpers from the main test file
 from tests.modules.attention.test_attention_1d import (
@@ -63,6 +59,11 @@ from tests.modules.attention.test_attention_1d import (
     get_rot_mats_from_hf,
 )
 from tests.support.comparison import comp_pcc
+
+from tt_transformers.modules.attention.attention_1d import Attention1D, Attention1DConfig
+from tt_transformers.modules.lazy_weight import LazyWeight
+from tt_transformers.modules.rmsnorm.rmsnorm_1d import RMSNorm1DConfig
+from tt_transformers.modules.tt_ccl import TT_CCL
 
 # =============================================================================
 # Benchmark Helpers (moved from test_attention_1d.py)
@@ -777,7 +778,7 @@ def test_attention_1d_fused_qk_profiling(ttnn_mesh_device: ttnn.MeshDevice):
     print()
     print(f"  {BOLD}{RED}FUSED PATH{RESET} (in decode_forward):")
     print(f"    1. {CYAN}_reshard_k_for_fused(){RESET} - 1x ttnn.to_memory_config (K only)")
-    print(f"       └─ Q is already on correct cores; only K moves to non-overlapping grid")
+    print("       └─ Q is already on correct cores; only K moves to non-overlapping grid")
     print(f"    2. {CYAN}rotary_embedding_llama_fused_qk(){RESET} - 1 fused kernel")
     print(f"    3. {CYAN}paged_fused_update_cache(){RESET} - 1 fused kernel")
     print()

@@ -19,7 +19,7 @@ Run the concrete 14B distilled-Qwen tensor model through direct eager/traced exe
 
 This is the declared qualification candidate, not a passing verdict:
 
-- `tt-transformers==0.1.0.dev0`
+- `tt-transformers==2.0.0.dev0`
 - `ttnn==0.77.0`
 - Python `3.10, 3.12`
 - `torch==2.11.0`
@@ -51,7 +51,7 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 - Set a writable `TT_CACHE_PATH` (the example appends topology exactly once), or use the versioned standalone root selected by `TT_TRANSFORMERS_CACHE`, `XDG_CACHE_HOME`, or the user cache.
 - Examples use built-in Transformers loading behavior; `trust_remote_code` is not enabled by default.
 - For offline runs set `HF_HOME`, `HF_HUB_OFFLINE=1`, and `TRANSFORMERS_OFFLINE=1` after populating the exact snapshot.
-- Reference asset root: `qualification/assets/reference_outputs/deepseek_r1_distill_qwen_14b`.
+- Reference asset root: `tests/assets/reference_outputs/deepseek_r1_distill_qwen_14b`.
 
 ### Install, run, and collect
 
@@ -82,16 +82,15 @@ PYTHONPATH=src MESH_DEVICE=N300 pytest --collect-only -q tests/hardware/models/d
 - Evidence: **none attributable to pinned source revision `00748e6ac7b65f50e5c2af07f6e7c1c535c7f4c0`**.
 - [Machine-readable manifest](support.json)
 - [Hardware gate](../../tests/hardware/models/deepseek_r1_distill_qwen_14b/test_demo.py)
-- [Pinned support baseline](../../qualification/analysis/support/support_baseline.md)
-- [Phase 3 boundary evidence](../../qualification/extraction/support_boundary.md)
-- [Historical evidence ledger](../../qualification/analysis/support/hardware_evidence.csv)
+- [Support matrix](../../SUPPORT.md)
+- [Validation summary](../../docs/validation.md)
 
 ### Known and unsupported gaps
 
 - N150/TP1.
 - N300 accuracy eval-32 and batch-32-ci.
 - any geometry not declared in support.json.
-- No hardware evidence is attributable to the pinned extraction revision.
+- Current regression evidence does not qualify the complete declared model contract.
 
 <!-- END GENERATED SUPPORT -->
 
@@ -100,7 +99,7 @@ This directory is a model-owned TTTv2 product path for
 
 It intentionally demonstrates direct executor construction from the reusable
 common LLM runtime. It is not part of the shared Llama/Qwen executor
-consolidation and does not use `models/common/models/executor.py`.
+consolidation and does not use `src/tt_transformers/models/executor.py`.
 
 ## Product path
 
@@ -157,7 +156,7 @@ DeepSeekR1Qwen14B model
 
 This direct pattern is supported when a model has genuinely distinct
 orchestration or has not been deliberately migrated to a shared model-layer
-executor. It still reuses the same `models/common/llm_runtime` mechanics; it
+executor. It still reuses the same `src/tt_transformers/llm_runtime` mechanics; it
 does not copy those runtime implementations.
 
 The executor owns paged-KV tensors, eager/trace registries, output leases,
@@ -177,8 +176,8 @@ The generator owns dispatch policy but no TT tensor resources.
 
 Relevant entry points include:
 
-- `models/common/tests/models/deepseek_r1_distill_qwen_14b/test_hf_adaptor.py`
-- `models/common/tests/models/deepseek_r1_distill_qwen_14b/test_demo_contract.py`
-- `models/common/tests/models/deepseek_r1_distill_qwen_14b/test_prefill_last_token_contract.py`
-- `models/common/tests/demos/deepseek_r1_distill_qwen_14b/demo.py`
-- `models/common/tests/llm_runtime/test_executor_integration.py`
+- `tests/models/deepseek_r1_distill_qwen_14b/test_hf_adaptor.py`
+- `tests/models/deepseek_r1_distill_qwen_14b/test_demo_contract.py`
+- `tests/models/deepseek_r1_distill_qwen_14b/test_prefill_last_token_contract.py`
+- `tests/hardware/models/deepseek_r1_distill_qwen_14b/test_demo.py`
+- `tests/llm_runtime/test_executor_integration.py`

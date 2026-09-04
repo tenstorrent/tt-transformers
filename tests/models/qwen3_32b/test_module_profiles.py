@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 import torch
-
 import ttnn
+
 from tt_transformers.models.qwen3_32b import weight_utils
 from tt_transformers.models.qwen3_32b.model import (
     QWEN3_32B_ACCURACY,
@@ -328,7 +328,7 @@ def test_model_helpers_write_explicit_recipes_on_common_configs(arch, num_device
 @pytest.mark.host
 @pytest.mark.model
 def test_checked_in_qwen_config_retains_intermediate_size_25600():
-    config_path = Path(__file__).parents[3] / "qualification/model_params/Qwen3-32B/config.json"
+    config_path = Path(__file__).parents[3] / "tests/assets/model_params/Qwen3-32B/config.json"
     checked_in = json.loads(config_path.read_text())
 
     assert QWEN3_32B_INTERMEDIATE_SIZE == 25600

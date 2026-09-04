@@ -4,10 +4,8 @@
 """PyTorch-only metric tests that do not require TTNN hardware."""
 
 import pytest
-
 import torch
-
-from qualification.tools.metrics import comp_allclose, compute_max_abs_error, compute_mean_abs_error, compute_pcc
+from tests.support.metrics import comp_allclose, compute_max_abs_error, compute_mean_abs_error, compute_pcc
 
 
 @pytest.mark.host

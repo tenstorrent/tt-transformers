@@ -465,8 +465,7 @@ def _normalize_per_row(value: Any, name: str, active_rows: int, batch_size: int)
             raise ValueError(f"sampling_params.{name} cannot be empty")
         if len(values) != 1 and len(values) < active_rows:
             raise ValueError(
-                f"sampling_params.{name} has {len(values)} entries but temperature describes "
-                f"{active_rows} active rows"
+                f"sampling_params.{name} has {len(values)} entries but temperature describes {active_rows} active rows"
             )
     if len(values) > batch_size:
         raise ValueError(f"sampling_params.{name} has {len(values)} entries, exceeding batch_size={batch_size}")

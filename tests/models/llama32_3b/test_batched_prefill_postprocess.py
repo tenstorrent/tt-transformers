@@ -1,10 +1,8 @@
-
-import pytest
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 # SPDX-License-Identifier: Apache-2.0
-
 from types import SimpleNamespace
 
+import pytest
 import torch
 
 import tt_transformers.models.llama32_3b.model as model_module

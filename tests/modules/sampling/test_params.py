@@ -356,8 +356,8 @@ def test_tttv2_runtime_import_boundary_excludes_legacy_sampling_state():
     )
     forbidden_modules = {
         "models.common.sampling",
-        "models.common.sampling.generator",
-        "models.common.sampling.tt_penalties",
+        "tt_transformers.sampling.generator",
+        "tt_transformers.sampling.tt_penalties",
     }
     violations = []
     for path in files:
@@ -375,9 +375,9 @@ import importlib
 import sys
 importlib.import_module('tt_transformers.llm_runtime.decode')
 forbidden = {
-    'models.common.sampling.generator',
-    'models.common.sampling.tt_penalties',
-    'models.common.sampling.tt_sampling',
+    'tt_transformers.sampling.generator',
+    'tt_transformers.sampling.tt_penalties',
+    'tt_transformers.sampling.tt_sampling',
 }
 loaded = sorted(forbidden.intersection(sys.modules))
 if loaded:

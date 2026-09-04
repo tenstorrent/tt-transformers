@@ -25,7 +25,7 @@ import argparse
 import importlib.util
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import torch
 
@@ -76,7 +76,7 @@ def _run_one_entry_prefill(
     generator: Generator,
     entry: ReferenceEntry,
     reference: Reference,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Run batch prefill check for one entry.
 
@@ -151,7 +151,7 @@ def _run_one_entry_prefill(
     }
 
 
-def _format_row(label: str, stats: Dict[str, Any]) -> str:
+def _format_row(label: str, stats: dict[str, Any]) -> str:
     return (
         f"{label:<20} "
         f"top1={stats['top1']:.3f} ({stats['matches_top1']}/{stats['total']})  "
@@ -165,8 +165,8 @@ def run_prefill_check(
     model_dir: Path,
     reference_path: Path,
     mesh_device,
-    build_kwargs: Dict[str, Any] | None = None,
-) -> List[Dict[str, Any]]:
+    build_kwargs: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
     """
     Programmatic entry point. Builds the generator, runs batch prefill
     over all reference entries, and returns the per-entry accuracy dicts.
@@ -176,7 +176,7 @@ def run_prefill_check(
     generator: Generator = build_generator(model_dir=model_dir, mesh_device=mesh_device, **build_kwargs)
 
     reference = load_reference(reference_path)
-    per_entry: List[Dict[str, Any]] = []
+    per_entry: list[dict[str, Any]] = []
 
     try:
         for entry_idx, entry in enumerate(reference.entries):

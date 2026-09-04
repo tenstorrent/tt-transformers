@@ -8,9 +8,10 @@ from __future__ import annotations
 import copy
 import dataclasses
 import threading
+from collections.abc import Callable, Iterator, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from contextlib import ExitStack
-from typing import Any, Callable, Iterator, Sequence, TypedDict
+from typing import Any, TypedDict
 
 import torch
 
@@ -609,7 +610,7 @@ class LaneGroupExecutor:
                 raise TypeError(f"decode {name} must be a torch.Tensor with a batch dimension")
             if int(value.shape[0]) != self.max_batch_size:
                 raise ValueError(
-                    f"DP decode expects fixed global batch {self.max_batch_size}; " f"{name} has batch {value.shape[0]}"
+                    f"DP decode expects fixed global batch {self.max_batch_size}; {name} has batch {value.shape[0]}"
                 )
 
         for lane_idx in range(self.tt_data_parallel):

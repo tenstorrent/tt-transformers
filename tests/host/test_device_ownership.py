@@ -13,7 +13,6 @@ from tt_transformers.device_ownership import (
     default_device_scope,
 )
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 

@@ -6,10 +6,9 @@ from __future__ import annotations
 import argparse
 import ast
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
-
 
 # Import roots corresponding to the production dependency declarations in
 # pyproject.toml. Distribution/import spelling differs for no entry here.
@@ -69,9 +68,7 @@ def _dependency_reason(imported: str, layer: str) -> str | None:
 
 def _initializer_laziness_reason(relative: Path, imported: str) -> str | None:
     concrete_model_initializer = (
-        len(relative.parts) == 3
-        and relative.parts[0] == "models"
-        and relative.parts[-1] == "__init__.py"
+        len(relative.parts) == 3 and relative.parts[0] == "models" and relative.parts[-1] == "__init__.py"
     )
     if relative not in {Path("__init__.py"), Path("models/__init__.py")} and not concrete_model_initializer:
         return None
@@ -164,9 +161,7 @@ def _structural_violations(path: Path, relative: Path, tree: ast.AST) -> list[Vi
         cache_calls = [
             node
             for node in ast.walk(tree)
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "resolve_model_cache"
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "resolve_model_cache"
         ]
         if len(cache_calls) != 1 or not {
             "hf_model_id",
@@ -239,10 +234,7 @@ def _structural_violations(path: Path, relative: Path, tree: ast.AST) -> list[Vi
                         path=path,
                         line=node.lineno,
                         imported=f"{node.module}.SamplingParams",
-                        reason=(
-                            "SamplingParams must use the canonical owner "
-                            f"{CANONICAL_SAMPLING_PARAMS_MODULE}"
-                        ),
+                        reason=(f"SamplingParams must use the canonical owner {CANONICAL_SAMPLING_PARAMS_MODULE}"),
                     )
                 )
         if layer not in DEPENDENCY_POLICY_LAYERS or not isinstance(node, ast.ClassDef):
@@ -311,11 +303,7 @@ def check_file(path: Path, package_root: Path) -> list[Violation]:
 
 
 def check_tree(package_root: Path) -> list[Violation]:
-    return [
-        violation
-        for path in sorted(package_root.rglob("*.py"))
-        for violation in check_file(path, package_root)
-    ]
+    return [violation for path in sorted(package_root.rglob("*.py")) for violation in check_file(path, package_root)]
 
 
 def main() -> int:

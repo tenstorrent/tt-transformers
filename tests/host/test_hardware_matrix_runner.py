@@ -37,7 +37,7 @@ def _wh_inventory():
 def _bh_qb_inventory():
     return {
         "captured_utc": "2026-09-03T00:00:00Z",
-        "machine_identity": "bh-qb-05-special-gwang-for-reservation-196606",
+        "machine_identity": "bh-qb-05.yyz2.tenstorrent.com",
         "architecture": "blackhole",
         "physical_sku": "P150_X4 quietbox (four physical P150B boards)",
         "device_count": 4,
@@ -79,16 +79,12 @@ def test_all_single_p150_nodes_admit_bh_qb_05_with_only_mesh_selection(tmp_path)
     for node in nodes:
         assert node["machine_pool"] == ["bh-lb-11", "bh-qb-05"]
         assert node["environment"]["MESH_DEVICE"] == "P150"
-        assert node["machine_environment_overrides"]["bh-qb-05"] == {
-            "TT_VISIBLE_DEVICES": None
-        }
-        assert node["physical_sku_provenance"]["selection_environment"] == {
-            "MESH_DEVICE": "P150"
-        }
+        assert node["machine_environment_overrides"]["bh-qb-05"] == {"TT_VISIBLE_DEVICES": None}
+        assert node["physical_sku_provenance"]["selection_environment"] == {"MESH_DEVICE": "P150"}
 
     node = runner.select_node(matrix, "bh-p150-rmsnorm-decode")
     args = _dry_args(tmp_path)
-    args.machine_identity = "bh-qb-05-special-gwang-for-reservation-196606"
+    args.machine_identity = "bh-qb-05.yyz2.tenstorrent.com"
     result = runner.preview(matrix, node, args, _bh_qb_inventory())
 
     assert result["machine_pool_entry"] == "bh-qb-05"
@@ -118,9 +114,7 @@ def test_matrix_refuses_a_pool_entry_that_does_not_support_the_requested_mesh():
         ),
     ],
 )
-def test_bh_qb_single_p150_rejects_wrong_physical_provenance(
-    field, value, message
-):
+def test_bh_qb_single_p150_rejects_wrong_physical_provenance(field, value, message):
     matrix = _matrix()
     node = runner.select_node(matrix, "bh-p150-rmsnorm-decode")
     inventory = _bh_qb_inventory()

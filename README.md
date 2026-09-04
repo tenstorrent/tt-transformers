@@ -1,43 +1,83 @@
 # TT Transformers
 
-`tt-transformers` is the standalone home for reusable TTNN transformer
-building blocks, runtimes, and model implementations for Tenstorrent devices.
+`tt-transformers` provides reusable TTNN transformer modules, model-neutral
+LLM runtime components, sampling utilities, and model implementations for
+Tenstorrent hardware.
 
 > [!IMPORTANT]
-> The repository is undergoing its initial extraction from `tt-metal`. No model
-> is qualified from this standalone package until its support manifest and
-> qualification report say otherwise.
+> The package is currently a developer preview. Every model remains
+> `experimental`; consult the [support matrix](https://github.com/tenstorrent/tt_transformers/blob/main/SUPPORT.md)
+> before relying on a model, topology, or workload.
 
-## Installation
+## Requirements
 
-The first compatibility target is the published `ttnn==0.77.0` wheel on its
-supported CPython 3.10 and 3.12, x86-64 manylinux platform matrix.
+- Linux on x86-64
+- CPython 3.10 or 3.12
+- `ttnn==0.77.0`
+- a compatible Tenstorrent driver, firmware, and device configuration for
+  hardware execution
+
+The Python package does not install firmware, drivers, model checkpoints,
+tokenizers, or model caches.
+
+## Install
+
+Install the library from a checkout:
 
 ```bash
+git clone https://github.com/tenstorrent/tt_transformers.git
+cd tt_transformers
 python -m pip install .
 ```
 
-Examples and tests have separate dependency groups:
+Repository examples are not installed by the wheel. To run them from a clone,
+install their dependencies as well:
 
 ```bash
-python -m pip install '.[examples]'
-python -m pip install '.[test]'
-python -m pip install '.[qualification]'  # only for live vLLM readiness clients
+python -m pip install -e '.[examples]'
 ```
 
-The package does not install firmware, drivers, checkpoints, tokenizers, or
-model caches. The human-readable experimental matrix is in [`SUPPORT.md`](SUPPORT.md),
-with per-example detail in [`examples/README.md`](examples/README.md) and each
-example's machine-readable `support.json`. Concrete/runnable remains distinct
-from qualified throughout these documents.
+Host tests use a separate extra:
 
-## Source provenance
+```bash
+python -m pip install -e '.[test]'
+python -m pytest -m host
+```
 
-The initial extraction is pinned to `tt-metal` revision
-`00748e6ac7b65f50e5c2af07f6e7c1c535c7f4c0`. The machine-readable file map
-lives under `qualification/provenance/`. The `models/common/modules/moe`
-subsystem is deliberately excluded; other boundary changes are recorded rather
-than silently omitted.
+For fully reproducible maintainer environments, use the hash-locked files in
+[`constraints/locks`](https://github.com/tenstorrent/tt_transformers/tree/main/constraints/locks).
 
-See `TTTV2_MIGRATION_PLAN.md` for the migration design and
-`TTTV2_MIGRATION_WORK_LOG.md` for current execution evidence.
+## Verify the installation
+
+```bash
+python -c 'import tt_transformers; print(tt_transformers.__version__)'
+```
+
+The top-level import is deliberately lightweight. Model families are imported
+from `tt_transformers.models`, while reusable building blocks live under
+`tt_transformers.modules`, `tt_transformers.llm_runtime`, and
+`tt_transformers.sampling`.
+
+## Learn the package
+
+- [Package architecture](https://github.com/tenstorrent/tt_transformers/blob/main/src/tt_transformers/README.md)
+- [Reusable modules](https://github.com/tenstorrent/tt_transformers/blob/main/src/tt_transformers/modules/README.md)
+- [LLM runtime](https://github.com/tenstorrent/tt_transformers/blob/main/src/tt_transformers/llm_runtime/README.md)
+- [Sampling](https://github.com/tenstorrent/tt_transformers/blob/main/src/tt_transformers/sampling/README.md)
+- [Repository examples](https://github.com/tenstorrent/tt_transformers/blob/main/examples/README.md)
+- [Validation summary](https://github.com/tenstorrent/tt_transformers/blob/main/docs/validation.md)
+
+## Development
+
+See [CONTRIBUTING.md](https://github.com/tenstorrent/tt_transformers/blob/main/CONTRIBUTING.md),
+the [test guide](https://github.com/tenstorrent/tt_transformers/blob/main/tests/README.md),
+and the [tool guide](https://github.com/tenstorrent/tt_transformers/blob/main/tools/README.md).
+Report security issues through the process in
+[SECURITY.md](https://github.com/tenstorrent/tt_transformers/blob/main/SECURITY.md).
+
+## Provenance
+
+The initial standalone source was extracted from `tt-metal` commit
+`00748e6ac7b65f50e5c2af07f6e7c1c535c7f4c0`. MoE was intentionally excluded.
+The compact source map is retained under
+[`docs/provenance`](https://github.com/tenstorrent/tt_transformers/tree/main/docs/provenance).

@@ -1,17 +1,25 @@
 """Host checks for support manifests and the Phase 3 support boundary."""
 
-import pytest
-
 import ast
 import json
 from pathlib import Path
 
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 MODELS = {
-    "deepseek_r1_distill_qwen_14b", "llama32_1b", "llama32_3b", "llama33_70b",
-    "llama3_8b", "mistral_7b", "phi4", "qwen25_72b", "qwen25_7b",
-    "qwen25_coder_32b", "qwen2_7b", "qwen3_32b",
+    "deepseek_r1_distill_qwen_14b",
+    "llama32_1b",
+    "llama32_3b",
+    "llama33_70b",
+    "llama3_8b",
+    "mistral_7b",
+    "phi4",
+    "qwen25_72b",
+    "qwen25_7b",
+    "qwen25_coder_32b",
+    "qwen2_7b",
+    "qwen3_32b",
 }
 
 

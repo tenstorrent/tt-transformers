@@ -29,17 +29,17 @@ Usage::
 
     # Token accuracy test (accuracy mode)
     MESH_DEVICE=N300 HF_MODEL=microsoft/phi-4 \\
-      pytest models/common/tests/demos/phi4/demo.py -k "not performance and token-accuracy" -v
+      pytest tests/hardware/models/phi4/test_demo.py -k "not performance and token-accuracy" -v
 
     # On-device sampling perf sweep
     SAMPLING_MODE=on_device_topk MESH_DEVICE=N300 HF_MODEL=microsoft/phi-4 \\
-      pytest models/common/tests/demos/phi4/demo.py -k "batch-32-ci" -v
+      pytest tests/hardware/models/phi4/test_demo.py -k "batch-32-ci" -v
 
 LazyWeight tensor cache: ``TT_CACHE_PATH/<device_name>`` when ``TT_CACHE_PATH`` is set,
 otherwise the versioned standalone cache policy under `TT_TRANSFORMERS_CACHE`, `XDG_CACHE_HOME`, or the user cache.
 
 Reference artifact (``.refpt``): the token-accuracy test gates on the committed book reference
-``models/tt_transformers/tests/reference_outputs/phi-4.refpt`` (real-corpus teacher-forced targets).
+``tests/assets/reference_outputs/phi4/phi-4.refpt`` (real-corpus teacher-forced targets).
 """
 
 import json
@@ -48,19 +48,12 @@ import os
 from pathlib import Path
 
 import torch
+import ttnn
 from loguru import logger
 
-import ttnn
-from tt_transformers.cache_environment import resolve_model_cache_path
-from tt_transformers.models.phi4.hf_adaptor import DEFAULT_HF_REVISION as DEMO_HF_REVISION
-from examples.common.runtime import TemporaryPathFactory, UnsupportedConfiguration, open_mesh_device
-from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
-from tt_transformers.llm_runtime.lane_group import LaneGroupExecutor
-from tt_transformers.models.phi4.executor import Phi4Executor, Phi4ExecutorConfig
-from tt_transformers.models.phi4.hf_adaptor import DEFAULT_HF_REVISION, encode_prompt, from_pretrained
-from tt_transformers.models.phi4.model import PHI4_ACCURACY, PHI4_PERFORMANCE, Phi4Transformer
-from tt_transformers.sampling.sampling_params import SamplingParams
-from tt_transformers.device_utils import cleanup_dp_model_case, cleanup_model_case
+from examples.common.benchmarking_utils import BenchmarkProfiler
+from examples.common.llm_demo_utils import create_benchmark_data
+from examples.common.model_targets import resolve_accuracy_targets
 from examples.common.run_helpers import assert_no_special_tokens as assert_no_special_tokens_shared
 from examples.common.run_helpers import (
     load_eval_repeat_prompts_batch32,
@@ -69,9 +62,16 @@ from examples.common.run_helpers import (
     run_perf_benchmark,
     run_teacher_forcing,
 )
-from qualification.tools.llm_demo_utils import create_benchmark_data
-from qualification.tools.model_targets import resolve_accuracy_targets
-from qualification.tools.benchmarking_utils import BenchmarkProfiler
+from examples.common.runtime import UnsupportedConfiguration, open_mesh_device
+from tt_transformers.cache_environment import resolve_model_cache_path
+from tt_transformers.device_utils import cleanup_dp_model_case, cleanup_model_case
+from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
+from tt_transformers.llm_runtime.lane_group import LaneGroupExecutor
+from tt_transformers.models.phi4.executor import Phi4Executor, Phi4ExecutorConfig
+from tt_transformers.models.phi4.hf_adaptor import DEFAULT_HF_REVISION, encode_prompt, from_pretrained
+from tt_transformers.models.phi4.hf_adaptor import DEFAULT_HF_REVISION as DEMO_HF_REVISION
+from tt_transformers.models.phi4.model import PHI4_ACCURACY, PHI4_PERFORMANCE, Phi4Transformer
+from tt_transformers.sampling.sampling_params import SamplingParams
 
 # =============================================================================
 # Expected metrics — perf gates set from FRESH same-box N300 measurement (consolidation round-1,
@@ -215,7 +215,9 @@ _PHI4_NUM_KV_HEADS = 10
 def _skip_below_min_tp_devices(n_devices: int) -> None:
     """Skip when fewer than ``_MIN_TP_DEVICES`` devices are available for tensor parallelism."""
     if n_devices < _MIN_TP_DEVICES:
-        raise UnsupportedConfiguration(f"Phi-4 requires >={_MIN_TP_DEVICES}-device tensor parallelism: the unsharded 14B overflows a single device's L1 (distributed-layernorm reader CBs at program build). Have {n_devices} device(s) — use MESH_DEVICE=N300.")
+        raise UnsupportedConfiguration(
+            f"Phi-4 requires >={_MIN_TP_DEVICES}-device tensor parallelism: the unsharded 14B overflows a single device's L1 (distributed-layernorm reader CBs at program build). Have {n_devices} device(s) — use MESH_DEVICE=N300."
+        )
 
 
 # T3K / TG are listed so the module imports on those hosts, but they cleanly skip at model build
@@ -231,10 +233,10 @@ _MESH_DEVICE_TO_SHAPE: dict[str, tuple[int, int]] = {
 def ttnn_mesh_device_param_from_env() -> dict:
     env = os.environ.get("MESH_DEVICE", "").strip()
     if not env:
-        raise UnsupportedConfiguration('MESH_DEVICE must be set (e.g. N300). See module docstring.')
+        raise UnsupportedConfiguration("MESH_DEVICE must be set (e.g. N300). See module docstring.")
     shape = _MESH_DEVICE_TO_SHAPE.get(env)
     if shape is None:
-        raise UnsupportedConfiguration(f'Unsupported MESH_DEVICE={env!r}; use one of {sorted(_MESH_DEVICE_TO_SHAPE)}.')
+        raise UnsupportedConfiguration(f"Unsupported MESH_DEVICE={env!r}; use one of {sorted(_MESH_DEVICE_TO_SHAPE)}.")
     # The model-owned runtime's representative batch-32 trace set measures 53,698,560 bytes.
     # Keep the region narrowly above that closed-world requirement.
     param = {"mesh_shape": shape, "trace_region_size": 60_000_000, "num_command_queues": 1}
@@ -245,10 +247,6 @@ def ttnn_mesh_device_param_from_env() -> dict:
     return param
 
 
-
-
-
-
 def _skip_unless_heads_divide_mesh(mesh_device: ttnn.MeshDevice) -> None:
     """Attention1D TP requires n_heads and n_kv_heads divisible by device count."""
     n_dev = mesh_device.get_num_devices()
@@ -257,7 +255,9 @@ def _skip_unless_heads_divide_mesh(mesh_device: ttnn.MeshDevice) -> None:
     n_h, n_kv = _PHI4_NUM_ATTENTION_HEADS, _PHI4_NUM_KV_HEADS
     if n_h % n_dev == 0 and n_kv % n_dev == 0:
         return
-    raise UnsupportedConfiguration(f'Incompatible mesh for Phi-4: {n_dev} devices need num_attention_heads ({n_h}) and num_key_value_heads ({n_kv}) each divisible by {n_dev}. Try MESH_DEVICE=N300 (2).')
+    raise UnsupportedConfiguration(
+        f"Incompatible mesh for Phi-4: {n_dev} devices need num_attention_heads ({n_h}) and num_key_value_heads ({n_kv}) each divisible by {n_dev}. Try MESH_DEVICE=N300 (2)."
+    )
 
 
 def get_device_name(mesh_device: ttnn.MeshDevice) -> str:
@@ -291,9 +291,12 @@ def ref_basename_for_hf(hf_model_id: str) -> str:
 def load_reference_data(hf_model_id: str):
     """Load reference tensors and optional metadata from ``.refpt``."""
     name = ref_basename_for_hf(hf_model_id)
-    ref_path = Path("qualification/assets/reference_outputs/phi4") / f"{name}.refpt"
+    ref_path = Path("tests/assets/reference_outputs/phi4") / f"{name}.refpt"
     if not ref_path.exists():
-        raise UnsupportedConfiguration(f'Reference file not found: {ref_path}. Expected the committed book reference (generated via models/tt_transformers/tests/generate_reference_outputs.py).')
+        raise UnsupportedConfiguration(
+            f"Reference file not found: {ref_path}. Expected the committed book reference "
+            "generated by qualification/tools/reference_outputs/generate_reference_outputs.py."
+        )
     ref_data = torch.load(ref_path, map_location="cpu", weights_only=False)
     return (
         ref_data["reference_tokens"],
@@ -305,7 +308,7 @@ def load_reference_data(hf_model_id: str):
 
 def load_input_prompts(batch_size: int) -> list[str]:
     """Load prompts for performance testing from shared sample file."""
-    prompts_path = Path("qualification/assets/sample_prompts/input_data_questions_prefill_128.json")
+    prompts_path = Path("examples/assets/sample_prompts/input_data_questions_prefill_128.json")
     if not prompts_path.exists():
         return ["What is the meaning of life?"] * batch_size
     with open(prompts_path) as f:
@@ -537,10 +540,12 @@ def _dp_lane_tp_or_skip(mesh_device: ttnn.MeshDevice, data_parallel: int) -> int
     """Return devices per lane, accepting only Phi-4's validated TP2 topology."""
     n = mesh_device.get_num_devices()
     if n % data_parallel != 0:
-        raise UnsupportedConfiguration(f'DP-{data_parallel} cannot partition {n} devices into equal lanes')
+        raise UnsupportedConfiguration(f"DP-{data_parallel} cannot partition {n} devices into equal lanes")
     tensor_parallel = n // data_parallel
     if tensor_parallel != _MIN_TP_DEVICES:
-        raise UnsupportedConfiguration(f'DP-{data_parallel} on {n} devices creates TP{tensor_parallel} lanes; Phi-4 requires TP{_MIN_TP_DEVICES} lanes')
+        raise UnsupportedConfiguration(
+            f"DP-{data_parallel} on {n} devices creates TP{tensor_parallel} lanes; Phi-4 requires TP{_MIN_TP_DEVICES} lanes"
+        )
     return tensor_parallel
 
 
@@ -697,9 +702,9 @@ def _run_dp_smoke(
             prefill_sampling_params=None,
         )
         if not (len(result.generated_token_ids) == data_parallel):
-            raise AssertionError('condition failed at line 724')
+            raise AssertionError("condition failed at line 724")
         if not (all(result.generated_token_ids)):
-            raise AssertionError(f'ci-b1-DP-{data_parallel}: every TP2 lane must return output')
+            raise AssertionError(f"ci-b1-DP-{data_parallel}: every TP2 lane must return output")
         log_generated_text(prompts, result.generated_token_ids, tokenizer)
         assert_no_special_tokens(result.generated_token_ids, tokenizer, case_name=f"ci-b1-DP-{data_parallel}")
     finally:
@@ -752,7 +757,9 @@ def run_phi4(test_config, mesh_device, optimizations):
             # ON and OFF on the HARDER low-precision path (higher-precision accuracy is strictly more
             # deterministic), so determinism coverage is intact. Hardware-capability guard, not a mask.
             if optimizations == "accuracy":
-                raise UnsupportedConfiguration('eval-32 accuracy: 14B all-BFP8 weights + seq1024 + 3-executor rotated-repeat churn exceed N300 DRAM (repeat-1 KV OOM; TTTv1 phi-4-accuracy also OOMs N300). Performance eval-32 validates determinism (ON+OFF) on the harder low-precision path.')
+                raise UnsupportedConfiguration(
+                    "eval-32 accuracy: 14B all-BFP8 weights + seq1024 + 3-executor rotated-repeat churn exceed N300 DRAM (repeat-1 KV OOM; TTTv1 phi-4-accuracy also OOMs N300). Performance eval-32 validates determinism (ON+OFF) on the harder low-precision path."
+                )
             # The ci-eval-32 numeric prompts are ~201 tokens → get_padded_prefill_len buckets them to a
             # 1024-token prefill (32 KV blocks/user), so max_seq_len MUST be >= 1024 or the batched-prefill
             # group page-table (num_blocks_in_seq(1024)=32) overruns a shorter page table (the "32 vs 16"
@@ -930,9 +937,9 @@ def _run_token_accuracy(model: Phi4Transformer, mesh_device: ttnn.MeshDevice, ex
     meas_top1 = math.ceil(top1)
     meas_top5 = math.ceil(top5)
     if not (meas_top1 >= min_top1):
-        raise AssertionError(f'Top-1 accuracy {top1:.1f}% (ceil {meas_top1}) below threshold {min_top1:.1f}%')
+        raise AssertionError(f"Top-1 accuracy {top1:.1f}% (ceil {meas_top1}) below threshold {min_top1:.1f}%")
     if not (meas_top5 >= min_top5):
-        raise AssertionError(f'Top-5 accuracy {top5:.1f}% (ceil {meas_top5}) below threshold {min_top5:.1f}%')
+        raise AssertionError(f"Top-5 accuracy {top5:.1f}% (ceil {meas_top5}) below threshold {min_top5:.1f}%")
 
 
 def _run_perf_benchmark(
@@ -1073,7 +1080,7 @@ def _run_perf_benchmark(
             if "ttft_ms" in expected and result.ttft_ms > expected["ttft_ms"] * (1 + PERF_TOLERANCE):
                 failures.append(f"ttft_ms {result.ttft_ms:.1f} above target {expected['ttft_ms']}")
             if not (not failures):
-                raise AssertionError(f'{case_name}: ' + '; '.join(failures))
+                raise AssertionError(f"{case_name}: " + "; ".join(failures))
     finally:
         traced_executor.cleanup()
 
@@ -1169,10 +1176,20 @@ def _run_eval_repeat_batch32(model: Phi4Transformer, mesh_device: ttnn.MeshDevic
 
 
 RUN_MAIN_CASE = run_phi4
-SPECIAL_CASE_RUNNERS = {
-}
+SPECIAL_CASE_RUNNERS = {}
 
-EXAMPLE_CASES = ('token-accuracy', 'batch-1', 'batch-32', 'batch-32-ci', 'eval-32', 'ci-b1-DP-2', 'ci-b1-DP-4', 'ci-b1-DP-8', 'ci-b1-DP-16', 'ci-b1-DP-32')
+EXAMPLE_CASES = (
+    "token-accuracy",
+    "batch-1",
+    "batch-32",
+    "batch-32-ci",
+    "eval-32",
+    "ci-b1-DP-2",
+    "ci-b1-DP-4",
+    "ci-b1-DP-8",
+    "ci-b1-DP-16",
+    "ci-b1-DP-32",
+)
 
 
 def main(argv=None):

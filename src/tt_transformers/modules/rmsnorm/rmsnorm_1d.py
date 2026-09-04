@@ -18,11 +18,13 @@ Key design:
 
 import math
 from dataclasses import dataclass, replace
+
 import ttnn
+
 from tt_transformers.device_ownership import compatibility_default_device
-from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.modules.lazy_weight import LazyWeight, resolve_lazy_weight
-from tt_transformers.modules.tt_ccl import default_topology, get_tt_ccl
+from tt_transformers.modules.lightweightmodule import LightweightModule
+from tt_transformers.modules.tt_ccl import TT_CCL, default_topology, get_tt_ccl
 from tt_transformers.tensor_utils import TILE_SIZE
 
 # =============================================================================
@@ -59,7 +61,7 @@ class RMSNorm1DConfig:
 
     # Device and collectives
     mesh_device: ttnn.MeshDevice | None = None
-    tt_ccl: "TT_CCL | None" = None  # type: ignore
+    tt_ccl: TT_CCL | None = None
 
     # Normalization settings
     eps: float = 1e-5

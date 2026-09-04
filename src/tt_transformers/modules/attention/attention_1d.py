@@ -29,14 +29,16 @@ Weight format requirements:
 """
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
-from typing import Callable, Optional
+from typing import Protocol
 
 import ttnn
+
 from tt_transformers.device_ownership import compatibility_default_device
-from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.modules.lazy_weight import LazyWeight, resolve_lazy_weight
+from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.modules.rmsnorm.rmsnorm_1d import RMSNorm1D, RMSNorm1DConfig
 from tt_transformers.modules.tt_ccl import (
     CCL_CHUNKS_PER_SYNC,
@@ -66,6 +68,14 @@ MAX_QKV_MM_SEQ_LEN = 2048  # Maximum sequence length for single QKV matmul
 # to fit on device and parallelize computation. After matmul, reshaped back.
 # Source: TTTv1 model_config.py "MAX_MM_SEQ_LEN": 1024
 MAX_MM_SEQ_LEN = 1024
+
+
+class PagedAttentionConfig(Protocol):
+    """Structural type required by paged KV-cache allocation."""
+
+    block_size: int
+    max_num_blocks: int
+
 
 # =============================================================================
 # Attention1DConfig dataclass
@@ -110,7 +120,7 @@ class Attention1DConfig:
     # Device and collectives
     mesh_device: ttnn.MeshDevice | None = None
     tt_ccl: TT_CCL | None = None
-    topology: Optional[ttnn.Topology] = None  # None = auto-detect
+    topology: ttnn.Topology | None = None  # None = auto-detect
     num_reduce_scatter_links: int | None = None
     num_all_gather_links: int | None = None
     decode_agmm_num_links: int = 1
@@ -163,7 +173,7 @@ class Attention1DConfig:
     # When enabled, KV cache allocation and capacity are owned by the caller.
     use_vllm_paged_kv_cache: bool = False
     kv_cache: "tuple[LazyWeight, LazyWeight] | tuple[ttnn.Tensor, ttnn.Tensor] | None" = None
-    paged_attention_config: "PagedAttentionConfig | None" = None  # type: ignore
+    paged_attention_config: PagedAttentionConfig | None = None
     kv_cache_dtype: ttnn.DataType = ttnn.bfloat8_b
     # Threshold for sharding KV cache during prefill to handle update_cache memory limitations.
     min_kv_prefill_shard_seqlen: int | None = None
@@ -190,9 +200,9 @@ class Attention1DConfig:
 
     # Prefill program configs (Callable factories: seq_len → config)
     prefill_input_memcfg: ttnn.MemoryConfig | None = None  # DRAM interleaved input for prefill
-    prefill_xqkv_prg_config: Callable[
-        [int], ttnn.MatmulMultiCoreReuseMultiCastProgramConfig
-    ] | None = None  # f(seq_len)
+    prefill_xqkv_prg_config: Callable[[int], ttnn.MatmulMultiCoreReuseMultiCastProgramConfig] | None = (
+        None  # f(seq_len)
+    )
     prefill_sdpa_prg_config: Callable[[int, int | None], ttnn.SDPAProgramConfig] | None = None  # f(seq_len, chunk_size)
     prefill_wo_prg_config: Callable[[int], ttnn.MatmulMultiCoreReuseMultiCastProgramConfig] | None = None  # f(seq_len)
     prefill_kv_memcfg: Callable[[int], ttnn.MemoryConfig] | None = None  # f(seq_len) for KV cache write
@@ -421,7 +431,7 @@ class Attention1D(LightweightModule):
         chunk_page_table: ttnn.Tensor | None = None,
         chunk_start_idx: int | None = None,
         chunk_start_idx_tensor: ttnn.Tensor | None = None,
-        batch_size: Optional[int] = None,  # todo)) work on removing this argument
+        batch_size: int | None = None,  # todo)) work on removing this argument
     ) -> ttnn.Tensor:
         """
         Prefill forward - multiple tokens.
@@ -466,8 +476,6 @@ class Attention1D(LightweightModule):
         original_seq_len = seq_len
         assert seq_len % 128 == 0 and seq_len > 0, "seq_len must be divisible by 128"
         assert seq_len % batch_size == 0, f"folded seq_len {seq_len} must be divisible by batch_size {batch_size}"
-        # Per-user sequence length (== seq_len when batch_size == 1).
-        per_user_seq_len = seq_len // batch_size
         if batch_size > 1:
             assert chunk_start_idx is None, "batched prefill does not support chunked SDPA"
 
@@ -1368,7 +1376,6 @@ class Attention1D(LightweightModule):
     # =========================================================================
 
 
-
 # =============================================================================
 # Config resolution
 # =============================================================================
@@ -1385,8 +1392,10 @@ _ATTENTION_COMPUTE_SLOT_NAMES = (
 
 
 def _attention_mesh_device(config: Attention1DConfig) -> ttnn.MeshDevice:
-    mesh_device = config.mesh_device or config.wqkv.device or compatibility_default_device(
-        ttnn, owner="modules.attention._attention_mesh_device"
+    mesh_device = (
+        config.mesh_device
+        or config.wqkv.device
+        or compatibility_default_device(ttnn, owner="modules.attention._attention_mesh_device")
     )
     if mesh_device is None:
         raise ValueError("Attention1D requires a mesh_device on the config, weight, or default device")
@@ -1498,7 +1507,7 @@ def resolve_attention1d_arch_config(config: Attention1DConfig, *, _arch=None) ->
     qkv_x, qkv_y = architecture_fields["prefill_qkv_grid"]
     if qkv_x <= 0 or qkv_y <= 0 or qkv_x > compute_grid.x or qkv_y > compute_grid.y:
         raise ValueError(
-            f"Attention1D prefill QKV grid {(qkv_x, qkv_y)} exceeds compute grid " f"{(compute_grid.x, compute_grid.y)}"
+            f"Attention1D prefill QKV grid {(qkv_x, qkv_y)} exceeds compute grid {(compute_grid.x, compute_grid.y)}"
         )
     for field_name in ("decode_create_qkv_head_grid", "decode_transformation_core_grid"):
         grid = architecture_fields[field_name]
@@ -1506,8 +1515,7 @@ def resolve_attention1d_arch_config(config: Attention1DConfig, *, _arch=None) ->
             continue
         if grid.x <= 0 or grid.y <= 0 or grid.x > compute_grid.x or grid.y > compute_grid.y:
             raise ValueError(
-                f"Attention1D {field_name} {(grid.x, grid.y)} exceeds compute grid "
-                f"{(compute_grid.x, compute_grid.y)}"
+                f"Attention1D {field_name} {(grid.x, grid.y)} exceeds compute grid {(compute_grid.x, compute_grid.y)}"
             )
 
     return _resolve_attention1d_config(

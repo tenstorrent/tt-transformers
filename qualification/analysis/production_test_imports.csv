@@ -1,7 +1,0 @@
-layer,source_path,line,scope,timing,kind,module,imported_symbol,alias,classification
-models,models/common/models/qwen25_coder_32b/demo.py,30,<module>,module,import,pytest,,,third_party_test
-models,models/common/models/qwen25_coder_32b/demo.py,43,<module>,module,from,models.common.tests.demos.cleanup_utils,cleanup_model_case,,external_models_test
-models,models/common/models/qwen25_coder_32b/demo.py,44,<module>,module,from,models.common.tests.demos.run_helpers,make_contiguous_page_table,,external_models_test
-models,models/common/models/qwen3_32b/demo.py,30,<module>,module,import,pytest,,,third_party_test
-models,models/common/models/qwen3_32b/demo.py,43,<module>,module,from,models.common.tests.demos.cleanup_utils,cleanup_model_case,,external_models_test
-models,models/common/models/qwen3_32b/demo.py,44,<module>,module,from,models.common.tests.demos.run_helpers,make_contiguous_page_table,,external_models_test
