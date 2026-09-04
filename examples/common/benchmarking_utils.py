@@ -10,10 +10,17 @@ from datetime import datetime
 import pytz
 from loguru import logger
 
-# Decouple dependency of model tests on infra folder unless running in CI
+# Internal benchmark export is optional. Generic CI environments such as
+# GitHub Actions do not provide tt-metal's private ``infra`` package.
 IS_CI_ENV = os.getenv("CI") == "true"
 if IS_CI_ENV:
-    from infra.data_collection.pydantic_models import BenchmarkMeasurement, PartialBenchmarkRun
+    try:
+        from infra.data_collection.pydantic_models import BenchmarkMeasurement, PartialBenchmarkRun
+    except ModuleNotFoundError as error:
+        if error.name != "infra":
+            raise
+        IS_CI_ENV = False
+        logger.warning("Benchmark data export disabled: optional tt-metal infra package is unavailable")
 else:
     logger.warning("Skipping import of pydantic_models for benchmarking since not running in CI environment")
 

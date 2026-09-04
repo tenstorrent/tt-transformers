@@ -3,6 +3,8 @@
 import ast
 import inspect
 import os
+import subprocess
+import sys
 from functools import wraps
 from pathlib import Path
 
@@ -15,6 +17,25 @@ SMOKE_PATHS = (
     ROOT / "examples/qwen25_coder_32b/smoke.py",
     ROOT / "examples/qwen3_32b/smoke.py",
 )
+
+
+@pytest.mark.host
+def test_benchmark_helper_does_not_require_private_tt_metal_infra_in_generic_ci():
+    environment = os.environ.copy()
+    environment["CI"] = "true"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from examples.common import benchmarking_utils as helper; assert helper.IS_CI_ENV is False",
+        ],
+        cwd=ROOT,
+        env=environment,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def _calls(path: Path):
