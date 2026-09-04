@@ -11,13 +11,15 @@ Run (T3K, internal KV smoke, 1-layer fast iteration)::
 
     MESH_DEVICE=T3K HF_MODEL=Qwen/Qwen3-32B \\
       QWEN3_32B_DEMO_NUM_LAYERS=1 \\
-      pytest src/tt_transformers/models/qwen3_32b/demo.py -v -k prefill_smoke
+      python -m pytest \
+        tests/hardware/models/qwen3_32b/test_smoke.py::test_qwen3_32b_prefill_smoke -v
 
 Executor + paged KV::
 
     MESH_DEVICE=T3K HF_MODEL=Qwen/Qwen3-32B \\
       QWEN3_32B_DEMO_NUM_LAYERS=1 \\
-      pytest src/tt_transformers/models/qwen3_32b/demo.py -v -k executor_prefill
+      python -m pytest \
+        tests/hardware/models/qwen3_32b/test_smoke.py::test_qwen3_32b_executor_prefill_smoke -v
 
 ``Attention1D`` shards heads across the mesh: 64 / 8 = 8 attention heads per device and
 8 / 8 = 1 KV head per device.
