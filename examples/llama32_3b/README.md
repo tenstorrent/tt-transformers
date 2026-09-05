@@ -1,0 +1,143 @@
+# Llama 3.2 3B with TTTv2
+
+<!-- BEGIN GENERATED SUPPORT -->
+
+## Standalone support contract
+
+### Purpose
+
+Exercise the concrete 3B Llama tensor model, shared Llama executor, accuracy, performance, and DP lane routing.
+
+### Status and checkpoint
+
+- Status: **experimental**.
+- Implementation: **concrete and runnable**; this is not evidence of qualification.
+- Hugging Face ID: `meta-llama/Llama-3.2-3B-Instruct`.
+- Hugging Face revision: 0cb88a4f764b7a12671c53f0838cd831a0843b95.
+
+### Candidate software tuple
+
+This is the declared qualification candidate, not a passing verdict:
+
+- `tt-transformers==2.0.0.dev0`
+- `ttnn==0.77.0`
+- Python `3.10, 3.12`
+- `torch==2.11.0`
+- `transformers==5.12.1`
+
+### Declared hardware geometry
+
+| Architecture | Physical SKU/system declaration | Mesh | TP | DP |
+| --- | --- | --- | ---: | ---: |
+| wormhole | N150 | 1x1 | 1 | 1 |
+| wormhole | N300 | 1x2 | 2 | 1 |
+| wormhole | N300 | 1x2 | 1 | 2 |
+| wormhole | T3K | 1x8 | 8 | 1 |
+| wormhole | T3K | 1x8 | 2 | 4 |
+| wormhole | T3K | 1x8 | 1 | 8 |
+
+Only these source-declared rows are candidates. No row has passing hardware evidence at the pinned extraction revision.
+
+### Proven limits and features
+
+- Demo cases cover active batch 1 or 32.
+- standard/CI sequence budgets are 1024/2048; DP smokes reach 4096.
+- TP1, TP2, and TP8 paths are declared; TP4 DP lanes are rejected.
+- N150 has decode tracing but no traced-prefill bucket; N300/T3K declare Q128/Q1024.
+- Device sampling: Host and on-device paths exist; the demo default is host sampling.
+- Trace support is case/topology-specific; use the exact hardware test parameters and capability manifest rather than extrapolating a generic trace claim.
+
+### Checkpoint, cache, and offline requirements
+
+- Obtain the authorized HF config, tokenizer/chat template, and complete checkpoint separately; weights are not shipped.
+- Set a writable `TT_CACHE_PATH` (the example appends topology exactly once), or use the versioned standalone root selected by `TT_TRANSFORMERS_CACHE`, `XDG_CACHE_HOME`, or the user cache.
+- Examples use built-in Transformers loading behavior; `trust_remote_code` is not enabled by default.
+- For offline runs set `HF_HOME`, `HF_HUB_OFFLINE=1`, and `TRANSFORMERS_OFFLINE=1` after populating the exact snapshot.
+- Reference asset root: `tests/assets/reference_outputs/llama32_3b`.
+
+### Install, run, and collect
+
+```bash
+python -m pip install -e '.[examples,test]'
+```
+
+Representative run using the first declared geometry:
+
+```bash
+HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 MESH_DEVICE=N150 HF_MODEL=meta-llama/Llama-3.2-3B-Instruct python -m examples.llama32_3b.demo --case token-accuracy --optimizations performance
+```
+
+Collect the equivalent hardware gate without running it:
+
+```bash
+PYTHONPATH=src MESH_DEVICE=N150 pytest --collect-only -q tests/hardware/models/llama32_3b/test_demo.py
+```
+
+### Correctness criterion
+
+`token-accuracy` compares teacher-forced predictions with the committed `.refpt` and enforces the source-declared top-1/top-5 floor when one exists. Performance cases enforce a floor only when a complete source target exists; otherwise measurements are observational. Eval cases require cross-batch consistency, DP smokes require every lane to complete without invalid special-token output, and any explicit source capacity guard remains a skip rather than support evidence.
+
+### Validation and evidence
+
+- Last standalone hardware validation date: **none**.
+- Validated git SHA: **none**.
+- Evidence: **none attributable to pinned source revision `00748e6ac7b65f50e5c2af07f6e7c1c535c7f4c0`**.
+- [Machine-readable manifest](support.json)
+- [Hardware gate](../../tests/hardware/models/llama32_3b/test_demo.py)
+- [Support matrix](../../SUPPORT.md)
+- [Validation summary](../../docs/validation.md)
+
+### Known and unsupported gaps
+
+- TP4 lanes.
+- traced prefill on N150.
+- any geometry not declared in support.json.
+- Current regression evidence does not qualify the complete declared model contract.
+
+<!-- END GENERATED SUPPORT -->
+
+This directory contains the Llama 3.2 3B TTTv2 product path.
+
+## Construction path
+
+```text
+HF checkpoint
+  -> hf_adaptor.py: provider configuration, tokenizer, and weights
+  -> model.py: TTTv2 Llama tensor graph
+  -> executor.py: thin typed entry point into llama3_executor.py
+  -> generator.py: vLLM boundary, lane construction, and dispatch
+```
+
+The tensor graph composes reusable embedding, rotary, RMSNorm, attention, MLP,
+LM-head, and optional sampling modules. The 3B architecture and tuning remain
+in this model package.
+
+## Executor composition
+
+The model-local `executor.py` retains the public
+`Llama32_3BExecutor`/config/builder names while delegating to
+`src/tt_transformers/models/llama3_executor.py`. The family module configures the
+family-neutral `src/tt_transformers/models/executor.py::ModelExecutor`.
+
+That owner composes paged-KV management, output reading, prefill/decode
+runtimes, eager/trace compilation, warmup, and deterministic cleanup from
+`src/tt_transformers/llm_runtime`.
+
+Llama 3.2 3B preserves the same narrow request signatures and Q128
+priming-before-prefill policy as before the extraction. It does not gain the
+newer Llama-8B/70B native sampling-state contract as a side effect.
+
+## vLLM, DP, and ownership
+
+The generator builds one executor per lane, uses `VLLMAdapter` at the server
+boundary, and wraps lanes with `LaneGroupExecutor` for DP. Lane executors own
+all TT tensors and cleanup; the generator owns no TT resources.
+
+## Tests
+
+- `tests/models/llama32_3b/test_hf_adaptor.py`
+- `tests/models/llama32_3b/test_batched_prefill_postprocess.py`
+- `tests/models/llama32_3b/test_demo_warmup.py`
+- `tests/hardware/models/llama32_3b/test_demo.py`
+- `tests/llm_runtime/test_executor_integration.py`
+- `tests/llm_runtime/test_model_executor.py`

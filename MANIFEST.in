@@ -1,0 +1,17 @@
+include CHANGELOG.md
+include CONTRIBUTING.md
+include LICENSE
+include .pre-commit-config.yaml
+include NOTICE
+include README.md
+include SECURITY.md
+include SUPPORT.md
+include pyproject.toml
+recursive-include .github/workflows *.yml
+recursive-include constraints *.md *.txt
+recursive-include docs *.csv *.md
+recursive-include examples *.json *.md *.py *.yaml
+recursive-include qualification *.json *.md *.py *.sh *.txt
+recursive-include src *.md *.py
+recursive-include tests *.bz2 *.json *.md *.py *.refpt
+recursive-include tools *.md *.py

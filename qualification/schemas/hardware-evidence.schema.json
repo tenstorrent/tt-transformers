@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tenstorrent/tt_transformers/qualification/schemas/hardware-evidence.schema.json",
+  "title": "Canonical TT Transformers hardware evidence index",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "candidate_sha",
+    "matrix",
+    "summary",
+    "records"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "candidate_sha": {"$ref": "#/$defs/sha1"},
+    "matrix": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "schema_version", "sha256", "node_count"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "schema_version": {"type": "integer", "minimum": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "node_count": {"type": "integer", "minimum": 1}
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "outcomes", "by_stage", "by_architecture", "by_mesh_device"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 1},
+        "outcomes": {"$ref": "#/$defs/outcome_counts"},
+        "by_stage": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/group_summary"}
+        },
+        "by_architecture": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/group_summary"}
+        },
+        "by_mesh_device": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/group_summary"}
+        }
+      }
+    },
+    "records": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/record"}
+    }
+  },
+  "$defs": {
+    "sha1": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "outcome": {
+      "enum": [
+        "passed",
+        "pre_device_failure",
+        "functional_failure",
+        "hardware_lifecycle_failure",
+        "missing_acceptance_data"
+      ]
+    },
+    "outcome_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "passed",
+        "pre_device_failure",
+        "functional_failure",
+        "hardware_lifecycle_failure",
+        "missing_acceptance_data"
+      ],
+      "properties": {
+        "passed": {"type": "integer", "minimum": 0},
+        "pre_device_failure": {"type": "integer", "minimum": 0},
+        "functional_failure": {"type": "integer", "minimum": 0},
+        "hardware_lifecycle_failure": {"type": "integer", "minimum": 0},
+        "missing_acceptance_data": {"type": "integer", "minimum": 0}
+      }
+    },
+    "group_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "total", "outcomes"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "total": {"type": "integer", "minimum": 1},
+        "outcomes": {"$ref": "#/$defs/outcome_counts"}
+      }
+    },
+    "file_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "size_bytes"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size_bytes": {"type": "integer", "minimum": 1}
+      }
+    },
+    "reset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["performed", "automatic", "reason"],
+      "properties": {
+        "performed": {"type": "boolean"},
+        "automatic": {"const": false},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    },
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "node",
+        "priority",
+        "stage",
+        "architecture",
+        "mesh_device",
+        "machine_pool_entry",
+        "branch",
+        "full_sha",
+        "started_utc",
+        "finished_utc",
+        "exit_code",
+        "runner_classification",
+        "outcome",
+        "acceptance_types",
+        "metrics_count",
+        "teardown_status",
+        "reset",
+        "source"
+      ],
+      "properties": {
+        "node": {"type": "string", "minLength": 1},
+        "priority": {"type": "integer", "minimum": 1},
+        "stage": {"enum": ["module", "runtime", "smoke", "e2e"]},
+        "architecture": {"enum": ["wormhole", "blackhole"]},
+        "mesh_device": {"type": "string", "minLength": 1},
+        "machine_pool_entry": {"type": "string", "minLength": 1},
+        "branch": {"type": "string", "minLength": 1},
+        "full_sha": {"$ref": "#/$defs/sha1"},
+        "started_utc": {"type": "string", "minLength": 1},
+        "finished_utc": {"type": "string", "minLength": 1},
+        "exit_code": {"type": "integer"},
+        "runner_classification": {
+          "enum": [
+            "passed",
+            "functional_failure",
+            "hardware_lifecycle_failure",
+            "missing_acceptance_data",
+            "no_passing_tests"
+          ]
+        },
+        "outcome": {"$ref": "#/$defs/outcome"},
+        "acceptance_types": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "metrics_count": {"type": "integer", "minimum": 0},
+        "teardown_status": {"type": "string", "minLength": 1},
+        "reset": {"$ref": "#/$defs/reset"},
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["evidence_json", "stdout_log", "pair_sha256"],
+          "properties": {
+            "evidence_json": {"$ref": "#/$defs/file_identity"},
+            "stdout_log": {"$ref": "#/$defs/file_identity"},
+            "pair_sha256": {"$ref": "#/$defs/sha256"}
+          }
+        }
+      }
+    }
+  }
+}
