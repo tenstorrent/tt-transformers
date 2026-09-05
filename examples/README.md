@@ -45,11 +45,194 @@ status and declared candidate geometries are summarized in
 ## Test wrappers
 
 Hardware pytest wrappers live under `tests/hardware/models`. Use the checked-in
-matrix runner rather than inventing selectors:
+matrix runner rather than inventing selectors.
+
+### Inspect the matrix without opening a device
 
 ```bash
+python qualification/tools/run_hardware_matrix.py --validate
 python qualification/tools/run_hardware_matrix.py --list
 ```
 
-Hardware processes must be serialized per physical host. A skipped or xfailed
-test is not validation evidence.
+`--validate` checks the matrix, selectors, supported meshes, machine pools,
+and evidence contracts. `--list` prints nodes in execution order. Both are
+host-safe and do not import or open a TT device.
+
+### Prepare a hardware run
+
+Before using `--dry-run` or `--execute`:
+
+1. Reserve the physical host and ensure no other TT process is using it.
+2. Use a clean checkout at the exact commit to be tested. Verify its branch,
+   full SHA, upstream, and `0 0` upstream divergence.
+3. Install this checkout into an environment containing `ttnn==0.77.0` and
+   the test dependencies.
+4. Run `tt-smi -s` and save a physical-inventory JSON document outside the
+   repository. It must include at least:
+
+   ```json
+   {
+     "captured_utc": "2026-01-01T00:00:00Z",
+     "machine_identity": "<allowed identity from the matrix>",
+     "architecture": "wormhole",
+     "physical_sku": "<physical system description>",
+     "device_count": 8,
+     "board_types": ["n300 L", "n300 R"],
+     "cluster_type": "T3K",
+     "system_mesh": "1x8",
+     "tt_visible_devices": null,
+     "source_command": "tt-smi -s"
+   }
+   ```
+
+The inventory must describe the physical host, not merely the logical
+`MESH_DEVICE` requested by one node. `--sync-gate-passed` is an attestation
+that these checkout checks were actually performed; it is not a bypass.
+
+### Preview one exact node
+
+Set the run identity once, then use `--dry-run` to verify the resolved command,
+environment, cache path, machine, and physical inventory without opening a
+device:
+
+```bash
+CHECKOUT="$(pwd)"
+BRANCH="$(git branch --show-current)"
+CANDIDATE_SHA="$(git rev-parse HEAD)"
+PYTHON="$(command -v python)"
+MACHINE_IDENTITY="<allowed identity from tests/hardware/hardware-matrix.json>"
+PHYSICAL_INVENTORY="<absolute path to physical-inventory.json>"
+RESULTS_ROOT="<absolute path outside the repository>"
+
+"${PYTHON}" qualification/tools/run_hardware_matrix.py \
+  --dry-run \
+  --node wh-n150-rmsnorm-prefill \
+  --common-sha "${CANDIDATE_SHA}" \
+  --branch "${BRANCH}" \
+  --machine-identity "${MACHINE_IDENTITY}" \
+  --sync-gate-passed \
+  --physical-inventory "${PHYSICAL_INVENTORY}" \
+  --checkout "${CHECKOUT}" \
+  --output-dir "${RESULTS_ROOT}" \
+  --python "${PYTHON}"
+```
+
+The runner rejects a checkout whose actual branch or SHA differs from the
+attested values.
+
+### Execute one node
+
+After reviewing the dry-run output, replace `--dry-run` with `--execute` and
+provide a host-scoped lock:
+
+```bash
+"${PYTHON}" qualification/tools/run_hardware_matrix.py \
+  --execute \
+  --node wh-n150-rmsnorm-prefill \
+  --common-sha "${CANDIDATE_SHA}" \
+  --branch "${BRANCH}" \
+  --machine-identity "${MACHINE_IDENTITY}" \
+  --sync-gate-passed \
+  --physical-inventory "${PHYSICAL_INVENTORY}" \
+  --checkout "${CHECKOUT}" \
+  --output-dir "${RESULTS_ROOT}" \
+  --lock-file /tmp/tt-transformers-hardware.lock \
+  --python "${PYTHON}"
+```
+
+Each invocation runs exactly one pytest process and writes a paired JSON record
+and complete stdout log. Exit zero means the node produced at least one passing
+test and met its acceptance-data requirements. On a nonzero exit, inspect the
+record's `failure_classification` before doing anything else.
+
+### Execute one model node
+
+For example, the following runs the Llama 3.1 8B token-accuracy gate as a
+logical single-P150 workload on a compatible Blackhole P150_X4 host. Use that
+host's allowed matrix identity and physical-inventory file in the variables
+defined above:
+
+```bash
+"${PYTHON}" qualification/tools/run_hardware_matrix.py \
+  --execute \
+  --node bh-p150-llama3-8b-token-accuracy \
+  --common-sha "${CANDIDATE_SHA}" \
+  --branch "${BRANCH}" \
+  --machine-identity "${MACHINE_IDENTITY}" \
+  --sync-gate-passed \
+  --physical-inventory "${PHYSICAL_INVENTORY}" \
+  --checkout "${CHECKOUT}" \
+  --output-dir "${RESULTS_ROOT}" \
+  --lock-file /tmp/tt-transformers-hardware.lock \
+  --python "${PYTHON}"
+```
+
+The checked-in node supplies the exact pytest selector, timeout,
+`HF_MODEL=meta-llama/Llama-3.1-8B-Instruct`, offline Hugging Face settings,
+writable model-cache root, and `MESH_DEVICE=P150`. On a P150_X4 quietbox it
+also requires `TT_VISIBLE_DEVICES` to remain unset. Review these resolved
+values with the same command using `--dry-run` before executing it.
+
+### Run every node assigned to one architecture
+
+One host may process its assigned nodes sequentially with this Bash loop:
+
+```bash
+ARCHITECTURE=wormhole  # use blackhole on the Blackhole host
+
+mapfile -t NODES < <("${PYTHON}" - "${ARCHITECTURE}" <<'PY'
+import json
+import sys
+
+architecture = sys.argv[1]
+with open("tests/hardware/hardware-matrix.json", encoding="utf-8") as stream:
+    matrix = json.load(stream)
+for node in sorted(matrix["nodes"], key=lambda item: item["priority"]):
+    if node["architecture"] == architecture:
+        print(node["id"])
+PY
+)
+
+for node in "${NODES[@]}"; do
+  "${PYTHON}" qualification/tools/run_hardware_matrix.py \
+    --execute \
+    --node "${node}" \
+    --common-sha "${CANDIDATE_SHA}" \
+    --branch "${BRANCH}" \
+    --machine-identity "${MACHINE_IDENTITY}" \
+    --sync-gate-passed \
+    --physical-inventory "${PHYSICAL_INVENTORY}" \
+    --checkout "${CHECKOUT}" \
+    --output-dir "${RESULTS_ROOT}" \
+    --lock-file /tmp/tt-transformers-hardware.lock \
+    --python "${PYTHON}" || exit $?
+done
+```
+
+Run at most one TT process per physical host. Independent physical hosts may
+run their sequential loops concurrently. For a `P150` node on a compatible
+P150_X4 quietbox, the checked-in matrix sets `MESH_DEVICE=P150` and unsets
+`TT_VISIBLE_DEVICES`; do not add a competing topology selector.
+
+### Validate and retain evidence
+
+After copying each host's JSON/log pairs into a shared external evidence root,
+build the canonical index:
+
+```bash
+python qualification/tools/validate_hardware_evidence.py \
+  --candidate-sha "${CANDIDATE_SHA}" \
+  --evidence-root "${EVIDENCE_ROOT}" \
+  --output "${EVIDENCE_ROOT}/index.json"
+sha256sum "${EVIDENCE_ROOT}/index.json"
+```
+
+Keep raw logs, caches, inventories, and archives outside Git. Publish only the
+approved immutable artifact location, tested SHA, hashes, topology boundary,
+and compact result summary.
+
+Never reset hardware as routine cleanup. Use `tt-smi -r` only after the failed
+pytest process has exited and its evidence confirms a hardware/lifecycle
+failure. Functional PCC, accuracy, geometry, or assertion failures are not
+reset conditions. A collected, skipped, or xfailed test is not validation
+evidence.
