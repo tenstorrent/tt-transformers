@@ -145,6 +145,34 @@ and complete stdout log. Exit zero means the node produced at least one passing
 test and met its acceptance-data requirements. On a nonzero exit, inspect the
 record's `failure_classification` before doing anything else.
 
+### Execute one model node
+
+For example, the following runs the Llama 3.1 8B token-accuracy gate as a
+logical single-P150 workload on a compatible Blackhole P150_X4 host. Use that
+host's allowed matrix identity and physical-inventory file in the variables
+defined above:
+
+```bash
+"${PYTHON}" qualification/tools/run_hardware_matrix.py \
+  --execute \
+  --node bh-p150-llama3-8b-token-accuracy \
+  --common-sha "${CANDIDATE_SHA}" \
+  --branch "${BRANCH}" \
+  --machine-identity "${MACHINE_IDENTITY}" \
+  --sync-gate-passed \
+  --physical-inventory "${PHYSICAL_INVENTORY}" \
+  --checkout "${CHECKOUT}" \
+  --output-dir "${RESULTS_ROOT}" \
+  --lock-file /tmp/tt-transformers-hardware.lock \
+  --python "${PYTHON}"
+```
+
+The checked-in node supplies the exact pytest selector, timeout,
+`HF_MODEL=meta-llama/Llama-3.1-8B-Instruct`, offline Hugging Face settings,
+writable model-cache root, and `MESH_DEVICE=P150`. On a P150_X4 quietbox it
+also requires `TT_VISIBLE_DEVICES` to remain unset. Review these resolved
+values with the same command using `--dry-run` before executing it.
+
 ### Run every node assigned to one architecture
 
 One host may process its assigned nodes sequentially with this Bash loop:
