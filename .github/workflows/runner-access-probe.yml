@@ -1,0 +1,24 @@
+name: Temporary P150 runner access probe
+
+on:
+  push:
+    branches:
+      - ci/runner-access-probe-sodf2p8q
+
+permissions: {}
+
+jobs:
+  p150-access:
+    name: Verify P150 runner access
+    runs-on:
+      group: metal infra runners
+      labels: [in-service, arch-blackhole, P150, pipeline-functional]
+    timeout-minutes: 2
+    steps:
+      - name: Confirm runner assignment
+        shell: bash
+        run: |
+          printf 'Runner access confirmed for tt_transformers\n'
+          printf 'Runner name: %s\n' "$RUNNER_NAME"
+          printf 'Runner OS: %s\n' "$RUNNER_OS"
+          printf 'Runner architecture: %s\n' "$RUNNER_ARCH"
