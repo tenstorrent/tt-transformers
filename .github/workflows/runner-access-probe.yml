@@ -1,4 +1,4 @@
-name: P150 runner access and hardware probe
+name: CIv2 P150b runner access and hardware probe
 
 on:
   push:
@@ -11,23 +11,17 @@ permissions:
 
 jobs:
   p150-access:
-    name: Inspect P150 with tt-smi
-    # Match tt-metal/.github/sku_config.yaml: skus.bh_p150.runs_on.
-    # models-e2e-tests-impl.yaml selects these labels without an explicit group.
-    runs-on:
-      - in-service
-      - arch-blackhole
-      - P150
-      - pipeline-functional
+    name: Inspect CIv2 P150b with tt-smi
+    # Shared CIv2 pool: tt-metal/.github/sku_config.yaml, bh_p150b_civ2_viommu.
+    runs-on: tt-ubuntu-2204-P150b-viommu-stable
     timeout-minutes: 10
     container:
       # Image from the successful tt-metal P150 job 101918474077 (2026-09-08).
       # tt-metal's development image includes tt-smi in /usr/local/bin.
       image: ghcr.io/tenstorrent/tt-metal/tt-metalium/ubuntu-22.04-dev-amd64@sha256:8920406917d04f92ecc147d9e9a307c667551e21694945f4652dcd0beb4eb0c6
-      volumes:
-        - /dev/hugepages-1G:/dev/hugepages-1G
-      # Device options from tt-metal/.github/workflows/models-e2e-tests-impl.yaml.
-      options: "--device /dev/tenstorrent --privileged -v /sys:/sys -e TT_GH_CI_INFRA"
+      # CIv2 device options from tt-metal's blackhole-e2e-tests-impl.yaml.
+      # The viommu runners do not require the legacy hugepage mount.
+      options: "--device /dev/tenstorrent -e TT_GH_CI_INFRA"
     steps:
       - name: Confirm runner assignment
         shell: bash
@@ -36,7 +30,10 @@ jobs:
           printf 'Runner name: %s\n' "$RUNNER_NAME"
           printf 'Runner OS: %s\n' "$RUNNER_OS"
           printf 'Runner architecture: %s\n' "$RUNNER_ARCH"
-      - name: Inspect P150 hardware
+          printf 'CI infrastructure: %s\n' "${TT_GH_CI_INFRA:-unset}"
+      - name: Inspect P150b hardware
         shell: bash
         timeout-minutes: 2
-        run: tt-smi -s
+        run: |
+          ls -l /dev/tenstorrent
+          tt-smi -s
