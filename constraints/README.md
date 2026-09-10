@@ -10,7 +10,7 @@ for CPython 3.10 and 3.12 on x86-64 Linux.
 
 The locks use PyPI as the primary index and the PyTorch CPU index as a
 supplemental index. Base and host locks select `ttnn==0.77.0`,
-`torch==2.11.0+cpu`, and `loguru==0.6.0`.
+`torch==2.11.0+cpu`, `loguru==0.6.0`, and `transformers==5.12.1`.
 
 They are maintainer/CI environments, not constraints imposed on downstream
 applications. Normal users install the package metadata declared in

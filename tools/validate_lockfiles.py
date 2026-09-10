@@ -77,7 +77,7 @@ def main() -> int:
     for python in ("py310", "py312"):
         base = locks[f"base-{python}"]
         host = locks[f"host-{python}"]
-        require_names(base, {"ttnn", "torch", "loguru"}, target=f"base-{python}")
+        require_names(base, {"ttnn", "torch", "loguru", "transformers"}, target=f"base-{python}")
         require_names(
             host,
             {"ttnn", "torch", "loguru", "pytest", "jsonschema", "transformers", "tqdm"},
@@ -85,6 +85,8 @@ def main() -> int:
         )
         if base["ttnn"][0] != "0.77.0" or base["torch"][0] != "2.11.0+cpu":
             raise ValueError(f"base-{python}: TTNN/Torch target drifted")
+        if base["transformers"][0] != "5.12.1":
+            raise ValueError(f"base-{python}: Transformers target drifted")
         for name, identity in base.items():
             if host.get(name) != identity:
                 raise ValueError(f"host-{python}: base artifact {name} differs")
