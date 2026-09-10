@@ -12,6 +12,10 @@ pre-commit install
 Maintainers and CI should prefer the hash-locked environments documented in
 `constraints/README.md`.
 
+To develop against a tt-metal checkout or a TTNN wheel built from a particular
+commit, follow [Custom TTNN development](docs/ttnn-development.md). It provides
+isolated source-linked and fixed-wheel environments while preserving release pins.
+
 ## Repository boundaries
 
 - Production code may import only `tt_transformers`, declared third-party

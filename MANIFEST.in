@@ -14,4 +14,4 @@ recursive-include examples *.json *.md *.py *.yaml
 recursive-include qualification *.json *.md *.py *.sh *.txt
 recursive-include src *.md *.py
 recursive-include tests *.bz2 *.json *.md *.py *.refpt
-recursive-include tools *.md *.py
+recursive-include tools *.json *.md *.py
