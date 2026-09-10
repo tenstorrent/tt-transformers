@@ -26,11 +26,13 @@ from .common import (
     save_runtime,
     source_state,
     tool_fingerprint,
+    tree_hash,
     write_json,
 )
 from .environment import (
     create_venv,
     dependency_files,
+    doctor,
     install_dependencies,
     prepare_dependencies,
     requirements,
@@ -38,6 +40,25 @@ from .environment import (
 )
 
 RECIPE = "tt-metal-native-v1"
+
+
+def cmake_options(build_dir: Path) -> dict:
+    selected = {
+        "CMAKE_BUILD_TYPE",
+        "CMAKE_CXX_COMPILER",
+        "ENABLE_DISTRIBUTED",
+        "ENABLE_TRACY",
+        "TT_ENABLE_LTO",
+        "TT_UNITY_BUILDS",
+        "TT_USE_SYSTEM_SFPI",
+        "WITH_PYTHON_BINDINGS",
+    }
+    result = {}
+    for line in (build_dir / "CMakeCache.txt").read_text().splitlines():
+        match = re.fullmatch(r"([^:#/]+):[^=]+=(.*)", line)
+        if match and match[1] in selected:
+            result[match[1]] = match[2]
+    return result
 
 
 def checkout_lock(checkout: Path) -> Path:
@@ -142,6 +163,7 @@ def sfpi_info(checkout: Path) -> dict:
         raise DevError("This recipe requires the selected source revision's local runtime/sfpi toolchain.")
     return {
         "compiler_sha256": file_hash(compiler),
+        "tree_sha256": tree_hash(root),
         "version": command([compiler, "--version"], capture=True).splitlines()[0],
     }
 
@@ -222,7 +244,7 @@ def attach(
         previous = read_json(workspace)
         if any(
             previous[key] != settings[key]
-            for key in ("checkout", "project", "build_dir", "build_type", "distributed", "extras")
+            for key in ("checkout", "project", "build_dir", "build_type", "distributed", "extras", "image")
         ):
             raise DevError("Workspace belongs to a different source/build profile. Choose another --output.")
         if previous["python"]["abi"] != info["abi"]:
@@ -241,6 +263,7 @@ def rebuild(manifest: Path) -> Path:
     checkout = Path(settings["checkout"])
     project = Path(settings["project"])
     with runtime_lock(checkout_lock(checkout), exclusive=True):
+        implementation = tool_fingerprint()
         tools = host_tools()
         venv = work / "venv"
         if not venv.exists():
@@ -281,17 +304,19 @@ def rebuild(manifest: Path) -> Path:
         )
         # Editable SCM metadata can change when a checkout becomes dirty; native provenance is separate.
         state = source_state(checkout)
+        options = cmake_options(Path(settings["build_dir"]))
         data = {
             "mode": "source",
             "metal": state,
             "python": settings["python"],
             "recipe": {
                 "name": RECIPE,
-                "tool_fingerprint": tool_fingerprint(),
+                "tool_fingerprint": implementation,
                 "build_type": settings["build_type"],
                 "distributed": settings["distributed"],
-                "tracy": False,
-                "lto": False,
+                "tracy": options.get("ENABLE_TRACY") == "ON",
+                "lto": options.get("TT_ENABLE_LTO") == "ON",
+                "cmake": options,
                 "image": settings["image"],
                 "builder_image": os.environ.get("TTNN_DEV_IMAGE"),
                 "tools": tools,
@@ -335,6 +360,7 @@ def export_wheel(source_manifest: Path, output: Path) -> Path:
         raise DevError("Wheel export requires a source runtime.")
     checkout = Path(source["source"]["checkout"])
     with runtime_lock(checkout_lock(checkout), exclusive=True):
+        packager_implementation = tool_fingerprint()
         state = source_state(checkout)
         if state["dirty"]:
             raise DevError("Commit local tt-metal changes before exporting a shared wheel.")
@@ -342,6 +368,7 @@ def export_wheel(source_manifest: Path, output: Path) -> Path:
             raise DevError("Source changed after the last build; rebuild before export.")
         if native_outputs(checkout, Path(source["source"]["build_dir"])) != source["source"]["outputs"]:
             raise DevError("Native outputs changed after the build; rebuild before export.")
+        doctor(source_manifest.parent / "environment.json")
         if output.exists() and any(output.iterdir()):
             raise DevError("Choose an empty output directory for the fixed wheel bundle.")
         output.mkdir(parents=True, exist_ok=True)
@@ -357,7 +384,8 @@ def export_wheel(source_manifest: Path, output: Path) -> Path:
                 "build==1.3.0",
                 "auditwheel==6.6.0",
                 "patchelf==0.17.2.4",
-            ]
+            ],
+            env=clean_environment(bootstrap),
         )
         env = clean_environment(bootstrap)
         env["TT_FROM_PRECOMPILED_DIR"] = str(checkout)
@@ -393,7 +421,11 @@ def export_wheel(source_manifest: Path, output: Path) -> Path:
             "mode": "wheel",
             "metal": state,
             "python": source["python"],
-            "recipe": source["recipe"],
+            "recipe": {
+                **source["recipe"],
+                "packager_tool_fingerprint": packager_implementation,
+                "wheel_tools": {"build": "1.3.0", "auditwheel": "6.6.0", "patchelf": "0.17.2.4"},
+            },
             "ttnn": {**metadata, "wheel": wheel.name, "sha256": file_hash(wheel)},
             "toolchain": {**source["toolchain"], "archive": toolchain_archive.name},
             "dependencies": {

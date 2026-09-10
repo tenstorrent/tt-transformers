@@ -30,12 +30,14 @@ from .common import (
     runtime_python,
     source_state,
     toml,
+    tree_hash,
     within,
     write_json,
 )
 
 INDEX = "https://pypi.org/simple"
 CPU_INDEX = "https://download.pytorch.org/whl/cpu"
+WHEEL_HOSTS = {"files.pythonhosted.org", "download.pytorch.org", "download-r2.pytorch.org"}
 PROBE = Path(__file__).with_name("probe.py")
 
 
@@ -130,7 +132,9 @@ def prepare_dependencies(
                 continue
         url = item["download_info"]["url"]
         parsed = urlparse(url)
-        if name != "ttnn" and (parsed.scheme != "https" or parsed.username or parsed.password):
+        if name != "ttnn" and (
+            parsed.scheme != "https" or parsed.hostname not in WHEEL_HOSTS or parsed.username or parsed.password
+        ):
             raise DevError(f"Expected a public HTTPS dependency wheel for {name}")
         if not unquote(parsed.path).endswith(".whl"):
             raise DevError(f"Dependency must be a wheel: {name}")
@@ -222,6 +226,9 @@ def create_environment(manifest: Path, project: Path, state: Path, python: str) 
     data = load_runtime(manifest)
     if data["mode"] != "wheel":
         raise DevError("Source runtimes already own their environment; use attach/rebuild.")
+    requested = interpreter_info(python)
+    if requested["abi"] != data["python"]["abi"]:
+        raise DevError(f"Python ABI mismatch: {requested['abi']} versus {data['python']['abi']}")
     if state.exists() and any(state.iterdir()):
         raise DevError(f"Choose a new environment directory: {state}")
     state.mkdir(parents=True, exist_ok=True)
@@ -293,6 +300,8 @@ def doctor(config: Path) -> dict:
     state = None
     if data["mode"] == "source":
         checkout = Path(data["source"]["checkout"])
+        if Path(settings["runtime_root"]).resolve() != checkout.resolve():
+            raise DevError("Source runtime assets point at another checkout.")
         state = source_state(checkout)
         if state["native_fingerprint"] != data["source"]["native_fingerprint"]:
             raise DevError("Native tt-metal inputs changed; run rebuild before testing.")
@@ -308,6 +317,15 @@ def doctor(config: Path) -> dict:
             if (stat.st_mtime_ns, stat.st_size) != (recorded["mtime_ns"], recorded["size"]):
                 if file_hash(target) != recorded["sha256"]:
                     raise DevError(f"Native compiler/CMake dependency changed; run rebuild: {path}")
+        build_dir = Path(data["source"]["build_dir"])
+        glob_check = build_dir / "CMakeFiles/VerifyGlobs.cmake"
+        glob_stamp = build_dir / "CMakeFiles/cmake.verify_globs"
+        if glob_check.is_file():
+            before = glob_stamp.stat().st_mtime_ns if glob_stamp.exists() else None
+            command(["cmake", "-P", glob_check], cwd=build_dir, env=clean_environment(venv), capture=True)
+            after = glob_stamp.stat().st_mtime_ns if glob_stamp.exists() else None
+            if before != after:
+                raise DevError("CMake globbed inputs changed; run rebuild before testing.")
     project_state = source_state(project)
     identity = digest(
         {
@@ -348,13 +366,31 @@ def doctor(config: Path) -> dict:
         if not origin.is_relative_to(venv.resolve()) or not extension.is_relative_to(venv.resolve()):
             raise DevError("TTNN was not imported from the selected wheel environment.")
         verify_installed_wheel(within(manifest.parent, data["ttnn"]["wheel"]), origin.parent)
+        overlay = config.parent / "runtime-root"
+        if overlay.is_symlink() or Path(settings["runtime_root"]).resolve() != overlay.resolve():
+            raise DevError("Wheel runtime assets point at another environment.")
+        for child in origin.parent.iterdir():
+            if child.name not in {"runtime", "__pycache__"} and (overlay / child.name).resolve() != child.resolve():
+                raise DevError(f"Wheel runtime asset link was changed: {child.name}")
+        for child in (origin.parent / "runtime").iterdir():
+            if child.name != "sfpi" and (overlay / "runtime" / child.name).resolve() != child.resolve():
+                raise DevError(f"Wheel runtime asset link was changed: runtime/{child.name}")
+        if (overlay / "runtime/sfpi").resolve() != (config.parent / "sfpi").resolve():
+            raise DevError("Wheel SFPI link points at another environment.")
         permitted = [venv.resolve()]
     for library in probe["native_libraries"]:
         if not any(Path(library).resolve().is_relative_to(root) for root in permitted):
             raise DevError(f"Native library came from another runtime: {library}")
     compiler = Path(settings["runtime_root"]) / "runtime/sfpi/compiler/bin/riscv-tt-elf-g++"
-    if not compiler.is_file() or file_hash(compiler) != data["toolchain"]["compiler_sha256"]:
+    if (
+        not compiler.is_file()
+        or not os.access(compiler, os.X_OK)
+        or file_hash(compiler) != data["toolchain"]["compiler_sha256"]
+    ):
         raise DevError("SFPI compiler does not match the runtime build.")
+    if data["toolchain"].get("tree_sha256"):
+        if tree_hash(Path(settings["runtime_root"]) / "runtime/sfpi") != data["toolchain"]["tree_sha256"]:
+            raise DevError("SFPI toolchain files changed after the runtime build.")
     return {
         "status": "pass",
         "mode": data["mode"],

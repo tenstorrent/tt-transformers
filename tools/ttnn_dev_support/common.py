@@ -13,6 +13,7 @@ import shlex
 import shutil
 import subprocess
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = "https://github.com/tenstorrent/tt-metal.git"
@@ -38,6 +39,25 @@ def file_hash(path: Path) -> str:
 def tool_fingerprint() -> str:
     files = [ROOT / "tools/ttnn_dev.py", *Path(__file__).parent.glob("*.py")]
     return digest({str(path.relative_to(ROOT)): file_hash(path) for path in sorted(files)})
+
+
+def tree_hash(root: Path) -> str:
+    records = {}
+
+    def visit(directory: Path, ancestors: set[Path]) -> None:
+        resolved = directory.resolve()
+        if resolved in ancestors:
+            raise DevError(f"Toolchain contains a symlink cycle: {directory}")
+        for path in sorted(directory.iterdir()):
+            if path.is_dir():
+                visit(path, ancestors | {resolved})
+            elif path.is_file():
+                records[str(path.relative_to(root))] = file_hash(path)
+            else:
+                raise DevError(f"Unsupported toolchain entry: {path}")
+
+    visit(root, set())
+    return digest(records)
 
 
 def read_json(path: Path) -> dict:
@@ -78,7 +98,36 @@ def command(argv, *, cwd=None, env=None, capture=False) -> str:
 
 
 def git(checkout: Path, *args: str) -> str:
-    return command(["git", "-C", checkout, *args], capture=True)
+    # Container mounts may retain a different host UID. Trust only the checkout
+    # explicitly selected by this invocation, without editing global git config.
+    return command(["git", "-c", f"safe.directory={checkout.resolve()}", "-C", checkout, *args], capture=True)
+
+
+def repository_url(checkout: Path) -> str | None:
+    result = subprocess.run(
+        [
+            "git",
+            "-c",
+            f"safe.directory={checkout.resolve()}",
+            "-C",
+            str(checkout),
+            "config",
+            "--get",
+            "remote.origin.url",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode:
+        return None
+    url = result.stdout.strip()
+    if url.startswith("git@github.com:"):
+        url = "https://github.com/" + url.split(":", 1)[1]
+    parsed = urlsplit(url)
+    if parsed.scheme not in {"https", "ssh"} or not parsed.hostname:
+        return None
+    host = parsed.hostname + (f":{parsed.port}" if parsed.port else "")
+    return urlunsplit((parsed.scheme, host, parsed.path, "", ""))
 
 
 def toml(path: Path) -> dict:
@@ -129,10 +178,17 @@ def clean_environment(venv: Path | None = None) -> dict[str, str]:
         "VIRTUAL_ENV",
         "CCACHE_REMOTE_STORAGE",
         "CCACHE_REMOTE_ONLY",
+        "TT_METAL_CACHE",
+        "TT_CACHE_PATH",
+        "TT_TRANSFORMERS_CACHE",
+        "PIP_INDEX_URL",
+        "PIP_EXTRA_INDEX_URL",
+        "PIP_FIND_LINKS",
     ):
         env.pop(name, None)
     env["PYTHONNOUSERSITE"] = "1"
     env["PYTHONUNBUFFERED"] = "1"
+    env["PIP_CONFIG_FILE"] = os.devnull
     if venv:
         env["VIRTUAL_ENV"] = str(venv)
         env["PATH"] = str(venv / "bin") + os.pathsep + env["PATH"]
@@ -191,6 +247,7 @@ def source_state(checkout: Path) -> dict:
     native_identity = {**identity, "patch": hashlib.sha256(native.encode()).hexdigest(), "untracked": native_untracked}
     return {
         **identity,
+        "repository": repository_url(checkout),
         "dirty": bool(changes or untracked or any(state["dirty"] for state in submodules.values())),
         "fingerprint": digest(identity),
         "native_fingerprint": digest(native_identity),

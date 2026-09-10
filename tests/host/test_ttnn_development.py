@@ -51,8 +51,8 @@ def runtime(tmp_path, *, mode="source"):
         "dependencies": {"directory": "dependencies", "extras": [], "requirements": ["torch==2.11.0"]},
         "toolchain": {"compiler_sha256": "b" * 64},
         "source": {
-            "checkout": "checkout",
-            "build_dir": "build",
+            "checkout": str(tmp_path / "checkout"),
+            "build_dir": str(tmp_path / "build"),
             "native_fingerprint": "c" * 64,
             "outputs": {"_ttnn.so": "d" * 64},
         },
@@ -299,7 +299,7 @@ def test_doctor_refuses_stale_native_inputs_before_importing_ttnn(tmp_path, monk
             "runtime": str(manifest),
             "venv": str(tmp_path / "venv"),
             "project": str(tmp_path),
-            "runtime_root": str(tmp_path / "runtime-root"),
+            "runtime_root": data["source"]["checkout"],
         },
     )
     monkeypatch.setattr(environment, "runtime_python", lambda path: Path("python"))
@@ -376,3 +376,54 @@ def test_container_executor_preserves_paths_and_replaces_executor(tmp_path, monk
     assert "--executor=native" in calls[0]
     assert f"type=bind,src={tmp_path / 'out'},dst={tmp_path / 'out'}" in calls[0]
     assert image in calls[0]
+
+
+@pytest.mark.host
+def test_ci_dispatch_pins_ref_and_rejects_the_wrong_artifact(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from tools import ttnn_dev
+
+    args = ttnn_dev.parser().parse_args(
+        ["build", "--executor", "ci", "--output", str(tmp_path), "--workflow-ref", "feature"]
+    )
+    monkeypatch.setattr(ttnn_dev, "resolve_ref", lambda ref: "a" * 40)
+    monkeypatch.setattr(ttnn_dev, "interpreter_info", lambda *a: pytest.fail("CI must not require local target Python"))
+
+    def dispatch(argv, **kwargs):
+        payload = json.loads(kwargs["input"])
+        assert payload["ref"] == "feature"
+        assert payload["inputs"]["metal_ref"] == "a" * 40
+        assert payload["inputs"]["request_id"]
+        return SimpleNamespace(returncode=0, stdout='{"workflow_run_id": 42}', stderr="")
+
+    monkeypatch.setattr(ttnn_dev.subprocess, "run", dispatch)
+    monkeypatch.setattr(ttnn_dev, "command", lambda *a, **k: "")
+    monkeypatch.setattr(ttnn_dev, "load_runtime", lambda path: {"mode": "wheel", "metal": {"sha": "b" * 40}})
+    with pytest.raises(common.DevError, match="different source commit"):
+        ttnn_dev.dispatch_build(args)
+
+
+@pytest.mark.host
+def test_toolchain_tree_hash_matches_a_dereferenced_export(tmp_path):
+    source = tmp_path / "source"
+    (source / "lib").mkdir(parents=True)
+    (source / "lib/header.hpp").write_text("value")
+    (source / "lib64").symlink_to(source / "lib", target_is_directory=True)
+    archive = tmp_path / "sfpi.tar.gz"
+    with tarfile.open(archive, "w:gz", dereference=True) as tar:
+        for path in sorted(source.iterdir()):
+            tar.add(path, arcname=path.name)
+    target = tmp_path / "installed"
+    environment.extract_toolchain(archive, target)
+    assert common.tree_hash(source) == common.tree_hash(target)
+    (target / "lib64/header.hpp").write_text("changed")
+    assert common.tree_hash(source) != common.tree_hash(target)
+
+
+@pytest.mark.host
+def test_git_trust_is_scoped_to_the_selected_checkout(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(common, "command", lambda argv, **kwargs: calls.append(argv) or "revision")
+    assert common.git(tmp_path, "rev-parse", "HEAD") == "revision"
+    assert calls == [["git", "-c", f"safe.directory={tmp_path.resolve()}", "-C", tmp_path, "rev-parse", "HEAD"]]

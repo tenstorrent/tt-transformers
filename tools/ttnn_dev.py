@@ -29,6 +29,7 @@ from tools.ttnn_dev_support.common import (  # noqa: E402
     ROOT,
     DevError,
     command,
+    host_tools,
     interpreter_info,
     load_environment,
     load_runtime,
@@ -134,8 +135,8 @@ def dispatch_build(args) -> int:
             "The initial CI profile uses a remote commit, Release, single-host support, and examples,test extras. "
             "Use native/local-container execution for other profiles."
         )
-    if interpreter_info(args.python)["minor"] != "3.10":
-        raise DevError("The initial CI build profile targets Python 3.10.")
+    if args.python != "3.10":
+        raise DevError("The initial CI build profile uses the image's Python 3.10; specify --python 3.10.")
     sha = resolve_ref(args.tt_metal_ref)
     request_id = uuid.uuid4().hex
     payload = {
@@ -187,7 +188,11 @@ def dispatch_build(args) -> int:
             args.output,
         ]
     )
-    load_runtime(args.output / "runtime.json")
+    runtime = load_runtime(args.output / "runtime.json")
+    if runtime["mode"] != "wheel" or runtime["metal"]["sha"] != sha:
+        raise DevError("CI returned a runtime for a different source commit or installation mode.")
+    if args.image and runtime["recipe"]["image"] != args.image:
+        raise DevError("CI returned a runtime built for another image.")
     print(args.output / "runtime.json")
     return 0
 
@@ -209,6 +214,7 @@ def build_command(args) -> Path:
             and data["recipe"]["build_type"] == args.build_type
             and data["recipe"]["distributed"] == args.distributed
             and data["recipe"].get("tool_fingerprint") == tool_fingerprint()
+            and data["recipe"]["tools"] == host_tools()
             and data["python"]["abi"] == interpreter_info(args.python)["abi"]
             and data["dependencies"]["extras"] == args.extras.split(",")
             and data["dependencies"]["requirements"] == requirements(args.project, args.extras.split(","))
@@ -236,7 +242,8 @@ def build_command(args) -> Path:
         extras=args.extras.split(","),
         image=args.image,
     )
-    doctor(work / "source/environment.json")
+    with runtime_lock(checkout_lock(checkout), exclusive=False):
+        doctor(work / "source/environment.json")
     if load_runtime(work / "source/runtime.json")["metal"]["sha"] != sha:
         raise DevError("Built source differs from the resolved commit.")
     return export_wheel(work / "source/runtime.json", work / "bundle")
@@ -350,13 +357,15 @@ def main(argv=None) -> int:
                 extras=args.extras.split(","),
                 image=args.image,
             )
-            print(json.dumps(doctor(result), indent=2))
+            with runtime_lock(configuration_lock(result), exclusive=False):
+                print(json.dumps(doctor(result), indent=2))
             print(result)
         elif args.action == "build":
             print(build_command(args))
         elif args.action == "rebuild":
             result = rebuild(args.runtime.resolve())
-            print(json.dumps(doctor(result), indent=2))
+            with runtime_lock(configuration_lock(result), exclusive=False):
+                print(json.dumps(doctor(result), indent=2))
         elif args.action == "export":
             print(export_wheel(args.runtime.resolve(), args.output.resolve()))
         elif args.action == "env":
