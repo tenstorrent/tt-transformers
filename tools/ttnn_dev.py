@@ -29,6 +29,7 @@ from tools.ttnn_dev_support.common import (  # noqa: E402
     ROOT,
     DevError,
     command,
+    git,
     host_tools,
     interpreter_info,
     load_environment,
@@ -103,6 +104,13 @@ def container_execution(args, argv: list[str]) -> int:
         mounts.add(args.tt_metal_checkout.resolve())
     if getattr(args, "build_dir", None):
         mounts.add(args.build_dir.resolve())
+    # Linked worktrees keep their Git metadata outside the checkout. Keep those
+    # paths available too, including the per-worktree lock and submodule Git dirs.
+    for checkout in list(mounts):
+        if (checkout / ".git").exists():
+            common_dir = Path(git(checkout, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+            if not any(common_dir.is_relative_to(mount) for mount in mounts):
+                mounts.add(common_dir)
     for path in mounts:
         path.mkdir(parents=True, exist_ok=True)
     inner = list(argv)

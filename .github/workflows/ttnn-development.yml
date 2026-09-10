@@ -19,10 +19,6 @@ on:
         description: Run P150b JIT, RMSNorm, and Llama token-accuracy checks
         type: boolean
         default: false
-  # Bootstrap validation before this new dispatchable workflow is merged.
-  push:
-    branches: [feat/ttnn-source-development]
-    paths: [.github/workflows/ttnn-development.yml]
 
 permissions:
   contents: read
@@ -45,7 +41,7 @@ jobs:
       - name: Resolve immutable build inputs
         id: resolve
         env:
-          METAL_REF: ${{ inputs.metal_ref || '3125b4ba98f65da970b409ca05b2a0614ae595c7' }}
+          METAL_REF: ${{ inputs.metal_ref }}
           INPUT_IMAGE: ${{ inputs.image }}
         run: |
           python - <<'PY'
@@ -93,6 +89,7 @@ jobs:
             -r "$RUNNER_TEMP/launcher-requirements.txt"
           echo "$RUNNER_TEMP/launcher/bin" >> "$GITHUB_PATH"
       - name: Build source runtime and export a fixed wheel
+        id: build_runtime
         shell: bash
         run: |
           python3 tools/ttnn_dev.py build --executor native \
@@ -113,6 +110,7 @@ jobs:
             python -m pytest -q -m host tests/host/test_package_surface.py \
             tests/host/test_import_boundaries.py tests/host/test_ttnn_development.py
       - name: Upload runtime bundle
+        if: ${{ !cancelled() && steps.build_runtime.outcome == 'success' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ttnn-runtime
@@ -134,7 +132,7 @@ jobs:
   hardware:
     name: Validate candidate TTNN on P150b
     needs: [resolve, build]
-    if: ${{ inputs.run_hardware || github.event_name == 'push' }}
+    if: ${{ inputs.run_hardware }}
     runs-on: tt-ubuntu-2204-P150b-viommu-stable
     timeout-minutes: 90
     container:

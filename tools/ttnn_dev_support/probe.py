@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.metadata
 import json
+import re
 import site
 import sys
 from pathlib import Path
@@ -49,6 +50,11 @@ def main() -> None:
         "tt_transformers_distribution": project_version,
         "direct_url": json.loads(direct) if direct else None,
         "native_libraries": sorted(libraries),
+        "installed_versions": {
+            re.sub(r"[-_.]+", "-", dist.metadata["Name"]).lower(): dist.version
+            for dist in importlib.metadata.distributions(path=site.getsitepackages())
+            if dist.metadata["Name"]
+        },
     }
     print("TTNN_DEV_PROBE=" + json.dumps(result), flush=True)
 

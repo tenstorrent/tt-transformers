@@ -145,6 +145,12 @@ that requests the release TTNN pin. `doctor` checks installed distributions
 with `python -I -m pip check`, excluding source egg-info and caller
 `PYTHONPATH`, and separately validates the source project's requirements.
 It rejects an installed tt-transformers distribution that could shadow the source.
+It also compares installed dependency versions against the development lock, so
+changing an otherwise compatible package with pip cannot silently alter the runtime.
+
+For IDE code analysis, select the environment's `venv/bin/python` and add this
+checkout's `src` directory to the IDE's Python analysis paths. Launch tests and
+examples through `ttnn_dev.py run` to retain the runtime checks and cache setup.
 
 Editable TTNN is recorded separately from hashed dependency wheels; a mutable
 checkout cannot have an immutable wheel hash. Source and fixed-wheel installs

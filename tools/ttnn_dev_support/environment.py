@@ -282,6 +282,22 @@ def verify_installed_wheel(wheel: Path, package: Path) -> None:
                 raise DevError(f"Installed wheel file changed: {name}")
 
 
+def verify_installed_dependencies(lock: Path, versions: dict[str, str]) -> None:
+    for line in lock.read_text().splitlines():
+        if not line or line.startswith("#"):
+            continue
+        requirement = Requirement(line.split(" --hash=", 1)[0])
+        constraints = list(requirement.specifier)
+        if len(constraints) != 1 or constraints[0].operator != "==":
+            raise DevError("Development dependency lock must contain exact versions.")
+        name = canonicalize_name(requirement.name)
+        if versions.get(name) != constraints[0].version:
+            raise DevError(
+                f"Installed {name} differs from the runtime lock: "
+                f"expected {constraints[0].version}, found {versions.get(name)}"
+            )
+
+
 def doctor(config: Path) -> dict:
     settings = load_environment(config)
     manifest = Path(settings["runtime"])
@@ -342,6 +358,8 @@ def doctor(config: Path) -> dict:
     if not line:
         raise DevError("Runtime import probe produced no identity report.")
     probe = json.loads(line.split("=", 1)[1])
+    dependencies = within(manifest.parent, data["dependencies"]["directory"])
+    verify_installed_dependencies(dependencies / "requirements.txt", probe["installed_versions"])
     if probe["tt_transformers_distribution"] is not None:
         raise DevError("Remove the installed tt-transformers distribution; this environment runs its source checkout.")
     if probe["ttnn_version"] != data["ttnn"]["version"]:
@@ -391,6 +409,8 @@ def doctor(config: Path) -> dict:
     if data["toolchain"].get("tree_sha256"):
         if tree_hash(Path(settings["runtime_root"]) / "runtime/sfpi") != data["toolchain"]["tree_sha256"]:
             raise DevError("SFPI toolchain files changed after the runtime build.")
+    identity = digest({"runtime": identity, "installed_versions": probe["installed_versions"]})
+    env = run_environment(config, data, identity=identity)
     return {
         "status": "pass",
         "mode": data["mode"],

@@ -323,10 +323,13 @@ def test_source_egg_info_is_not_treated_as_an_installed_distribution(tmp_path, m
     monkeypatch.setattr(import_probe.site, "getsitepackages", lambda: [str(installed)])
     assert importlib.metadata.version("tt-transformers") == "2.0.0.dev0"
     assert import_probe.installed_project_version() is None
-    info = installed / "tt_transformers-2.0.0.dev0.dist-info"
-    info.mkdir()
+    # Use a separate environment, as the real probe runs in a fresh interpreter.
+    # importlib.metadata caches directory entries on some Python/filesystem pairs.
+    populated = tmp_path / "populated-site-packages"
+    info = populated / "tt_transformers-2.0.0.dev0.dist-info"
+    info.mkdir(parents=True)
     (info / "METADATA").write_text((egg / "PKG-INFO").read_text())
-    importlib.invalidate_caches()
+    monkeypatch.setattr(import_probe.site, "getsitepackages", lambda: [str(populated)])
     assert import_probe.installed_project_version() == "2.0.0.dev0"
 
 
@@ -370,13 +373,57 @@ def test_container_executor_preserves_paths_and_replaces_executor(tmp_path, monk
     args = ttnn_dev.parser().parse_args(argv)
     calls = []
     monkeypatch.setattr(ttnn_dev.shutil, "which", lambda name: "/usr/bin/docker")
-    monkeypatch.setattr(
-        ttnn_dev.subprocess, "run", lambda command: calls.append(command) or SimpleNamespace(returncode=0)
-    )
+    original_run = subprocess.run
+
+    def run(command, **kwargs):
+        if command[0] == "/usr/bin/docker":
+            calls.append(command)
+            return SimpleNamespace(returncode=0)
+        return original_run(command, **kwargs)
+
+    monkeypatch.setattr(ttnn_dev.subprocess, "run", run)
     assert ttnn_dev.container_execution(args, argv) == 0
     assert "--executor=native" in calls[0]
     assert f"type=bind,src={tmp_path / 'out'},dst={tmp_path / 'out'}" in calls[0]
     assert image in calls[0]
+
+
+@pytest.mark.host
+def test_container_executor_mounts_worktree_git_metadata(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from tools import ttnn_dev
+
+    parent = repository(tmp_path / "parent")
+    checkout = tmp_path / "worktree"
+    git(parent, "worktree", "add", "--detach", str(checkout), "HEAD")
+    image = "example/image@sha256:" + "a" * 64
+    argv = [
+        "attach",
+        "--tt-metal-checkout",
+        str(checkout),
+        "--output",
+        str(tmp_path / "out"),
+        "--executor",
+        "local-container",
+        "--image",
+        image,
+    ]
+    args = ttnn_dev.parser().parse_args(argv)
+    calls = []
+    original_run = subprocess.run
+
+    def run(command, **kwargs):
+        if command[0] == "/usr/bin/docker":
+            calls.append(command)
+            return SimpleNamespace(returncode=0)
+        return original_run(command, **kwargs)
+
+    monkeypatch.setattr(ttnn_dev.shutil, "which", lambda name: "/usr/bin/docker")
+    monkeypatch.setattr(ttnn_dev.subprocess, "run", run)
+    assert ttnn_dev.container_execution(args, argv) == 0
+    common_dir = parent / ".git"
+    assert f"type=bind,src={common_dir},dst={common_dir}" in calls[0]
 
 
 @pytest.mark.host
@@ -428,3 +475,12 @@ def test_git_trust_is_scoped_to_the_selected_checkout(tmp_path, monkeypatch):
     monkeypatch.setattr(common, "command", lambda argv, **kwargs: calls.append(argv) or "revision")
     assert common.git(tmp_path, "rev-parse", "HEAD") == "revision"
     assert calls == [["git", "-c", f"safe.directory={tmp_path.resolve()}", "-C", tmp_path, "rev-parse", "HEAD"]]
+
+
+@pytest.mark.host
+def test_effective_source_requirements_cannot_be_bypassed_by_pip_check(tmp_path):
+    lock = tmp_path / "requirements.txt"
+    lock.write_text("torch==2.11.0+cpu --hash=sha256:" + "a" * 64 + "\n")
+    environment.verify_installed_dependencies(lock, {"torch": "2.11.0+cpu"})
+    with pytest.raises(common.DevError, match="Installed torch differs"):
+        environment.verify_installed_dependencies(lock, {"torch": "2.7.1+cpu"})
