@@ -100,12 +100,25 @@ Two further limits are worth stating plainly:
   execution. Four real undefined-name defects survived a green host run in this
   port and were caught only by `ruff`. Until a Galaxy node exists, lint is the
   only gate that reads those files at all.
-- **The reference-tensor suites are skipped, not passing.** Two ported executor
-  tests read 1.37 GB of `.pt` reference tensors by relative path, one file of
-  which exceeds GitHub's 100 MB limit, so no repository can hold them. The
-  generator that wrote them was part of the retired `GalaxyDirectRunner` and
-  left with it, so regenerating the references and re-pointing them at a
-  supported execution path is one task, and it needs Galaxy hardware.
+- **The runner-derived reference comparisons are retired, and no recording will
+  be produced.** In `tt-metal` the executor suites compared against tensors
+  recorded by `GalaxyDirectRunner`, which wrapped the same model object the
+  executor drives — so the gate validated the orchestration layer against a
+  second orchestration layer, not Galaxy numerics. The runner is deliberately
+  gone and nothing in this package can produce those tensors, so the
+  comparisons were removed rather than reimplemented: two gates per model were
+  deleted, and two were edited to keep the coverage that stands on its own. The
+  surviving executor gates assert contracts and self-consistency — paged-KV
+  capacity resolution and transactional bind/unbind, cross-slot agreement,
+  program identity, teardown — not absolute values. The Galaxy numeric path is
+  still checked against HuggingFace by `test_model_wh_galaxy.py` and the 2D
+  module suites, and against the in-repo `.refpt` token assets by
+  `test_executor_teacher_forced_accuracy`; none of that chain came from the
+  runner. The follow-up worth building is the differential gate the 1D side
+  already has (`test_w6_active15_padded16_trace_correctness`): two oracles from
+  the same production executor in one process, no file and no second
+  implementation. It is blocked today by the L1 address clash on a second KV
+  allocation cycle in one process.
 
 The two new model packages, `llama33_70b_galaxy` and `qwen3_32b_galaxy`,
 deliberately ship **no** `support.json`. The manifest count below is therefore

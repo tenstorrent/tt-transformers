@@ -42,7 +42,7 @@ model.embed_prefill(tokens)                       model.embed_decode(tokens)
 model.prefill_forward(x, rot_mats, user_id=…,     model.decode_forward(x, positions,
                       get_last_token=-1, …)                            rot_mats, page_table=…)
 model.post_process_prefill_output(hidden, last)   model.gather_and_untilize_logits(logits)
-model.rope_setup.{load_device_weights, cos_matrix, get_rot_idxs, get_rot_mats}
+model.rope_setup.{load_device_weights, cos_matrix, get_rot_idxs, decode_forward}
 model.prepare_prefill_rot_mats(position_indices)
 ```
 
@@ -161,8 +161,16 @@ class _GalaxyRopeView:
 
     The runtime reads `cos_matrix.shape[2]` for the rotary capacity check, stages
     decode rotary indices with `get_rot_idxs`, and turns them into cos/sin with
-    `get_rot_mats`. `RotarySetup2D` already owns the first two under those exact
-    names; only `get_rot_mats` differs, and it is `decode_forward` there.
+    `decode_forward`. `RotarySetup2D` owns all three under those exact names, so
+    this view is a pass-through.
+
+    It did not used to be. At the port's merge base the runtime asked for the
+    cos/sin step as `get_rot_mats`, and this view existed mainly to rename
+    `RotarySetup2D.decode_forward` to it. Upstream has since renamed the runtime's
+    expectation to `decode_forward` -- the 2D module's own name all along -- so the
+    rename is gone. Keeping only the old name here raised `AttributeError:
+    '_GalaxyRopeView' object has no attribute 'decode_forward'` on the first decode
+    step of every Galaxy model.
     """
 
     def __init__(self, rope: Any):
@@ -186,7 +194,7 @@ class _GalaxyRopeView:
     def get_rot_idxs(self, position_idxs: Any, on_host: bool = False) -> Any:
         return self._rope.get_rot_idxs(position_idxs, on_host=on_host)
 
-    def get_rot_mats(self, rot_idxs: Any) -> list[Any]:
+    def decode_forward(self, rot_idxs: Any) -> list[Any]:
         return self._rope.decode_forward(rot_idxs)
 
 

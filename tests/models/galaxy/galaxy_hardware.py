@@ -30,7 +30,15 @@ GALAXY_DEVICE_PARAMS = {
     "fabric_config": ttnn.FabricConfig.FABRIC_1D_RING,
 }
 
-_REFERENCE_ROOT = Path("models/tt_transformers/tests/reference_outputs")
+#: Repository root, derived from this file rather than the working directory, so the
+#: asset lookups below do not depend on where pytest was invoked.
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+#: Reference *token* assets -- the small `.refpt` files that ship in the repository.
+#: tt-metal kept them flat under `models/tt_transformers/tests/reference_outputs`;
+#: this package stores them per model directory under `tests/assets`. The tt-metal
+#: path resolved to nothing here, so every gate reading tokens skipped silently.
+_TOKEN_ASSET_ROOT = _REPO_ROOT / "tests/assets/reference_outputs"
 
 
 def local_files_only() -> bool:
@@ -81,10 +89,12 @@ def load_reference_tokens(model_name: str) -> tuple[torch.Tensor, torch.Tensor]:
     its own call site; this does it once, here, for every caller.
     """
 
-    path = _REFERENCE_ROOT / f"{model_name}.refpt"
-    if not path.exists():
-        pytest.skip(f"reference token file not found: {path}")
-    data = torch.load(path, map_location="cpu", weights_only=False)
+    matches = sorted(_TOKEN_ASSET_ROOT.glob(f"*/{model_name}.refpt"))
+    if not matches:
+        pytest.skip(f"reference token file not found: {_TOKEN_ASSET_ROOT}/*/{model_name}.refpt")
+    if len(matches) > 1:
+        raise AssertionError(f"{model_name}.refpt is ambiguous across {[str(p.parent.name) for p in matches]}")
+    data = torch.load(matches[0], map_location="cpu", weights_only=False)
     reference_tokens = data["reference_tokens"]
     if reference_tokens.dim() > 1:
         reference_tokens = reference_tokens.reshape(-1)

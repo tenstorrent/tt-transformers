@@ -5,64 +5,45 @@
 
 One test per coverage item of `tttv2_milestone_c_briefs/c2_exec_qwen.md`:
 
-1. eager prefill at 128, 512 and 2048, single row, logits PCC >= 0.99 against the
-   same request through `GalaxyDirectRunner`;
-2. eager decode, batch 1 and batch 32, first token after prefill;
-3. paged KV — late capacity resolution, transactional bind/unbind, per-layer KV
-   metadata, and KV PCC >= 0.99 against the reference path;
-4. prefix-cached and chunked prefill. **Both already passed for Qwen at Milestone
+1. eager decode, batch 1 and batch 32, first token after prefill — the slots must
+   agree with each other;
+2. paged KV — late capacity resolution, transactional bind/unbind, per-layer KV
+   metadata;
+3. prefix-cached and chunked prefill. **Both already passed for Qwen at Milestone
    B**, two fresh processes each, so a failure here is a regression introduced by
    `c-defects` or by the executor and is reported as one;
-5. program compilation and `WarmupCoordinator` completion, with program identity
+4. program compilation and `WarmupCoordinator` completion, with program identity
    keyed on physical geometry rather than the active row count;
-6. three startup/serve/cleanup cycles in one process with no retained TT
+5. three startup/serve/cleanup cycles in one process with no retained TT
    resources — the one-live-model form, which Qwen passed 3/3 at Milestone B;
-7. teacher-forced accuracy through the executor path, top-1 >= 89% / top-5 >= 97%;
-8. **two models in one process** — the D-C7 shape, which Qwen *failed* at
+6. teacher-forced accuracy through the executor path, top-1 >= 89% / top-5 >= 97%;
+7. **two models in one process** — the D-C7 shape, which Qwen *failed* at
    Milestone B and which `c-defects` fixed across four defects (D-C7 proper,
    D-C13, D-C14, D-C15). Qwen is the only model of the two that can see D-C7's
    capacity residue, because it does not carry the Llama L1 address clash, so this
    file is where the fix is verified to have stayed fixed *through the executor*.
 
-**The reference is a file, not a second cycle in this process.** Two reasons, and
-neither is the one the sibling Llama file gives — its L1 address clash was
-Llama-only and `c-defects` has since fixed it:
-
-* **provenance.** A recorded reference carries a fingerprint over the bytes of the
-  sources that decide what it means, so a stale artifact fails the test instead of
-  quietly weakening a PCC. `c-defects` attempt 10 §11 found that hole the hard way.
-* **cost.** The 64-layer checkpoint load dominates a run; recording once and
-  loading in each later process keeps every gate run to one load.
-
-The reference was computed through the qualified runner and written to a file that
-a later process loads rather than silently recomputing.
-
-**In this package there is no generator and no reference file.** Both were
-`GalaxyDirectRunner`-based, and that runner is deliberately absent (2026-09-02
-operator decision); the reference tree it wrote does not migrate either, being
-1.37 GB of `.pt` with one file above GitHub's 100 MB hard limit. So
-`test_reference_prefill_and_decode` skips, and every test that consumes a
-reference skips through `_require_reference`. A reference that exists but whose
-fingerprint is stale still **fails**, which is the provenance guarantee above and
-must survive Phase 4. Port Phase 4 owns making these real again, which is one task
-rather than two: the references have to be regenerated *and* re-expressed against
-an executor path instead of the runner. `_REFERENCE_ROOT` below is still the
-tt-metal-relative path and needs replacing with a fixture or environment
-indirection as part of that work.
+**What is no longer here.** Coverage items 1 and 3 of the brief compared the
+executor against a reference recorded through `GalaxyDirectRunner`, which
+Milestone B had qualified. The runner is deliberately absent (2026-09-02
+operator decision) and nothing else in this package can produce those tensors,
+so those comparisons are **retired, not reimplemented** — recording them through
+the executor would only have compared it against itself. Every assertion that
+stands without a recording is kept, including the two gates that used to do both.
+The `.refpt` token assets behind the accuracy gate are a different mechanism and
+are untouched.
 
 Run one node id per process, as the house rules require::
 
     pytest tests/models/qwen3_32b_galaxy/test_executor_wh_galaxy.py \
         -v -rA --color=no -p no:cacheprovider \
-        -k "prefill_matches_reference and 128"
+        -k "paged_kv_contract"
 """
 
 from __future__ import annotations
 
 import gc
-import hashlib
 import os
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -79,7 +60,6 @@ from tests.models.galaxy.galaxy_hardware import (
 )
 
 from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
-from tt_transformers.models.galaxy.collectives import deallocate_if_allocated
 from tt_transformers.models.galaxy.kv_contract import GalaxyPagedAttentionConfig
 from tt_transformers.models.qwen3_32b_galaxy.executor import (
     Qwen3_32BGalaxyExecutor,
@@ -101,10 +81,8 @@ _PREFILL_LENGTHS = (128, 512, 2048)
 _RECIPE_LENGTHS = (128, 1024, 2048)
 _CHUNK_ALIGNMENT = 128
 _LOGITS_PCC = 0.99
-_KV_PCC = 0.99
 _TEACHER_FORCED_TOP1 = 0.89
 _TEACHER_FORCED_TOP5 = 0.97
-_REFERENCE_ROOT = Path("tttv2_milestone_c_evidence/exec_qwen/reference")
 
 
 # ---------------------------------------------------------------------------
@@ -265,30 +243,6 @@ def _prompt(length: int) -> list[int]:
 # ---------------------------------------------------------------------------
 
 
-#: Sources whose bytes decide what a recorded reference *means*. A cached
-#: reference computed before any of these changed is not a reference to the
-#: code under test, and `c-defects` attempt 10 §11 found exactly that: attempt
-#: 1's PCC numbers compared a HEAD executor against an artifact four fixes old,
-#: because `_reference_prefill` silently reloads from disk. The fingerprint is
-#: over source files rather than over `git rev-parse HEAD` on purpose — commits
-#: that only add evidence must not invalidate a reference that is still valid.
-_REFERENCE_SOURCES = (
-    "tests/models/qwen3_32b_galaxy/test_executor_wh_galaxy.py",
-    "src/tt_transformers/models/qwen3_32b_galaxy/executor.py",
-    "src/tt_transformers/models/qwen3_32b_galaxy/model.py",
-    "src/tt_transformers/models/galaxy/recipes.py",
-    "src/tt_transformers/modules/attention/attention_2d.py",
-)
-
-
-def _code_fingerprint() -> str:
-    digest = hashlib.sha256()
-    for name in _REFERENCE_SOURCES:
-        digest.update(name.encode())
-        digest.update(Path(name).read_bytes())
-    return digest.hexdigest()[:16]
-
-
 def _context_for(length: int) -> int:
     """Return a context that can hold `length` prompt tokens and one decode step.
 
@@ -309,119 +263,6 @@ def _context_for(length: int) -> int:
         return _MAX_SEQ_LEN
     alignment = _CHUNK_ALIGNMENT
     return -(-(length + 1) // alignment) * alignment
-
-
-def _reference_path(length: int) -> Path:
-    layers = _layers() or 0
-    context = _context_for(length)
-    return _REFERENCE_ROOT / f"qwen_prefill{length}_ctx{context}_layers{layers}.pt"
-
-
-def _read_kv_user(
-    kv_pair: list[Any],
-    mesh_device: ttnn.MeshDevice,
-    *,
-    slot: int,
-    length: int,
-    blocks_per_user: int,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Return one slot's `(K, V)` as `[heads, length, head_dim]` on host.
-
-    The paged cache is replicated at allocation; each mesh **row** then writes its
-    own KV head slice, and each mesh **column** serves its own eight users. So the
-    rows concatenate on the head axis and the columns stack on the block axis, and
-    the authoritative copy of slot ``u`` is in column ``u // 8``. The block range
-    is sliced on device first: composing the whole pool would move gigabytes.
-    """
-
-    blocks = -(-length // _BLOCK_SIZE)
-    first = slot * blocks_per_user
-    column = slot // (GALAXY_PHYSICAL_BATCH // GALAXY_MESH_SHAPE[1])
-    outputs = []
-    for cache in kv_pair:
-        shape = tuple(int(value) for value in cache.shape)
-        window = None
-        try:
-            window = ttnn.slice(cache, (first, 0, 0, 0), (first + blocks, shape[1], shape[2], shape[3]))
-            composed = ttnn.to_torch(
-                window,
-                mesh_composer=ttnn.ConcatMesh2dToTensor(mesh_device, dims=(1, 0), mesh_shape=GALAXY_MESH_SHAPE),
-            ).float()
-        finally:
-            deallocate_if_allocated(window)
-        # (columns * blocks, rows * local_heads, block_size, head_dim)
-        mine = composed[column * blocks : (column + 1) * blocks]
-        heads = int(mine.shape[1])
-        outputs.append(mine.permute(1, 0, 2, 3).reshape(heads, blocks * _BLOCK_SIZE, -1)[:, :length, :])
-    return outputs[0], outputs[1]
-
-
-def _require_reference(length: int) -> dict[str, torch.Tensor]:
-    path = _reference_path(length)
-    if not path.exists():
-        # Absent is the expected state in this package, not an error: the generator
-        # was GalaxyDirectRunner-based and did not migrate, and the reference tree
-        # it wrote cannot live in a Git repository (1.37 GB of `.pt`, one file over
-        # GitHub's 100 MB limit). Skip until port Phase 4 regenerates these against
-        # an executor path. A *stale* reference still fails below -- that is a real
-        # error, and this must not start passing vacuously once one exists.
-        pytest.skip(
-            f"reference file {path} is absent; its generator is not ported "
-            f"(port Phase 4 regenerates it against the executor path)"
-        )
-    values = torch.load(path, map_location="cpu", weights_only=False)
-    fingerprint = _code_fingerprint()
-    if values.get("code_fingerprint") != fingerprint:
-        pytest.fail(
-            f"reference file {path} was recorded by code fingerprint "
-            f"{values.get('code_fingerprint')}, not by the current {fingerprint}; "
-            f"re-run test_reference_prefill_and_decode[{length}] in its own process"
-        )
-    print(f"[reference] using {path} fingerprint {fingerprint}", flush=True)
-    return values
-
-
-def _report_kv_windows(case: str, expected: torch.Tensor, actual: torch.Tensor, length: int) -> None:
-    """Report the KV comparison window by window before asserting on the whole.
-
-    One PCC over the whole prefix cannot separate "every position is slightly
-    off" from "one block is garbage", and `test_model_wh_galaxy._report_kv_pcc`
-    already established that the distinction is what identifies the defect.
-    Reporting is not asserting: the gate below is untouched.
-    """
-
-    if expected.shape != actual.shape:
-        print(f"[kv] {case}: shape {tuple(expected.shape)} vs {tuple(actual.shape)}", flush=True)
-        return
-    windows = {
-        "all": slice(0, length),
-        "first32": slice(0, min(32, length)),
-        "last32": slice(max(0, length - 32), length),
-    }
-    for name, window in windows.items():
-        _, message = _pcc(expected[:, window, :], actual[:, window, :], 0.0)
-        print(f"[kv] {case} {name}: {message}", flush=True)
-    diff = (expected - actual).abs()
-    per_position = diff.amax(dim=(0, 2))
-    worst = torch.topk(per_position, k=min(8, per_position.numel()))
-    print(
-        f"[kv] {case}: reference |max|={float(expected.abs().max()):.6g} device |max|="
-        f"{float(actual.abs().max()):.6g} maxabsdiff={float(diff.max()):.6g}",
-        flush=True,
-    )
-    print(
-        f"[kv] {case}: worst positions {worst.indices.tolist()} values {[round(float(v), 5) for v in worst.values]}",
-        flush=True,
-    )
-    print(
-        f"[kv] {case}: per-head maxabsdiff {[round(float(v), 5) for v in diff.amax(dim=(1, 2))]}",
-        flush=True,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Executor request helpers
-# ---------------------------------------------------------------------------
 
 
 def _executor_prefill(
@@ -463,79 +304,6 @@ def _decode_logits(result: Any) -> torch.Tensor:
 
 
 # ---------------------------------------------------------------------------
-# 0. Reference generation (one cycle, no executor)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.device
-@pytest.mark.wormhole
-@pytest.mark.galaxy
-@pytest.mark.model
-@pytest.mark.parametrize("mesh_device", [GALAXY_MESH_SHAPE], indirect=True)
-@pytest.mark.parametrize("device_params", [GALAXY_DEVICE_PARAMS], indirect=True)
-@pytest.mark.parametrize("length", _PREFILL_LENGTHS)
-def test_reference_prefill_and_decode(mesh_device: ttnn.MeshDevice, length: int) -> None:
-    """Regenerate the reference values the executor is checked against.
-
-    The tt-metal original computed these through `GalaxyDirectRunner`, which
-    Milestone B had qualified. That runner is deliberately absent from this
-    package (2026-09-02 operator decision), so this generator has no
-    implementation here and the reference tree it wrote does not migrate either:
-    1.37 GB of `.pt`, one file above GitHub's 100 MB hard limit.
-
-    Phase 4 of the port owns making this real again, and it is one task rather
-    than two — the references have to be regenerated *and* re-expressed against an
-    executor path instead of the runner. Until then this skips, and the tests that
-    consume the references skip through `_require_reference`.
-    """
-
-    pytest.skip(
-        "reference generator was GalaxyDirectRunner-based and is not ported; "
-        "regenerate against the executor path (port Phase 4)"
-    )
-
-
-# ---------------------------------------------------------------------------
-# 1. Eager prefill
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.device
-@pytest.mark.wormhole
-@pytest.mark.galaxy
-@pytest.mark.model
-@pytest.mark.parametrize("mesh_device", [GALAXY_MESH_SHAPE], indirect=True)
-@pytest.mark.parametrize("device_params", [GALAXY_DEVICE_PARAMS], indirect=True)
-@pytest.mark.parametrize("length", _PREFILL_LENGTHS)
-def test_executor_prefill_matches_reference(mesh_device: ttnn.MeshDevice, length: int) -> None:
-    """Coverage 1: single-row eager prefill logits, PCC ≥ 0.99 against the runner."""
-
-    reference = _require_reference(length)
-    context = _context_for(length)
-    handle = _load(
-        mesh_device,
-        max_seq_len=context,
-        paged_attention_config=_paged_config(max_seq_len=context),
-    )
-    executor = None
-    try:
-        executor, kv_cache = _open_executor(handle)
-        logits = _executor_prefill(executor, kv_cache, _prompt(length), max_seq_len=context)
-        actual = logits.float().reshape(-1)
-        expected = reference["prefill_logits"].float().reshape(-1)
-        passed, message = _pcc(expected, actual, _LOGITS_PCC)
-        print(f"[exec] prefill {length} logits {message}", flush=True)
-        assert int(torch.argmax(actual)) == int(torch.argmax(expected)), (
-            f"executor prefill argmax {int(torch.argmax(actual))} != reference {int(torch.argmax(expected))}"
-        )
-        assert passed, f"prefill {length} logits PCC below {_LOGITS_PCC}: {message}"
-    finally:
-        if executor is not None:
-            executor.cleanup()
-        _close(handle)
-
-
-# ---------------------------------------------------------------------------
 # 2. Eager decode
 # ---------------------------------------------------------------------------
 
@@ -548,10 +316,15 @@ def test_executor_prefill_matches_reference(mesh_device: ttnn.MeshDevice, length
 @pytest.mark.parametrize("device_params", [GALAXY_DEVICE_PARAMS], indirect=True)
 @pytest.mark.parametrize("active_rows", [1, GALAXY_PHYSICAL_BATCH])
 def test_executor_decode_first_token(mesh_device: ttnn.MeshDevice, active_rows: int) -> None:
-    """Coverage 2: eager decode at batch 1 and batch 32, first token after prefill."""
+    """Coverage 2: eager decode at batch 1 and batch 32, first token after prefill.
+
+    Checks the executor against *itself* across slots, not against a recorded
+    reference: identical prompts in every active slot must produce the same first
+    token, and the decode logits must be finite. The absolute-value comparison this
+    test used to make needed the `GalaxyDirectRunner` recording, which is retired.
+    """
 
     length = 128
-    reference = _require_reference(length)
     prompt = _prompt(length)
     handle = _load(mesh_device)
     executor = None
@@ -571,16 +344,11 @@ def test_executor_decode_first_token(mesh_device: ttnn.MeshDevice, active_rows: 
         logits = _decode_logits(_executor_decode(executor, kv_cache, tokens, positions))
         assert torch.isfinite(logits[:active_rows]).all(), "decode logits are not finite"
 
-        expected = reference["decode_logits"].float()
-        passed, message = _pcc(expected[0], logits[0], _LOGITS_PCC)
-        print(f"[exec] decode active_rows={active_rows} row 0 {message}", flush=True)
-        assert passed, f"decode row 0 logits PCC below {_LOGITS_PCC}: {message}"
         if active_rows > 1:
-            reference_argmax = int(torch.argmax(expected[0]))
+            # The slots must agree with each other. Which token they agree on was the
+            # recording's job, and is no longer asserted here.
             argmaxes = [int(torch.argmax(logits[slot])) for slot in range(active_rows)]
-            assert set(argmaxes) == {reference_argmax}, (
-                f"batch-32 decode disagrees across slots: {argmaxes} against {reference_argmax}"
-            )
+            assert len(set(argmaxes)) == 1, f"batch-32 decode disagrees across slots: {argmaxes}"
     finally:
         if executor is not None:
             executor.cleanup()
@@ -599,10 +367,13 @@ def test_executor_decode_first_token(mesh_device: ttnn.MeshDevice, active_rows: 
 @pytest.mark.parametrize("mesh_device", [GALAXY_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", [GALAXY_DEVICE_PARAMS], indirect=True)
 def test_executor_paged_kv_contract(mesh_device: ttnn.MeshDevice, expect_error) -> None:
-    """Coverage 3: late capacity resolution, bind/unbind, metadata, KV PCC."""
+    """Coverage 3: late capacity resolution, transactional bind/unbind, metadata.
 
-    length = 128
-    reference = _require_reference(length)
+    The KV-value comparison this test used to end with needed the
+    `GalaxyDirectRunner` recording, which is retired; the contract assertions around
+    it stand on their own and are what this gate is for.
+    """
+
     handle = _load(mesh_device)
     model = handle.model
     executor = None
@@ -653,20 +424,6 @@ def test_executor_paged_kv_contract(mesh_device: ttnn.MeshDevice, expect_error) 
         with expect_error(ValueError, "exact manager-owned borrowed handle"):
             executor.kv_cache_manager.validate_borrowed_handle([list(pair) for pair in kv_cache])
         assert all(layer.attention.kv_cache_binding is not None for layer in model.layers)
-
-        # --- the KV the executor's prefill wrote, against the reference path.
-        _executor_prefill(executor, kv_cache, _prompt(length))
-        blocks_per_user = _MAX_SEQ_LEN // _BLOCK_SIZE
-        for label, pair in (("first", kv_cache[0]), ("last", kv_cache[-1])):
-            actual_k, actual_v = _read_kv_user(
-                pair, mesh_device, slot=0, length=length, blocks_per_user=blocks_per_user
-            )
-            for kind, actual in (("k", actual_k), ("v", actual_v)):
-                expected = reference[f"kv_{label}_{kind}"].float()
-                _report_kv_windows(f"{label} {kind.upper()}", expected, actual, length)
-                passed, message = _pcc(expected, actual, _KV_PCC)
-                print(f"[exec] KV {label} layer {kind.upper()} {message}", flush=True)
-                assert passed, f"KV {label} layer {kind.upper()} PCC below {_KV_PCC}: {message}"
 
         # --- release unbinds transactionally and leaves nothing retained.
         executor.cleanup()

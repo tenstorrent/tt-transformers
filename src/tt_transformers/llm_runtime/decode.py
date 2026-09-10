@@ -24,7 +24,9 @@ from tt_transformers.llm_runtime.tensor_resources import (
     raise_cleanup_failures,
     release_orphans,
 )
-from tt_transformers.modules.rope.rope_1d import prepare_rot_idxs
+from tt_transformers.modules.rope.rope_1d import prepare_rot_idxs as _prepare_rot_idxs_1d
+from tt_transformers.modules.rope.rope_2d import RotarySetup2DConfig
+from tt_transformers.modules.rope.rope_2d import prepare_rot_idxs as _prepare_rot_idxs_2d
 from tt_transformers.modules.sampling.params import (
     PreparedSamplingParams,
     place_prepared_sampling_params,
@@ -800,7 +802,15 @@ class DecodeRuntime:
             )
         )
         nonnegative = torch.maximum(prepared.start_pos, torch.zeros_like(prepared.start_pos))
-        rotary = prepare_rot_idxs(config.model.rope_setup.config, nonnegative, on_host=True)
+        # 1D and 2D rope carry different config shapes -- `Rope1DConfig.device` vs
+        # `RotarySetup2DConfig.mesh_device` -- and each module owns a `prepare_rot_idxs`
+        # for its own. They cannot be merged behind one method: `test_legacy_rope_adapters_are_not_public`
+        # deliberately forbids `get_rot_idxs` on `RotarySetup1D`. So the runtime selects
+        # by config type. A `singledispatch` registry would be tidier and is the right
+        # long-term shape; see the port handoff.
+        rope_config = config.model.rope_setup.config
+        prepare = _prepare_rot_idxs_2d if isinstance(rope_config, RotarySetup2DConfig) else _prepare_rot_idxs_1d
+        rotary = prepare(rope_config, nonnegative, on_host=True)
         mapper = ttnn.ShardTensor2dMesh(
             config.mesh_device,
             dims=(None, None),

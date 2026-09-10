@@ -65,10 +65,10 @@ declares no Galaxy, TG or 32-chip node, so nothing the port adds has been
 re-qualified here, and no gate in this repository executes it. Every Galaxy
 claim behind this code was measured on the `tt-metal` branch named above.
 
-Two of the ported suites also read reference tensors by relative path that no
-repository can hold, and the generator that wrote them was itself part of the
-condemned runner. Those tests are marked skipped pending regeneration against
-a supported execution path.
+Two of the ported suites compared the executor against tensors recorded by the
+condemned runner; because the runner wrapped the same model object the executor
+drives, those gates never validated Galaxy numerics, and they are retired
+rather than regenerated. See `docs/validation.md`.
 
 The scope limit on this event is the same as the first: the ledger inventories
 source-tree files that were candidates for the package. The porting author's
