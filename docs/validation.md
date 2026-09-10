@@ -77,6 +77,50 @@ raw files retrievable; the active source tree keeps only this compact summary.
 The deterministic archive must be copied to the project's approved immutable
 artifact store before publication.
 
+## Galaxy 8x4 and 2D modules: not qualified here
+
+The Galaxy 8x4 mesh support and the 2D tensor-parallel modules were ported from
+`tt-metal` branch `apbernal/tttv2_wh_glx_2d_modules_milestone_c` at commit
+`0036376d342bbd9de50ca8ea284b578838c44b29`. `docs/provenance/README.md`
+describes that event. **Every Galaxy claim behind this code was measured on
+that branch, on a 32-board Galaxy mesh, and none of it is re-qualified here.**
+
+`tests/hardware/hardware-matrix.json` declares no Galaxy, TG or 32-chip node.
+The mesh values it does declare — N150, N300, T3K, P150, P150x4 — are all 1xN,
+so no node selects a 2D mesh at all and no gate in this repository executes any
+ported device suite. The suites land as files. Adding a Galaxy node class is a
+prerequisite to be agreed with the repository owners, not a detail: it needs
+new `mesh_device` values, a machine pool, a cache requirement, and the serial
+lock semantics extended to a 32-board mesh.
+
+Two further limits are worth stating plainly:
+
+- **A green host suite is not evidence that these suites work.** The ported
+  device tests are `device`-marked, so `pytest -m host` never collects them for
+  execution. Four real undefined-name defects survived a green host run in this
+  port and were caught only by `ruff`. Until a Galaxy node exists, lint is the
+  only gate that reads those files at all.
+- **The reference-tensor suites are skipped, not passing.** Two ported executor
+  tests read 1.37 GB of `.pt` reference tensors by relative path, one file of
+  which exceeds GitHub's 100 MB limit, so no repository can hold them. The
+  generator that wrote them was part of the retired `GalaxyDirectRunner` and
+  left with it, so regenerating the references and re-pointing them at a
+  supported execution path is one task, and it needs Galaxy hardware.
+
+The two new model packages, `llama33_70b_galaxy` and `qwen3_32b_galaxy`,
+deliberately ship **no** `support.json`. The manifest count below is therefore
+still twelve against fourteen model directories: declaring a candidate geometry
+that nothing in the matrix can select would be a false claim.
+
+For the record, and as a developer-host observation rather than qualification
+evidence: on the porting host the branch runs the host suite at parity with the
+baseline it started from — 2,609 passes against a baseline 2,106, with the same
+single pre-existing failure in both. That failure,
+`test_benchmark_helper_does_not_require_private_tt_metal_infra_in_generic_ci`,
+asserts that private tt-metal infrastructure is absent, and this host has it.
+That run used `PYTHONPATH` against the checkout, not an unpacked sdist, so it
+is not comparable to the cleaned-package figures above.
+
 ## Known limits
 
 - All twelve model manifests remain experimental.
@@ -89,3 +133,12 @@ artifact store before publication.
   target policy, or relevant test fixtures change. The current evidence binds
   only to `9134c399334240e3e4d35dfa93013c6c7293a3d1`; later commits do not
   inherit exact-SHA qualification.
+- By that rule, the 42-node result above does **not** carry to the Galaxy port.
+  The tested code is an ancestor of it, but the port modifies twelve production
+  files under `src/tt_transformers/llm_runtime/` and
+  `src/tt_transformers/modules/` — the code the module and runtime stages
+  exercise. The 42 nodes must be rerun before the matrix result is claimed for
+  any revision containing that port, independently of the separate question of
+  Galaxy coverage.
+- The two Galaxy model packages have no `support.json`, so the twelve
+  experimental manifests above describe fourteen model directories.
