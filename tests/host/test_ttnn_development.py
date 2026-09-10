@@ -326,6 +326,7 @@ def test_source_egg_info_is_not_treated_as_an_installed_distribution(tmp_path, m
     info = installed / "tt_transformers-2.0.0.dev0.dist-info"
     info.mkdir()
     (info / "METADATA").write_text((egg / "PKG-INFO").read_text())
+    importlib.invalidate_caches()
     assert import_probe.installed_project_version() == "2.0.0.dev0"
 
 
