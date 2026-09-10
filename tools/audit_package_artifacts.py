@@ -63,7 +63,7 @@ SDIST_REQUIRED_DIRECTORIES = {
     "tools",
 }
 ABSOLUTE_TEXT_PATTERNS = (b"/localdev/", b"/home/gwang/", b"/tmp/gwang/", b"C:\\")
-EXPECTED_BASE_REQUIRES = {"ttnn==0.77.0", "torch==2.11.0", "loguru==0.6.0"}
+EXPECTED_BASE_REQUIRES = {"ttnn==0.77.0", "torch==2.11.0", "loguru==0.6.0", "transformers==5.12.1"}
 
 
 def sha256(data: bytes) -> str:

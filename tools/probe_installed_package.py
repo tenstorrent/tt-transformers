@@ -14,12 +14,13 @@ import pathlib
 import site
 import sys
 
-BLOCKED_OPTIONAL = {"pytest", "tqdm", "transformers"}
+BLOCKED_OPTIONAL = {"pytest"}
 EXPECTED_VERSIONS = {
     "tt-transformers": "2.0.0.dev0",
     "ttnn": "0.77.0",
     "torch": "2.11.0+cpu",
     "loguru": "0.6.0",
+    "transformers": "5.12.1",
 }
 MODEL_FAMILIES = (
     "deepseek_r1_distill_qwen_14b",
@@ -143,7 +144,13 @@ def probe() -> dict[str, object]:
     sys.meta_path.insert(0, BlockOptional())
     modules = list(REQUIRED_MODULES)
     for family in MODEL_FAMILIES:
-        modules.extend((f"tt_transformers.models.{family}", f"tt_transformers.models.{family}.model"))
+        modules.extend(
+            (
+                f"tt_transformers.models.{family}",
+                f"tt_transformers.models.{family}.model",
+                f"tt_transformers.models.{family}.hf_adaptor",
+            )
+        )
     for module in modules:
         importlib.import_module(module)
 

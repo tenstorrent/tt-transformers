@@ -12,9 +12,10 @@ from pathlib import Path
 
 # Import roots corresponding to the production dependency declarations in
 # pyproject.toml. Distribution/import spelling differs for no entry here.
-DECLARED_BASE_THIRD_PARTY_ROOTS = frozenset({"loguru", "torch", "ttnn"})
-DECLARED_OPTIONAL_THIRD_PARTY_ROOTS = frozenset({"tqdm", "transformers", "yaml"})
-OPTIONAL_ROOT_LAYERS = {
+DECLARED_BASE_THIRD_PARTY_ROOTS = frozenset({"loguru", "torch", "ttnn", "transformers"})
+DECLARED_OPTIONAL_THIRD_PARTY_ROOTS = frozenset({"tqdm", "yaml"})
+# Installation requirements do not relax the import-layer or lazy-import policy.
+RESTRICTED_ROOT_LAYERS = {
     "tqdm": frozenset({"models"}),
     "transformers": frozenset({"models"}),
     "yaml": frozenset({"root"}),
@@ -57,12 +58,10 @@ def _dependency_reason(imported: str, layer: str) -> str | None:
         # product boundary. Foundation optional-path policy is tracked by its
         # own extraction qualification.
         return None
-    if root in DECLARED_BASE_THIRD_PARTY_ROOTS:
+    if root in RESTRICTED_ROOT_LAYERS and layer not in RESTRICTED_ROOT_LAYERS[root]:
+        return f"dependency {root} is not allowed in the {layer} layer"
+    if root in DECLARED_BASE_THIRD_PARTY_ROOTS or root in DECLARED_OPTIONAL_THIRD_PARTY_ROOTS:
         return None
-    if root in DECLARED_OPTIONAL_THIRD_PARTY_ROOTS:
-        if layer in OPTIONAL_ROOT_LAYERS[root]:
-            return None
-        return f"optional dependency {root} is not allowed in the {layer} layer"
     return "third-party import root is not declared for the runtime/model product"
 
 
@@ -73,8 +72,8 @@ def _initializer_laziness_reason(relative: Path, imported: str) -> str | None:
     if relative not in {Path("__init__.py"), Path("models/__init__.py")} and not concrete_model_initializer:
         return None
     root = imported.lstrip(".").split(".", 1)[0]
-    if root in DECLARED_OPTIONAL_THIRD_PARTY_ROOTS:
-        return "package initializer cannot eagerly import an optional dependency"
+    if root in RESTRICTED_ROOT_LAYERS:
+        return "package initializer cannot eagerly import a layer-scoped dependency"
     if relative == Path("__init__.py") and (
         imported in {".models", "tt_transformers.models"}
         or imported.startswith((".models.", "tt_transformers.models."))

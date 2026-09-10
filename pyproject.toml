@@ -25,13 +25,13 @@ dependencies = [
   "ttnn==0.77.0",
   "torch==2.11.0",
   "loguru==0.6.0",
+  "transformers==5.12.1",
 ]
 
 [project.optional-dependencies]
 examples = [
   "PyYAML>=6.0,<7",
   "pytz>=2024.1",
-  "transformers==5.12.1",
   "tqdm==4.66.3",
 ]
 test = [
@@ -41,7 +41,6 @@ test = [
   "jsonschema>=4.23,<5",
   "pytz>=2024.1",
   "huggingface-hub>=0.30.0",
-  "transformers==5.12.1",
   "tqdm==4.66.3",
 ]
 yaml = [
