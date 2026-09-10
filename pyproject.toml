@@ -114,6 +114,7 @@ markers = [
   "p150: requires a P150-compatible mesh",
   "p300: requires a P300-compatible mesh",
   "p150x4: requires a four-die P150x4-compatible mesh",
+  "galaxy: requires a 32-device WH Galaxy (8, 4) mesh",
 ]
 
 [tool.coverage.run]

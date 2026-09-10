@@ -27,6 +27,7 @@ TAXONOMY = {
     "p150",
     "p300",
     "p150x4",
+    "galaxy",
 }
 SKU_ARCH = {
     "n150": "wormhole",
@@ -35,6 +36,7 @@ SKU_ARCH = {
     "p150": "blackhole",
     "p300": "blackhole",
     "p150x4": "blackhole",
+    "galaxy": "wormhole",
 }
 PROVEN_DEVICE_MARKS = {
     ("tests/modules/mlp/test_mlp_2d.py", "test_ttnn_linear_2d_mesh_topology_bug"): {"device", "wormhole"},

@@ -34,6 +34,7 @@ class FakeTTNN:
 
 
 @pytest.mark.host
+@pytest.mark.host
 def test_scope_restores_exact_previous_device():
     original = object()
     owned = object()
@@ -47,6 +48,7 @@ def test_scope_restores_exact_previous_device():
 
 
 @pytest.mark.host
+@pytest.mark.host
 def test_scope_restores_after_body_failure():
     original = object()
     ttnn = FakeTTNN(original)
@@ -57,6 +59,7 @@ def test_scope_restores_after_body_failure():
     assert active_default_device_owners() == ()
 
 
+@pytest.mark.host
 @pytest.mark.host
 def test_nested_scopes_restore_in_lifo_order():
     original = object()
@@ -74,6 +77,7 @@ def test_nested_scopes_restore_in_lifo_order():
 
 
 @pytest.mark.host
+@pytest.mark.host
 def test_repeated_scopes_do_not_retain_previous_owner():
     original = object()
     ttnn = FakeTTNN(original)
@@ -86,6 +90,7 @@ def test_repeated_scopes_do_not_retain_previous_owner():
 
 
 @pytest.mark.host
+@pytest.mark.host
 def test_failed_set_is_best_effort_restored():
     original = object()
     ttnn = FakeTTNN(original)
@@ -97,6 +102,7 @@ def test_failed_set_is_best_effort_restored():
     assert active_default_device_owners() == ()
 
 
+@pytest.mark.host
 @pytest.mark.host
 def test_different_threads_cannot_observe_cross_owner_default():
     original = object()
@@ -136,6 +142,7 @@ def test_different_threads_cannot_observe_cross_owner_default():
 
 
 @pytest.mark.host
+@pytest.mark.host
 def test_compatibility_fallback_requires_registered_owner_and_active_default():
     owner = DEFAULT_DEVICE_FALLBACK_LEDGER[0].owner
     device = object()
@@ -147,13 +154,17 @@ def test_compatibility_fallback_requires_registered_owner_and_active_default():
 
 
 @pytest.mark.host
+@pytest.mark.host
 def test_fallback_ledger_is_exact_and_unique():
     owners = [record.owner for record in DEFAULT_DEVICE_FALLBACK_LEDGER]
-    assert len(owners) == 10
-    assert len(set(owners)) == 10
+    # 10 at the standalone extraction, plus the embedding/lm_head/rope/sampling 2D
+    # constructors the Galaxy port adds. mlp and rmsnorm 2D were already registered.
+    assert len(owners) == 14
+    assert len(set(owners)) == 14
     assert all(record.rationale for record in DEFAULT_DEVICE_FALLBACK_LEDGER)
 
 
+@pytest.mark.host
 @pytest.mark.host
 def test_production_default_device_access_matches_ledger_exactly():
     fallback_owners = []

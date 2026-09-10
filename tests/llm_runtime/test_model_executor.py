@@ -72,7 +72,8 @@ def test_model_layer_has_only_the_approved_family_modules_and_readmes() -> None:
     model_directories = sorted(
         path for path in _MODELS_ROOT.iterdir() if path.is_dir() and (path / "model.py").is_file()
     )
-    assert len(model_directories) == 12
+    # 12 at the standalone extraction, plus llama33_70b_galaxy and qwen3_32b_galaxy.
+    assert len(model_directories) == 14
     assert all((_REPOSITORY_ROOT / "examples" / path.name / "README.md").is_file() for path in model_directories)
 
 

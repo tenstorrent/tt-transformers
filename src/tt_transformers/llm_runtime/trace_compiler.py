@@ -93,12 +93,19 @@ class TraceCapturePlan:
     workspace_fingerprint: Any = None
     prime: Callable[[PersistentInputs], Any] | None = None
     release_prime_output: Callable[[Any], list[BaseException]] | None = None
+    #: Establish this operation's execution context immediately before its
+    #: capture, outside the capture region. A model whose operations do not share
+    #: one device context leaves it unset, which is every caller before it
+    #: existed; ``capture_all`` then behaves exactly as it did.
+    prepare_context: Callable[[], Any] | None = None
 
     def __post_init__(self) -> None:
         if self.operation not in ("prefill", "decode"):
             raise ValueError(f"Unsupported trace operation: {self.operation!r}")
         if (self.prime is None) is not (self.release_prime_output is None):
             raise ValueError("trace capture prime and output releaser must be configured together")
+        if self.prepare_context is not None and not callable(self.prepare_context):
+            raise TypeError("trace capture prepare_context must be callable when configured")
 
 
 @dataclass
@@ -267,6 +274,12 @@ class TraceCompiler:
         try:
             for trace_key, plan in self._plans.items():
                 self.program_compiler.require_compiled(plan.program_key)
+                # Staging an operation's persistent inputs is itself that
+                # operation's device work - on a 2D model the prefill rotary
+                # slice is a program - so its context is established here too,
+                # not only before the capture region below.
+                if plan.prepare_context is not None:
+                    plan.prepare_context()
                 values = plan.prepare_inputs()
                 persistent = values if isinstance(values, PersistentInputs) else PersistentInputs(values)
                 prepared[trace_key] = (persistent, plan)
@@ -282,6 +295,14 @@ class TraceCompiler:
             for trace_key in capture_order:
                 persistent, plan = prepared[trace_key]
                 record = self._traces[trace_key]
+                # One capture region records one operation's programs, and an
+                # operation's programs may only be dispatched under that
+                # operation's own device context. Establishing it is the
+                # operation owner's job and cannot happen inside the region, so
+                # the plan is asked for it here - after the previous capture has
+                # ended and synchronized, before this one begins.
+                if plan.prepare_context is not None:
+                    plan.prepare_context()
                 # Program signatures intentionally describe padded trace
                 # identity, not active-row cardinality. Selected operation
                 # plans therefore prime their exact persistent-input body

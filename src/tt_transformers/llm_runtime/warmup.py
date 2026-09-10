@@ -249,6 +249,7 @@ class WarmupCoordinator:
         execution: Any,
         ensure_sampling_buffers: Callable[[], None],
         validate_bound_cache: Callable[[Any], None],
+        reestablish_operation_boundary: Callable[[str], None] | None = None,
     ) -> None:
         if not isinstance(config, WarmupCoordinatorConfig):
             raise TypeError("config must be a WarmupCoordinatorConfig")
@@ -279,6 +280,8 @@ class WarmupCoordinator:
             raise TypeError("ensure_sampling_buffers must be callable")
         if not callable(validate_bound_cache):
             raise TypeError("validate_bound_cache must be callable")
+        if reestablish_operation_boundary is not None and not callable(reestablish_operation_boundary):
+            raise TypeError("reestablish_operation_boundary must be callable or None")
 
         self.config = config
         self.execution = execution
@@ -286,6 +289,7 @@ class WarmupCoordinator:
         self.trace_compiler = trace_compiler
         self._ensure_sampling_buffers = ensure_sampling_buffers
         self._validate_bound_cache = validate_bound_cache
+        self._reestablish_operation_boundary = reestablish_operation_boundary
         self._eager: set[WarmupCase] = set()
         self._trace_registered: set[WarmupCase] = set()
         self._trace_decisions: dict[str, bool] = {}
@@ -466,9 +470,38 @@ class WarmupCoordinator:
             self._ensure_sampling_buffers()
         plan = self._plan(can_sample_on_device=can_sample_on_device)
         destination = self._trace_registered if enable_trace else self._eager
+        compiled_here = 0
         for case in plan.decode:
             if case in destination:
                 continue
+            # One operation boundary per compiled decode program, because a
+            # decode boundary can own a *single-use* device resource and the
+            # caller only established one.
+            #
+            # On WH Galaxy that resource is the persistent `ttnn.dram_prefetcher`
+            # sender: `Prefetcher2D.activate("decode")` dispatches it for exactly
+            # `num_layers` rounds, so it feeds exactly one traversal of the decode
+            # graph. With device sampling off this loop compiles one program
+            # (`decode_paths == ["logits"]`) and nothing notices. With it on, and
+            # `allow_force_argmax` false - which is the accurate answer for a
+            # sampler that encodes greedy as `top_k=1, top_p=0` rather than
+            # owning a separate argmax program - the plan carries **two**, and the
+            # second one's weight-fed matmuls block on global-CB credits that
+            # never arrive. The host then parks in the first barrier downstream of
+            # them, which is the LM head's own
+            # `finally: resources.synchronize("decode")`, and never returns:
+            # `tttv2_milestone_c_evidence/trace/logs/w1_L_sampling_tb.log` is that
+            # stack, captured by a repeating `faulthandler` dump.
+            #
+            # The first program keeps the caller's boundary, so a single-case plan
+            # is byte-identical to every version of this file before it - which is
+            # every result Milestone C has measured. Prefill deliberately does not
+            # do this: its boundary owns no single-use resource, its multi-case
+            # loop is what the whole prefill evidence base was measured through,
+            # and re-activating it per case would reload the sub-device manager
+            # many times over for no measured need.
+            if compiled_here and self._reestablish_operation_boundary is not None:
+                self._reestablish_operation_boundary("decode")
             sampling = None
             if case.sampling_path == "argmax":
                 sampling = _greedy_sampling_params(lane_batch)
@@ -482,6 +515,7 @@ class WarmupCoordinator:
                 sampling_params=sampling,
             )
             self._record_required_programs(program, traced=enable_trace)
+            compiled_here += 1
             if not enable_trace:
                 logger.info("Compiled decode")
                 if sampling is not None:
@@ -682,7 +716,8 @@ def _build_plan(
                     WarmupCase("prefill", batch_size, sequence_length, sampling_path)
                     for sampling_path in batch_sampling_paths
                 )
-        cached_prompt_length = layout.block_size + sequence_length
+        cached_tokens = warmup.cached_prefill_tokens or layout.block_size
+        cached_prompt_length = cached_tokens + sequence_length
         if cached_prompt_length <= layout.raw_capacity_width * layout.block_size:
             prefill.extend(
                 WarmupCase(
@@ -690,7 +725,7 @@ def _build_plan(
                     1,
                     sequence_length,
                     sampling_path,
-                    cached_tokens=layout.block_size,
+                    cached_tokens=cached_tokens,
                 )
                 for sampling_path in sampling_paths
                 + (["argmax"] if can_sample_on_device and allow_force_argmax else [])

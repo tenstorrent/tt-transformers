@@ -50,11 +50,13 @@ PHASE0_KEYS = {
 
 
 @pytest.mark.host
+@pytest.mark.host
 @pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "on", True])
 def test_normalized_true_values(value):
     assert parse_bool(value, name="FLAG") is True
 
 
+@pytest.mark.host
 @pytest.mark.host
 @pytest.mark.parametrize("value", ["", "0", "false", "FALSE", "no", "off", False])
 def test_normalized_false_values(value):
@@ -62,11 +64,13 @@ def test_normalized_false_values(value):
 
 
 @pytest.mark.host
+@pytest.mark.host
 def test_invalid_boolean_is_not_silently_truthy():
     with pytest.raises(ValueError, match="FLAG must be one of"):
         parse_bool("sometimes", name="FLAG")
 
 
+@pytest.mark.host
 @pytest.mark.host
 def test_offline_policy_is_explicit_and_not_derived_from_ci():
     assert offline_mode({"CI": "true"}) is False
@@ -77,12 +81,14 @@ def test_offline_policy_is_explicit_and_not_derived_from_ci():
 
 
 @pytest.mark.host
+@pytest.mark.host
 def test_typed_inventory_covers_all_phase0_keys():
     assert PHASE0_KEYS <= ENVIRONMENT_SPECS.keys()
     assert environment_flag("DISABLE_BATCHED_PREFILL", {"DISABLE_BATCHED_PREFILL": "0"}) is False
     assert environment_int("MAX_PREFILL_CHUNK_SIZE", {"MAX_PREFILL_CHUNK_SIZE": "4"}) == 4
 
 
+@pytest.mark.host
 @pytest.mark.host
 def test_default_cache_is_home_scoped_and_never_cwd_relative(tmp_path):
     resolution = resolve_model_cache(
@@ -100,6 +106,7 @@ def test_default_cache_is_home_scoped_and_never_cwd_relative(tmp_path):
     assert resolution.path != resolution.legacy_cwd_path
 
 
+@pytest.mark.host
 @pytest.mark.host
 def test_xdg_and_standalone_cache_roots_keep_model_topology_suffix(tmp_path):
     xdg = resolve_model_cache(
@@ -122,6 +129,7 @@ def test_xdg_and_standalone_cache_roots_keep_model_topology_suffix(tmp_path):
     )
 
 
+@pytest.mark.host
 @pytest.mark.host
 def test_explicit_cache_dir_and_legacy_tt_cache_path_remain_exact(tmp_path):
     argument = resolve_model_cache(
@@ -155,6 +163,7 @@ def test_explicit_cache_dir_and_legacy_tt_cache_path_remain_exact(tmp_path):
 
 
 @pytest.mark.host
+@pytest.mark.host
 def test_permission_fallback_preserves_llama_layout(monkeypatch, tmp_path):
     configured = tmp_path / "readonly/P150"
     fallback = tmp_path / "fallback/model/P150"
@@ -182,6 +191,7 @@ def test_permission_fallback_preserves_llama_layout(monkeypatch, tmp_path):
     assert resolution.source == "permission_fallback"
 
 
+@pytest.mark.host
 @pytest.mark.host
 def test_cache_identity_is_complete_stable_and_sensitive():
     inputs = dict(
@@ -211,6 +221,7 @@ def test_cache_identity_is_complete_stable_and_sensitive():
     assert first.conversion_schema
 
 
+@pytest.mark.host
 @pytest.mark.host
 def test_implicit_namespace_invalidates_on_checkpoint_dtype_architecture_and_versions(monkeypatch, tmp_path):
     versions = {"tt-transformers": "1.0", "ttnn": "0.77.0"}
@@ -250,6 +261,7 @@ def test_implicit_namespace_invalidates_on_checkpoint_dtype_architecture_and_ver
 
 
 @pytest.mark.host
+@pytest.mark.host
 def test_explicit_paths_do_not_change_when_identity_inputs_change(tmp_path):
     mesh = SimpleNamespace(arch=lambda: "wormhole", shape=(1, 2), get_num_devices=lambda: 2)
     paths = {
@@ -268,6 +280,7 @@ def test_explicit_paths_do_not_change_when_identity_inputs_change(tmp_path):
     assert paths == {tmp_path / "established"}
 
 
+@pytest.mark.host
 @pytest.mark.host
 def test_preflight_is_secret_redacted_and_reports_identity(tmp_path):
     mesh = SimpleNamespace(arch=lambda: "blackhole", shape=(2, 2), get_num_devices=lambda: 4)
@@ -301,6 +314,7 @@ def test_preflight_is_secret_redacted_and_reports_identity(tmp_path):
 
 
 @pytest.mark.host
+@pytest.mark.host
 def test_implicit_preflight_confirms_the_exact_identity_namespace(tmp_path):
     mesh = SimpleNamespace(arch=lambda: "wormhole", shape=(1, 2), get_num_devices=lambda: 2)
     environ = {"HOME": str(tmp_path / "home")}
@@ -328,9 +342,11 @@ def test_implicit_preflight_confirms_the_exact_identity_namespace(tmp_path):
 
 
 @pytest.mark.host
-def test_all_twelve_hf_adaptors_use_the_shared_policy():
+@pytest.mark.host
+def test_all_fourteen_hf_adaptors_use_the_shared_policy():
     adaptors = sorted((ROOT / "src/tt_transformers/models").glob("*/hf_adaptor.py"))
-    assert len(adaptors) == 12
+    # 12 at the standalone extraction, plus llama33_70b_galaxy and qwen3_32b_galaxy.
+    assert len(adaptors) == 14
     for path in adaptors:
         source = path.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(path))
@@ -363,6 +379,7 @@ def test_all_twelve_hf_adaptors_use_the_shared_policy():
         assert {"hf_model_id", "hf_revision", "topology", "mesh_device", "dtype"} <= cache_keywords
 
 
+@pytest.mark.host
 @pytest.mark.host
 @pytest.mark.parametrize(
     ("model", "num_devices", "expected_topology", "cache_kwargs"),

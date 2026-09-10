@@ -187,6 +187,7 @@ def make_coordinator(
     allow_force_argmax=True,
     page_table_layout=None,
     sampling_config=None,
+    reestablish_operation_boundary=None,
 ):
     events = events if events is not None else []
     execution = execution or RecordingExecution(events)
@@ -231,6 +232,7 @@ def make_coordinator(
         execution=execution,
         ensure_sampling_buffers=ensure_sampling,
         validate_bound_cache=validate_bound,
+        reestablish_operation_boundary=reestablish_operation_boundary,
     )
     return coordinator, execution, trace_compiler, sampling_calls, bound_calls, events
 
@@ -1051,3 +1053,131 @@ def test_dynamic_hints_cannot_expand_static_trace_or_sampling_ceilings(expect_er
         )
 
     coordinator.warmup_prefill(kv_cache="cache", enable_trace=False, can_sample_on_device=False)
+
+
+# ---------------------------------------------------------------------------
+# One operation boundary per compiled decode program
+#
+# A decode operation boundary can own a *single-use* device resource. On WH
+# Galaxy it does: `Prefetcher2D.activate("decode")` dispatches the persistent
+# `ttnn.dram_prefetcher` for exactly `num_layers` rounds, which feeds exactly one
+# traversal of the decode graph. The coordinator compiles one program per
+# configured decode sampling path, and the caller established one boundary, so
+# every program after the first ran without a sender: its weight-fed matmuls
+# blocked on global-CB credits that never arrived and the host parked forever in
+# the LM head's own `finally: resources.synchronize("decode")`.
+# `tttv2_milestone_c_evidence/trace/logs/w1_L_sampling_tb.log` is that stack.
+#
+# The collaborator is optional and the *first* program keeps the caller's
+# boundary, so a single-case plan - which is every plan with device sampling off,
+# and every plan Milestone C measured before this - is unchanged.
+# ---------------------------------------------------------------------------
+
+
+def _boundary_recorder(events):
+    calls = []
+
+    def reestablish(operation):
+        events.append(f"boundary:{operation}")
+        calls.append(operation)
+
+    return reestablish, calls
+
+
+@pytest.mark.host
+def test_sampled_decode_warmup_reestablishes_the_boundary_between_programs():
+    events = []
+    reestablish, calls = _boundary_recorder(events)
+    coordinator, execution, *_ = make_coordinator(
+        trace_mode="none",
+        sampling=True,
+        warmup_config=WarmupConfig(prefill_seq_lens=(128,), prefill_batch_sizes=(1,)),
+        sequence_lengths=(128,),
+        lane_capacity=1,
+        events=events,
+        reestablish_operation_boundary=reestablish,
+    )
+
+    coordinator.warmup_decode(
+        kv_cache="cache",
+        enable_trace=False,
+        max_batch_size=1,
+        num_blocks=8,
+        can_sample_on_device=True,
+    )
+
+    assert len(execution.decode_calls) == 2, "the sampled plan must carry two decode programs for this to be a test"
+    # Exactly one re-establishment, and it sits *between* the two compiles: the
+    # caller owns the boundary for the first program and the coordinator owns one
+    # for each program after it.
+    assert calls == ["decode"]
+    assert [event for event in events if event.startswith(("compile_decode", "boundary:"))] == [
+        "compile_decode",
+        "boundary:decode",
+        "compile_decode",
+    ]
+
+
+@pytest.mark.host
+def test_single_program_decode_warmup_leaves_the_callers_boundary_alone():
+    events = []
+    reestablish, calls = _boundary_recorder(events)
+    coordinator, execution, *_ = make_coordinator(
+        trace_mode="none",
+        sampling=False,
+        warmup_config=WarmupConfig(prefill_seq_lens=(128,), prefill_batch_sizes=(1,)),
+        sequence_lengths=(128,),
+        lane_capacity=1,
+        events=events,
+        reestablish_operation_boundary=reestablish,
+    )
+
+    coordinator.warmup_decode(
+        kv_cache="cache",
+        enable_trace=False,
+        max_batch_size=1,
+        num_blocks=8,
+        can_sample_on_device=False,
+    )
+
+    assert len(execution.decode_calls) == 1
+    assert calls == []
+
+
+@pytest.mark.host
+def test_prefill_warmup_never_reestablishes_the_boundary():
+    """The negative control the change is bounded by.
+
+    A prefill boundary owns no single-use resource, the multi-case prefill loop
+    is what every prefill result in this milestone was measured through, and
+    re-activating prefill per case would reload the sub-device manager once per
+    case for no measured need.
+    """
+
+    events = []
+    reestablish, calls = _boundary_recorder(events)
+    coordinator, execution, *_ = make_coordinator(
+        trace_mode="none",
+        sampling=True,
+        warmup_config=WarmupConfig(prefill_seq_lens=(128,), prefill_batch_sizes=(1,)),
+        sequence_lengths=(128,),
+        lane_capacity=1,
+        events=events,
+        reestablish_operation_boundary=reestablish,
+    )
+
+    coordinator.warmup_prefill(kv_cache="cache", enable_trace=False, can_sample_on_device=True)
+
+    assert len(execution.prefill_calls) > 1, "this control needs a multi-case prefill plan to mean anything"
+    assert calls == []
+
+
+@pytest.mark.host
+def test_decode_boundary_collaborator_must_be_callable_or_none(expect_error):
+    with expect_error(TypeError, "reestablish_operation_boundary must be callable or None"):
+        make_coordinator(
+            trace_mode="none",
+            sampling=False,
+            lane_capacity=1,
+            reestablish_operation_boundary="not callable",
+        )
