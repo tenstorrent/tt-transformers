@@ -1,0 +1,67 @@
+{
+  "model": "meta-llama/Llama-3.1-8B-Instruct",
+  "revision": "0e9e39f249a16976918f6564b8830bc894c89659",
+  "metadata_source": "https://huggingface.co/api/models/meta-llama/Llama-3.1-8B-Instruct/tree/0e9e39f249a16976918f6564b8830bc894c89659",
+  "files": [
+    {
+      "name": "config.json",
+      "size": 855,
+      "git_blob_sha1": "0bb6fd75b3ad2fe988565929f329945262c2814e",
+      "lfs": false
+    },
+    {
+      "name": "generation_config.json",
+      "size": 184,
+      "git_blob_sha1": "cc7276afd599de091142c6ed3005faf8a74aa257",
+      "lfs": false
+    },
+    {
+      "name": "model-00001-of-00004.safetensors",
+      "size": 4976698672,
+      "git_blob_sha1": "a59dca28867995c0d05384251ac5f4d62461a226",
+      "lfs": true
+    },
+    {
+      "name": "model-00002-of-00004.safetensors",
+      "size": 4999802720,
+      "git_blob_sha1": "4ab0726caf5e75dd1e5700c7e7899ac8c0798428",
+      "lfs": true
+    },
+    {
+      "name": "model-00003-of-00004.safetensors",
+      "size": 4915916176,
+      "git_blob_sha1": "5864b15557563e7700a3f95236afdee36f5fdb74",
+      "lfs": true
+    },
+    {
+      "name": "model-00004-of-00004.safetensors",
+      "size": 1168138808,
+      "git_blob_sha1": "b8babcaa5a888d6efd5c05206361b4685492ad13",
+      "lfs": true
+    },
+    {
+      "name": "model.safetensors.index.json",
+      "size": 23950,
+      "git_blob_sha1": "0fd8120f1c6acddc268ebc2583058efaf699a771",
+      "lfs": false
+    },
+    {
+      "name": "special_tokens_map.json",
+      "size": 296,
+      "git_blob_sha1": "02ee80b6196926a5ad790a004d9efd6ab1ba6542",
+      "lfs": false
+    },
+    {
+      "name": "tokenizer.json",
+      "size": 9085657,
+      "git_blob_sha1": "5cc5f00a5b203e90a27a3bd60d1ec393b07971e8",
+      "lfs": false
+    },
+    {
+      "name": "tokenizer_config.json",
+      "size": 55351,
+      "git_blob_sha1": "db88166e2bc4c799fd5d1ae643b75e84d03ee70e",
+      "lfs": false
+    }
+  ]
+}
