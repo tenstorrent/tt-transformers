@@ -79,6 +79,8 @@ def container_execution(args, argv: list[str]) -> int:
         mounts.add(output.resolve())
         if args.action == "env":
             data = load_runtime(args.runtime.resolve())
+            if image and data["recipe"].get("image") not in {None, image}:
+                raise DevError("Use the runtime's recorded container image for this profile.")
             mounts.add(args.runtime.resolve().parent)
             image = image or data["recipe"].get("image")
     else:
@@ -90,6 +92,8 @@ def container_execution(args, argv: list[str]) -> int:
         else:
             manifest = args.runtime.resolve()
         data = load_runtime(manifest)
+        if image and data["recipe"].get("image") not in {None, image}:
+            raise DevError("Use the runtime's recorded container image for this profile.")
         mounts.add(manifest.parent)
         image = image or data["recipe"].get("image")
         if data["mode"] == "source":
@@ -153,6 +157,7 @@ def dispatch_build(args) -> int:
             "metal_ref": sha,
             "request_id": request_id,
             "run_hardware": str(args.run_hardware).lower(),
+            "runtime_run_id": args.reuse_run or "",
             "image": args.image or "",
         },
     }
@@ -309,6 +314,7 @@ def parser() -> argparse.ArgumentParser:
             sub.add_argument("--tt-metal-ref", default="main")
             sub.add_argument("--workflow-ref", default="main")
             sub.add_argument("--run-hardware", action="store_true")
+            sub.add_argument("--reuse-run", help="Revalidate the runtime bundle from a previous CI run")
     sub = commands.add_parser("rebuild")
     sub.add_argument("--runtime", type=Path, required=True)
     sub.add_argument("--executor", choices=("native", "local-container"), default="native")
@@ -344,6 +350,12 @@ def main(argv=None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     args = parser().parse_args(arguments)
     try:
+        image = getattr(args, "image", None)
+        if image and not re.fullmatch(r"[^\s]+@sha256:[0-9a-f]{64}", image):
+            raise DevError("--image must be pinned by a sha256 digest.")
+        reuse = getattr(args, "reuse_run", None)
+        if reuse and (args.executor != "ci" or not reuse.isdigit() or int(reuse) < 1):
+            raise DevError("--reuse-run requires CI execution and a positive GitHub run ID.")
         if hasattr(args, "jobs") and args.jobs < 1:
             raise DevError("--jobs must be positive.")
         if getattr(args, "executor", None) == "local-container":

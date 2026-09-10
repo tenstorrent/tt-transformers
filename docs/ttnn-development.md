@@ -175,6 +175,12 @@ The initial CI profile is Python 3.10, Release, single-host support, and the
 Before merge, maintainers can choose a registered workflow branch through
 `--workflow-ref`.
 
+To revalidate an existing CI bundle, add `--reuse-run RUN_ID` and specify its
+exact `--tt-metal-ref` SHA. The workflow verifies the bundle's commit, image,
+Python ABI, and hashes, then reruns the current checks without recompiling TTNN.
+Verified build bundles are retained even if a later test fails; retaining a
+bundle does not mark those tests as passing.
+
 Optional hardware validation runs on a separate CIv2 P150b VM, without a
 tt-metal checkout. It executes a JIT tensor operation, an exact RMSNorm test
 with skipped-result rejection, and the Llama 3.1 8B token-accuracy example.

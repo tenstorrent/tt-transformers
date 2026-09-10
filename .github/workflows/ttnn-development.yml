@@ -12,6 +12,9 @@ on:
       request_id:
         description: Optional identifier used by the development launcher
         type: string
+      runtime_run_id:
+        description: Optional prior run ID whose ttnn-runtime bundle should be revalidated
+        type: string
       image:
         description: Pinned Ubuntu 22.04 development image (empty uses the tested default)
         type: string
@@ -23,6 +26,7 @@ on:
 permissions:
   contents: read
   packages: read
+  actions: read
 
 jobs:
   resolve:
@@ -90,12 +94,37 @@ jobs:
           echo "$RUNNER_TEMP/launcher/bin" >> "$GITHUB_PATH"
       - name: Build source runtime and export a fixed wheel
         id: build_runtime
+        if: ${{ inputs.runtime_run_id == '' }}
         shell: bash
         run: |
           python3 tools/ttnn_dev.py build --executor native \
             --tt-metal-ref "$METAL_SHA" --jobs 8 \
             --image "$TTNN_DEV_IMAGE" --output "$RUNNER_TEMP/ttnn-build" \
             2>&1 | tee tt-metal-build.log
+      - name: Retrieve an existing runtime bundle
+        if: ${{ inputs.runtime_run_id != '' }}
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ttnn-runtime
+          path: ${{ runner.temp }}/ttnn-build/bundle
+          run-id: ${{ inputs.runtime_run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify requested runtime identity
+        id: verify_runtime
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          from tools.ttnn_dev_support.common import load_runtime
+          runtime = load_runtime(Path(os.environ['RUNNER_TEMP']) / 'ttnn-build/bundle/runtime.json')
+          if runtime['mode'] != 'wheel' or runtime['metal']['sha'] != os.environ['METAL_SHA']:
+              raise SystemExit('Runtime artifact does not match the requested tt-metal commit')
+          if runtime['recipe']['image'] != os.environ['TTNN_DEV_IMAGE']:
+              raise SystemExit('Runtime artifact does not match the requested image')
+          if runtime['python']['minor'] != '3.10':
+              raise SystemExit('This CI profile requires a Python 3.10 runtime')
+          PY
       - name: Verify a fresh wheel environment
         shell: bash
         run: |
@@ -110,7 +139,7 @@ jobs:
             python -m pytest -q -m host tests/host/test_package_surface.py \
             tests/host/test_import_boundaries.py tests/host/test_ttnn_development.py
       - name: Upload runtime bundle
-        if: ${{ !cancelled() && steps.build_runtime.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.verify_runtime.outcome == 'success' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ttnn-runtime
