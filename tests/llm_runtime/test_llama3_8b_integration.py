@@ -12,16 +12,16 @@ from unittest.mock import create_autospec
 import pytest
 import torch
 import ttnn
-from examples.llama3_8b import demo as llama_demo
+from examples.llama3_8b import benchmark as llama_demo
 
 from tt_transformers.llm_runtime.config import PagedKVCacheConfig, PageTableLayout, TraceConfig, WarmupConfig
 from tt_transformers.llm_runtime.execution import EagerExecutor, TracedExecutor
 from tt_transformers.llm_runtime.lane_group import LaneGroupExecutor
 from tt_transformers.llm_runtime.warmup import _build_plan
 from tt_transformers.models import llama3_executor as llama3_family_executor
-from tt_transformers.models.llama3_8b import executor as llama_executor
-from tt_transformers.models.llama3_8b import generator as llama_generator
+from tt_transformers.models.llama3_8b import hf_generator as llama_executor
 from tt_transformers.models.llama3_8b import model as llama_model
+from tt_transformers.models.llama3_8b import vllm_generator as llama_generator
 
 
 class _Mesh:
@@ -837,7 +837,7 @@ def test_generator_constructs_model_owned_lane_configs_with_exact_decode_coverag
         executor_calls.append((llm, config))
         return _FakeLane(llm, config)
 
-    monkeypatch.setattr(llama_generator, "from_pretrained", fake_from_pretrained)
+    monkeypatch.setattr(llama_generator, "_load_model", fake_from_pretrained)
     monkeypatch.setattr(llama_generator, "build_llama3_executor", fake_build_executor)
     monkeypatch.setattr(llama_generator, "_model_kv_metadata", lambda model: ((ttnn.bfloat8_b,), 1, 8, 128))
 

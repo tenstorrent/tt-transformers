@@ -3,7 +3,7 @@
 import os
 
 import pytest
-from examples.qwen25_7b import demo as example
+from examples.qwen25_7b import benchmark as example
 from tests.support.marker_policy import selected_topology_marks
 
 try:

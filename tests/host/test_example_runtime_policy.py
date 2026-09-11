@@ -68,9 +68,9 @@ def test_all_executable_examples_have_no_forced_remote_cwd_cache_or_unscoped_def
 
 
 @pytest.mark.host
-def test_demo_cache_helpers_use_standalone_policy_and_preserve_tt_cache_topology():
+def test_benchmark_cache_helpers_use_standalone_policy_and_preserve_tt_cache_topology():
     helpers = []
-    for path in sorted((ROOT / "examples").glob("*/demo.py")):
+    for path in sorted((ROOT / "examples").glob("*/benchmark.py")):
         tree = ast.parse(path.read_text(), filename=str(path))
         function = next(
             (

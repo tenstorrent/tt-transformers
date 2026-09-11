@@ -11,7 +11,7 @@ import torch
 
 from tt_transformers.llm_runtime.config import TraceConfig
 
-_DEMO_PATH = "examples/mistral_7b/demo.py"
+_DEMO_PATH = "examples/mistral_7b/benchmark.py"
 _HARDWARE_DEMO_PATH = "tests/hardware/models/mistral_7b/test_demo.py"
 _DEMO_SOURCE = "\n".join(
     (Path(_DEMO_PATH).read_text(encoding="utf-8"), Path(_HARDWARE_DEMO_PATH).read_text(encoding="utf-8"))
@@ -126,7 +126,7 @@ def test_demo_imports_promoted_runner_helpers_and_model_owned_executor():
         "run_teacher_forcing",
     ):
         assert ("examples.common.run_helpers", helper) in imported
-    assert ("tt_transformers.models.mistral_7b.executor", "Mistral7BExecutor") in imported
+    assert ("tt_transformers.models.mistral_7b.hf_generator", "Mistral7BExecutor") in imported
     assert not any(module == "tt_transformers.models.executor" for module, _ in imported)
 
 

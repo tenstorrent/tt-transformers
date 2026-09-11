@@ -87,6 +87,7 @@ REQUIRED_MODULES = (
     "tt_transformers.llm_runtime.prefill.trace",
     "tt_transformers.models",
     "tt_transformers.models.executor",
+    "tt_transformers.models.hf_generation",
     "tt_transformers.models.llama3_executor",
     "tt_transformers.models.qwen2_executor",
 )
@@ -148,7 +149,8 @@ def probe() -> dict[str, object]:
             (
                 f"tt_transformers.models.{family}",
                 f"tt_transformers.models.{family}.model",
-                f"tt_transformers.models.{family}.hf_adaptor",
+                f"tt_transformers.models.{family}.hf_generator",
+                f"tt_transformers.models.{family}.vllm_generator",
             )
         )
     for module in modules:

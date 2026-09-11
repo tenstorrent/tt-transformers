@@ -13,13 +13,13 @@ _EXPORTS = {
     "Qwen25_7B": ("tt_transformers.models.qwen25_7b.model", "Qwen25_7B"),
     "Qwen25_7BPrecisionConfig": ("tt_transformers.models.qwen25_7b.model", "Qwen25_7BPrecisionConfig"),
     "Qwen25_7BTransformerConfig": ("tt_transformers.models.qwen25_7b.model", "Qwen25_7BTransformerConfig"),
-    "Qwen25Executor": ("tt_transformers.models.qwen25_7b.executor", "Qwen25Executor"),
-    "Qwen25ExecutorConfig": ("tt_transformers.models.qwen25_7b.executor", "Qwen25ExecutorConfig"),
-    "Qwen25ForCausalLM": ("tt_transformers.models.qwen25_7b.hf_adaptor", "Qwen25ForCausalLM"),
+    "Qwen25Executor": ("tt_transformers.models.qwen25_7b.hf_generator", "Qwen25Executor"),
+    "Qwen25ExecutorConfig": ("tt_transformers.models.qwen25_7b.hf_generator", "Qwen25ExecutorConfig"),
+    "Qwen25ForCausalLM": ("tt_transformers.models.qwen25_7b.hf_generator", "Qwen25ForCausalLM"),
     "Qwen25PagedAttentionConfig": ("tt_transformers.models.qwen25_7b.model", "Qwen25PagedAttentionConfig"),
-    "Qwen25Generator": ("tt_transformers.models.qwen25_7b.generator", "Qwen25Generator"),
-    "Qwen25GeneratorConfig": ("tt_transformers.models.qwen25_7b.generator", "Qwen25GeneratorConfig"),
-    "Qwen25RuntimeConfig": ("tt_transformers.models.qwen25_7b.hf_adaptor", "Qwen25RuntimeConfig"),
+    "Qwen25Generator": ("tt_transformers.models.qwen25_7b.vllm_generator", "Qwen25Generator"),
+    "Qwen25GeneratorConfig": ("tt_transformers.models.qwen25_7b.vllm_generator", "Qwen25GeneratorConfig"),
+    "Qwen25RuntimeConfig": ("tt_transformers.models.qwen25_7b.hf_generator", "Qwen25RuntimeConfig"),
 }
 
 __all__ = [

@@ -22,13 +22,20 @@ tensors and execution. Sampling utilities supply shared behavior to these
 paths. Model-specific policy stays in `models` so the lower layers can be
 reused by other models.
 
-For example, the [Llama 3.1 8B implementation](models/llama3_8b/) separates
-checkpoint loading and configuration in `hf_adaptor.py` from tensor operations
-in `model.py`. Its `executor.py` constructs the execution target using shared
-Llama-family policy and runtime owners. Its `generator.py` exposes generation
-calls and delegates prefill, decode, and cleanup to that target. See the
-[model guide](models/README.md#model-package-layout) for the common file layout
-and the [prefill guide](llm_runtime/prefill/README.md) for execution planning.
+For example, the [Llama 3.1 8B implementation](models/llama3_8b/) keeps
+its tensor operations in `model.py`. Its `hf_generator.py` loads checkpoints
+and tokenizers, constructs one executor, and returns a model exposing
+`.generate()`. Its `vllm_generator.py` retains the scheduler-facing vLLM
+interface. Both entry points reuse the shared Llama-family execution policy
+and runtime owners. See the [model guide](models/README.md#model-package-layout)
+for the common file layout and the [prefill guide](llm_runtime/prefill/README.md)
+for execution planning.
+
+Repository `examples/<model>/demo.py` demonstrates the public loading,
+chat-template tokenization, `.generate()`, decoding, and cleanup flow. Its
+separate `benchmark.py` contains accuracy/performance workloads and explicit
+executor configuration. See the [runnable commands](../../examples/README.md#generate-text)
+or the [model API example](models/README.md#hf-style-text-generation).
 
 Static choices such as topology and program configuration are resolved during
 construction. Device, tensor, trace, and cache resources have explicit owners;

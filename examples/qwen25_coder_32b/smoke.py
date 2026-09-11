@@ -42,7 +42,7 @@ from examples.common.run_helpers import make_contiguous_page_table
 from examples.common.runtime import TemporaryPathFactory, UnsupportedConfiguration, open_mesh_device
 from tt_transformers.device_ownership import default_device_scope
 from tt_transformers.device_utils import cleanup_model_case
-from tt_transformers.models.qwen25_coder_32b.executor import (
+from tt_transformers.models.qwen25_coder_32b.hf_generator import (
     EagerQwen25Coder32BExecutor,
     TracedQwen25Coder32BExecutor,
     run_lm_head,

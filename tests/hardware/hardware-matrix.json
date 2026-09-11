@@ -2679,7 +2679,8 @@
         },
         "allowed_physical_cluster_types": [
           "development loudbox",
-          "P150_X4"
+          "P150_X4",
+          "P150_X8"
         ]
       },
       "acceptance_types": [
@@ -3048,6 +3049,676 @@
       ],
       "enabled": true,
       "disabled_classification": null
+    },
+    {
+      "id": "wh-n150-llama3-8b-hf-generate-single",
+      "priority": 43,
+      "stage": "e2e",
+      "architecture": "wormhole",
+      "mesh_device": "N150",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/hardware/models/llama3_8b/test_hf_generate.py::test_generate_matches_demo_and_reuses_model[batch1]"
+      },
+      "timeout_seconds": 3600,
+      "environment": {
+        "MESH_DEVICE": "N150",
+        "HF_MODEL": "meta-llama/Llama-3.1-8B-Instruct",
+        "HF_HOME": "/proj_sw/user_dev/huggingface",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TT_CACHE_PATH": "{checkout}/model_cache/llama3_8b",
+        "PYTEST_ADDOPTS": "-rP"
+      },
+      "cache_requirement": {
+        "kind": "established_warm_model_cache",
+        "model": "llama3_8b",
+        "root_semantics": "model root; model appends topology exactly once",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "N150 is a single-device selection on wh-lb-42; physical host inventory recorded separately",
+        "selection_environment": {
+          "MESH_DEVICE": "N150"
+        }
+      },
+      "acceptance_types": [
+        "public_generate_matches_demo",
+        "repeated_call_isolation",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "approved HF text generation plan",
+        "tests/hardware/models/llama3_8b/test_hf_generate.py"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "wh-n150-llama3-8b-hf-generate-batch",
+      "priority": 44,
+      "stage": "e2e",
+      "architecture": "wormhole",
+      "mesh_device": "N150",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/hardware/models/llama3_8b/test_hf_generate.py::test_generate_left_padded_batch[batch3-capacity32]"
+      },
+      "timeout_seconds": 3600,
+      "environment": {
+        "MESH_DEVICE": "N150",
+        "HF_MODEL": "meta-llama/Llama-3.1-8B-Instruct",
+        "HF_HOME": "/proj_sw/user_dev/huggingface",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TT_CACHE_PATH": "{checkout}/model_cache/llama3_8b",
+        "PYTEST_ADDOPTS": "-rP"
+      },
+      "cache_requirement": {
+        "kind": "established_warm_model_cache",
+        "model": "llama3_8b",
+        "root_semantics": "model root; model appends topology exactly once",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "N150 is a single-device selection on wh-lb-42; physical host inventory recorded separately",
+        "selection_environment": {
+          "MESH_DEVICE": "N150"
+        }
+      },
+      "acceptance_types": [
+        "public_generate_matches_demo",
+        "repeated_call_isolation",
+        "clean_teardown",
+        "left_padded_batch"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "approved HF text generation plan",
+        "tests/hardware/models/llama3_8b/test_hf_generate.py"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "bh-p150-llama3-8b-hf-generate-single",
+      "priority": 45,
+      "stage": "e2e",
+      "architecture": "blackhole",
+      "mesh_device": "P150",
+      "machine_pool": [
+        "bh-lb-11",
+        "bh-qb-05"
+      ],
+      "selector": {
+        "target": "tests/hardware/models/llama3_8b/test_hf_generate.py::test_generate_matches_demo_and_reuses_model[batch1]"
+      },
+      "timeout_seconds": 3600,
+      "environment": {
+        "MESH_DEVICE": "P150",
+        "HF_MODEL": "meta-llama/Llama-3.1-8B-Instruct",
+        "HF_HOME": "/proj_sw/user_dev/huggingface",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TT_CACHE_PATH": "{checkout}/model_cache/llama3_8b",
+        "PYTEST_ADDOPTS": "-rP"
+      },
+      "cache_requirement": {
+        "kind": "established_warm_model_cache",
+        "model": "llama3_8b",
+        "root_semantics": "model root; model appends topology exactly once",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "MESH_DEVICE=P150 selects one P150 device; physical host inventory recorded separately",
+        "selection_environment": {
+          "MESH_DEVICE": "P150"
+        },
+        "allowed_physical_cluster_types": [
+          "development loudbox",
+          "P150_X4",
+          "P150_X8"
+        ]
+      },
+      "acceptance_types": [
+        "public_generate_matches_demo",
+        "repeated_call_isolation",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "approved HF text generation plan",
+        "tests/hardware/models/llama3_8b/test_hf_generate.py"
+      ],
+      "enabled": true,
+      "disabled_classification": null,
+      "machine_environment_overrides": {
+        "bh-qb-05": {
+          "TT_VISIBLE_DEVICES": null
+        }
+      }
+    },
+    {
+      "id": "bh-p150-llama3-8b-hf-generate-batch",
+      "priority": 46,
+      "stage": "e2e",
+      "architecture": "blackhole",
+      "mesh_device": "P150",
+      "machine_pool": [
+        "bh-lb-11",
+        "bh-qb-05"
+      ],
+      "selector": {
+        "target": "tests/hardware/models/llama3_8b/test_hf_generate.py::test_generate_left_padded_batch[batch3-capacity32]"
+      },
+      "timeout_seconds": 3600,
+      "environment": {
+        "MESH_DEVICE": "P150",
+        "HF_MODEL": "meta-llama/Llama-3.1-8B-Instruct",
+        "HF_HOME": "/proj_sw/user_dev/huggingface",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TT_CACHE_PATH": "{checkout}/model_cache/llama3_8b",
+        "PYTEST_ADDOPTS": "-rP"
+      },
+      "cache_requirement": {
+        "kind": "established_warm_model_cache",
+        "model": "llama3_8b",
+        "root_semantics": "model root; model appends topology exactly once",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "MESH_DEVICE=P150 selects one P150 device; physical host inventory recorded separately",
+        "selection_environment": {
+          "MESH_DEVICE": "P150"
+        },
+        "allowed_physical_cluster_types": [
+          "development loudbox",
+          "P150_X4",
+          "P150_X8"
+        ]
+      },
+      "acceptance_types": [
+        "public_generate_matches_demo",
+        "repeated_call_isolation",
+        "clean_teardown",
+        "left_padded_batch"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "approved HF text generation plan",
+        "tests/hardware/models/llama3_8b/test_hf_generate.py"
+      ],
+      "enabled": true,
+      "disabled_classification": null,
+      "machine_environment_overrides": {
+        "bh-qb-05": {
+          "TT_VISIBLE_DEVICES": null
+        }
+      }
+    },
+    {
+      "id": "wh-n150-llama3-8b-hf-generate-trace",
+      "priority": 47,
+      "stage": "e2e",
+      "architecture": "wormhole",
+      "mesh_device": "N150",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/hardware/models/llama3_8b/test_hf_generate.py::test_generate_trace_device_greedy_matches_eager_host[batch1-trace-all-device-greedy]"
+      },
+      "timeout_seconds": 3600,
+      "environment": {
+        "MESH_DEVICE": "N150",
+        "HF_MODEL": "meta-llama/Llama-3.1-8B-Instruct",
+        "HF_HOME": "/proj_sw/user_dev/huggingface",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TT_CACHE_PATH": "{checkout}/model_cache/llama3_8b",
+        "PYTEST_ADDOPTS": "-rP"
+      },
+      "cache_requirement": {
+        "kind": "established_warm_model_cache",
+        "model": "llama3_8b",
+        "root_semantics": "model root; model appends topology exactly once",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "N150 is a single-device selection on wh-lb-42; physical host inventory recorded separately",
+        "selection_environment": {
+          "MESH_DEVICE": "N150"
+        }
+      },
+      "acceptance_types": [
+        "traced_device_greedy_matches_eager_host",
+        "verified_prefill_decode_trace_replay",
+        "repeated_call_isolation",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "approved HF text generation plan",
+        "tests/hardware/models/llama3_8b/test_hf_generate.py"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "bh-p150-llama3-8b-hf-generate-trace",
+      "priority": 48,
+      "stage": "e2e",
+      "architecture": "blackhole",
+      "mesh_device": "P150",
+      "machine_pool": [
+        "bh-lb-11",
+        "bh-qb-05"
+      ],
+      "selector": {
+        "target": "tests/hardware/models/llama3_8b/test_hf_generate.py::test_generate_trace_device_greedy_matches_eager_host[batch1-trace-all-device-greedy]"
+      },
+      "timeout_seconds": 3600,
+      "environment": {
+        "MESH_DEVICE": "P150",
+        "HF_MODEL": "meta-llama/Llama-3.1-8B-Instruct",
+        "HF_HOME": "/proj_sw/user_dev/huggingface",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TT_CACHE_PATH": "{checkout}/model_cache/llama3_8b",
+        "PYTEST_ADDOPTS": "-rP"
+      },
+      "cache_requirement": {
+        "kind": "established_warm_model_cache",
+        "model": "llama3_8b",
+        "root_semantics": "model root; model appends topology exactly once",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "MESH_DEVICE=P150 selects one P150 device; physical host inventory recorded separately",
+        "selection_environment": {
+          "MESH_DEVICE": "P150"
+        },
+        "allowed_physical_cluster_types": [
+          "development loudbox",
+          "P150_X4",
+          "P150_X8"
+        ]
+      },
+      "acceptance_types": [
+        "traced_device_greedy_matches_eager_host",
+        "verified_prefill_decode_trace_replay",
+        "repeated_call_isolation",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "approved HF text generation plan",
+        "tests/hardware/models/llama3_8b/test_hf_generate.py"
+      ],
+      "enabled": true,
+      "disabled_classification": null,
+      "machine_environment_overrides": {
+        "bh-qb-05": {
+          "TT_VISIBLE_DEVICES": null
+        }
+      }
+    },
+    {
+      "id": "wh-n150-llama3-8b-token-accuracy",
+      "priority": 49,
+      "stage": "e2e",
+      "architecture": "wormhole",
+      "mesh_device": "N150",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/hardware/models/llama3_8b/test_demo.py::test_llama3_8b[wormhole_b0-performance-token-accuracy-repeat_batch-1-prefetcher-off-N150]"
+      },
+      "timeout_seconds": 3600,
+      "environment": {
+        "MESH_DEVICE": "N150",
+        "HF_MODEL": "meta-llama/Llama-3.1-8B-Instruct",
+        "HF_HOME": "/proj_sw/user_dev/huggingface",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TT_CACHE_PATH": "{checkout}/model_cache/llama3_8b",
+        "PYTEST_ADDOPTS": "-rP"
+      },
+      "cache_requirement": {
+        "kind": "established_warm_model_cache",
+        "model": "llama3_8b",
+        "root_semantics": "model root; model appends topology exactly once",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "N150 is a single-device selection on wh-lb-42; physical host inventory recorded separately",
+        "selection_environment": {
+          "MESH_DEVICE": "N150"
+        }
+      },
+      "acceptance_types": [
+        "token_accuracy_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "approved HF text generation plan: cached HF reference comparison",
+        "examples/llama3_8b/benchmark.py: N150 performance top1>=90%, top5>=97%",
+        "tests/hardware/models/llama3_8b/test_demo.py"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "wh-n150-llama3-8b-hf-demo-cli",
+      "priority": 50,
+      "stage": "e2e",
+      "architecture": "wormhole",
+      "mesh_device": "N150",
+      "machine_pool": [
+        "wh-lb-42"
+      ],
+      "selector": {
+        "target": "tests/hardware/models/llama3_8b/test_hf_generate.py::test_hf_style_demo_cli"
+      },
+      "timeout_seconds": 3600,
+      "environment": {
+        "MESH_DEVICE": "N150",
+        "HF_MODEL": "meta-llama/Llama-3.1-8B-Instruct",
+        "HF_HOME": "/proj_sw/user_dev/huggingface",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TT_CACHE_PATH": "{checkout}/model_cache/llama3_8b",
+        "PYTEST_ADDOPTS": "-rP"
+      },
+      "cache_requirement": {
+        "kind": "established_warm_model_cache",
+        "model": "llama3_8b",
+        "root_semantics": "model root; model appends topology exactly once",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "N150 is a single-device selection on wh-lb-42; physical host inventory recorded separately",
+        "selection_environment": {
+          "MESH_DEVICE": "N150"
+        }
+      },
+      "acceptance_types": [
+        "public_hf_demo_cli",
+        "decoded_text",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "examples/llama3_8b/demo.py",
+        "tests/hardware/models/llama3_8b/test_hf_generate.py"
+      ],
+      "enabled": true,
+      "disabled_classification": null
+    },
+    {
+      "id": "bh-p150-llama3-8b-hf-demo-cli",
+      "priority": 51,
+      "stage": "e2e",
+      "architecture": "blackhole",
+      "mesh_device": "P150",
+      "machine_pool": [
+        "bh-lb-11",
+        "bh-qb-05"
+      ],
+      "selector": {
+        "target": "tests/hardware/models/llama3_8b/test_hf_generate.py::test_hf_style_demo_cli"
+      },
+      "timeout_seconds": 3600,
+      "environment": {
+        "MESH_DEVICE": "P150",
+        "HF_MODEL": "meta-llama/Llama-3.1-8B-Instruct",
+        "HF_HOME": "/proj_sw/user_dev/huggingface",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TT_CACHE_PATH": "{checkout}/model_cache/llama3_8b",
+        "PYTEST_ADDOPTS": "-rP"
+      },
+      "cache_requirement": {
+        "kind": "established_warm_model_cache",
+        "model": "llama3_8b",
+        "root_semantics": "model root; model appends topology exactly once",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "MESH_DEVICE=P150 selects one P150 device; physical host inventory recorded separately",
+        "selection_environment": {
+          "MESH_DEVICE": "P150"
+        },
+        "allowed_physical_cluster_types": [
+          "development loudbox",
+          "P150_X4",
+          "P150_X8"
+        ]
+      },
+      "acceptance_types": [
+        "public_hf_demo_cli",
+        "decoded_text",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "examples/llama3_8b/demo.py",
+        "tests/hardware/models/llama3_8b/test_hf_generate.py"
+      ],
+      "enabled": true,
+      "disabled_classification": null,
+      "machine_environment_overrides": {
+        "bh-qb-05": {
+          "TT_VISIBLE_DEVICES": null
+        }
+      }
     }
   ]
 }

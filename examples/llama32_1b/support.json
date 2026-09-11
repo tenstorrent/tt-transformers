@@ -87,7 +87,7 @@
   },
   "limits": {
     "source_proven": [
-      "Demo cases cover active batch 1 or 32",
+      "Benchmark cases cover active batch 1 or 32",
       "standard/CI sequence budgets are 1024/2048; DP smokes reach 4096",
       "TP1, TP2, and TP8 model paths are declared; TP4 DP lanes are deliberately rejected",
       "N150 batch-32-ci at sequence 2048 is not enabled",
@@ -95,7 +95,7 @@
     ]
   },
   "features": {
-    "device_sampling": "Host and on-device paths exist; the demo default is host sampling.",
+    "device_sampling": "Host and on-device paths exist; the benchmark default is host sampling.",
     "trace": "case_and_topology_specific"
   }
 }

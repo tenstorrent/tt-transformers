@@ -1,5 +1,28 @@
 # Mistral-7B with TTTv2
 
+## Generate text
+
+[`demo.py`](demo.py) loads the public model with `hf_generator.from_pretrained`,
+formats a chat with `model.tokenizer.apply_chat_template`, calls
+`model.generate`, prints the decoded continuation, and cleans up the model.
+
+With the checkpoint cached locally, run:
+
+```bash
+HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+MESH_DEVICE=N150 python -m examples.mistral_7b.demo \
+  --hf-model "mistralai/Mistral-7B-Instruct-v0.3" \
+  --prompt "Explain paged attention briefly." \
+  --max-new-tokens 40 --max-seq-len 2048
+```
+
+The inputs stay as CPU PyTorch tensors; the model handles TT transfers and KV
+storage. `MESH_DEVICE` selects the caller-owned mesh. Configure `TT_CACHE_PATH`
+when using an existing writable TT model cache, as described below.
+
+[`benchmark.py`](benchmark.py) contains the accuracy, performance, tracing, and
+DP workloads. Run its `--case` / `--optimizations` commands for those checks.
+
 <!-- BEGIN GENERATED SUPPORT -->
 
 ## Standalone support contract
@@ -39,10 +62,10 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 
 ### Proven limits and features
 
-- Demo cases cover active batch 1 or 32.
+- Benchmark cases cover active batch 1 or 32.
 - standard/CI budgets are 1024/2048; retained DP smokes reach 4096.
 - N300 DP2 and T3K DP8 use one-device lanes; other retained DP factors skip.
-- Device sampling: Host and on-device top-k paths exist; the demo default is host sampling.
+- Device sampling: Host and on-device top-k paths exist; the benchmark default is host sampling.
 - Trace support is case/topology-specific; use the exact hardware test parameters and capability manifest rather than extrapolating a generic trace claim.
 
 ### Checkpoint, cache, and offline requirements
@@ -59,10 +82,10 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 python -m pip install -e '.[examples,test]'
 ```
 
-Representative run using the first declared geometry:
+Representative benchmark using the first declared geometry:
 
 ```bash
-HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 MESH_DEVICE=N150 HF_MODEL=mistralai/Mistral-7B-Instruct-v0.3 python -m examples.mistral_7b.demo --case token-accuracy --optimizations performance
+HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 MESH_DEVICE=N150 HF_MODEL=mistralai/Mistral-7B-Instruct-v0.3 python -m examples.mistral_7b.benchmark --case token-accuracy --optimizations performance
 ```
 
 Collect the equivalent hardware gate without running it:
@@ -103,21 +126,19 @@ consolidation and does not use `src/tt_transformers/models/executor.py`.
 
 ```text
 Hugging Face checkpoint
-  -> hf_adaptor.py: provider metadata, tokenizer, and weight conversion
+  -> hf_generator.py: checkpoint/tokenizer loading, executor construction, and HF generation
   -> model.py: Mistral tensor graph composed from TTTv2 modules
-  -> executor.py: direct composition of common runtime owners for one lane
-  -> generator.py: vLLM construction, DP composition, and dispatch
+  -> vllm_generator.py: vLLM construction, DP composition, and dispatch
 ```
 
 ## Files
 
 | File | Responsibility |
 | --- | --- |
-| `hf_adaptor.py` | Resolve provider configuration/tokenizer and construct the product model |
+| `hf_generator.py` | Resolve provider configuration/tokenizer and construct the product model; construct the executor and expose `.generate()` |
 | `weight_utils.py` | Convert and map provider weights |
 | `model.py` | Build and execute the TTTv2 Mistral transformer graph |
-| `executor.py` | Directly compose one execution lane and own its resources |
-| `generator.py` | Build lanes, configure the vLLM boundary, and select eager/traced execution |
+| `vllm_generator.py` | Build lanes, configure the vLLM boundary, and select eager/traced execution |
 
 ## Tensor-module composition
 

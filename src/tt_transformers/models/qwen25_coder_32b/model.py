@@ -977,11 +977,11 @@ class Qwen25Coder32B(LightweightModule):
         block_size: int = 32,
         executor_mode: bool = False,
     ) -> Qwen25Coder32B:
-        """Compatibility constructor; provider loading lives in ``hf_adaptor``."""
+        """Compatibility constructor; provider loading lives in ``hf_generator``."""
 
-        from tt_transformers.models.qwen25_coder_32b.hf_adaptor import (
+        from tt_transformers.models.qwen25_coder_32b.hf_generator import (
             _INTERNAL_KV_CACHE_CONFIG,
-            from_pretrained,
+            _load_model,
         )
 
         optimizations: str | Qwen25Coder32BPrecisionConfig
@@ -991,7 +991,7 @@ class Qwen25Coder32B(LightweightModule):
             optimizations = "accuracy"
         else:
             optimizations = precision
-        product = from_pretrained(
+        product = _load_model(
             mesh_device,
             hf_model=hf_model_id,
             hf_revision=revision,

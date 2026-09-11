@@ -9,7 +9,7 @@ Tensor layout contracts:
   - **Prefill** hidden states: ``[1, 1, S, dim]`` TILE, ``S % 128 == 0``.
   - **Decode** hidden states: ``[1, 1, B, dim]`` TILE (``B`` padded to tile in modules).
 
-The tensor graph is provider-neutral. ``hf_adaptor.py`` owns Hugging Face loading and
+The tensor graph is provider-neutral. ``hf_generator.py`` owns Hugging Face loading and
 builds :class:`Mistral7BTransformerConfig`; the model exposes the strict duck-typed
 surface consumed by ``tt_transformers.llm_runtime``.
 """

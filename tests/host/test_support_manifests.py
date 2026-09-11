@@ -63,9 +63,17 @@ def test_examples_are_pytest_free_and_tests_depend_on_examples_only_one_way():
 @pytest.mark.host
 def test_hardware_wrappers_import_public_example_modules():
     wrappers = sorted((ROOT / "tests/hardware/models").glob("*/test_*.py"))
-    if len(wrappers) != 14:
-        raise AssertionError(f"expected 14 hardware wrappers, got {len(wrappers)}")
+    if len(wrappers) != 15:
+        raise AssertionError(f"expected 15 hardware wrappers, got {len(wrappers)}")
     for path in wrappers:
         source = path.read_text()
         if "from examples." not in source or "run_" not in source:
             raise AssertionError(f"{path}: not delegated to a public example helper")
+        if path.name == "test_demo.py":
+            tree = ast.parse(source, filename=str(path))
+            assert any(
+                isinstance(node, ast.ImportFrom)
+                and node.module == f"examples.{path.parent.name}"
+                and any(alias.name == "benchmark" and alias.asname == "example" for alias in node.names)
+                for node in tree.body
+            ), f"{path}: hardware benchmark gate must delegate to benchmark.py"

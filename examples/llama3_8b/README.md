@@ -1,5 +1,28 @@
 # Llama 3.1 8B with TTTv2
 
+## Generate text
+
+[`demo.py`](demo.py) loads the public model with `hf_generator.from_pretrained`,
+formats a chat with `model.tokenizer.apply_chat_template`, calls
+`model.generate`, prints the decoded continuation, and cleans up the model.
+
+With the checkpoint cached locally, run:
+
+```bash
+HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+MESH_DEVICE=N150 python -m examples.llama3_8b.demo \
+  --hf-model "meta-llama/Llama-3.1-8B-Instruct" \
+  --prompt "Explain paged attention briefly." \
+  --max-new-tokens 40 --max-seq-len 2048
+```
+
+The inputs stay as CPU PyTorch tensors; the model handles TT transfers and KV
+storage. `MESH_DEVICE` selects the caller-owned mesh. Configure `TT_CACHE_PATH`
+when using an existing writable TT model cache, as described below.
+
+[`benchmark.py`](benchmark.py) contains the accuracy, performance, tracing, and
+DP workloads. Run its `--case` / `--optimizations` commands for those checks.
+
 <!-- BEGIN GENERATED SUPPORT -->
 
 ## Standalone support contract
@@ -45,7 +68,7 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 
 ### Proven limits and features
 
-- Demo cases cover active batch 1 or 32.
+- Benchmark cases cover active batch 1 or 32.
 - standard/CI budgets are 1024/2048; the DP4 case reaches 4096.
 - Blackhole contract buckets are 1024, with P150x4 DP4 at 4096.
 - device sampling keeps Blackhole prefill sequential unless the controlled invariance experiment proves otherwise.
@@ -66,10 +89,10 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 python -m pip install -e '.[examples,test]'
 ```
 
-Representative run using the first declared geometry:
+Representative benchmark using the first declared geometry:
 
 ```bash
-HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 MESH_DEVICE=N150 HF_MODEL=meta-llama/Llama-3.1-8B-Instruct python -m examples.llama3_8b.demo --case token-accuracy --optimizations performance
+HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 MESH_DEVICE=N150 HF_MODEL=meta-llama/Llama-3.1-8B-Instruct python -m examples.llama3_8b.benchmark --case token-accuracy --optimizations performance
 ```
 
 Collect the equivalent hardware gate without running it:
@@ -105,14 +128,13 @@ PYTHONPATH=src MESH_DEVICE=N150 pytest --collect-only -q tests/hardware/models/l
 This directory contains the model-owned Llama 3.1 8B product path built from
 TTTv2 modules and the reusable common LLM runtime.
 
-The path has four layers:
+The model entry points share one tensor implementation:
 
 ```text
 model provider / checkpoint
-  -> hf_adaptor.py: provider metadata, tokenizer, and weight conversion
+  -> hf_generator.py: checkpoint/tokenizer loading, executor construction, and HF generation
   -> model.py: TTTv2 tensor model assembled from reusable modules
-  -> executor.py: thin typed entry point into the Llama family executor
-  -> generator.py: vLLM-facing construction, DP composition, and dispatch
+  -> vllm_generator.py: vLLM-facing construction, DP composition, and dispatch
 ```
 
 The most important boundary is between the tensor model and runtime
@@ -130,10 +152,9 @@ orchestration:
 
 | File | Responsibility |
 | --- | --- |
-| `hf_adaptor.py` | Load HF config/tokenizer/weights, convert provider naming/layout, compute Llama 3 RoPE values, and create the product model |
+| `hf_generator.py` | Load HF config/tokenizer/weights, convert provider naming/layout, compute Llama 3 RoPE values, and create the product model; construct the executor and expose `.generate()` |
 | `model.py` | Build and execute the TTTv2 Llama transformer graph |
-| `executor.py` | Preserve the model-local typed builder/import surface over `llama3_executor.py` |
-| `generator.py` | Construct lanes, optionally compose DP, normalize vLLM calls, and select eager/traced execution |
+| `vllm_generator.py` | Construct lanes, optionally compose DP, normalize vLLM calls, and select eager/traced execution |
 
 ## End-to-end object graph
 
@@ -143,6 +164,7 @@ For one lane:
 Llama3ForCausalLM
 ├── tokenizer
 ├── Llama3RuntimeConfig
+├── executor → Llama3Executor below
 └── Llama3Transformer1D
     ├── Embedding1D
     ├── RotarySetup1D
@@ -186,7 +208,7 @@ Llama3Generator
 
 ### Provider adaptation
 
-`from_pretrained(...)` in `hf_adaptor.py` is the current Hugging Face provider
+`from_pretrained(...)` in `hf_generator.py` is the current Hugging Face provider
 entry point. It:
 
 1. resolves the model ID;
@@ -199,9 +221,15 @@ entry point. It:
 7. converts Q/K rotary weight layout;
 8. maps HF names to the model's Meta-style names;
 9. builds `Llama3Transformer1DConfig`;
-10. constructs `Llama3Transformer1D`; and
-11. returns `Llama3ForCausalLM`, which packages the tensor model, tokenizer,
-    generation defaults, and `Llama3RuntimeConfig`.
+10. constructs `Llama3Transformer1D`;
+11. constructs and attaches one `Llama3Executor`; and
+12. returns `Llama3ForCausalLM`, which packages the tensor model, tokenizer,
+    generation defaults, `Llama3RuntimeConfig`, and executor-backed `.generate()`.
+
+For tokenizer inputs and cleanup, see the
+[HF generation example](../../src/tt_transformers/models/README.md#hf-style-text-generation).
+The benchmark and vLLM entry point use `_load_model()` from the same module
+to construct their own executor without creating a second owner.
 
 Provider-facing concerns stop there. Neither `Llama3Executor` nor the common
 runtime reads HF config or converts HF weights.
@@ -554,7 +582,7 @@ fits its established lifecycle. A demonstrated family may add a small policy
 facade such as `llama3_executor.py` or `qwen2_executor.py`.
 
 When a model has genuinely distinct orchestration, its model-local
-`executor.py` may instead compose the focused `llm_runtime` modules directly.
+`hf_generator.py` may instead compose the focused `llm_runtime` modules directly.
 Either construction should:
 
 - translate model metadata into resolved common runtime configs;
@@ -595,13 +623,13 @@ runtime mechanics while owning different TTTv2 module graphs and executors.
 
 vLLM is one facade. An SGLang integration can build the same model executor and
 provide an SGLang-specific adapter for request fields, cache negotiation,
-trace selection, and asynchronous output conventions. A direct demo or custom
+trace selection, and asynchronous output conventions. A benchmark or custom
 service can bypass server adapters and call the model-owned executor with an
 explicit execution target.
 
 ### Other model providers
 
-Hugging Face is currently isolated in `hf_adaptor.py`. Another provider can
+Hugging Face is currently isolated in `hf_generator.py`. Another provider can
 supply:
 
 - architecture metadata;

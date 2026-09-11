@@ -329,7 +329,7 @@ def test_implicit_preflight_confirms_the_exact_identity_namespace(tmp_path):
 
 @pytest.mark.host
 def test_all_twelve_hf_adaptors_use_the_shared_policy():
-    adaptors = sorted((ROOT / "src/tt_transformers/models").glob("*/hf_adaptor.py"))
+    adaptors = sorted((ROOT / "src/tt_transformers/models").glob("*/hf_generator.py"))
     assert len(adaptors) == 12
     for path in adaptors:
         source = path.read_text(encoding="utf-8")
@@ -384,7 +384,7 @@ def test_all_twelve_hf_adaptors_use_the_shared_policy():
 def test_adaptor_default_cache_keeps_pinned_topology_suffix(
     monkeypatch, tmp_path, model, num_devices, expected_topology, cache_kwargs
 ):
-    path = ROOT / f"src/tt_transformers/models/{model}/hf_adaptor.py"
+    path = ROOT / f"src/tt_transformers/models/{model}/hf_generator.py"
     source = path.read_text(encoding="utf-8")
     tree = ast.parse(source, filename=str(path))
     function_name = "_model_cache_path" if model == "llama3_8b" else "_cache_path"

@@ -10,7 +10,7 @@ import pytest
 from examples.common.model_targets import resolve_accuracy_targets, resolve_metric_tolerance
 from examples.common.trace_region_sizes import resolve_trace_region_size
 
-_DEMO_PATH = "examples/llama33_70b/demo.py"
+_DEMO_PATH = "examples/llama33_70b/benchmark.py"
 _HARDWARE_DEMO_PATH = "tests/hardware/models/llama33_70b/test_demo.py"
 _DEMO_SOURCE = "\n".join(
     (Path(_DEMO_PATH).read_text(encoding="utf-8"), Path(_HARDWARE_DEMO_PATH).read_text(encoding="utf-8"))
@@ -132,8 +132,8 @@ def test_required_capability_policy_allows_observation_but_never_acceptance_with
 @pytest.mark.model
 def test_demo_uses_model_owned_runtime_provider_and_shared_helpers():
     imports = [ast.unparse(node) for node in _DEMO_TREE.body if isinstance(node, (ast.Import, ast.ImportFrom))]
-    assert any("tt_transformers.models.llama33_70b.executor" in statement for statement in imports)
-    assert any("tt_transformers.models.llama33_70b.hf_adaptor" in statement for statement in imports)
+    assert any("tt_transformers.models.llama33_70b.hf_generator" in statement for statement in imports)
+    assert any("tt_transformers.models.llama33_70b.hf_generator" in statement for statement in imports)
     assert any("examples.common.run_helpers" in statement for statement in imports)
     assert any(
         isinstance(node, ast.ImportFrom)

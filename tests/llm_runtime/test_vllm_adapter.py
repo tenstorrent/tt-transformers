@@ -17,15 +17,15 @@ from tt_transformers.llm_runtime.vllm_adapter import (
     VLLMAdapter,
     VLLMAdapterConfig,
 )
-from tt_transformers.models.llama3_8b import generator as llama3_generator_module
-from tt_transformers.models.llama3_8b.executor import Llama3Executor
-from tt_transformers.models.llama3_8b.generator import Llama3Generator
-from tt_transformers.models.llama33_70b import generator as llama70_generator_module
-from tt_transformers.models.qwen2_7b.generator import Qwen2Generator
-from tt_transformers.models.qwen3_32b import generator as qwen3_generator_module
-from tt_transformers.models.qwen25_7b.generator import Qwen25Generator
-from tt_transformers.models.qwen25_72b.generator import Qwen25_72BGenerator
-from tt_transformers.models.qwen25_coder_32b.generator import Qwen25Coder32BGenerator
+from tt_transformers.models.llama3_8b import vllm_generator as llama3_generator_module
+from tt_transformers.models.llama3_8b.hf_generator import Llama3Executor
+from tt_transformers.models.llama3_8b.vllm_generator import Llama3Generator
+from tt_transformers.models.llama33_70b import vllm_generator as llama70_generator_module
+from tt_transformers.models.qwen2_7b.vllm_generator import Qwen2Generator
+from tt_transformers.models.qwen3_32b import vllm_generator as qwen3_generator_module
+from tt_transformers.models.qwen25_7b.vllm_generator import Qwen25Generator
+from tt_transformers.models.qwen25_72b.vllm_generator import Qwen25_72BGenerator
+from tt_transformers.models.qwen25_coder_32b.vllm_generator import Qwen25Coder32BGenerator
 
 
 def _adapter(

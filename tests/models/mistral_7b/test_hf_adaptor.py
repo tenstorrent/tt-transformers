@@ -6,9 +6,10 @@ import pytest
 import torch
 from transformers import MistralConfig, MistralForCausalLM
 
-from tt_transformers.models.mistral_7b import hf_adaptor, weight_utils
+from tt_transformers.models.mistral_7b import hf_generator as hf_adaptor
 from tt_transformers.models.mistral_7b import model as mistral_model
-from tt_transformers.models.mistral_7b.hf_adaptor import (
+from tt_transformers.models.mistral_7b import weight_utils
+from tt_transformers.models.mistral_7b.hf_generator import (
     Mistral7BForCausalLM,
     Mistral7BRuntimeConfig,
     _trace_seq_lens,

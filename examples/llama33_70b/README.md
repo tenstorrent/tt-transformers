@@ -1,5 +1,28 @@
 # Llama 3.3 70B with TTTv2
 
+## Generate text
+
+[`demo.py`](demo.py) loads the public model with `hf_generator.from_pretrained`,
+formats a chat with `model.tokenizer.apply_chat_template`, calls
+`model.generate`, prints the decoded continuation, and cleans up the model.
+
+With the checkpoint cached locally, run:
+
+```bash
+HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+MESH_DEVICE=T3K python -m examples.llama33_70b.demo \
+  --hf-model "meta-llama/Llama-3.3-70B-Instruct" \
+  --prompt "Explain paged attention briefly." \
+  --max-new-tokens 40 --max-seq-len 2048
+```
+
+The inputs stay as CPU PyTorch tensors; the model handles TT transfers and KV
+storage. `MESH_DEVICE` selects the caller-owned mesh. Configure `TT_CACHE_PATH`
+when using an existing writable TT model cache, as described below.
+
+[`benchmark.py`](benchmark.py) contains the accuracy, performance, tracing, and
+DP workloads. Run its `--case` / `--optimizations` commands for those checks.
+
 <!-- BEGIN GENERATED SUPPORT -->
 
 ## Standalone support contract
@@ -36,7 +59,7 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 
 ### Proven limits and features
 
-- Demo cases cover active batch 1 or 32.
+- Benchmark cases cover active batch 1 or 32.
 - P150x4 contract buckets are 4096 for token accuracy and 1024 for eval/performance cases.
 - one model replica requires the full declared lane; every collected DP>1 case skips.
 - P150x4 long-prefill coverage is not established.
@@ -57,10 +80,10 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 python -m pip install -e '.[examples,test]'
 ```
 
-Representative run using the first declared geometry:
+Representative benchmark using the first declared geometry:
 
 ```bash
-HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 MESH_DEVICE=T3K HF_MODEL=meta-llama/Llama-3.3-70B-Instruct python -m examples.llama33_70b.demo --case token-accuracy --optimizations performance
+HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 MESH_DEVICE=T3K HF_MODEL=meta-llama/Llama-3.3-70B-Instruct python -m examples.llama33_70b.benchmark --case token-accuracy --optimizations performance
 ```
 
 Collect the equivalent hardware gate without running it:
@@ -99,10 +122,9 @@ This directory contains the Llama 3.3 70B TTTv2 product path.
 
 ```text
 meta-llama/Llama-3.3-70B-Instruct
-  -> hf_adaptor.py: provider metadata, tokenizer, and weights
+  -> hf_generator.py: checkpoint/tokenizer loading, executor construction, and HF generation
   -> model.py: multi-device TTTv2 Llama graph
-  -> executor.py: thin typed entry point into llama3_executor.py
-  -> generator.py: vLLM construction, DP lanes, and dispatch
+  -> vllm_generator.py: vLLM construction, DP lanes, and dispatch
 ```
 
 `model.py` composes reusable embedding, rotary, RMSNorm, attention, MLP,

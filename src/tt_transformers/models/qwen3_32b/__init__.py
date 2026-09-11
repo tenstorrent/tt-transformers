@@ -15,10 +15,10 @@ _EXPORTS = {
     "Qwen3_32BPrecisionConfig": ("tt_transformers.models.qwen3_32b.model", "Qwen3_32BPrecisionConfig"),
     "QWEN3_32B_ACCURACY": ("tt_transformers.models.qwen3_32b.model", "QWEN3_32B_ACCURACY"),
     "QWEN3_32B_PERFORMANCE": ("tt_transformers.models.qwen3_32b.model", "QWEN3_32B_PERFORMANCE"),
-    "Qwen3_32BGenerator": ("tt_transformers.models.qwen3_32b.generator", "Qwen3_32BGenerator"),
-    "Qwen3_32BGeneratorConfig": ("tt_transformers.models.qwen3_32b.generator", "Qwen3_32BGeneratorConfig"),
-    "EagerQwen3_32BExecutor": ("tt_transformers.models.qwen3_32b.executor", "EagerQwen3_32BExecutor"),
-    "TracedQwen3_32BExecutor": ("tt_transformers.models.qwen3_32b.executor", "TracedQwen3_32BExecutor"),
+    "Qwen3_32BGenerator": ("tt_transformers.models.qwen3_32b.vllm_generator", "Qwen3_32BGenerator"),
+    "Qwen3_32BGeneratorConfig": ("tt_transformers.models.qwen3_32b.vllm_generator", "Qwen3_32BGeneratorConfig"),
+    "EagerQwen3_32BExecutor": ("tt_transformers.models.qwen3_32b.hf_generator", "EagerQwen3_32BExecutor"),
+    "TracedQwen3_32BExecutor": ("tt_transformers.models.qwen3_32b.hf_generator", "TracedQwen3_32BExecutor"),
 }
 
 __all__ = [

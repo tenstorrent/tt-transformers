@@ -35,10 +35,9 @@ repository checkout and are not installed by the wheel.
 
 | File | Responsibility |
 |---|---|
-| `hf_adaptor.py` | Adapt Hugging Face configuration, checkpoints, and tokenizers to the model. |
+| `hf_generator.py` | Load Hugging Face checkpoints/tokenizers, construct an executor, and expose `.generate()`. |
 | `model.py` | Compose reusable modules into the model's TTNN tensor computation and layouts. |
-| `executor.py` | Construct or specialize model execution using shared runtime owners. |
-| `generator.py` | Expose direct or vLLM-facing generation calls and delegate execution. |
+| `vllm_generator.py` | Preserve the scheduler-facing vLLM interface and delegate execution. |
 | `weight_utils.py` | Convert model-specific weights where a separate helper is needed. |
 | `__init__.py` | Declare the model package's intended import surface. |
 
@@ -52,6 +51,76 @@ prefill/decode, cache, trace, and cleanup machinery belongs in
 For installation and TTNN version selection, see
 [release compatibility](../README.md#release-compatibility). Each
 tt-transformers release uses a pinned, publicly available TTNN package.
+
+## HF-style text generation
+
+Load a model with an already-open TT mesh and pass tokenizer outputs directly
+to its `generate()` method:
+
+```python
+from tt_transformers.models.llama3_8b.hf_generator import from_pretrained
+
+model = from_pretrained(
+    mesh_device,
+    hf_model="meta-llama/Llama-3.1-8B-Instruct",
+    max_batch_size=1,
+    max_seq_len=2048,
+)
+try:
+    inputs = model.tokenizer.apply_chat_template(
+        [{"role": "user", "content": "Explain paged attention briefly."}],
+        add_generation_prompt=True,
+        tokenize=True,
+        return_dict=True,
+        return_tensors="pt",
+    )
+    outputs = model.generate(**inputs, max_new_tokens=40, do_sample=False)
+    continuation = outputs[:, inputs["input_ids"].shape[1]:]
+    print(model.tokenizer.batch_decode(continuation, skip_special_tokens=True))
+finally:
+    model.cleanup()
+```
+
+`input_ids` and optional `attention_mask` stay as CPU PyTorch tensors. The
+executor handles TTNN conversion and device transfers internally; there is no
+`.to(model.device)` step. Independently loaded HF tokenizers work with the same
+interface. The returned CPU `torch.LongTensor` contains the original prompt
+followed by the continuation, in the original batch order. Finished rows are
+padded while other rows continue.
+
+Supported generation options are `max_new_tokens`, `do_sample`, `temperature`,
+`top_k`, `top_p`, `eos_token_id`, and `pad_token_id`. Each call resolves its
+options without changing checkpoint defaults. Unsupported generation options
+raise an error. The interface does not implement HF's complete
+`GenerationMixin` API, a full-sequence `forward()` interface, or multimodal
+inputs.
+
+The loaded model owns its executor, internal KV cache, and generation request
+state. Compatible repeated calls reuse execution resources and start with a
+fresh request. `cleanup()` releases the executor before the tensor model and
+leaves the caller's mesh open. Advanced callers may supply the existing typed
+`executor_config` at loading time. Eager execution and host token selection are
+the defaults. A device-sampling executor can use native greedy selection;
+stochastic generation uses host logits to preserve the requested top-k/top-p
+semantics. Trace configurations use the existing warmup and coverage checks;
+a request outside captured coverage raises an error.
+
+Every repository `demo.py` follows this public API directly: load the model,
+apply its tokenizer's chat template, call `.generate()`, decode the continuation,
+and clean up. The [example commands](../../../examples/README.md#generate-text)
+accept `--prompt`, `--max-new-tokens`, `--max-seq-len`, and `--hf-model`.
+
+The separate `benchmark.py` workloads and `vllm_generator.py` use the private
+`_load_model()` helper when constructing their own execution configuration.
+Benchmarks retain their accuracy/performance policies; vLLM retains
+scheduler-controlled cache allocation and async decode behavior. Both keep
+one executor per tensor model. Applications use the public `from_pretrained()`
+loader.
+
+External vLLM registrations must point to the renamed module, for example
+`tt_transformers.models.llama3_8b.vllm_generator:Llama3Generator`. Class names
+and serving method signatures are unchanged. The old model-local
+`hf_adaptor`, `executor`, and `generator` module paths have been removed.
 
 ## Model lifecycle
 

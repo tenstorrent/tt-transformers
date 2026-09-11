@@ -83,7 +83,7 @@ def test_transformers_5_12_has_builtin_qwen_loader_registrations():
 @pytest.mark.host
 @pytest.mark.parametrize("model_name", QWEN_ADAPTORS)
 def test_qwen_tokenizer_loaders_do_not_opt_in_by_default(monkeypatch, model_name):
-    adaptor = importlib.import_module(f"tt_transformers.models.{model_name}.hf_adaptor")
+    adaptor = importlib.import_module(f"tt_transformers.models.{model_name}.hf_generator")
     observed = []
 
     def fake_from_pretrained(*args, **kwargs):
@@ -99,7 +99,7 @@ def test_qwen_tokenizer_loaders_do_not_opt_in_by_default(monkeypatch, model_name
 
 @pytest.mark.host
 def test_qwen25_72b_config_and_model_loaders_do_not_forward_remote_code(monkeypatch):
-    adaptor = importlib.import_module("tt_transformers.models.qwen25_72b.hf_adaptor")
+    adaptor = importlib.import_module("tt_transformers.models.qwen25_72b.hf_generator")
     observed = []
     config = SimpleNamespace(
         num_hidden_layers=80,
@@ -132,7 +132,7 @@ def test_qwen25_72b_config_and_model_loaders_do_not_forward_remote_code(monkeypa
 
 @pytest.mark.host
 def test_existing_llama3_remote_code_opt_in_remains_explicit_and_defaults_false(monkeypatch):
-    adaptor = importlib.import_module("tt_transformers.models.llama3_8b.hf_adaptor")
+    adaptor = importlib.import_module("tt_transformers.models.llama3_8b.hf_generator")
     assert inspect.signature(adaptor.load_tokenizer).parameters["trust_remote_code"].default is False
     assert inspect.signature(adaptor.load_converted_state_dict).parameters["trust_remote_code"].default is False
     observed = []

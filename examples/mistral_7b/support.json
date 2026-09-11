@@ -79,13 +79,13 @@
   },
   "limits": {
     "source_proven": [
-      "Demo cases cover active batch 1 or 32",
+      "Benchmark cases cover active batch 1 or 32",
       "standard/CI budgets are 1024/2048; retained DP smokes reach 4096",
       "N300 DP2 and T3K DP8 use one-device lanes; other retained DP factors skip"
     ]
   },
   "features": {
-    "device_sampling": "Host and on-device top-k paths exist; the demo default is host sampling.",
+    "device_sampling": "Host and on-device top-k paths exist; the benchmark default is host sampling.",
     "trace": "case_and_topology_specific"
   }
 }

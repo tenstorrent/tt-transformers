@@ -8,10 +8,7 @@ import json
 import subprocess
 from pathlib import Path
 
-LFC_BASE = (
-    "http://large-file-cache.large-file-cache.svc.cluster.local/"
-    "/mldata/model_checkpoints/pytorch/huggingface"
-)
+LFC_BASE = "http://large-file-cache.large-file-cache.svc.cluster.local//mldata/model_checkpoints/pytorch/huggingface"
 MANIFEST = Path(__file__).with_name("llama31-8b-checkpoint.json")
 
 
@@ -30,8 +27,7 @@ def verify_file(path: Path, entry: dict) -> str:
         # HF exposes the Git blob ID of each LFS pointer even for gated files.
         # Reconstruct that pointer from the cached bytes to verify the revision.
         pointer = (
-            "version https://git-lfs.github.com/spec/v1\n"
-            f"oid sha256:{sha256.hexdigest()}\nsize {size}\n"
+            f"version https://git-lfs.github.com/spec/v1\noid sha256:{sha256.hexdigest()}\nsize {size}\n"
         ).encode()
         git_blob = hashlib.sha1(f"blob {len(pointer)}\0".encode() + pointer)
     if git_blob.hexdigest() != entry["git_blob_sha1"]:
@@ -62,9 +58,17 @@ def main() -> None:
         print(f"Downloading {name} from CIv2 LFC", flush=True)
         subprocess.run(
             [
-                "wget", "--no-proxy", "--tries=5", "--retry-connrefused",
-                "--waitretry=10", "--timeout=30", "--progress=dot:giga",
-                "--continue", "--output-document", str(destination), url,
+                "wget",
+                "--no-proxy",
+                "--tries=5",
+                "--retry-connrefused",
+                "--waitretry=10",
+                "--timeout=30",
+                "--progress=dot:giga",
+                "--continue",
+                "--output-document",
+                str(destination),
+                url,
             ],
             check=True,
             timeout=1200,

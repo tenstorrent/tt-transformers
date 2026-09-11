@@ -62,6 +62,26 @@ from `tt_transformers.models`, while reusable building blocks live under
 `tt_transformers.modules`, `tt_transformers.llm_runtime`, and
 `tt_transformers.sampling`.
 
+## Generate text
+
+From a checkout with the example dependencies and checkpoint cached locally:
+
+```bash
+HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+MESH_DEVICE=N150 python -m examples.llama3_8b.demo \
+  --hf-model meta-llama/Llama-3.1-8B-Instruct \
+  --prompt "Explain paged attention briefly." \
+  --max-new-tokens 40 --max-seq-len 2048
+```
+
+Each model's `demo.py` shows the public `from_pretrained()` → tokenizer →
+`generate()` → cleanup flow. Inputs remain CPU PyTorch tensors; the model
+handles TTNN transfers and generation resources internally. See the
+[model API example](src/tt_transformers/models/README.md#hf-style-text-generation)
+for use with an already-open mesh and the [example guide](examples/README.md)
+for other models. Accuracy and performance workloads use each model's separate
+`benchmark.py` command with `--case` and `--optimizations`.
+
 ## Learn the package
 
 - [Software architecture](docs/architecture.md)

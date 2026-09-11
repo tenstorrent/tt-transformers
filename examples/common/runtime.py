@@ -16,6 +16,29 @@ class UnsupportedConfiguration(RuntimeError):
     """A requested example geometry or asset is deliberately unsupported."""
 
 
+def mesh_device_parameters_from_env() -> dict:
+    """Resolve the explicit mesh selection for the text-generation examples."""
+    selected = os.environ.get("MESH_DEVICE", "").strip().upper()
+    shapes = {
+        "N150": (1, 1),
+        "N300": (1, 2),
+        "T3K": (1, 8),
+        "P150": (1, 1),
+        "P300": (1, 2),
+        "P150X4": (1, 4),
+        "TG": (4, 8),
+    }
+    if selected not in shapes:
+        raise UnsupportedConfiguration("Set MESH_DEVICE to N150, N300, T3K, P150, P300, P150x4, or TG")
+    shape = shapes[selected]
+    parameters = {"mesh_shape": shape, "trace_region_size": 0, "num_command_queues": 1}
+    if shape != (1, 1):
+        parameters["fabric_config"] = (
+            ttnn.FabricConfig.FABRIC_1D if selected in {"N300", "TG"} else ttnn.FabricConfig.FABRIC_1D_RING
+        )
+    return parameters
+
+
 class TemporaryPathFactory:
     """Small runtime counterpart of pytest's tmp_path_factory."""
 

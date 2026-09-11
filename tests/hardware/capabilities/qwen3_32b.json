@@ -11,9 +11,9 @@
     "plan": "SUPPORT.md",
     "integration_contract": "docs/architecture.md",
     "source_files": [
-      "examples/qwen3_32b/demo.py",
-      "src/tt_transformers/models/qwen3_32b/hf_adaptor.py",
-      "src/tt_transformers/models/qwen3_32b/generator.py"
+      "examples/qwen3_32b/benchmark.py",
+      "src/tt_transformers/models/qwen3_32b/hf_generator.py",
+      "src/tt_transformers/models/qwen3_32b/vllm_generator.py"
     ]
   },
   "scope": {

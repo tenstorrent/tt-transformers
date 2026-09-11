@@ -8,9 +8,12 @@ import pytest
 import torch
 import ttnn
 
-from tt_transformers.models.qwen3_32b import executor, generator, hf_adaptor, weight_utils
+from tt_transformers.models.qwen3_32b import hf_generator as executor
+from tt_transformers.models.qwen3_32b import hf_generator as hf_adaptor
 from tt_transformers.models.qwen3_32b import model as qwen3_model
-from tt_transformers.models.qwen3_32b.hf_adaptor import Qwen3_32BForCausalLM, Qwen3_32BRuntimeConfig, _trace_seq_lens
+from tt_transformers.models.qwen3_32b import vllm_generator as generator
+from tt_transformers.models.qwen3_32b import weight_utils
+from tt_transformers.models.qwen3_32b.hf_generator import Qwen3_32BForCausalLM, Qwen3_32BRuntimeConfig, _trace_seq_lens
 
 
 def _runtime_config():

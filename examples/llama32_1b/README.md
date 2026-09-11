@@ -1,5 +1,28 @@
 # Llama 3.2 1B with TTTv2
 
+## Generate text
+
+[`demo.py`](demo.py) loads the public model with `hf_generator.from_pretrained`,
+formats a chat with `model.tokenizer.apply_chat_template`, calls
+`model.generate`, prints the decoded continuation, and cleans up the model.
+
+With the checkpoint cached locally, run:
+
+```bash
+HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+MESH_DEVICE=N150 python -m examples.llama32_1b.demo \
+  --hf-model "meta-llama/Llama-3.2-1B-Instruct" \
+  --prompt "Explain paged attention briefly." \
+  --max-new-tokens 40 --max-seq-len 2048
+```
+
+The inputs stay as CPU PyTorch tensors; the model handles TT transfers and KV
+storage. `MESH_DEVICE` selects the caller-owned mesh. Configure `TT_CACHE_PATH`
+when using an existing writable TT model cache, as described below.
+
+[`benchmark.py`](benchmark.py) contains the accuracy, performance, tracing, and
+DP workloads. Run its `--case` / `--optimizations` commands for those checks.
+
 <!-- BEGIN GENERATED SUPPORT -->
 
 ## Standalone support contract
@@ -40,12 +63,12 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 
 ### Proven limits and features
 
-- Demo cases cover active batch 1 or 32.
+- Benchmark cases cover active batch 1 or 32.
 - standard/CI sequence budgets are 1024/2048; DP smokes reach 4096.
 - TP1, TP2, and TP8 model paths are declared; TP4 DP lanes are deliberately rejected.
 - N150 batch-32-ci at sequence 2048 is not enabled.
 - traced prefill is Q128 on N150 and Q128/Q1024 on N300/T3K.
-- Device sampling: Host and on-device paths exist; the demo default is host sampling.
+- Device sampling: Host and on-device paths exist; the benchmark default is host sampling.
 - Trace support is case/topology-specific; use the exact hardware test parameters and capability manifest rather than extrapolating a generic trace claim.
 
 ### Checkpoint, cache, and offline requirements
@@ -62,10 +85,10 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 python -m pip install -e '.[examples,test]'
 ```
 
-Representative run using the first declared geometry:
+Representative benchmark using the first declared geometry:
 
 ```bash
-HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 MESH_DEVICE=N150 HF_MODEL=meta-llama/Llama-3.2-1B-Instruct python -m examples.llama32_1b.demo --case token-accuracy --optimizations performance
+HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 MESH_DEVICE=N150 HF_MODEL=meta-llama/Llama-3.2-1B-Instruct python -m examples.llama32_1b.benchmark --case token-accuracy --optimizations performance
 ```
 
 Collect the equivalent hardware gate without running it:
@@ -103,10 +126,9 @@ This directory contains the Llama 3.2 1B TTTv2 product path.
 
 ```text
 HF checkpoint
-  -> hf_adaptor.py: provider configuration, tokenizer, and weights
+  -> hf_generator.py: checkpoint/tokenizer loading, executor construction, and HF generation
   -> model.py: TTTv2 Llama tensor graph
-  -> executor.py: thin typed entry point into llama3_executor.py
-  -> generator.py: vLLM boundary, lane construction, and dispatch
+  -> vllm_generator.py: vLLM boundary, lane construction, and dispatch
 ```
 
 `model.py` composes reusable embedding, rotary, RMSNorm, attention, MLP,
@@ -115,7 +137,7 @@ remain model-owned.
 
 ## Executor composition
 
-The model-local `executor.py` exports the historical
+The model-local `hf_generator.py` exports the historical
 `Llama32_1BExecutor`/config/builder names. The implementation lives in
 `src/tt_transformers/models/llama3_executor.py`, which supplies Llama-family Q128
 warmup policy and composes `src/tt_transformers/models/executor.py::ModelExecutor`.
@@ -137,7 +159,7 @@ refactor.
 
 ## vLLM, DP, and ownership
 
-`generator.py` builds one model/executor per lane and configures
+`vllm_generator.py` builds one model/executor per lane and configures
 `VLLMAdapter`. DP1 uses the executor directly; larger DP uses
 `LaneGroupExecutor`. Executors own TT resources; the generator/adapter own
 dispatch policy only.

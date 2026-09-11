@@ -1,5 +1,28 @@
 # DeepSeek-R1-Distill-Qwen-14B with TTTv2
 
+## Generate text
+
+[`demo.py`](demo.py) loads the public model with `hf_generator.from_pretrained`,
+formats a chat with `model.tokenizer.apply_chat_template`, calls
+`model.generate`, prints the decoded continuation, and cleans up the model.
+
+With the checkpoint cached locally, run:
+
+```bash
+HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+MESH_DEVICE=N300 python -m examples.deepseek_r1_distill_qwen_14b.demo \
+  --hf-model "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B" \
+  --prompt "Explain paged attention briefly." \
+  --max-new-tokens 40 --max-seq-len 2048
+```
+
+The inputs stay as CPU PyTorch tensors; the model handles TT transfers and KV
+storage. `MESH_DEVICE` selects the caller-owned mesh. Configure `TT_CACHE_PATH`
+when using an existing writable TT model cache, as described below.
+
+[`benchmark.py`](benchmark.py) contains the accuracy, performance, tracing, and
+DP workloads. Run its `--case` / `--optimizations` commands for those checks.
+
 <!-- BEGIN GENERATED SUPPORT -->
 
 ## Standalone support contract
@@ -38,11 +61,11 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 
 ### Proven limits and features
 
-- Demo cases cover active batch 1 or 32.
+- Benchmark cases cover active batch 1 or 32.
 - standard/CI sequence budgets are 1024/2048; retained DP smokes reach 4096.
 - TP1 is rejected; supported model lanes are TP2, TP4, or TP8.
 - N300 accuracy eval-32 and batch-32-ci are explicitly DRAM-infeasible.
-- Device sampling: Host and on-device top-k paths exist; the demo default is on_device_topk.
+- Device sampling: Host and on-device top-k paths exist; the benchmark default is on_device_topk.
 - Trace support is case/topology-specific; use the exact hardware test parameters and capability manifest rather than extrapolating a generic trace claim.
 
 ### Checkpoint, cache, and offline requirements
@@ -59,10 +82,10 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 python -m pip install -e '.[examples,test]'
 ```
 
-Representative run using the first declared geometry:
+Representative benchmark using the first declared geometry:
 
 ```bash
-HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 MESH_DEVICE=N300 HF_MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-14B python -m examples.deepseek_r1_distill_qwen_14b.demo --case token-accuracy --optimizations performance
+HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 MESH_DEVICE=N300 HF_MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-14B python -m examples.deepseek_r1_distill_qwen_14b.benchmark --case token-accuracy --optimizations performance
 ```
 
 Collect the equivalent hardware gate without running it:
@@ -105,21 +128,19 @@ consolidation and does not use `src/tt_transformers/models/executor.py`.
 
 ```text
 Hugging Face checkpoint
-  -> hf_adaptor.py: provider metadata, tokenizer, and weight conversion
+  -> hf_generator.py: checkpoint/tokenizer loading, executor construction, and HF generation
   -> model.py: DeepSeek-Qwen tensor graph composed from TTTv2 modules
-  -> executor.py: direct composition of common runtime owners for one lane
-  -> generator.py: vLLM construction, DP composition, and dispatch
+  -> vllm_generator.py: vLLM construction, DP composition, and dispatch
 ```
 
 ## Files
 
 | File | Responsibility |
 | --- | --- |
-| `hf_adaptor.py` | Resolve the HF checkpoint/tokenizer and construct model/runtime configuration |
+| `hf_generator.py` | Resolve the HF checkpoint/tokenizer and construct model/runtime configuration; construct the executor and expose `.generate()` |
 | `weight_utils.py` | Convert and map provider weights into the model-owned layout |
 | `model.py` | Build and execute the DeepSeek-Qwen transformer graph |
-| `executor.py` | Directly compose one lane from `llm_runtime` modules and own cleanup |
-| `generator.py` | Build one or more lanes, configure `VLLMAdapter`, and expose the vLLM-facing API |
+| `vllm_generator.py` | Build one or more lanes, configure `VLLMAdapter`, and expose the vLLM-facing API |
 
 ## Tensor-module composition
 

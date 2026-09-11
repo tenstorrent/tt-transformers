@@ -26,15 +26,15 @@ _EXPORTS = {
         "DeepSeekR1Qwen14BTransformerConfig",
     ),
     "DeepSeekR1Qwen14BExecutor": (
-        "tt_transformers.models.deepseek_r1_distill_qwen_14b.executor",
+        "tt_transformers.models.deepseek_r1_distill_qwen_14b.hf_generator",
         "DeepSeekR1Qwen14BExecutor",
     ),
     "DeepSeekR1Qwen14BExecutorConfig": (
-        "tt_transformers.models.deepseek_r1_distill_qwen_14b.executor",
+        "tt_transformers.models.deepseek_r1_distill_qwen_14b.hf_generator",
         "DeepSeekR1Qwen14BExecutorConfig",
     ),
     "DeepSeekR1Qwen14BForCausalLM": (
-        "tt_transformers.models.deepseek_r1_distill_qwen_14b.hf_adaptor",
+        "tt_transformers.models.deepseek_r1_distill_qwen_14b.hf_generator",
         "DeepSeekR1Qwen14BForCausalLM",
     ),
     "DeepSeekR1Qwen14BPagedAttentionConfig": (
@@ -42,15 +42,15 @@ _EXPORTS = {
         "DeepSeekR1Qwen14BPagedAttentionConfig",
     ),
     "DeepSeekR1Qwen14BGenerator": (
-        "tt_transformers.models.deepseek_r1_distill_qwen_14b.generator",
+        "tt_transformers.models.deepseek_r1_distill_qwen_14b.vllm_generator",
         "DeepSeekR1Qwen14BGenerator",
     ),
     "DeepSeekR1Qwen14BGeneratorConfig": (
-        "tt_transformers.models.deepseek_r1_distill_qwen_14b.generator",
+        "tt_transformers.models.deepseek_r1_distill_qwen_14b.vllm_generator",
         "DeepSeekR1Qwen14BGeneratorConfig",
     ),
     "DeepSeekR1Qwen14BRuntimeConfig": (
-        "tt_transformers.models.deepseek_r1_distill_qwen_14b.hf_adaptor",
+        "tt_transformers.models.deepseek_r1_distill_qwen_14b.hf_generator",
         "DeepSeekR1Qwen14BRuntimeConfig",
     ),
 }

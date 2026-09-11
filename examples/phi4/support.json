@@ -60,7 +60,7 @@
   },
   "limits": {
     "source_proven": [
-      "Demo cases cover active batch 1 or 32",
+      "Benchmark cases cover active batch 1 or 32",
       "standard/CI budgets are 1024/2048; DP smoke metadata reaches 4096",
       "ordinary execution is N300 TP2; physical T3K is admitted only as four TP2 lanes",
       "N150 exceeds the source L1 capacity guard"

@@ -22,7 +22,7 @@ CHECKPOINTS = {
 
 
 def _adaptor(model: str):
-    return importlib.import_module(f"tt_transformers.models.{model}.hf_adaptor")
+    return importlib.import_module(f"tt_transformers.models.{model}.hf_generator")
 
 
 @pytest.mark.host
@@ -168,10 +168,10 @@ def _uses_revision(call: ast.Call, keyword: str = "revision") -> bool:
 @pytest.mark.host
 @pytest.mark.parametrize("model", CHECKPOINTS)
 def test_config_model_cache_preflight_and_tokenizer_share_resolved_revision(model):
-    path = ROOT / f"src/tt_transformers/models/{model}/hf_adaptor.py"
+    path = ROOT / f"src/tt_transformers/models/{model}/hf_generator.py"
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     functions = {node.name: node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
-    loader = functions["from_pretrained"]
+    loader = functions["_load_model"]
     calls = {_call_name(node): node for node in ast.walk(loader) if isinstance(node, ast.Call)}
 
     assert any(

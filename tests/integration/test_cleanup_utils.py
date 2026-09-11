@@ -125,11 +125,11 @@ def test_two_sequential_dp_profiles_release_children_between_carves(monkeypatch)
 @pytest.mark.parametrize(
     ("demo_path", "create_name"),
     [
-        ("examples/qwen2_7b/demo.py", "_create_dp_submeshes"),
-        ("examples/qwen25_7b/demo.py", "_create_dp_submeshes"),
-        ("examples/deepseek_r1_distill_qwen_14b/demo.py", "_create_dp_submeshes"),
-        ("examples/llama32_1b/demo.py", "create_dp_submeshes"),
-        ("examples/llama32_3b/demo.py", "create_dp_submeshes"),
+        ("examples/qwen2_7b/benchmark.py", "_create_dp_submeshes"),
+        ("examples/qwen25_7b/benchmark.py", "_create_dp_submeshes"),
+        ("examples/deepseek_r1_distill_qwen_14b/benchmark.py", "_create_dp_submeshes"),
+        ("examples/llama32_1b/benchmark.py", "create_dp_submeshes"),
+        ("examples/llama32_3b/benchmark.py", "create_dp_submeshes"),
     ],
 )
 def test_dp_demos_quiesce_before_carving_and_use_shared_teardown(demo_path, create_name):

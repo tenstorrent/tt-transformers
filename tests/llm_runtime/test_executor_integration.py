@@ -23,28 +23,28 @@ from tt_transformers.llm_runtime.warmup import _build_plan
 from tt_transformers.models import executor as shared_model_executor
 from tt_transformers.models import llama3_executor as llama3_family_executor
 from tt_transformers.models import qwen2_executor as qwen2_family_executor
-from tt_transformers.models.deepseek_r1_distill_qwen_14b import executor as deepseek_executor
-from tt_transformers.models.deepseek_r1_distill_qwen_14b import generator as deepseek_generator
-from tt_transformers.models.llama32_1b import executor as llama32_executor
-from tt_transformers.models.llama32_1b import generator as llama32_generator
-from tt_transformers.models.llama32_3b import executor as llama32_3b_executor
-from tt_transformers.models.llama32_3b import generator as llama32_3b_generator
-from tt_transformers.models.llama33_70b import executor as llama33_70b_executor
-from tt_transformers.models.llama33_70b import generator as llama33_70b_generator
-from tt_transformers.models.mistral_7b import executor as mistral_executor
-from tt_transformers.models.mistral_7b import generator as mistral_generator
-from tt_transformers.models.phi4 import executor as phi4_executor
-from tt_transformers.models.phi4 import generator as phi4_generator
-from tt_transformers.models.qwen2_7b import executor as qwen2_executor
-from tt_transformers.models.qwen2_7b import generator as qwen2_generator
-from tt_transformers.models.qwen3_32b import executor as qwen3_32b_executor
-from tt_transformers.models.qwen3_32b import generator as qwen3_32b_generator
-from tt_transformers.models.qwen25_7b import executor as qwen25_executor
-from tt_transformers.models.qwen25_7b import generator as qwen25_generator
-from tt_transformers.models.qwen25_72b import executor as qwen25_72b_executor
-from tt_transformers.models.qwen25_72b import generator as qwen25_72b_generator
-from tt_transformers.models.qwen25_coder_32b import executor as qwen25_coder_32b_executor
-from tt_transformers.models.qwen25_coder_32b import generator as qwen25_coder_32b_generator
+from tt_transformers.models.deepseek_r1_distill_qwen_14b import hf_generator as deepseek_executor
+from tt_transformers.models.deepseek_r1_distill_qwen_14b import vllm_generator as deepseek_generator
+from tt_transformers.models.llama32_1b import hf_generator as llama32_executor
+from tt_transformers.models.llama32_1b import vllm_generator as llama32_generator
+from tt_transformers.models.llama32_3b import hf_generator as llama32_3b_executor
+from tt_transformers.models.llama32_3b import vllm_generator as llama32_3b_generator
+from tt_transformers.models.llama33_70b import hf_generator as llama33_70b_executor
+from tt_transformers.models.llama33_70b import vllm_generator as llama33_70b_generator
+from tt_transformers.models.mistral_7b import hf_generator as mistral_executor
+from tt_transformers.models.mistral_7b import vllm_generator as mistral_generator
+from tt_transformers.models.phi4 import hf_generator as phi4_executor
+from tt_transformers.models.phi4 import vllm_generator as phi4_generator
+from tt_transformers.models.qwen2_7b import hf_generator as qwen2_executor
+from tt_transformers.models.qwen2_7b import vllm_generator as qwen2_generator
+from tt_transformers.models.qwen3_32b import hf_generator as qwen3_32b_executor
+from tt_transformers.models.qwen3_32b import vllm_generator as qwen3_32b_generator
+from tt_transformers.models.qwen25_7b import hf_generator as qwen25_executor
+from tt_transformers.models.qwen25_7b import vllm_generator as qwen25_generator
+from tt_transformers.models.qwen25_72b import hf_generator as qwen25_72b_executor
+from tt_transformers.models.qwen25_72b import vllm_generator as qwen25_72b_generator
+from tt_transformers.models.qwen25_coder_32b import hf_generator as qwen25_coder_32b_executor
+from tt_transformers.models.qwen25_coder_32b import vllm_generator as qwen25_coder_32b_generator
 
 EXECUTOR_BINDINGS = {
     "llama32_1b": SimpleNamespace(
@@ -257,18 +257,18 @@ EXECUTOR_BINDINGS = {
 }
 
 GENERATOR_PATHS = {
-    "llama32_1b": "tt_transformers.models.llama32_1b.generator:Llama32_1BGenerator",
-    "llama32_3b": "tt_transformers.models.llama32_3b.generator:Llama32_3BGenerator",
-    "llama33_70b": "tt_transformers.models.llama33_70b.generator:Llama33_70BGenerator",
-    "mistral_7b": "tt_transformers.models.mistral_7b.generator:Mistral7BGenerator",
-    "phi4": "tt_transformers.models.phi4.generator:Phi4Generator",
-    "qwen2_7b": "tt_transformers.models.qwen2_7b.generator:Qwen2Generator",
-    "qwen25_7b": "tt_transformers.models.qwen25_7b.generator:Qwen25Generator",
-    "qwen25_72b": "tt_transformers.models.qwen25_72b.generator:Qwen25_72BGenerator",
-    "qwen25_coder_32b": "tt_transformers.models.qwen25_coder_32b.generator:Qwen25Coder32BGenerator",
-    "qwen3_32b": "tt_transformers.models.qwen3_32b.generator:Qwen3_32BGenerator",
+    "llama32_1b": "tt_transformers.models.llama32_1b.vllm_generator:Llama32_1BGenerator",
+    "llama32_3b": "tt_transformers.models.llama32_3b.vllm_generator:Llama32_3BGenerator",
+    "llama33_70b": "tt_transformers.models.llama33_70b.vllm_generator:Llama33_70BGenerator",
+    "mistral_7b": "tt_transformers.models.mistral_7b.vllm_generator:Mistral7BGenerator",
+    "phi4": "tt_transformers.models.phi4.vllm_generator:Phi4Generator",
+    "qwen2_7b": "tt_transformers.models.qwen2_7b.vllm_generator:Qwen2Generator",
+    "qwen25_7b": "tt_transformers.models.qwen25_7b.vllm_generator:Qwen25Generator",
+    "qwen25_72b": "tt_transformers.models.qwen25_72b.vllm_generator:Qwen25_72BGenerator",
+    "qwen25_coder_32b": "tt_transformers.models.qwen25_coder_32b.vllm_generator:Qwen25Coder32BGenerator",
+    "qwen3_32b": "tt_transformers.models.qwen3_32b.vllm_generator:Qwen3_32BGenerator",
     "deepseek_r1_distill_qwen_14b": (
-        "tt_transformers.models.deepseek_r1_distill_qwen_14b.generator:DeepSeekR1Qwen14BGenerator"
+        "tt_transformers.models.deepseek_r1_distill_qwen_14b.vllm_generator:DeepSeekR1Qwen14BGenerator"
     ),
 }
 
@@ -600,7 +600,7 @@ def test_large_qwen_builder_threads_exact_decode_sampling_coverage(
     product = product_binding.make_product(mesh_device, 4)
     executor_configs = []
 
-    monkeypatch.setattr(product_binding.generator_module, "from_pretrained", lambda **kwargs: product)
+    monkeypatch.setattr(product_binding.generator_module, "_load_model", lambda **kwargs: product)
     monkeypatch.setattr(
         product_binding.generator_module,
         "_model_kv_metadata",
@@ -990,7 +990,7 @@ def test_qwen3_generator_sampling_policy_controls_decode_topk_warmup(monkeypatch
     product = _make_qwen3_32b_product(mesh_device, max_batch_size=4)
     executor_configs = []
 
-    monkeypatch.setattr(qwen3_32b_generator, "from_pretrained", lambda **kwargs: product)
+    monkeypatch.setattr(qwen3_32b_generator, "_load_model", lambda **kwargs: product)
     monkeypatch.setattr(
         qwen3_32b_generator,
         "_model_kv_metadata",
@@ -1657,7 +1657,7 @@ def test_generator_constructs_data_parallel_lane_group(binding, monkeypatch):
         built_lanes.append(lane)
         return lane
 
-    monkeypatch.setattr(binding.generator_module, "from_pretrained", fake_from_pretrained)
+    monkeypatch.setattr(binding.generator_module, "_load_model", fake_from_pretrained)
     monkeypatch.setattr(binding.generator_module, binding.build_executor_name, fake_build_executor)
     monkeypatch.setattr(
         binding.generator_module,

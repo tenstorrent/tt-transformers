@@ -10,7 +10,7 @@ Tensor layout contracts:
   - **Decode** hidden states: ``[1, 1, B, dim]`` TILE (``B`` padded to tile in modules).
 
 The tensor model is provider-neutral. Hugging Face loading and conversion live
-in :mod:`tt_transformers.models.qwen2_7b.hf_adaptor`.
+in :mod:`tt_transformers.models.qwen2_7b.hf_generator`.
 """
 
 from __future__ import annotations

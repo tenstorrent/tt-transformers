@@ -7,9 +7,10 @@ import torch
 from transformers import LlamaConfig, LlamaForCausalLM
 from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding
 
-from tt_transformers.models.llama32_1b import hf_adaptor, weight_utils
+from tt_transformers.models.llama32_1b import hf_generator as hf_adaptor
 from tt_transformers.models.llama32_1b import model as llama_model
-from tt_transformers.models.llama32_1b.hf_adaptor import (
+from tt_transformers.models.llama32_1b import weight_utils
+from tt_transformers.models.llama32_1b.hf_generator import (
     Llama32_1BForCausalLM,
     Llama32_1BRuntimeConfig,
     _trace_seq_lens,

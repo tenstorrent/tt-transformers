@@ -20,31 +20,34 @@ _EXPORTS = {
     "build_qwen25_coder_32b_model": ("tt_transformers.models.qwen25_coder_32b.model", "build_qwen25_coder_32b_model"),
     "QWEN25_CODER_32B_ACCURACY": ("tt_transformers.models.qwen25_coder_32b.model", "QWEN25_CODER_32B_ACCURACY"),
     "QWEN25_CODER_32B_PERFORMANCE": ("tt_transformers.models.qwen25_coder_32b.model", "QWEN25_CODER_32B_PERFORMANCE"),
-    "Qwen25Coder32BGenerator": ("tt_transformers.models.qwen25_coder_32b.generator", "Qwen25Coder32BGenerator"),
+    "Qwen25Coder32BGenerator": ("tt_transformers.models.qwen25_coder_32b.vllm_generator", "Qwen25Coder32BGenerator"),
     "Qwen25Coder32BGeneratorConfig": (
-        "tt_transformers.models.qwen25_coder_32b.generator",
+        "tt_transformers.models.qwen25_coder_32b.vllm_generator",
         "Qwen25Coder32BGeneratorConfig",
     ),
     "build_qwen25_coder_32b_generator": (
-        "tt_transformers.models.qwen25_coder_32b.generator",
+        "tt_transformers.models.qwen25_coder_32b.vllm_generator",
         "build_qwen25_coder_32b_generator",
     ),
-    "Qwen25Coder32BExecutor": ("tt_transformers.models.qwen25_coder_32b.executor", "Qwen25Coder32BExecutor"),
+    "Qwen25Coder32BExecutor": ("tt_transformers.models.qwen25_coder_32b.hf_generator", "Qwen25Coder32BExecutor"),
     "Qwen25Coder32BExecutorConfig": (
-        "tt_transformers.models.qwen25_coder_32b.executor",
+        "tt_transformers.models.qwen25_coder_32b.hf_generator",
         "Qwen25Coder32BExecutorConfig",
     ),
     "build_qwen25_coder_32b_executor": (
-        "tt_transformers.models.qwen25_coder_32b.executor",
+        "tt_transformers.models.qwen25_coder_32b.hf_generator",
         "build_qwen25_coder_32b_executor",
     ),
-    "EagerQwen25Coder32BExecutor": ("tt_transformers.models.qwen25_coder_32b.executor", "EagerQwen25Coder32BExecutor"),
+    "EagerQwen25Coder32BExecutor": (
+        "tt_transformers.models.qwen25_coder_32b.hf_generator",
+        "EagerQwen25Coder32BExecutor",
+    ),
     "TracedQwen25Coder32BExecutor": (
-        "tt_transformers.models.qwen25_coder_32b.executor",
+        "tt_transformers.models.qwen25_coder_32b.hf_generator",
         "TracedQwen25Coder32BExecutor",
     ),
-    "Qwen25Coder32BForCausalLM": ("tt_transformers.models.qwen25_coder_32b.hf_adaptor", "Qwen25Coder32BForCausalLM"),
-    "from_pretrained": ("tt_transformers.models.qwen25_coder_32b.hf_adaptor", "from_pretrained"),
+    "Qwen25Coder32BForCausalLM": ("tt_transformers.models.qwen25_coder_32b.hf_generator", "Qwen25Coder32BForCausalLM"),
+    "from_pretrained": ("tt_transformers.models.qwen25_coder_32b.hf_generator", "from_pretrained"),
 }
 
 __all__ = [

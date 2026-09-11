@@ -8,10 +8,11 @@ import torch
 from transformers import LlamaConfig, LlamaForCausalLM
 from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding
 
-from tt_transformers.models.llama32_3b import generator as llama_generator
-from tt_transformers.models.llama32_3b import hf_adaptor, weight_utils
+from tt_transformers.models.llama32_3b import hf_generator as hf_adaptor
 from tt_transformers.models.llama32_3b import model as llama_model
-from tt_transformers.models.llama32_3b.hf_adaptor import (
+from tt_transformers.models.llama32_3b import vllm_generator as llama_generator
+from tt_transformers.models.llama32_3b import weight_utils
+from tt_transformers.models.llama32_3b.hf_generator import (
     Llama32_3BForCausalLM,
     Llama32_3BRuntimeConfig,
     _trace_seq_lens,
@@ -81,7 +82,7 @@ def test_generator_resolves_trace_mode_from_lane_capability(
     captured = []
     lane = SimpleNamespace(cleanup=lambda: None)
 
-    monkeypatch.setattr(llama_generator, "from_pretrained", lambda *_, **__: product)
+    monkeypatch.setattr(llama_generator, "_load_model", lambda *_, **__: product)
     monkeypatch.setattr(llama_generator, "_model_kv_metadata", lambda _: ((torch.bfloat16,), 1, 8, 128))
     monkeypatch.setattr(
         llama_generator,

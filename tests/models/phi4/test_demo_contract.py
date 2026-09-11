@@ -12,7 +12,7 @@ import torch
 from tt_transformers.llm_runtime.config import TraceConfig
 from tt_transformers.llm_runtime.prefill.plan import _plan_prefill_requests
 
-_DEMO_PATH = "examples/phi4/demo.py"
+_DEMO_PATH = "examples/phi4/benchmark.py"
 _HARDWARE_DEMO_PATH = "tests/hardware/models/phi4/test_demo.py"
 _DEMO_SOURCE = "\n".join(
     (Path(_DEMO_PATH).read_text(encoding="utf-8"), Path(_HARDWARE_DEMO_PATH).read_text(encoding="utf-8"))

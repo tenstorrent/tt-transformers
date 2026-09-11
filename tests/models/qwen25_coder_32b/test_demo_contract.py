@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-_DEMO_PATH = "examples/qwen25_coder_32b/demo.py"
+_DEMO_PATH = "examples/qwen25_coder_32b/benchmark.py"
 _HARDWARE_DEMO_PATH = "tests/hardware/models/qwen25_coder_32b/test_demo.py"
 _DEMO_SOURCE = "\n".join(
     (Path(_DEMO_PATH).read_text(encoding="utf-8"), Path(_HARDWARE_DEMO_PATH).read_text(encoding="utf-8"))
@@ -61,7 +61,7 @@ def test_demo_keeps_coder_trace_region_and_fabric():
 @pytest.mark.model
 def test_demo_uses_model_owned_runtime_compatibility_wrappers():
     imports = [ast.unparse(node) for node in _DEMO_TREE.body if isinstance(node, (ast.Import, ast.ImportFrom))]
-    assert any("tt_transformers.models.qwen25_coder_32b.executor" in statement for statement in imports)
+    assert any("tt_transformers.models.qwen25_coder_32b.hf_generator" in statement for statement in imports)
     assert "EagerQwen25Coder32BExecutor" in _DEMO_SOURCE
     assert "TracedQwen25Coder32BExecutor" in _DEMO_SOURCE
     assert "Qwen25Coder32B.from_pretrained" in _DEMO_SOURCE

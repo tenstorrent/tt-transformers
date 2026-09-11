@@ -1,5 +1,28 @@
 # Qwen2.5-7B with TTTv2
 
+## Generate text
+
+[`demo.py`](demo.py) loads the public model with `hf_generator.from_pretrained`,
+formats a chat with `model.tokenizer.apply_chat_template`, calls
+`model.generate`, prints the decoded continuation, and cleans up the model.
+
+With the checkpoint cached locally, run:
+
+```bash
+HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+MESH_DEVICE=N300 python -m examples.qwen25_7b.demo \
+  --hf-model "Qwen/Qwen2.5-7B-Instruct" \
+  --prompt "Explain paged attention briefly." \
+  --max-new-tokens 40 --max-seq-len 2048
+```
+
+The inputs stay as CPU PyTorch tensors; the model handles TT transfers and KV
+storage. `MESH_DEVICE` selects the caller-owned mesh. Configure `TT_CACHE_PATH`
+when using an existing writable TT model cache, as described below.
+
+[`benchmark.py`](benchmark.py) contains the accuracy, performance, tracing, and
+DP workloads. Run its `--case` / `--optimizations` commands for those checks.
+
 <!-- BEGIN GENERATED SUPPORT -->
 
 ## Standalone support contract
@@ -36,11 +59,11 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 
 ### Proven limits and features
 
-- Demo cases cover active batch 1 or 32.
+- Benchmark cases cover active batch 1 or 32.
 - standard/CI budgets are 1024/2048.
 - ordinary execution is N300 TP2; T3K DP4 partitions into four TP2 lanes.
 - N150 overflows the source L1 capacity guard.
-- Device sampling: Host and on-device top-k paths exist; the demo default is host sampling.
+- Device sampling: Host and on-device top-k paths exist; the benchmark default is host sampling.
 - Trace support is case/topology-specific; use the exact hardware test parameters and capability manifest rather than extrapolating a generic trace claim.
 
 ### Checkpoint, cache, and offline requirements
@@ -57,10 +80,10 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 python -m pip install -e '.[examples,test]'
 ```
 
-Representative run using the first declared geometry:
+Representative benchmark using the first declared geometry:
 
 ```bash
-HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 MESH_DEVICE=N300 HF_MODEL=Qwen/Qwen2.5-7B-Instruct python -m examples.qwen25_7b.demo --case token-accuracy --optimizations performance
+HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 MESH_DEVICE=N300 HF_MODEL=Qwen/Qwen2.5-7B-Instruct python -m examples.qwen25_7b.benchmark --case token-accuracy --optimizations performance
 ```
 
 Collect the equivalent hardware gate without running it:
@@ -99,10 +122,9 @@ This directory contains the Qwen2.5-7B TTTv2 product path.
 
 ```text
 HF checkpoint
-  -> hf_adaptor.py: provider configuration, tokenizer, and weights
+  -> hf_generator.py: checkpoint/tokenizer loading, executor construction, and HF generation
   -> model.py: Qwen2.5 tensor graph composed from TTTv2 modules
-  -> executor.py: thin typed entry point into qwen2_executor.py
-  -> generator.py: vLLM boundary, DP composition, and dispatch
+  -> vllm_generator.py: vLLM boundary, DP composition, and dispatch
 ```
 
 `model.py` owns Qwen2.5 architecture/tuning while composing reusable embedding,
@@ -123,7 +145,7 @@ silently adopt Qwen3 stateful sampling behavior.
 
 ## vLLM, DP, and ownership
 
-`generator.py` builds one executor per lane, uses `VLLMAdapter` for external
+`vllm_generator.py` builds one executor per lane, uses `VLLMAdapter` for external
 normalization/cache validation, and composes multiple lanes with
 `LaneGroupExecutor`. TT resources remain lane-owned.
 
