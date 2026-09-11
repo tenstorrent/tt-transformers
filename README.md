@@ -20,6 +20,10 @@ Tenstorrent hardware.
 The Python package does not install firmware, drivers, model checkpoints,
 tokenizers, or model caches.
 
+Each tt-transformers release uses a pinned, publicly available TTNN package.
+See [release compatibility](src/tt_transformers/README.md#release-compatibility)
+for the release policy and the separate custom-runtime development workflow.
+
 ## Install
 
 Install the library from a checkout:
@@ -60,7 +64,9 @@ from `tt_transformers.models`, while reusable building blocks live under
 
 ## Learn the package
 
-- [Package architecture](https://github.com/tenstorrent/tt_transformers/blob/main/src/tt_transformers/README.md)
+- [Software architecture](docs/architecture.md)
+- [Package guide](src/tt_transformers/README.md)
+- [Models and deprecation policy](src/tt_transformers/models/README.md)
 - [Reusable modules](https://github.com/tenstorrent/tt_transformers/blob/main/src/tt_transformers/modules/README.md)
 - [LLM runtime](https://github.com/tenstorrent/tt_transformers/blob/main/src/tt_transformers/llm_runtime/README.md)
 - [Sampling](https://github.com/tenstorrent/tt_transformers/blob/main/src/tt_transformers/sampling/README.md)
