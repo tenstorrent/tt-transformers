@@ -16,5 +16,6 @@ def selected_topology_marks(pytest_module):
         "P150": ("blackhole", "p150"),
         "P300": ("blackhole", "p300"),
         "P150X4": ("blackhole", "p150x4"),
+        "TG": ("wormhole", "galaxy"),
     }
     return [getattr(pytest_module.mark, name) for name in mapping.get(selected, ())]

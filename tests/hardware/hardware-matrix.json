@@ -138,6 +138,25 @@
         "P150x4"
       ],
       "tt_visible_devices_policy": "must be unset; logical P150x4 model profile with physical P300_X2 evidence"
+    },
+    "wh-glx6u-05": {
+      "architecture": "wormhole",
+      "allowed_identities": [
+        "wh-glx6u-05",
+        "wh-glx6u-05.yyz2.tenstorrent.com"
+      ],
+      "physical_role": "32-device WH Galaxy 6U; thirty-two tt-galaxy-wh boards in one chassis",
+      "expected_inventory": {
+        "device_count": 32,
+        "board_types": [
+          "tt-galaxy-wh L"
+        ],
+        "cluster_type": "TG"
+      },
+      "supported_mesh_devices": [
+        "TG"
+      ],
+      "tt_visible_devices_policy": "unset; the Galaxy suites parametrize the (8, 4) mesh explicitly"
     }
   },
   "nodes": [
@@ -3048,6 +3067,67 @@
       ],
       "enabled": true,
       "disabled_classification": null
+    },
+    {
+      "id": "wh-tg-rmsnorm-2d-qk-norm",
+      "priority": 43,
+      "stage": "module",
+      "architecture": "wormhole",
+      "mesh_device": "TG",
+      "machine_pool": [
+        "wh-glx6u-05"
+      ],
+      "selector": {
+        "target": "tests/modules/rmsnorm/test_rmsnorm_2d_wh_galaxy.py::test_rmsnorm_2d_wh_galaxy_head_local_128_qk_decode_and_prefill_repeat[wormhole_b0-device_params0-q_norm-mesh_device0]"
+      },
+      "timeout_seconds": 900,
+      "environment": {
+        "MESH_DEVICE": "TG"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "full 32-board WH Galaxy (8, 4) mesh; standalone TG product provenance, not a submesh",
+        "required_host_role": "32-device WH Galaxy 6U"
+      },
+      "acceptance_types": [
+        "pcc_threshold",
+        "program_cache_stability",
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "extracted pytest markers/parameters",
+        "measured on wh-glx6u-05"
+      ],
+      "enabled": false,
+      "disabled_classification": "different_hardware_deferred"
     }
   ]
 }

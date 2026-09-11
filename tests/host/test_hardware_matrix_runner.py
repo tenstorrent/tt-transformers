@@ -64,8 +64,40 @@ def _dry_args(tmp_path):
 @pytest.mark.host
 def test_checked_in_matrix_validates_and_covers_every_required_mesh():
     counts = runner.validate_matrix(_matrix())
-    assert counts == {"N150": 9, "N300": 6, "T3K": 8, "P150": 8, "P150x4": 11}
-    assert sum(counts.values()) == 42
+    assert counts == {"N150": 9, "N300": 6, "T3K": 8, "P150": 8, "P150x4": 11, "TG": 1}
+    assert sum(counts.values()) == 43
+
+
+@pytest.mark.host
+def test_the_tg_galaxy_node_is_a_disabled_proposal_and_cannot_be_selected():
+    """The one TG node is a proposal, not a gate, and must stay unselectable.
+
+    A 32-board Galaxy is an infrastructure commitment the port cannot make on its
+    own: it means claiming a machine pool and extending the serial-reservation
+    policy from an 8-device host to a 32-board chassis, which is the one place the
+    existing `scope: physical_host` policy may genuinely not stretch. The node is
+    checked in `enabled: false` so the shape is reviewable as a diff rather than
+    negotiated in the abstract. Whoever enables it should have settled the
+    serialization question first -- and will have to delete this test to do it,
+    which is the point.
+    """
+
+    matrix = _matrix()
+    node = next(entry for entry in matrix["nodes"] if entry["mesh_device"] == "TG")
+    assert node["id"] == "wh-tg-rmsnorm-2d-qk-norm"
+    assert node["enabled"] is False
+    assert node["disabled_classification"] == "different_hardware_deferred"
+    assert node["machine_pool"] == ["wh-glx6u-05"]
+
+    machine = matrix["machines"]["wh-glx6u-05"]
+    assert machine["expected_inventory"]["device_count"] == 32
+    assert machine["supported_mesh_devices"] == ["TG"]
+
+    # Every other node is live; TG is the only deferral in the matrix.
+    assert [entry["id"] for entry in matrix["nodes"] if not entry["enabled"]] == [node["id"]]
+
+    with pytest.raises(runner.MatrixError, match="different_hardware_deferred"):
+        runner.select_node(matrix, node["id"])
 
 
 @pytest.mark.host

@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MATRIX = ROOT / "tests/hardware/hardware-matrix.json"
 ALLOWED_STAGES = {"module", "runtime", "smoke", "e2e"}
 ALLOWED_ARCHITECTURES = {"wormhole", "blackhole"}
-ALLOWED_MESH_DEVICES = {"N150", "N300", "T3K", "P150", "P150x4"}
+ALLOWED_MESH_DEVICES = {"N150", "N300", "T3K", "P150", "P150x4", "TG"}
 ALLOWED_RESULT_CLASSIFICATIONS = {
     "passed",
     "functional_failure",

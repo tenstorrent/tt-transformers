@@ -688,6 +688,14 @@ def test_forward_rejects_unknown_mode():
 # the tree is a Galaxy package and no hardware-matrix node selects either
 # orientation, so nothing exercisable regressed — but whether MLP2D should accept
 # any 2D mesh or only `(8, 4)` is a product decision for the repo owners.
+#
+# **Decided 2026-09-10: keep it narrow, and record the loss rather than restore
+# the path.** Narrow fails closed and matches the only hardware that exists;
+# restoring generic 2D would add a code path nothing can currently run. This is a
+# deferral, not a conclusion — it is listed under "Known limits" in
+# `docs/validation.md` so it is revisited when a non-Galaxy 2D mesh appears, and
+# the pre-port test is recoverable at
+# `git show 38cbf1c:tests/modules/mlp/test_mlp_2d.py`.
 
 # ============================================================================
 # TTNN Topology Bug Tests - Document known issues with 2D mesh tensor topology

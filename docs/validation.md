@@ -8,10 +8,11 @@ promise.
 
 - Tested code: `9134c399334240e3e4d35dfa93013c6c7293a3d1`
 - Executed: 2026-09-04 20:58–22:39 UTC
-- Matrix: 42/42 nodes passed
+- Matrix: 42/42 enabled nodes passed (43 declared; the TG node is disabled and
+  was not executed — see "Galaxy 8x4 and 2D modules" below)
 - Stages: modules 30/30, runtime 1/1, smoke 3/3, end-to-end 8/8
 - Hosts: Wormhole 23/23, Blackhole 19/19
-- Meshes: N150 9/9, N300 6/6, T3K 8/8, P150 8/8, P150x4 11/11
+- Meshes: N150 9/9, N300 6/6, T3K 8/8, P150 8/8, P150x4 11/11, TG 0/1 disabled
 - Functional, lifecycle, missing-acceptance, and reset outcomes: zero
 
 Both physical hosts ran concurrently while every node remained serialized
@@ -85,13 +86,25 @@ The Galaxy 8x4 mesh support and the 2D tensor-parallel modules were ported from
 describes that event. **Every Galaxy claim behind this code was measured on
 that branch, on a 32-board Galaxy mesh, and none of it is re-qualified here.**
 
-`tests/hardware/hardware-matrix.json` declares no Galaxy, TG or 32-chip node.
-The mesh values it does declare — N150, N300, T3K, P150, P150x4 — are all 1xN,
-so no node selects a 2D mesh at all and no gate in this repository executes any
-ported device suite. The suites land as files. Adding a Galaxy node class is a
-prerequisite to be agreed with the repository owners, not a detail: it needs
-new `mesh_device` values, a machine pool, a cache requirement, and the serial
-lock semantics extended to a 32-board mesh.
+`tests/hardware/hardware-matrix.json` now declares **one** TG node,
+`wh-tg-rmsnorm-2d-qk-norm`, and it is checked in **`enabled: false`** with
+`disabled_classification: different_hardware_deferred`. It is a proposal, not a
+gate: nothing selects it, `run_hardware_matrix.py` refuses it by design, and the
+42-node result above is unchanged by its presence. It exists so the shape of a
+Galaxy node class — the `TG` mesh value, a 32-board machine entry, the pool, the
+cache requirement, the SKU provenance claim — is reviewable as a diff rather than
+negotiated in the abstract. `fixture_policy.get_logical_sku` already maps a
+32-device mesh to `TG`, so only the matrix entry was missing.
+
+**Enabling it is an infrastructure commitment the port cannot make on its own.**
+It means claiming a machine pool and extending the serial-reservation policy from
+an 8-device host to a 32-board chassis. That last point is the real question:
+`serialization.scope` is `physical_host` with one process, written for 8-device
+hosts, and a Galaxy may share a chassis or fabric in ways the lock file does not
+model. Settle that before flipping the flag.
+
+The other nineteen Galaxy suites have no node. **Every ported device suite
+therefore still lands as a file that no gate in this repository runs.**
 
 Two further limits are worth stating plainly:
 
@@ -155,3 +168,39 @@ is not comparable to the cleaned-package figures above.
   Galaxy coverage.
 - The two Galaxy model packages have no `support.json`, so the twelve
   experimental manifests above describe fourteen model directories.
+
+Four deferrals the port recorded rather than resolved, all of them decisions for
+the module and repository owners:
+
+- **`MLP2D` and `RMSNorm2D` accept only the Galaxy `(8, 4)` mesh**
+  (`WH_GALAXY_MESH_SHAPE`), where the pre-port version accepted any 2D mesh and
+  its test parametrized `(4, 8)` as well. Kept narrow deliberately: it fails
+  closed, it matches the only hardware that exists, and no node in the matrix
+  declares a 2D mesh at all, so nothing exercisable regressed. **The `(4, 8)`
+  coverage is a known deferral, not a silent narrowing** — restore the generic
+  path when a non-Galaxy 2D mesh appears. The pre-port test is recoverable at
+  `git show 38cbf1c:tests/modules/mlp/test_mlp_2d.py`.
+- **`llm_runtime/decode.py` selects `prepare_rot_idxs` by `isinstance` on the
+  rope config type.** 1D and 2D rope carry different config shapes
+  (`device` vs `mesh_device`) and each module owns its own helper, and they
+  cannot be merged behind one method because
+  `test_legacy_rope_adapters_are_not_public` deliberately forbids `get_rot_idxs`
+  on `RotarySetup1D`. So the branch is a type dispatch, not a model-family
+  branch. `functools.singledispatch` over the config types, letting each rope
+  module register its own helper, is the shape this wants. The import it needs is
+  permitted by the boundary policy, so this is a tidiness question, not a
+  blocker.
+- **`tests/support/fixture_policy.get_updated_device_params` was a stub in this
+  package before the port**, returning its input unchanged, so
+  `dispatch_core_axis` reached `ttnn.open_mesh_device` verbatim and every device
+  test setting it died at fixture setup. This is not a Galaxy issue: the
+  package's own `tests/modules/sampling/test_legacy_sampling.py` passes the same
+  key, so no device suite had run here since the extraction. Restored, with the
+  Blackhole ROW→COL guard, but the owners should know the gap existed.
+- **A differential correctness gate for the Galaxy executor does not exist yet.**
+  The 1D side has one — `test_w6_active15_padded16_trace_correctness`, which
+  builds two oracles from the same production executor in one process and
+  compares them through `logits_oracle.assert_rowwise_logits_parity`, with no
+  file and no second implementation. That is the right shape for Galaxy and is
+  blocked today by an L1 address clash on a second KV allocation cycle in one
+  process.

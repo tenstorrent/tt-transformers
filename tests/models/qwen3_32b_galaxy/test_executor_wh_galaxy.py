@@ -105,8 +105,13 @@ def _hf_revision() -> str | None:
     return DEFAULT_HF_REVISION if _hf_model() == DEFAULT_HF_MODEL else None
 
 
+#: The layer-subset switch. Named once so the accuracy gate can cite it when it
+#: refuses to score a truncated model.
+_LAYERS_ENV = "QWEN3_32B_GALAXY_TEST_LAYERS"
+
+
 def _layers() -> int | None:
-    value = os.getenv("QWEN3_32B_GALAXY_TEST_LAYERS")
+    value = os.getenv(_LAYERS_ENV)
     return int(value) if value else None
 
 
@@ -116,7 +121,7 @@ def _load_hf_subset():
     A layer subset reads the two or three safetensors shards it needs instead of
     the whole 62 GB checkpoint, which is what makes an iteration loop on this model
     affordable. No gate run uses it: every number in the report needs all 64
-    layers.
+    layers -- enforced by a skip in the accuracy test, not just promised here.
     """
 
     layers = _layers()
@@ -777,6 +782,16 @@ def test_executor_teacher_forced_accuracy(mesh_device: ttnn.MeshDevice) -> None:
     batch 1. The gate is top-1 >= 89% / top-5 >= 97%; the executor must not lose
     accuracy against what the runner reached.
     """
+
+    # A layer subset is what makes iterating on this model affordable, and `_load`
+    # applies `QWEN3_32B_GALAXY_TEST_LAYERS` unconditionally -- so without this
+    # guard the accuracy gate would silently score a truncated model against
+    # whole-model thresholds and report a functional failure that is really a
+    # misconfiguration. `_load_hf_subset` promises the accuracy gate never uses a
+    # subset; nothing enforced that promise until here. Skip rather than fail:
+    # during iteration the subset is a deliberate operator choice, not an error.
+    if _layers() is not None:
+        pytest.skip(f"{_LAYERS_ENV}={_layers()} requests a layer subset; teacher-forced accuracy needs every layer")
 
     prompt_len = 512
     reference_tokens, top5_tokens = load_reference_tokens(_REFERENCE_NAME)
