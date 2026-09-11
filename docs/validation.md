@@ -119,8 +119,11 @@ a node result carries.
 - Green across both Llama and Qwen shapes: attention 2D, embedding 2D, lm_head
   2D, MLP 2D, RMSNorm 2D (final-norm and q/k-norm), rope 2D, sampling 2D (exact
   and stochastic), column user selector, worker partition, page-table placement.
-- **All 4 failures are in `tests/modules/prefetcher/test_prefetcher_2d_wh_galaxy.py`
-  and share one root cause**, recorded below.
+- **All 4 failures are in `tests/modules/prefetcher/test_prefetcher_2d_wh_galaxy.py`.**
+  Three are traced to one root cause, recorded below. The fourth
+  (`attention_decode_with_active_prefetch`) fails and then hangs in teardown, so it
+  was killed at its timeout and **its traceback was never written** — it is
+  unexplained rather than explained by the same cause.
 
 **Known defect — the global circular buffer cannot be re-placed after a prefill.**
 `Prefetcher2D._release_global_cb()` runs on every `activate("prefill")` when
