@@ -106,6 +106,44 @@ model. Settle that before flipping the flag.
 The other nineteen Galaxy suites have no node. **Every ported device suite
 therefore still lands as a file that no gate in this repository runs.**
 
+### Galaxy module suites, executed by hand — evidence, not qualification
+
+Because no node selects them, the WH Galaxy module suites were run directly on a
+32-board `(8, 4)` mesh (`wh-glx6u-05`), one pytest node id per process, on
+2026-09-11. **This is not a matrix result and must not be cited as one**: it was
+driven by a shell loop, not `run_hardware_matrix.py`, so it carries none of the
+evidence fields, serial-reservation guarantees or acceptance classification that
+a node result carries.
+
+- **57 module node ids, 53 passed, 50 minutes of device time.**
+- Green across both Llama and Qwen shapes: attention 2D, embedding 2D, lm_head
+  2D, MLP 2D, RMSNorm 2D (final-norm and q/k-norm), rope 2D, sampling 2D (exact
+  and stochastic), column user selector, worker partition, page-table placement.
+- **All 4 failures are in `tests/modules/prefetcher/test_prefetcher_2d_wh_galaxy.py`
+  and share one root cause**, recorded below.
+
+**Known defect — the global circular buffer cannot be re-placed after a prefill.**
+`Prefetcher2D._release_global_cb()` runs on every `activate("prefill")` when
+`release_global_cb_on_prefill` is set, and frees the buffer's L1 — but it does not
+invoke `on_global_cb_released`, which is wired only into `cleanup()`. On Galaxy
+that callback is what clears the mesh program cache and forgets the placement
+record. Without it the cached decode programs stay resident, and so do their
+semaphores; a semaphore is a 32-byte L1 allocation and `FreeListOpt::allocate`
+prefers the smallest fitting block, so those blocks are taken below the buffer's
+original address. The next `activate("decode")` then either trips the restore
+guard (measured: 12 stray 32-byte blocks at 880352, below the free top 1368992
+the first creation recorded) or fails outright in the allocator (792 064 B of CB
+needed per bank against 709 152 B free). The mechanism is described exactly, and
+independently, in `release_galaxy_global_cb_placement`'s own docstring — only the
+wiring to the per-prefill release is missing.
+
+Deliberately not patched here. Clearing the cache on every prefill→decode
+transition is correct by that docstring's argument but recompiles every program
+on the serving path; forgetting only the placement record is cheap and unsafe,
+since that record is what keeps the address stable for programs still cached.
+Which cost to pay is the module owners' call. **The restore guard raising is the
+system working — do not relax it.**
+
 Two further limits are worth stating plainly:
 
 - **A green host suite is not evidence that these suites work.** The ported
