@@ -326,6 +326,44 @@ def galaxy_prefetch_decode_mode_plan(collectives: tuple[Any, ...]) -> GalaxyMode
     )
 
 
+@dataclass(frozen=True)
+class _SubDeviceOnlyContext:
+    """A prefetch context that names the worker sub-device but no global CB."""
+
+    mode: str
+    mesh_device: Any
+    worker_sub_device_id: Any
+    global_cb: None = None
+
+    @property
+    def sub_device_id(self) -> Any:
+        return self.worker_sub_device_id
+
+
+def sub_device_only_prefetch_context(context: Any) -> Any:
+    """Strip the global CB off a prefetch context, keeping the worker sub-device.
+
+    The production shape, not a test convenience: a module whose weights are not
+    in the ring still runs on the narrowed decode partition, and every program
+    enqueued there must name exactly one sub-device or
+    `fd_mesh_command_queue.cpp` refuses the workload ("Programs must be executed
+    on a single sub-device"). The 2D modules read both `global_cb` and
+    `worker_sub_device_id` off their prefetch context, so the partition can only
+    reach them through one, which is why both Galaxy models wrap the confined
+    attention decode context the same way (`_UnprefetchedContext` in
+    `models/llama33_70b_galaxy/model.py` and its Qwen twin). Returns `None`
+    unchanged, so a CCL-only fixture keeps passing no context at all.
+    """
+
+    if context is None:
+        return None
+    return _SubDeviceOnlyContext(
+        mode=getattr(context, "mode", "decode"),
+        mesh_device=context.mesh_device,
+        worker_sub_device_id=context.worker_sub_device_id,
+    )
+
+
 def compose_2d_sharded_tensor(tensor: ttnn.Tensor, mesh_device: ttnn.MeshDevice) -> Any:
     """Compose a tensor sharded over columns and replicated over rows."""
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 import gc
 import math
 import traceback
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -887,7 +888,26 @@ def _make_module(
     decode_all_reduce: dict[str, Any],
     q_norm: torch.Tensor | None,
     k_norm: torch.Tensor | None,
+    decode_prefetch_context: Any = None,
+    decode_matmul_program: Callable[[int, int, int], Any] = _matmul_program,
 ) -> Attention2D:
+    """Build the qualified decode/prefill attention geometry.
+
+    Both arguments exist for one caller, the prefetcher suite's
+    `attention_decode_with_active_prefetch`, and both carry the consequences of
+    narrowing the decode partition. This suite's CCL-only fixture leaves one
+    sub-device over the whole compute grid, so it passes neither.
+
+    * `decode_prefetch_context` names the worker sub-device: under a narrowed
+      partition a program that names none is refused outright (see
+      `sub_device_only_prefetch_context`).
+    * `decode_matmul_program` builds the two dense decode matmul configs. The
+      default anchors at `(0, 0)` and spans all seven compute columns, which
+      reaches the `x=0` and `x=4` prefetch sender columns; production confines
+      them with `allowed_worker_cores` instead
+      (`recipes.dense_matmul_program_config`, Milestone A limitation L3).
+    """
+
     wqkv_mapper = lazy_wqkv.mesh_mapper_config
     wo_mapper = lazy_wo.mesh_mapper_config
     collectives = _AttentionCollectives(
@@ -945,16 +965,16 @@ def _make_module(
             decode_concat_memory_config=ttnn.DRAM_MEMORY_CONFIG,
             decode_concat_sub_core_grids=decode_all_reduce["gather_users_memcfg"].shard_spec.grid,
             decode_wo_output_memory_config=ttnn.DRAM_MEMORY_CONFIG,
-            decode_program_config=_matmul_program(_BATCH_SIZE, local_input, local_qkv),
+            decode_program_config=decode_matmul_program(_BATCH_SIZE, local_input, local_qkv),
             decode_sdpa_program_config=_sdpa_program(
                 _MAX_SEQ_LEN, decode=True, sub_core_grids=decode_all_reduce["sdpa_cores"]
             ),
-            decode_wo_program_config=_matmul_program(_BATCH_SIZE, local_hidden, local_output),
+            decode_wo_program_config=decode_matmul_program(_BATCH_SIZE, local_hidden, local_output),
             decode_qkv_kernel_config=kernel,
             decode_sdpa_kernel_config=kernel,
             decode_wo_kernel_config=kernel,
             decode_activation_dtype=ttnn.bfloat16,
-            decode_prefetch_context=None,
+            decode_prefetch_context=decode_prefetch_context,
             prefill_prefetch_context=None,
             prefill_sequence_configs={
                 recipe.identity: recipe

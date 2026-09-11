@@ -57,9 +57,11 @@ from tests.modules._wh_galaxy_hardware import (
     galaxy_prefetcher_config,
     galaxy_prefetcher_sender_cores,
     require_galaxy_hardware_resources,
+    sub_device_only_prefetch_context,
 )
 
 from tt_transformers.device_utils import GALAXY_L1_SMALL_SIZE
+from tt_transformers.models.galaxy.recipes import dense_matmul_program_config
 from tt_transformers.modules.mlp.mlp_2d import MLP2D, MLP2DConfig, _load_input_device_tensor
 from tt_transformers.modules.prefetcher import Prefetcher2D
 
@@ -859,6 +861,14 @@ def test_prefetcher_2d_wh_galaxy_attention_decode_with_active_prefetch(mesh_devi
             decode_all_reduce,
             q_norm,
             k_norm,
+            # The narrowed partition only reaches the decode matmuls through a
+            # prefetch context, and these weights are not consumed off the ring -
+            # exactly the production wiring for confined attention decode.
+            decode_prefetch_context=sub_device_only_prefetch_context(resources.prefetch_context("decode")),
+            # The attention suite's dense matmul grid spans all seven compute
+            # columns, including both prefetch sender columns; on this partition
+            # the two decode matmuls need the confined production config.
+            decode_matmul_program=dense_matmul_program_config,
         )
         binding = attention_suite._make_cache(module, mesh_device)
         module.bind_kv_cache(binding)
