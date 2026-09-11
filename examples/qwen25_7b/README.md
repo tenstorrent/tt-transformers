@@ -99,10 +99,9 @@ This directory contains the Qwen2.5-7B TTTv2 product path.
 
 ```text
 HF checkpoint
-  -> hf_adaptor.py: provider configuration, tokenizer, and weights
+  -> hf_generator.py: checkpoint/tokenizer loading, executor construction, and HF generation
   -> model.py: Qwen2.5 tensor graph composed from TTTv2 modules
-  -> executor.py: thin typed entry point into qwen2_executor.py
-  -> generator.py: vLLM boundary, DP composition, and dispatch
+  -> vllm_generator.py: vLLM boundary, DP composition, and dispatch
 ```
 
 `model.py` owns Qwen2.5 architecture/tuning while composing reusable embedding,
@@ -123,7 +122,7 @@ silently adopt Qwen3 stateful sampling behavior.
 
 ## vLLM, DP, and ownership
 
-`generator.py` builds one executor per lane, uses `VLLMAdapter` for external
+`vllm_generator.py` builds one executor per lane, uses `VLLMAdapter` for external
 normalization/cache validation, and composes multiple lanes with
 `LaneGroupExecutor`. TT resources remain lane-owned.
 

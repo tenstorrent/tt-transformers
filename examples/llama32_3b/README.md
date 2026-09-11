@@ -102,10 +102,9 @@ This directory contains the Llama 3.2 3B TTTv2 product path.
 
 ```text
 HF checkpoint
-  -> hf_adaptor.py: provider configuration, tokenizer, and weights
+  -> hf_generator.py: checkpoint/tokenizer loading, executor construction, and HF generation
   -> model.py: TTTv2 Llama tensor graph
-  -> executor.py: thin typed entry point into llama3_executor.py
-  -> generator.py: vLLM boundary, lane construction, and dispatch
+  -> vllm_generator.py: vLLM boundary, lane construction, and dispatch
 ```
 
 The tensor graph composes reusable embedding, rotary, RMSNorm, attention, MLP,
@@ -114,7 +113,7 @@ in this model package.
 
 ## Executor composition
 
-The model-local `executor.py` retains the public
+The model-local `hf_generator.py` retains the public
 `Llama32_3BExecutor`/config/builder names while delegating to
 `src/tt_transformers/models/llama3_executor.py`. The family module configures the
 family-neutral `src/tt_transformers/models/executor.py::ModelExecutor`.

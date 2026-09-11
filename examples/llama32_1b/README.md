@@ -103,10 +103,9 @@ This directory contains the Llama 3.2 1B TTTv2 product path.
 
 ```text
 HF checkpoint
-  -> hf_adaptor.py: provider configuration, tokenizer, and weights
+  -> hf_generator.py: checkpoint/tokenizer loading, executor construction, and HF generation
   -> model.py: TTTv2 Llama tensor graph
-  -> executor.py: thin typed entry point into llama3_executor.py
-  -> generator.py: vLLM boundary, lane construction, and dispatch
+  -> vllm_generator.py: vLLM boundary, lane construction, and dispatch
 ```
 
 `model.py` composes reusable embedding, rotary, RMSNorm, attention, MLP,
@@ -115,7 +114,7 @@ remain model-owned.
 
 ## Executor composition
 
-The model-local `executor.py` exports the historical
+The model-local `hf_generator.py` exports the historical
 `Llama32_1BExecutor`/config/builder names. The implementation lives in
 `src/tt_transformers/models/llama3_executor.py`, which supplies Llama-family Q128
 warmup policy and composes `src/tt_transformers/models/executor.py::ModelExecutor`.
@@ -137,7 +136,7 @@ refactor.
 
 ## vLLM, DP, and ownership
 
-`generator.py` builds one model/executor per lane and configures
+`vllm_generator.py` builds one model/executor per lane and configures
 `VLLMAdapter`. DP1 uses the executor directly; larger DP uses
 `LaneGroupExecutor`. Executors own TT resources; the generator/adapter own
 dispatch policy only.

@@ -72,9 +72,13 @@ from examples.common.trace_region_sizes import resolve_trace_region_size
 from tt_transformers.cache_environment import resolve_model_cache_path
 from tt_transformers.device_utils import cleanup_model_case, get_device_name
 from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
-from tt_transformers.models.llama33_70b.executor import Llama33_70BExecutor, Llama33_70BExecutorConfig
-from tt_transformers.models.llama33_70b.hf_adaptor import DEFAULT_HF_REVISION as DEMO_HF_REVISION
-from tt_transformers.models.llama33_70b.hf_adaptor import encode_prompt, from_pretrained
+from tt_transformers.models.llama33_70b.hf_generator import DEFAULT_HF_REVISION as DEMO_HF_REVISION
+from tt_transformers.models.llama33_70b.hf_generator import (
+    Llama33_70BExecutor,
+    Llama33_70BExecutorConfig,
+    encode_prompt,
+)
+from tt_transformers.models.llama33_70b.hf_generator import _load_model as from_pretrained
 from tt_transformers.models.llama33_70b.model import (
     LLAMA33_70B_ACCURACY,
     LLAMA33_70B_PERFORMANCE,

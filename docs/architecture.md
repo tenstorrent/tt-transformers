@@ -6,7 +6,7 @@ an end-to-end serving framework.
 ## Layers
 
 ```text
-model adaptor and model-owned generator
+HF generation and vLLM entry points
                 │
                 ▼
       model-owned executor policy
@@ -28,7 +28,9 @@ model adaptor and model-owned generator
 - `tt_transformers.llm_runtime` owns prefill/decode planning, program and trace
   compilation, KV-cache coordination, output ownership, warmup, and cleanup.
 - `tt_transformers.models` owns checkpoint adaptation, model-specific tensor
-  layout, executor policy, and generator facades.
+  layout, executor policy, and generator facades. Each concrete model keeps
+  its tensor implementation in `model.py`, its executor-backed HF interface
+  in `hf_generator.py`, and its vLLM interface in `vllm_generator.py`.
 
 Static choices such as topology and program configuration are resolved during
 construction. Device resources have explicit owners and ordered, idempotent

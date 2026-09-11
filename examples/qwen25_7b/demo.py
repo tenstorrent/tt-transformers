@@ -83,9 +83,9 @@ from tt_transformers.cache_environment import resolve_model_cache_path
 from tt_transformers.device_utils import cleanup_dp_model_case, cleanup_model_case
 from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
 from tt_transformers.llm_runtime.lane_group import LaneGroupExecutor
-from tt_transformers.models.qwen25_7b.executor import Qwen25Executor, Qwen25ExecutorConfig
-from tt_transformers.models.qwen25_7b.hf_adaptor import DEFAULT_HF_REVISION as DEMO_HF_REVISION
-from tt_transformers.models.qwen25_7b.hf_adaptor import from_pretrained
+from tt_transformers.models.qwen25_7b.hf_generator import DEFAULT_HF_REVISION as DEMO_HF_REVISION
+from tt_transformers.models.qwen25_7b.hf_generator import Qwen25Executor, Qwen25ExecutorConfig
+from tt_transformers.models.qwen25_7b.hf_generator import _load_model as from_pretrained
 from tt_transformers.models.qwen25_7b.model import QWEN25_7B_ACCURACY, QWEN25_7B_PERFORMANCE, Qwen25_7B
 from tt_transformers.sampling.sampling_params import SamplingParams
 

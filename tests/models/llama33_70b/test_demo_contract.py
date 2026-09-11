@@ -132,8 +132,8 @@ def test_required_capability_policy_allows_observation_but_never_acceptance_with
 @pytest.mark.model
 def test_demo_uses_model_owned_runtime_provider_and_shared_helpers():
     imports = [ast.unparse(node) for node in _DEMO_TREE.body if isinstance(node, (ast.Import, ast.ImportFrom))]
-    assert any("tt_transformers.models.llama33_70b.executor" in statement for statement in imports)
-    assert any("tt_transformers.models.llama33_70b.hf_adaptor" in statement for statement in imports)
+    assert any("tt_transformers.models.llama33_70b.hf_generator" in statement for statement in imports)
+    assert any("tt_transformers.models.llama33_70b.hf_generator" in statement for statement in imports)
     assert any("examples.common.run_helpers" in statement for statement in imports)
     assert any(
         isinstance(node, ast.ImportFrom)

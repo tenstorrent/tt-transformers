@@ -6,9 +6,9 @@ import pytest
 import torch
 from transformers import Phi3Config, Phi3ForCausalLM
 
-from tt_transformers.models.phi4 import hf_adaptor
+from tt_transformers.models.phi4 import hf_generator as hf_adaptor
 from tt_transformers.models.phi4 import model as phi4_model
-from tt_transformers.models.phi4.hf_adaptor import (
+from tt_transformers.models.phi4.hf_generator import (
     DEFAULT_HF_REVISION,
     Phi4ForCausalLM,
     Phi4RuntimeConfig,

@@ -59,8 +59,11 @@ from examples.common.run_helpers import (
 from examples.common.runtime import UnsupportedConfiguration, open_mesh_device
 from tt_transformers.cache_environment import resolve_model_cache_path
 from tt_transformers.device_utils import cleanup_model_case
-from tt_transformers.models.qwen25_coder_32b.executor import EagerQwen25Coder32BExecutor, TracedQwen25Coder32BExecutor
-from tt_transformers.models.qwen25_coder_32b.hf_adaptor import DEFAULT_HF_REVISION as DEMO_HF_REVISION
+from tt_transformers.models.qwen25_coder_32b.hf_generator import DEFAULT_HF_REVISION as DEMO_HF_REVISION
+from tt_transformers.models.qwen25_coder_32b.hf_generator import (
+    EagerQwen25Coder32BExecutor,
+    TracedQwen25Coder32BExecutor,
+)
 from tt_transformers.models.qwen25_coder_32b.model import (
     QWEN25_CODER_32B_ACCURACY,
     QWEN25_CODER_32B_PERFORMANCE,

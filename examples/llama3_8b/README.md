@@ -105,14 +105,13 @@ PYTHONPATH=src MESH_DEVICE=N150 pytest --collect-only -q tests/hardware/models/l
 This directory contains the model-owned Llama 3.1 8B product path built from
 TTTv2 modules and the reusable common LLM runtime.
 
-The path has four layers:
+The model entry points share one tensor implementation:
 
 ```text
 model provider / checkpoint
-  -> hf_adaptor.py: provider metadata, tokenizer, and weight conversion
+  -> hf_generator.py: checkpoint/tokenizer loading, executor construction, and HF generation
   -> model.py: TTTv2 tensor model assembled from reusable modules
-  -> executor.py: thin typed entry point into the Llama family executor
-  -> generator.py: vLLM-facing construction, DP composition, and dispatch
+  -> vllm_generator.py: vLLM-facing construction, DP composition, and dispatch
 ```
 
 The most important boundary is between the tensor model and runtime
@@ -130,10 +129,9 @@ orchestration:
 
 | File | Responsibility |
 | --- | --- |
-| `hf_adaptor.py` | Load HF config/tokenizer/weights, convert provider naming/layout, compute Llama 3 RoPE values, and create the product model |
+| `hf_generator.py` | Load HF config/tokenizer/weights, convert provider naming/layout, compute Llama 3 RoPE values, and create the product model; construct the executor and expose `.generate()` |
 | `model.py` | Build and execute the TTTv2 Llama transformer graph |
-| `executor.py` | Preserve the model-local typed builder/import surface over `llama3_executor.py` |
-| `generator.py` | Construct lanes, optionally compose DP, normalize vLLM calls, and select eager/traced execution |
+| `vllm_generator.py` | Construct lanes, optionally compose DP, normalize vLLM calls, and select eager/traced execution |
 
 ## End-to-end object graph
 
@@ -143,6 +141,7 @@ For one lane:
 Llama3ForCausalLM
 ├── tokenizer
 ├── Llama3RuntimeConfig
+├── executor → Llama3Executor below
 └── Llama3Transformer1D
     ├── Embedding1D
     ├── RotarySetup1D
@@ -186,7 +185,7 @@ Llama3Generator
 
 ### Provider adaptation
 
-`from_pretrained(...)` in `hf_adaptor.py` is the current Hugging Face provider
+`from_pretrained(...)` in `hf_generator.py` is the current Hugging Face provider
 entry point. It:
 
 1. resolves the model ID;
@@ -199,9 +198,15 @@ entry point. It:
 7. converts Q/K rotary weight layout;
 8. maps HF names to the model's Meta-style names;
 9. builds `Llama3Transformer1DConfig`;
-10. constructs `Llama3Transformer1D`; and
-11. returns `Llama3ForCausalLM`, which packages the tensor model, tokenizer,
-    generation defaults, and `Llama3RuntimeConfig`.
+10. constructs `Llama3Transformer1D`;
+11. constructs and attaches one `Llama3Executor`; and
+12. returns `Llama3ForCausalLM`, which packages the tensor model, tokenizer,
+    generation defaults, `Llama3RuntimeConfig`, and executor-backed `.generate()`.
+
+For tokenizer inputs and cleanup, see the
+[HF generation example](../../src/tt_transformers/models/README.md#hf-style-text-generation).
+The existing demo and vLLM entry point use `_load_model()` from the same module
+to construct their own executor without creating a second owner.
 
 Provider-facing concerns stop there. Neither `Llama3Executor` nor the common
 runtime reads HF config or converts HF weights.
@@ -554,7 +559,7 @@ fits its established lifecycle. A demonstrated family may add a small policy
 facade such as `llama3_executor.py` or `qwen2_executor.py`.
 
 When a model has genuinely distinct orchestration, its model-local
-`executor.py` may instead compose the focused `llm_runtime` modules directly.
+`hf_generator.py` may instead compose the focused `llm_runtime` modules directly.
 Either construction should:
 
 - translate model metadata into resolved common runtime configs;
@@ -601,7 +606,7 @@ explicit execution target.
 
 ### Other model providers
 
-Hugging Face is currently isolated in `hf_adaptor.py`. Another provider can
+Hugging Face is currently isolated in `hf_generator.py`. Another provider can
 supply:
 
 - architecture metadata;

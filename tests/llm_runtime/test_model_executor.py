@@ -73,6 +73,10 @@ def test_model_layer_has_only_the_approved_family_modules_and_readmes() -> None:
         path for path in _MODELS_ROOT.iterdir() if path.is_dir() and (path / "model.py").is_file()
     )
     assert len(model_directories) == 12
+    for path in model_directories:
+        assert (path / "hf_generator.py").is_file()
+        assert (path / "vllm_generator.py").is_file()
+        assert not any((path / name).exists() for name in ("hf_adaptor.py", "executor.py", "generator.py"))
     assert all((_REPOSITORY_ROOT / "examples" / path.name / "README.md").is_file() for path in model_directories)
 
 
@@ -80,9 +84,9 @@ def test_model_layer_has_only_the_approved_family_modules_and_readmes() -> None:
 @pytest.mark.parametrize(
     "relative_path",
     (
-        "deepseek_r1_distill_qwen_14b/executor.py",
-        "mistral_7b/executor.py",
-        "phi4/executor.py",
+        "deepseek_r1_distill_qwen_14b/hf_generator.py",
+        "mistral_7b/hf_generator.py",
+        "phi4/hf_generator.py",
     ),
 )
 def test_direct_composition_examples_do_not_depend_on_shared_family_executors(relative_path: str) -> None:

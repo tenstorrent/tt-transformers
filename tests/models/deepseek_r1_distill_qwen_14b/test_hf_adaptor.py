@@ -8,12 +8,14 @@ import torch
 from transformers import Qwen2Config, Qwen2ForCausalLM
 from transformers.models.qwen2.modeling_qwen2 import Qwen2RotaryEmbedding
 
-from tt_transformers.models.deepseek_r1_distill_qwen_14b import generator, hf_adaptor, weight_utils
+from tt_transformers.models.deepseek_r1_distill_qwen_14b import hf_generator as hf_adaptor
 from tt_transformers.models.deepseek_r1_distill_qwen_14b import model as qwen_model
-from tt_transformers.models.deepseek_r1_distill_qwen_14b.hf_adaptor import (
+from tt_transformers.models.deepseek_r1_distill_qwen_14b import vllm_generator as generator
+from tt_transformers.models.deepseek_r1_distill_qwen_14b import weight_utils
+from tt_transformers.models.deepseek_r1_distill_qwen_14b.hf_generator import (
     DeepSeekR1Qwen14BForCausalLM as DeepSeekProduct,
 )
-from tt_transformers.models.deepseek_r1_distill_qwen_14b.hf_adaptor import (
+from tt_transformers.models.deepseek_r1_distill_qwen_14b.hf_generator import (
     DeepSeekR1Qwen14BRuntimeConfig,
     _trace_seq_lens,
     convert_hf_model_weights,

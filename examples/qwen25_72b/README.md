@@ -97,10 +97,9 @@ This directory contains the large Qwen2.5-72B TTTv2 product path.
 
 ```text
 HF checkpoint
-  -> hf_adaptor.py: provider metadata, tokenizer, and weights
+  -> hf_generator.py: checkpoint/tokenizer loading, executor construction, and HF generation
   -> model.py: multi-device Qwen2.5 tensor graph
-  -> executor.py: thin family builder plus concrete direct-run helpers
-  -> generator.py: vLLM construction, DP composition, and dispatch
+  -> vllm_generator.py: vLLM construction, DP composition, and dispatch
 ```
 
 The tensor model composes reusable embedding, rotary, RMSNorm, attention, MLP,

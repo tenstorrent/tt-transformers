@@ -97,7 +97,7 @@ def _initializer_laziness_reason(relative: Path, imported: str) -> str | None:
 def _structural_violations(path: Path, relative: Path, tree: ast.AST) -> list[Violation]:
     violations: list[Violation] = []
     layer = relative.parts[0] if len(relative.parts) > 1 else "root"
-    if layer == "models" and path.name == "hf_adaptor.py":
+    if layer == "models" and path.name == "hf_generator.py":
         policy_imports = {
             alias.name
             for node in ast.walk(tree)
@@ -111,7 +111,7 @@ def _structural_violations(path: Path, relative: Path, tree: ast.AST) -> list[Vi
                     path=path,
                     line=1,
                     imported="tt_transformers.cache_environment",
-                    reason="HF adaptors must use the shared cache/environment policy",
+                    reason="HF generators must use the shared cache/environment policy",
                 )
             )
         preflight_calls: list[ast.Call] = []
@@ -126,7 +126,7 @@ def _structural_violations(path: Path, relative: Path, tree: ast.AST) -> list[Vi
                                 path=path,
                                 line=node.lineno,
                                 imported='Path("model_cache")',
-                                reason="HF adaptor cache defaults cannot resolve against CWD",
+                                reason="HF generator cache defaults cannot resolve against CWD",
                             )
                         )
             if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "os":
@@ -136,7 +136,7 @@ def _structural_violations(path: Path, relative: Path, tree: ast.AST) -> list[Vi
                             path=path,
                             line=node.lineno,
                             imported=f"os.{node.attr}",
-                            reason="HF adaptor environment access must use the typed shared policy",
+                            reason="HF generator environment access must use the typed shared policy",
                         )
                     )
         if len(preflight_calls) != 1:
@@ -145,7 +145,7 @@ def _structural_violations(path: Path, relative: Path, tree: ast.AST) -> list[Vi
                     path=path,
                     line=1,
                     imported="report_model_preflight",
-                    reason=f"HF adaptor must emit exactly one preflight report, found {len(preflight_calls)}",
+                    reason=f"HF generator must emit exactly one preflight report, found {len(preflight_calls)}",
                 )
             )
         elif not any(keyword.arg == "cache_resolution" for keyword in preflight_calls[0].keywords):
@@ -154,7 +154,7 @@ def _structural_violations(path: Path, relative: Path, tree: ast.AST) -> list[Vi
                     path=path,
                     line=preflight_calls[0].lineno,
                     imported="report_model_preflight",
-                    reason="HF adaptor preflight must report the exact CacheResolution",
+                    reason="HF generator preflight must report the exact CacheResolution",
                 )
             )
         cache_calls = [
@@ -174,7 +174,7 @@ def _structural_violations(path: Path, relative: Path, tree: ast.AST) -> list[Vi
                     path=path,
                     line=cache_calls[0].lineno if cache_calls else 1,
                     imported="resolve_model_cache",
-                    reason="HF adaptor cache resolution must include the complete identity inputs",
+                    reason="HF generator cache resolution must include the complete identity inputs",
                 )
             )
     for node in ast.walk(tree):

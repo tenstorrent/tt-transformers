@@ -290,9 +290,9 @@ def test_prefill_request_rows_are_placed_into_lane_local_slots_with_history():
 @pytest.mark.parametrize(
     ("relative_path", "class_name"),
     [
-        ("src/tt_transformers/models/llama3_8b/generator.py", "Llama3Generator"),
-        ("src/tt_transformers/models/llama33_70b/generator.py", "Llama33_70BGenerator"),
-        ("src/tt_transformers/models/qwen3_32b/generator.py", "Qwen3_32BGenerator"),
+        ("src/tt_transformers/models/llama3_8b/vllm_generator.py", "Llama3Generator"),
+        ("src/tt_transformers/models/llama33_70b/vllm_generator.py", "Llama33_70BGenerator"),
+        ("src/tt_transformers/models/qwen3_32b/vllm_generator.py", "Qwen3_32BGenerator"),
     ],
 )
 def test_target_generator_capabilities_advertise_exact_device_top_k(relative_path, class_name):
@@ -349,9 +349,9 @@ def test_tttv2_runtime_import_boundary_excludes_legacy_sampling_state():
     files.extend(
         Path(path)
         for path in (
-            "src/tt_transformers/models/llama3_8b/executor.py",
-            "src/tt_transformers/models/llama33_70b/executor.py",
-            "src/tt_transformers/models/qwen3_32b/executor.py",
+            "src/tt_transformers/models/llama3_8b/hf_generator.py",
+            "src/tt_transformers/models/llama33_70b/hf_generator.py",
+            "src/tt_transformers/models/qwen3_32b/hf_generator.py",
         )
     )
     forbidden_modules = {

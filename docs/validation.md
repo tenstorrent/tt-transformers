@@ -80,8 +80,12 @@ artifact store before publication.
 ## Known limits
 
 - All twelve model manifests remain experimental.
-- The 42-node matrix covers selected regression cells, not every declared
+- The recorded 42-node matrix covers selected regression cells, not every declared
   model geometry or workload.
+- The active matrix now contains 49 nodes, including the HF generation and
+  Wormhole cached-reference gates described in [tests](../tests/README.md).
+  Their results require new evidence; the historical 42-node result does not
+  qualify these additional gates.
 - Four separate Llama 3.3 performance diagnostics at earlier code SHA
   `2883a949860d749adc2ed1af5525b27a9a547505` passed TTFT but missed their
   throughput floors; they were not rerun at the tested code above.

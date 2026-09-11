@@ -25,7 +25,7 @@ from examples.llama33_70b.demo import create_executor, create_model, lazy_weight
 from huggingface_hub import snapshot_download
 from tests.models.llama33_70b.logits_oracle import assert_rowwise_logits_parity
 
-from tt_transformers.models.llama33_70b.hf_adaptor import DEFAULT_HF_REVISION
+from tt_transformers.models.llama33_70b.hf_generator import DEFAULT_HF_REVISION
 from tt_transformers.sampling import SamplingParams
 
 _HF_MODEL = "meta-llama/Llama-3.3-70B-Instruct"

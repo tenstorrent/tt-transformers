@@ -9,7 +9,7 @@ import pytest
 from examples.common.model_targets import resolve_metric_tolerance
 from examples.common.trace_region_sizes import resolve_trace_region_size
 
-from tt_transformers.models.qwen3_32b import executor as qwen3_executor
+from tt_transformers.models.qwen3_32b import hf_generator as qwen3_executor
 
 _DEMO_PATH = "examples/qwen3_32b/demo.py"
 _HARDWARE_DEMO_PATH = "tests/hardware/models/qwen3_32b/test_demo.py"
@@ -367,7 +367,7 @@ def test_required_bh_gate_failures_are_not_converted_to_fixture_skips():
 @pytest.mark.model
 def test_demo_uses_model_owned_runtime_compatibility_wrappers():
     imports = [ast.unparse(node) for node in _DEMO_TREE.body if isinstance(node, (ast.Import, ast.ImportFrom))]
-    assert any("tt_transformers.models.qwen3_32b.executor" in statement for statement in imports)
+    assert any("tt_transformers.models.qwen3_32b.hf_generator" in statement for statement in imports)
     assert "EagerQwen3_32BExecutor" in _DEMO_SOURCE
     assert "TracedQwen3_32BExecutor" in _DEMO_SOURCE
     assert "Qwen3_32B.from_pretrained" in _DEMO_SOURCE

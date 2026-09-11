@@ -61,7 +61,7 @@ def test_demo_keeps_coder_trace_region_and_fabric():
 @pytest.mark.model
 def test_demo_uses_model_owned_runtime_compatibility_wrappers():
     imports = [ast.unparse(node) for node in _DEMO_TREE.body if isinstance(node, (ast.Import, ast.ImportFrom))]
-    assert any("tt_transformers.models.qwen25_coder_32b.executor" in statement for statement in imports)
+    assert any("tt_transformers.models.qwen25_coder_32b.hf_generator" in statement for statement in imports)
     assert "EagerQwen25Coder32BExecutor" in _DEMO_SOURCE
     assert "TracedQwen25Coder32BExecutor" in _DEMO_SOURCE
     assert "Qwen25Coder32B.from_pretrained" in _DEMO_SOURCE

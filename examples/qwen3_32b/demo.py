@@ -66,8 +66,8 @@ from examples.common.runtime import UnsupportedConfiguration, open_mesh_device
 from examples.common.trace_region_sizes import resolve_trace_region_size
 from tt_transformers.cache_environment import resolve_model_cache_path
 from tt_transformers.device_utils import cleanup_model_case, get_device_name
-from tt_transformers.models.qwen3_32b.executor import EagerQwen3_32BExecutor, TracedQwen3_32BExecutor
-from tt_transformers.models.qwen3_32b.hf_adaptor import DEFAULT_HF_REVISION as DEMO_HF_REVISION
+from tt_transformers.models.qwen3_32b.hf_generator import DEFAULT_HF_REVISION as DEMO_HF_REVISION
+from tt_transformers.models.qwen3_32b.hf_generator import EagerQwen3_32BExecutor, TracedQwen3_32BExecutor
 from tt_transformers.models.qwen3_32b.model import QWEN3_32B_ACCURACY, QWEN3_32B_PERFORMANCE, Qwen3_32B
 from tt_transformers.sampling.sampling_params import SamplingParams
 

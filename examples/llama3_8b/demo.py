@@ -56,8 +56,12 @@ from tt_transformers.device_utils import cleanup_model_case, get_device_name
 from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
 from tt_transformers.llm_runtime.lane_group import LaneGroupExecutor
 from tt_transformers.mesh_utils import create_submeshes
-from tt_transformers.models.llama3_8b.executor import Llama3ExecutorConfig, build_llama3_executor
-from tt_transformers.models.llama3_8b.hf_adaptor import from_pretrained, load_converted_state_dict
+from tt_transformers.models.llama3_8b.hf_generator import (
+    Llama3ExecutorConfig,
+    build_llama3_executor,
+    load_converted_state_dict,
+)
+from tt_transformers.models.llama3_8b.hf_generator import _load_model as from_pretrained
 from tt_transformers.models.llama3_8b.model import Llama31_8BPagedAttentionConfig
 from tt_transformers.sampling.sampling_params import SamplingParams
 

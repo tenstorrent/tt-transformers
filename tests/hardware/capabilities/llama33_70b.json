@@ -12,8 +12,8 @@
     "integration_contract": "docs/architecture.md",
     "source_files": [
       "examples/llama33_70b/demo.py",
-      "src/tt_transformers/models/llama33_70b/hf_adaptor.py",
-      "src/tt_transformers/models/llama33_70b/generator.py"
+      "src/tt_transformers/models/llama33_70b/hf_generator.py",
+      "src/tt_transformers/models/llama33_70b/vllm_generator.py"
     ]
   },
   "scope": {

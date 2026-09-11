@@ -99,10 +99,9 @@ This directory contains the Llama 3.3 70B TTTv2 product path.
 
 ```text
 meta-llama/Llama-3.3-70B-Instruct
-  -> hf_adaptor.py: provider metadata, tokenizer, and weights
+  -> hf_generator.py: checkpoint/tokenizer loading, executor construction, and HF generation
   -> model.py: multi-device TTTv2 Llama graph
-  -> executor.py: thin typed entry point into llama3_executor.py
-  -> generator.py: vLLM construction, DP lanes, and dispatch
+  -> vllm_generator.py: vLLM construction, DP lanes, and dispatch
 ```
 
 `model.py` composes reusable embedding, rotary, RMSNorm, attention, MLP,

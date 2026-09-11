@@ -146,10 +146,10 @@ def validate() -> list[str]:
     matrix_path = ROOT / "tests/hardware/hardware-matrix.json"
     matrix = json.loads(matrix_path.read_text(encoding="utf-8"))
     nodes = matrix.get("nodes", [])
-    if len(nodes) != 42 or len({node.get("id") for node in nodes}) != 42:
-        errors.append("hardware matrix must contain 42 unique nodes")
-    if sum(node.get("mesh_device") == "P150" for node in nodes) != 8:
-        errors.append("hardware matrix must retain eight logical P150 nodes")
+    if len(nodes) != 49 or len({node.get("id") for node in nodes}) != 49:
+        errors.append("hardware matrix must contain 49 unique nodes")
+    if sum(node.get("mesh_device") == "P150" for node in nodes) != 11:
+        errors.append("hardware matrix must retain eleven logical P150 nodes")
 
     for path in (
         ROOT / "TTTV2_MIGRATION_WORK_LOG.md",

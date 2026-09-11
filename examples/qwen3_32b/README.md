@@ -108,21 +108,19 @@ family module.
 
 ```text
 Qwen/Qwen3-32B
-  -> hf_adaptor.py: provider metadata, tokenizer, and weight conversion
+  -> hf_generator.py: checkpoint/tokenizer loading, executor construction, and HF generation
   -> model.py: Qwen3 tensor graph composed from TTTv2 modules
-  -> executor.py: Qwen3 policy over the shared model-layer ModelExecutor
-  -> generator.py: vLLM construction, DP composition, and dispatch
+  -> vllm_generator.py: vLLM construction, DP composition, and dispatch
 ```
 
 ## Files
 
 | File | Responsibility |
 | --- | --- |
-| `hf_adaptor.py` | Resolve HF configuration/tokenizer/weights and construct runtime metadata |
+| `hf_generator.py` | Resolve HF configuration/tokenizer/weights and construct runtime metadata; construct the executor and expose `.generate()` |
 | `weight_utils.py` | Convert and map provider weights |
 | `model.py` | Build and execute the Qwen3-32B tensor graph |
-| `executor.py` | Supply Qwen3-native sampling, trace-prime, and compatibility policy |
-| `generator.py` | Build lanes, compose DP, configure `VLLMAdapter`, and dispatch calls |
+| `vllm_generator.py` | Build lanes, compose DP, configure `VLLMAdapter`, and dispatch calls |
 | `demo.py` | Direct model demonstration entry point |
 
 ## Tensor-module composition

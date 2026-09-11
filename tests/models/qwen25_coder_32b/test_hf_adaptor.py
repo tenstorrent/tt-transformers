@@ -7,8 +7,10 @@ import torch
 from transformers import Qwen2Config, Qwen2ForCausalLM
 from transformers.models.qwen2.modeling_qwen2 import Qwen2RotaryEmbedding
 
-from tt_transformers.models.qwen25_coder_32b import generator, hf_adaptor, weight_utils
-from tt_transformers.models.qwen25_coder_32b.hf_adaptor import (
+from tt_transformers.models.qwen25_coder_32b import hf_generator as hf_adaptor
+from tt_transformers.models.qwen25_coder_32b import vllm_generator as generator
+from tt_transformers.models.qwen25_coder_32b import weight_utils
+from tt_transformers.models.qwen25_coder_32b.hf_generator import (
     Qwen25Coder32BForCausalLM,
     Qwen25Coder32BRuntimeConfig,
     _trace_seq_lens,

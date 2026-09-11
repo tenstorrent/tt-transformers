@@ -126,7 +126,7 @@ def test_demo_imports_promoted_runner_helpers_and_model_owned_executor():
         "run_teacher_forcing",
     ):
         assert ("examples.common.run_helpers", helper) in imported
-    assert ("tt_transformers.models.mistral_7b.executor", "Mistral7BExecutor") in imported
+    assert ("tt_transformers.models.mistral_7b.hf_generator", "Mistral7BExecutor") in imported
     assert not any(module == "tt_transformers.models.executor" for module, _ in imported)
 
 

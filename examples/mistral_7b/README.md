@@ -103,21 +103,19 @@ consolidation and does not use `src/tt_transformers/models/executor.py`.
 
 ```text
 Hugging Face checkpoint
-  -> hf_adaptor.py: provider metadata, tokenizer, and weight conversion
+  -> hf_generator.py: checkpoint/tokenizer loading, executor construction, and HF generation
   -> model.py: Mistral tensor graph composed from TTTv2 modules
-  -> executor.py: direct composition of common runtime owners for one lane
-  -> generator.py: vLLM construction, DP composition, and dispatch
+  -> vllm_generator.py: vLLM construction, DP composition, and dispatch
 ```
 
 ## Files
 
 | File | Responsibility |
 | --- | --- |
-| `hf_adaptor.py` | Resolve provider configuration/tokenizer and construct the product model |
+| `hf_generator.py` | Resolve provider configuration/tokenizer and construct the product model; construct the executor and expose `.generate()` |
 | `weight_utils.py` | Convert and map provider weights |
 | `model.py` | Build and execute the TTTv2 Mistral transformer graph |
-| `executor.py` | Directly compose one execution lane and own its resources |
-| `generator.py` | Build lanes, configure the vLLM boundary, and select eager/traced execution |
+| `vllm_generator.py` | Build lanes, configure the vLLM boundary, and select eager/traced execution |
 
 ## Tensor-module composition
 

@@ -105,21 +105,19 @@ consolidation and does not use `src/tt_transformers/models/executor.py`.
 
 ```text
 Hugging Face checkpoint
-  -> hf_adaptor.py: provider metadata, tokenizer, and weight conversion
+  -> hf_generator.py: checkpoint/tokenizer loading, executor construction, and HF generation
   -> model.py: DeepSeek-Qwen tensor graph composed from TTTv2 modules
-  -> executor.py: direct composition of common runtime owners for one lane
-  -> generator.py: vLLM construction, DP composition, and dispatch
+  -> vllm_generator.py: vLLM construction, DP composition, and dispatch
 ```
 
 ## Files
 
 | File | Responsibility |
 | --- | --- |
-| `hf_adaptor.py` | Resolve the HF checkpoint/tokenizer and construct model/runtime configuration |
+| `hf_generator.py` | Resolve the HF checkpoint/tokenizer and construct model/runtime configuration; construct the executor and expose `.generate()` |
 | `weight_utils.py` | Convert and map provider weights into the model-owned layout |
 | `model.py` | Build and execute the DeepSeek-Qwen transformer graph |
-| `executor.py` | Directly compose one lane from `llm_runtime` modules and own cleanup |
-| `generator.py` | Build one or more lanes, configure `VLLMAdapter`, and expose the vLLM-facing API |
+| `vllm_generator.py` | Build one or more lanes, configure `VLLMAdapter`, and expose the vLLM-facing API |
 
 ## Tensor-module composition
 

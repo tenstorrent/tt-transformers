@@ -15,14 +15,14 @@ _EXPORTS = {
     "Qwen25_72BPrecisionConfig": ("tt_transformers.models.qwen25_72b.model", "Qwen25_72BPrecisionConfig"),
     "QWEN25_72B_ACCURACY": ("tt_transformers.models.qwen25_72b.model", "QWEN25_72B_ACCURACY"),
     "QWEN25_72B_PERFORMANCE": ("tt_transformers.models.qwen25_72b.model", "QWEN25_72B_PERFORMANCE"),
-    "Qwen25_72BGenerator": ("tt_transformers.models.qwen25_72b.generator", "Qwen25_72BGenerator"),
-    "Qwen25_72BGeneratorConfig": ("tt_transformers.models.qwen25_72b.generator", "Qwen25_72BGeneratorConfig"),
-    "Qwen25_72BExecutor": ("tt_transformers.models.qwen25_72b.executor", "Qwen25_72BExecutor"),
-    "Qwen25_72BExecutorConfig": ("tt_transformers.models.qwen25_72b.executor", "Qwen25_72BExecutorConfig"),
-    "Qwen25_72BForCausalLM": ("tt_transformers.models.qwen25_72b.hf_adaptor", "Qwen25_72BForCausalLM"),
-    "build_qwen25_72b_executor": ("tt_transformers.models.qwen25_72b.executor", "build_qwen25_72b_executor"),
-    "build_qwen25_72b_generator": ("tt_transformers.models.qwen25_72b.generator", "build_qwen25_72b_generator"),
-    "from_pretrained": ("tt_transformers.models.qwen25_72b.hf_adaptor", "from_pretrained"),
+    "Qwen25_72BGenerator": ("tt_transformers.models.qwen25_72b.vllm_generator", "Qwen25_72BGenerator"),
+    "Qwen25_72BGeneratorConfig": ("tt_transformers.models.qwen25_72b.vllm_generator", "Qwen25_72BGeneratorConfig"),
+    "Qwen25_72BExecutor": ("tt_transformers.models.qwen25_72b.hf_generator", "Qwen25_72BExecutor"),
+    "Qwen25_72BExecutorConfig": ("tt_transformers.models.qwen25_72b.hf_generator", "Qwen25_72BExecutorConfig"),
+    "Qwen25_72BForCausalLM": ("tt_transformers.models.qwen25_72b.hf_generator", "Qwen25_72BForCausalLM"),
+    "build_qwen25_72b_executor": ("tt_transformers.models.qwen25_72b.hf_generator", "build_qwen25_72b_executor"),
+    "build_qwen25_72b_generator": ("tt_transformers.models.qwen25_72b.vllm_generator", "build_qwen25_72b_generator"),
+    "from_pretrained": ("tt_transformers.models.qwen25_72b.hf_generator", "from_pretrained"),
 }
 
 __all__ = [

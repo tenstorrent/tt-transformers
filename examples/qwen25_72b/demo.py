@@ -60,9 +60,14 @@ from examples.common.runtime import UnsupportedConfiguration, open_mesh_device
 from tt_transformers.cache_environment import resolve_model_cache_path
 from tt_transformers.device_utils import cleanup_model_case
 from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
-from tt_transformers.models.qwen25_72b.executor import Qwen25_72BExecutor, Qwen25_72BExecutorConfig
-from tt_transformers.models.qwen25_72b.hf_adaptor import DEFAULT_HF_REVISION as DEMO_HF_REVISION
-from tt_transformers.models.qwen25_72b.hf_adaptor import encode_prompt, from_pretrained, load_tokenizer
+from tt_transformers.models.qwen25_72b.hf_generator import DEFAULT_HF_REVISION as DEMO_HF_REVISION
+from tt_transformers.models.qwen25_72b.hf_generator import (
+    Qwen25_72BExecutor,
+    Qwen25_72BExecutorConfig,
+    encode_prompt,
+    load_tokenizer,
+)
+from tt_transformers.models.qwen25_72b.hf_generator import _load_model as from_pretrained
 from tt_transformers.models.qwen25_72b.model import QWEN25_72B_ACCURACY, QWEN25_72B_PERFORMANCE, Qwen25_72B
 from tt_transformers.sampling.sampling_params import SamplingParams
 

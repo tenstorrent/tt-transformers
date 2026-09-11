@@ -64,8 +64,8 @@ def _dry_args(tmp_path):
 @pytest.mark.host
 def test_checked_in_matrix_validates_and_covers_every_required_mesh():
     counts = runner.validate_matrix(_matrix())
-    assert counts == {"N150": 9, "N300": 6, "T3K": 8, "P150": 8, "P150x4": 11}
-    assert sum(counts.values()) == 42
+    assert counts == {"N150": 13, "N300": 6, "T3K": 8, "P150": 11, "P150x4": 11}
+    assert sum(counts.values()) == 49
 
 
 @pytest.mark.host
@@ -75,7 +75,7 @@ def test_all_single_p150_nodes_admit_bh_qb_05_with_only_mesh_selection(tmp_path)
     assert "P150" in machine["supported_mesh_devices"]
 
     nodes = [node for node in matrix["nodes"] if node["mesh_device"] == "P150"]
-    assert {node["priority"] for node in nodes} == {*range(24, 31), 38}
+    assert {node["priority"] for node in nodes} == {*range(24, 31), 38, 45, 46, 48}
     for node in nodes:
         assert node["machine_pool"] == ["bh-lb-11", "bh-qb-05"]
         assert node["environment"]["MESH_DEVICE"] == "P150"
@@ -99,6 +99,26 @@ def test_matrix_refuses_a_pool_entry_that_does_not_support_the_requested_mesh():
 
     with pytest.raises(runner.MatrixError, match="machine mesh support mismatch"):
         runner.validate_matrix(matrix)
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("suffix", ["single", "batch"])
+def test_hf_generation_p150_nodes_accept_current_loudbox_inventory(suffix):
+    matrix = _matrix()
+    node = runner.select_node(matrix, f"bh-p150-llama3-8b-hf-generate-{suffix}")
+    inventory = {
+        "captured_utc": "2026-09-11T04:50:00Z",
+        "machine_identity": "bh-lb-11.yyz2.tenstorrent.com",
+        "architecture": "blackhole",
+        "physical_sku": "eight P150B boards",
+        "device_count": 8,
+        "board_types": ["p150b", "P150"],
+        "cluster_type": "P150_X8",
+        "system_mesh": "2x4",
+        "tt_visible_devices": None,
+        "source_command": "tt-smi -s",
+    }
+    runner.validate_physical_inventory(matrix, node, "bh-lb-11", inventory["machine_identity"], inventory)
 
 
 @pytest.mark.host

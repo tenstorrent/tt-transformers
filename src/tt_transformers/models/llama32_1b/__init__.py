@@ -10,11 +10,11 @@ from importlib import import_module
 _EXPORTS = {
     "LLAMA32_1B_ACCURACY": ("tt_transformers.models.llama32_1b.model", "LLAMA32_1B_ACCURACY"),
     "LLAMA32_1B_PERFORMANCE": ("tt_transformers.models.llama32_1b.model", "LLAMA32_1B_PERFORMANCE"),
-    "Llama32_1BExecutor": ("tt_transformers.models.llama32_1b.executor", "Llama32_1BExecutor"),
-    "Llama32_1BExecutorConfig": ("tt_transformers.models.llama32_1b.executor", "Llama32_1BExecutorConfig"),
-    "Llama32_1BForCausalLM": ("tt_transformers.models.llama32_1b.hf_adaptor", "Llama32_1BForCausalLM"),
+    "Llama32_1BExecutor": ("tt_transformers.models.llama32_1b.hf_generator", "Llama32_1BExecutor"),
+    "Llama32_1BExecutorConfig": ("tt_transformers.models.llama32_1b.hf_generator", "Llama32_1BExecutorConfig"),
+    "Llama32_1BForCausalLM": ("tt_transformers.models.llama32_1b.hf_generator", "Llama32_1BForCausalLM"),
     "Llama32_1BPrecisionConfig": ("tt_transformers.models.llama32_1b.model", "Llama32_1BPrecisionConfig"),
-    "Llama32_1BRuntimeConfig": ("tt_transformers.models.llama32_1b.hf_adaptor", "Llama32_1BRuntimeConfig"),
+    "Llama32_1BRuntimeConfig": ("tt_transformers.models.llama32_1b.hf_generator", "Llama32_1BRuntimeConfig"),
     "Llama32_1BTransformer1D": ("tt_transformers.models.llama32_1b.model", "Llama32_1BTransformer1D"),
     "Llama32_1BTransformer1DConfig": ("tt_transformers.models.llama32_1b.model", "Llama32_1BTransformer1DConfig"),
 }

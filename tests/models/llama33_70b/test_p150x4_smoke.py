@@ -15,8 +15,8 @@ from tests.integration.cleanup_utils import cleanup_model_case
 from tests.integration.run_helpers import make_contiguous_page_table
 
 from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
-from tt_transformers.models.llama33_70b.executor import Llama33_70BExecutor, Llama33_70BExecutorConfig
-from tt_transformers.models.llama33_70b.hf_adaptor import from_pretrained
+from tt_transformers.models.llama33_70b.hf_generator import Llama33_70BExecutor, Llama33_70BExecutorConfig
+from tt_transformers.models.llama33_70b.hf_generator import _load_model as from_pretrained
 from tt_transformers.models.llama33_70b.model import LLAMA33_70B_ACCURACY, LLAMA33_70B_BH_TP4_CLUSTER_TYPES
 
 _HF_MODEL = "meta-llama/Llama-3.3-70B-Instruct"

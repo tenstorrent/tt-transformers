@@ -99,10 +99,9 @@ This directory contains the Qwen2-7B TTTv2 product path.
 
 ```text
 HF checkpoint
-  -> hf_adaptor.py: provider configuration, tokenizer, and weights
+  -> hf_generator.py: checkpoint/tokenizer loading, executor construction, and HF generation
   -> model.py: Qwen2 tensor graph composed from TTTv2 modules
-  -> executor.py: thin typed entry point into qwen2_executor.py
-  -> generator.py: vLLM boundary, DP composition, and dispatch
+  -> vllm_generator.py: vLLM boundary, DP composition, and dispatch
 ```
 
 The model composes reusable embedding, rotary, RMSNorm, attention, MLP,
@@ -111,7 +110,7 @@ device tuning remain model-owned.
 
 ## Executor composition
 
-The local `executor.py` retains the public Qwen2 class/config/builder names.
+The local `hf_generator.py` retains the public Qwen2 class/config/builder names.
 `src/tt_transformers/models/qwen2_executor.py` supplies Qwen2-family policy and
 composes `src/tt_transformers/models/executor.py::ModelExecutor`.
 

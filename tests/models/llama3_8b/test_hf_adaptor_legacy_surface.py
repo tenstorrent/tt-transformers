@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from tt_transformers.models.llama3_8b import hf_adaptor
-from tt_transformers.models.llama3_8b.hf_adaptor import (
+from tt_transformers.models.llama3_8b import hf_generator as hf_adaptor
+from tt_transformers.models.llama3_8b.hf_generator import (
     Llama3RuntimeConfig,
     _disable_batched_prefill,
     _max_prefill_chunk_size,

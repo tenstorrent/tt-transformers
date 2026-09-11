@@ -4,7 +4,7 @@
 """
 Host-side weight helpers for Qwen2.5-72B-Instruct TTTv2.
 
-Construction lives in ``tt_transformers.models.qwen25_72b.hf_adaptor``;
+Construction lives in ``tt_transformers.models.qwen25_72b.hf_generator``;
 low-level permutes and HF tensor layout live in ``weight_utils``.
 """
 

@@ -14,8 +14,8 @@ import ttnn
 from tests.integration.cleanup_utils import cleanup_model_case
 from tests.integration.run_helpers import make_contiguous_page_table
 
-from tt_transformers.models.qwen3_32b.executor import EagerQwen3_32BExecutor
-from tt_transformers.models.qwen3_32b.hf_adaptor import from_pretrained
+from tt_transformers.models.qwen3_32b.hf_generator import EagerQwen3_32BExecutor
+from tt_transformers.models.qwen3_32b.hf_generator import _load_model as from_pretrained
 from tt_transformers.models.qwen3_32b.model import QWEN3_32B_ACCURACY, QWEN3_32B_BH_TP4_CLUSTER_TYPES
 
 _HF_MODEL = "Qwen/Qwen3-32B"

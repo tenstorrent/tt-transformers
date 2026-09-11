@@ -104,10 +104,9 @@ This directory contains the Qwen2.5-Coder-32B TTTv2 product path.
 
 ```text
 HF checkpoint
-  -> hf_adaptor.py: provider metadata, tokenizer, and weights
+  -> hf_generator.py: checkpoint/tokenizer loading, executor construction, and HF generation
   -> model.py: Qwen2.5-Coder tensor graph
-  -> executor.py: thin family builder plus compatibility/direct-run helpers
-  -> generator.py: vLLM construction, DP composition, and dispatch
+  -> vllm_generator.py: vLLM construction, DP composition, and dispatch
 ```
 
 The model uses reusable embedding, rotary, RMSNorm, attention, MLP, LM-head,

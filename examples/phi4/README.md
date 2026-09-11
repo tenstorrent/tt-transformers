@@ -103,21 +103,19 @@ consolidation and does not use `src/tt_transformers/models/executor.py`.
 
 ```text
 Hugging Face checkpoint
-  -> hf_adaptor.py: provider metadata, tokenizer, and weight conversion
+  -> hf_generator.py: checkpoint/tokenizer loading, executor construction, and HF generation
   -> model.py: Phi-4 tensor graph composed from TTTv2 modules
-  -> executor.py: direct composition of common runtime owners for one lane
-  -> generator.py: vLLM construction, DP composition, and dispatch
+  -> vllm_generator.py: vLLM construction, DP composition, and dispatch
 ```
 
 ## Files
 
 | File | Responsibility |
 | --- | --- |
-| `hf_adaptor.py` | Resolve the Phi-4 provider configuration/tokenizer and build runtime metadata |
+| `hf_generator.py` | Resolve the Phi-4 provider configuration/tokenizer and build runtime metadata; construct the executor and expose `.generate()` |
 | `weight_utils.py` | Convert and map HF weights into the model-owned layout |
 | `model.py` | Build and execute the TTTv2 Phi-4 transformer graph |
-| `executor.py` | Directly compose one execution lane and own its runtime resources |
-| `generator.py` | Build lanes, configure `VLLMAdapter`, and expose serving dispatch |
+| `vllm_generator.py` | Build lanes, configure `VLLMAdapter`, and expose serving dispatch |
 
 ## Tensor-module composition
 

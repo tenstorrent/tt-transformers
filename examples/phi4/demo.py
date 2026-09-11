@@ -67,9 +67,14 @@ from tt_transformers.cache_environment import resolve_model_cache_path
 from tt_transformers.device_utils import cleanup_dp_model_case, cleanup_model_case
 from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
 from tt_transformers.llm_runtime.lane_group import LaneGroupExecutor
-from tt_transformers.models.phi4.executor import Phi4Executor, Phi4ExecutorConfig
-from tt_transformers.models.phi4.hf_adaptor import DEFAULT_HF_REVISION, encode_prompt, from_pretrained
-from tt_transformers.models.phi4.hf_adaptor import DEFAULT_HF_REVISION as DEMO_HF_REVISION
+from tt_transformers.models.phi4.hf_generator import (
+    DEFAULT_HF_REVISION,
+    Phi4Executor,
+    Phi4ExecutorConfig,
+    encode_prompt,
+)
+from tt_transformers.models.phi4.hf_generator import DEFAULT_HF_REVISION as DEMO_HF_REVISION
+from tt_transformers.models.phi4.hf_generator import _load_model as from_pretrained
 from tt_transformers.models.phi4.model import PHI4_ACCURACY, PHI4_PERFORMANCE, Phi4Transformer
 from tt_transformers.sampling.sampling_params import SamplingParams
 

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from tt_transformers.models.qwen25_coder_32b import hf_adaptor
+from tt_transformers.models.qwen25_coder_32b import hf_generator as hf_adaptor
 from tt_transformers.models.qwen25_coder_32b import model as qwen_model
 
 
@@ -40,7 +40,7 @@ def test_compatibility_constructor_selects_matching_kv_ownership(monkeypatch, ex
         captured.update(mesh_device=mesh_device, **kwargs)
         return SimpleNamespace(model=expected_model)
 
-    monkeypatch.setattr(hf_adaptor, "from_pretrained", fake_from_pretrained)
+    monkeypatch.setattr(hf_adaptor, "_load_model", fake_from_pretrained)
     mesh_device = object()
     actual_model = qwen_model.Qwen25Coder32B.from_pretrained(
         mesh_device,
