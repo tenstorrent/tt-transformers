@@ -60,14 +60,14 @@
   },
   "limits": {
     "source_proven": [
-      "Demo cases cover active batch 1 or 32",
+      "Benchmark cases cover active batch 1 or 32",
       "standard/CI budgets are 1024/2048",
       "ordinary execution is N300 TP2; T3K DP4 partitions into four TP2 lanes",
       "N150 overflows the source L1 capacity guard"
     ]
   },
   "features": {
-    "device_sampling": "Host and on-device top-k paths exist; the demo default is host sampling.",
+    "device_sampling": "Host and on-device top-k paths exist; the benchmark default is host sampling.",
     "trace": "case_and_topology_specific"
   }
 }

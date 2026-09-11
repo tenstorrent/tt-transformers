@@ -1,5 +1,28 @@
 # Llama 3.1 8B with TTTv2
 
+## Generate text
+
+[`demo.py`](demo.py) loads the public model with `hf_generator.from_pretrained`,
+formats a chat with `model.tokenizer.apply_chat_template`, calls
+`model.generate`, prints the decoded continuation, and cleans up the model.
+
+With the checkpoint cached locally, run:
+
+```bash
+HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+MESH_DEVICE=N150 python -m examples.llama3_8b.demo \
+  --hf-model "meta-llama/Llama-3.1-8B-Instruct" \
+  --prompt "Explain paged attention briefly." \
+  --max-new-tokens 40 --max-seq-len 2048
+```
+
+The inputs stay as CPU PyTorch tensors; the model handles TT transfers and KV
+storage. `MESH_DEVICE` selects the caller-owned mesh. Configure `TT_CACHE_PATH`
+when using an existing writable TT model cache, as described below.
+
+[`benchmark.py`](benchmark.py) contains the accuracy, performance, tracing, and
+DP workloads. Run its `--case` / `--optimizations` commands for those checks.
+
 <!-- BEGIN GENERATED SUPPORT -->
 
 ## Standalone support contract
@@ -45,7 +68,7 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 
 ### Proven limits and features
 
-- Demo cases cover active batch 1 or 32.
+- Benchmark cases cover active batch 1 or 32.
 - standard/CI budgets are 1024/2048; the DP4 case reaches 4096.
 - Blackhole contract buckets are 1024, with P150x4 DP4 at 4096.
 - device sampling keeps Blackhole prefill sequential unless the controlled invariance experiment proves otherwise.
@@ -66,10 +89,10 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 python -m pip install -e '.[examples,test]'
 ```
 
-Representative run using the first declared geometry:
+Representative benchmark using the first declared geometry:
 
 ```bash
-HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 MESH_DEVICE=N150 HF_MODEL=meta-llama/Llama-3.1-8B-Instruct python -m examples.llama3_8b.demo --case token-accuracy --optimizations performance
+HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 MESH_DEVICE=N150 HF_MODEL=meta-llama/Llama-3.1-8B-Instruct python -m examples.llama3_8b.benchmark --case token-accuracy --optimizations performance
 ```
 
 Collect the equivalent hardware gate without running it:
@@ -205,7 +228,7 @@ entry point. It:
 
 For tokenizer inputs and cleanup, see the
 [HF generation example](../../src/tt_transformers/models/README.md#hf-style-text-generation).
-The existing demo and vLLM entry point use `_load_model()` from the same module
+The benchmark and vLLM entry point use `_load_model()` from the same module
 to construct their own executor without creating a second owner.
 
 Provider-facing concerns stop there. Neither `Llama3Executor` nor the common
@@ -600,7 +623,7 @@ runtime mechanics while owning different TTTv2 module graphs and executors.
 
 vLLM is one facade. An SGLang integration can build the same model executor and
 provide an SGLang-specific adapter for request fields, cache negotiation,
-trace selection, and asynchronous output conventions. A direct demo or custom
+trace selection, and asynchronous output conventions. A benchmark or custom
 service can bypass server adapters and call the model-owned executor with an
 explicit execution target.
 

@@ -12,7 +12,7 @@ from unittest.mock import create_autospec
 import pytest
 import torch
 import ttnn
-from examples.llama3_8b import demo as llama_demo
+from examples.llama3_8b import benchmark as llama_demo
 
 from tt_transformers.llm_runtime.config import PagedKVCacheConfig, PageTableLayout, TraceConfig, WarmupConfig
 from tt_transformers.llm_runtime.execution import EagerExecutor, TracedExecutor

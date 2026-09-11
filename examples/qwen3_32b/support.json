@@ -60,7 +60,7 @@
   },
   "limits": {
     "source_proven": [
-      "Demo cases cover active batch 1 or 32",
+      "Benchmark cases cover active batch 1 or 32",
       "P150x4 buckets are 4096 for token accuracy, 1024 for eval, and 2048 for batch-32-ci",
       "model lanes require at least TP4; all DP cases capacity-skip",
       "P150x4 batched prefill remains disabled unless exact-token cross-cardinality invariance is proven"

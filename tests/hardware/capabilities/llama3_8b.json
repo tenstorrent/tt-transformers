@@ -11,7 +11,7 @@
     "plan": "SUPPORT.md",
     "integration_contract": "docs/architecture.md",
     "source_files": [
-      "examples/llama3_8b/demo.py",
+      "examples/llama3_8b/benchmark.py",
       "src/tt_transformers/models/llama3_8b/hf_generator.py",
       "src/tt_transformers/models/llama3_8b/vllm_generator.py"
     ]

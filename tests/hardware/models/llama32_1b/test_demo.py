@@ -3,7 +3,7 @@
 import os
 
 import pytest
-from examples.llama32_1b import demo as example
+from examples.llama32_1b import benchmark as example
 from tests.support.marker_policy import selected_topology_marks
 
 try:

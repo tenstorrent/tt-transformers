@@ -9,7 +9,7 @@ import pytest
 from examples.common.trace_region_sizes import resolve_trace_region_size
 from tests.models.llama3_8b.demo_utils import evaluate_seeded_cross_cardinality_consistency
 
-_DEMO_PATH = "examples/llama3_8b/demo.py"
+_DEMO_PATH = "examples/llama3_8b/benchmark.py"
 _HARDWARE_DEMO_PATH = "tests/hardware/models/llama3_8b/test_demo.py"
 _DEMO_SOURCE = "\n".join(
     (Path(_DEMO_PATH).read_text(encoding="utf-8"), Path(_HARDWARE_DEMO_PATH).read_text(encoding="utf-8"))

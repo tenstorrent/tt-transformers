@@ -29,6 +29,30 @@ _MAX_SEQ_LEN = 1024
 _NEW_TOKENS = 8
 
 
+@pytest.mark.device
+@pytest.mark.model
+@pytest.mark.slow
+def test_hf_style_demo_cli(capsys):
+    from examples.llama3_8b import demo
+
+    if os.environ.get("MESH_DEVICE", "").strip().upper() not in {"N150", "P150"}:
+        pytest.skip("Set MESH_DEVICE=N150 or P150 for the simple text demo")
+    demo.main(
+        [
+            "--prompt",
+            "What is the capital of France? Answer in one short sentence.",
+            "--max-new-tokens",
+            "16",
+            "--max-seq-len",
+            "1024",
+        ]
+    )
+    output = capsys.readouterr().out
+    assert "Paris" in output, output
+    print("HF_SIMPLE_DEMO: public loading, chat template, generate, decode, and cleanup completed")
+    print("HF_SIMPLE_DEMO_TEXT:", output.strip().splitlines()[-1])
+
+
 @pytest.fixture
 def generation_model(request):
     selected = os.environ.get("MESH_DEVICE", "").strip().upper()

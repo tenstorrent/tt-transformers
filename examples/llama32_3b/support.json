@@ -87,14 +87,14 @@
   },
   "limits": {
     "source_proven": [
-      "Demo cases cover active batch 1 or 32",
+      "Benchmark cases cover active batch 1 or 32",
       "standard/CI sequence budgets are 1024/2048; DP smokes reach 4096",
       "TP1, TP2, and TP8 paths are declared; TP4 DP lanes are rejected",
       "N150 has decode tracing but no traced-prefill bucket; N300/T3K declare Q128/Q1024"
     ]
   },
   "features": {
-    "device_sampling": "Host and on-device paths exist; the demo default is host sampling.",
+    "device_sampling": "Host and on-device paths exist; the benchmark default is host sampling.",
     "trace": "case_and_topology_specific"
   }
 }

@@ -14,6 +14,46 @@ python -m pip install -e '.[examples,test]'
 Each model README documents its `HF_MODEL`, pinned revision, `MESH_DEVICE`,
 cache requirements, supported arguments, and exact commands.
 
+## Generate text
+
+Every model directory provides a short `demo.py` with the same public flow:
+`from_pretrained()` → `tokenizer.apply_chat_template()` → `model.generate()` →
+decode → `model.cleanup()`.
+
+```bash
+HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+MESH_DEVICE=N150 python -m examples.llama3_8b.demo \
+  --hf-model meta-llama/Llama-3.1-8B-Instruct \
+  --prompt "Explain paged attention briefly." \
+  --max-new-tokens 40 --max-seq-len 2048
+```
+
+The CLI selects its mesh from `MESH_DEVICE`. The model owns its executor and
+generation resources, and accepts CPU PyTorch tokenizer outputs directly.
+The demo prints the continuation and releases the model before closing its
+mesh. Set `TT_CACHE_PATH` to an existing writable model-cache root when needed;
+the model-specific cache policy below still applies.
+
+For a different model, use its README's mesh and checkpoint with the same four
+CLI options. `--prompt` defaults to a short question, `--max-new-tokens` to 40,
+and `--max-seq-len` to 2048. `--hf-model` selects a checkpoint for the chosen
+implementation.
+
+## Accuracy and performance benchmarks
+
+Each directory's `benchmark.py` retains the detailed accuracy, performance,
+trace, and DP workloads. For example:
+
+```bash
+HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+MESH_DEVICE=N150 HF_MODEL=meta-llama/Llama-3.1-8B-Instruct \
+python -m examples.llama3_8b.benchmark --case token-accuracy --optimizations performance
+```
+
+Existing commands that use `--case` or `--optimizations` must invoke
+`examples.<model>.benchmark`. Hardware accuracy/performance pytest wrappers
+delegate to this module and preserve their existing selectors and thresholds.
+
 | Example | Current validated subset |
 |---|---|
 | [DeepSeek R1 Distill Qwen 14B](deepseek_r1_distill_qwen_14b/README.md) | no model-family cell in the current 42-node regression matrix |

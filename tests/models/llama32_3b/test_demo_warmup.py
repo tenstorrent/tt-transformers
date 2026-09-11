@@ -10,7 +10,7 @@ import pytest
 
 from tt_transformers.llm_runtime.config import TraceConfig
 
-_DEMO_PATH = "examples/llama32_3b/demo.py"
+_DEMO_PATH = "examples/llama32_3b/benchmark.py"
 _DEMO_TREE = ast.parse(Path(_DEMO_PATH).read_text(encoding="utf-8"), filename=_DEMO_PATH)
 
 
@@ -155,7 +155,7 @@ def test_dp_build_validates_and_resolves_cache_from_each_lane_submesh():
     assert "_skip_unless_heads_divide_mesh" in call_names
     assert "lazy_weight_cache_dir_for_demo" in call_names
 
-    from_pretrained_call = next(node for node in calls if node.func.id == "from_pretrained")
+    from_pretrained_call = next(node for node in calls if node.func.id == "_load_model")
     cache_dir = next(keyword.value for keyword in from_pretrained_call.keywords if keyword.arg == "cache_dir")
     assert isinstance(cache_dir, ast.Name)
     assert cache_dir.id == "lane_cache_dir"
@@ -208,7 +208,7 @@ def test_create_model_preserves_reduced_layer_diagnostic_override(monkeypatch):
         "LLAMA32_3B_ACCURACY": object(),
         "LLAMA32_3B_PERFORMANCE": object(),
         "_skip_unless_heads_divide_mesh": lambda *_: None,
-        "from_pretrained": from_pretrained,
+        "_load_model": from_pretrained,
         "os": os,
         "pytest": pytest,
         "ttnn": SimpleNamespace(MeshDevice=object),

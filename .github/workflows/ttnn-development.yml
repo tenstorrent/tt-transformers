@@ -239,7 +239,7 @@ jobs:
         timeout-minutes: 45
         run: |
           python3 tools/ttnn_dev.py run --environment "$RUNNER_TEMP/candidate/environment.json" -- \
-            python -m examples.llama3_8b.demo --case token-accuracy --optimizations performance \
+            python -m examples.llama3_8b.benchmark --case token-accuracy --optimizations performance \
             2>&1 | tee generated/llama-token-accuracy.log
           tt-smi -s > generated/hardware-after.json
       - name: Upload hardware evidence

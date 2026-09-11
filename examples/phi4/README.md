@@ -1,5 +1,28 @@
 # Phi-4 with TTTv2
 
+## Generate text
+
+[`demo.py`](demo.py) loads the public model with `hf_generator.from_pretrained`,
+formats a chat with `model.tokenizer.apply_chat_template`, calls
+`model.generate`, prints the decoded continuation, and cleans up the model.
+
+With the checkpoint cached locally, run:
+
+```bash
+HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+MESH_DEVICE=N300 python -m examples.phi4.demo \
+  --hf-model "microsoft/phi-4" \
+  --prompt "Explain paged attention briefly." \
+  --max-new-tokens 40 --max-seq-len 2048
+```
+
+The inputs stay as CPU PyTorch tensors; the model handles TT transfers and KV
+storage. `MESH_DEVICE` selects the caller-owned mesh. Configure `TT_CACHE_PATH`
+when using an existing writable TT model cache, as described below.
+
+[`benchmark.py`](benchmark.py) contains the accuracy, performance, tracing, and
+DP workloads. Run its `--case` / `--optimizations` commands for those checks.
+
 <!-- BEGIN GENERATED SUPPORT -->
 
 ## Standalone support contract
@@ -36,7 +59,7 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 
 ### Proven limits and features
 
-- Demo cases cover active batch 1 or 32.
+- Benchmark cases cover active batch 1 or 32.
 - standard/CI budgets are 1024/2048; DP smoke metadata reaches 4096.
 - ordinary execution is N300 TP2; physical T3K is admitted only as four TP2 lanes.
 - N150 exceeds the source L1 capacity guard.
@@ -57,10 +80,10 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 python -m pip install -e '.[examples,test]'
 ```
 
-Representative run using the first declared geometry:
+Representative benchmark using the first declared geometry:
 
 ```bash
-HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 MESH_DEVICE=N300 HF_MODEL=microsoft/phi-4 python -m examples.phi4.demo --case token-accuracy --optimizations performance
+HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 MESH_DEVICE=N300 HF_MODEL=microsoft/phi-4 python -m examples.phi4.benchmark --case token-accuracy --optimizations performance
 ```
 
 Collect the equivalent hardware gate without running it:

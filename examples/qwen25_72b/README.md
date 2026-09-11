@@ -1,5 +1,28 @@
 # Qwen2.5-72B with TTTv2
 
+## Generate text
+
+[`demo.py`](demo.py) loads the public model with `hf_generator.from_pretrained`,
+formats a chat with `model.tokenizer.apply_chat_template`, calls
+`model.generate`, prints the decoded continuation, and cleans up the model.
+
+With the checkpoint cached locally, run:
+
+```bash
+HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+MESH_DEVICE=T3K python -m examples.qwen25_72b.demo \
+  --hf-model "Qwen/Qwen2.5-72B-Instruct" \
+  --prompt "Explain paged attention briefly." \
+  --max-new-tokens 40 --max-seq-len 2048
+```
+
+The inputs stay as CPU PyTorch tensors; the model handles TT transfers and KV
+storage. `MESH_DEVICE` selects the caller-owned mesh. Configure `TT_CACHE_PATH`
+when using an existing writable TT model cache, as described below.
+
+[`benchmark.py`](benchmark.py) contains the accuracy, performance, tracing, and
+DP workloads. Run its `--case` / `--optimizations` commands for those checks.
+
 <!-- BEGIN GENERATED SUPPORT -->
 
 ## Standalone support contract
@@ -35,7 +58,7 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 
 ### Proven limits and features
 
-- Demo cases cover active batch 1 or 32.
+- Benchmark cases cover active batch 1 or 32.
 - standard/CI sequence budgets are 1024/2048.
 - weights and KV require T3K TP8.
 - all retained DP cases capacity-skip.
@@ -56,10 +79,10 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 python -m pip install -e '.[examples,test]'
 ```
 
-Representative run using the first declared geometry:
+Representative benchmark using the first declared geometry:
 
 ```bash
-HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 MESH_DEVICE=T3K HF_MODEL=Qwen/Qwen2.5-72B-Instruct python -m examples.qwen25_72b.demo --case token-accuracy --optimizations performance
+HF_HOME=/path/to/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 MESH_DEVICE=T3K HF_MODEL=Qwen/Qwen2.5-72B-Instruct python -m examples.qwen25_72b.benchmark --case token-accuracy --optimizations performance
 ```
 
 Collect the equivalent hardware gate without running it:

@@ -31,6 +31,12 @@ and runtime owners. See the [model guide](models/README.md#model-package-layout)
 for the common file layout and the [prefill guide](llm_runtime/prefill/README.md)
 for execution planning.
 
+Repository `examples/<model>/demo.py` demonstrates the public loading,
+chat-template tokenization, `.generate()`, decoding, and cleanup flow. Its
+separate `benchmark.py` contains accuracy/performance workloads and explicit
+executor configuration. See the [runnable commands](../../examples/README.md#generate-text)
+or the [model API example](models/README.md#hf-style-text-generation).
+
 Static choices such as topology and program configuration are resolved during
 construction. Device, tensor, trace, and cache resources have explicit owners;
 cleanup must be ordered, retryable, and safe after partial initialization.

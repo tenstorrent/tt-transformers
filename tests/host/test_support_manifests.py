@@ -69,3 +69,11 @@ def test_hardware_wrappers_import_public_example_modules():
         source = path.read_text()
         if "from examples." not in source or "run_" not in source:
             raise AssertionError(f"{path}: not delegated to a public example helper")
+        if path.name == "test_demo.py":
+            tree = ast.parse(source, filename=str(path))
+            assert any(
+                isinstance(node, ast.ImportFrom)
+                and node.module == f"examples.{path.parent.name}"
+                and any(alias.name == "benchmark" and alias.asname == "example" for alias in node.names)
+                for node in tree.body
+            ), f"{path}: hardware benchmark gate must delegate to benchmark.py"

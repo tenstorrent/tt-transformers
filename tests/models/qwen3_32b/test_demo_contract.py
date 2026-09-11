@@ -11,7 +11,7 @@ from examples.common.trace_region_sizes import resolve_trace_region_size
 
 from tt_transformers.models.qwen3_32b import hf_generator as qwen3_executor
 
-_DEMO_PATH = "examples/qwen3_32b/demo.py"
+_DEMO_PATH = "examples/qwen3_32b/benchmark.py"
 _HARDWARE_DEMO_PATH = "tests/hardware/models/qwen3_32b/test_demo.py"
 _DEMO_SOURCE = "\n".join(
     (Path(_DEMO_PATH).read_text(encoding="utf-8"), Path(_HARDWARE_DEMO_PATH).read_text(encoding="utf-8"))

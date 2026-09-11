@@ -64,8 +64,8 @@ def _dry_args(tmp_path):
 @pytest.mark.host
 def test_checked_in_matrix_validates_and_covers_every_required_mesh():
     counts = runner.validate_matrix(_matrix())
-    assert counts == {"N150": 13, "N300": 6, "T3K": 8, "P150": 11, "P150x4": 11}
-    assert sum(counts.values()) == 49
+    assert counts == {"N150": 14, "N300": 6, "T3K": 8, "P150": 12, "P150x4": 11}
+    assert sum(counts.values()) == 51
 
 
 @pytest.mark.host
@@ -75,7 +75,7 @@ def test_all_single_p150_nodes_admit_bh_qb_05_with_only_mesh_selection(tmp_path)
     assert "P150" in machine["supported_mesh_devices"]
 
     nodes = [node for node in matrix["nodes"] if node["mesh_device"] == "P150"]
-    assert {node["priority"] for node in nodes} == {*range(24, 31), 38, 45, 46, 48}
+    assert {node["priority"] for node in nodes} == {*range(24, 31), 38, 45, 46, 48, 51}
     for node in nodes:
         assert node["machine_pool"] == ["bh-lb-11", "bh-qb-05"]
         assert node["environment"]["MESH_DEVICE"] == "P150"

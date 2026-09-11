@@ -108,7 +108,7 @@ jobs:
         shell: bash
         timeout-minutes: 45
         run: |
-          python -m examples.llama3_8b.demo \
+          python -m examples.llama3_8b.benchmark \
             --case token-accuracy --optimizations performance \
             2>&1 | tee generated/llama-token-accuracy.log
       - name: Inspect hardware after model execution

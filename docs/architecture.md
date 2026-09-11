@@ -38,3 +38,17 @@ cleanup paths. Production code never imports repository examples, tests, or
 qualification helpers.
 
 All model APIs are experimental until their support manifests say otherwise.
+
+## Repository entry points
+
+`examples/<model>/demo.py` is the application-facing example. It calls the
+model's public `hf_generator.from_pretrained()`, applies the tokenizer's chat
+template, calls `.generate()`, decodes the continuation, and cleans up the
+model. It supplies an open mesh; the model owns executor construction, KV
+storage, input staging, and the generation loop.
+
+`examples/<model>/benchmark.py` contains the detailed accuracy, performance,
+tracing, and DP workloads. These tools explicitly configure execution to
+measure particular runtime paths. Existing hardware accuracy/performance
+wrappers delegate to `benchmark.py`; the simple demo remains independent of
+benchmark helpers and reference artifacts.

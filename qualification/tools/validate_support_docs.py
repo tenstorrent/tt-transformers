@@ -68,6 +68,9 @@ def validate() -> list[str]:
         errors.append("support manifests do not cover the exact model set")
 
     for path in manifest_paths:
+        for filename in ("demo.py", "benchmark.py"):
+            if not path.with_name(filename).is_file():
+                errors.append(f"{path}: {filename} is missing")
         manifest = json.loads(path.read_text(encoding="utf-8"))
         for error in validator.iter_errors(manifest):
             location = "/".join(map(str, error.absolute_path)) or "<root>"
@@ -146,10 +149,10 @@ def validate() -> list[str]:
     matrix_path = ROOT / "tests/hardware/hardware-matrix.json"
     matrix = json.loads(matrix_path.read_text(encoding="utf-8"))
     nodes = matrix.get("nodes", [])
-    if len(nodes) != 49 or len({node.get("id") for node in nodes}) != 49:
-        errors.append("hardware matrix must contain 49 unique nodes")
-    if sum(node.get("mesh_device") == "P150" for node in nodes) != 11:
-        errors.append("hardware matrix must retain eleven logical P150 nodes")
+    if len(nodes) != 51 or len({node.get("id") for node in nodes}) != 51:
+        errors.append("hardware matrix must contain 51 unique nodes")
+    if sum(node.get("mesh_device") == "P150" for node in nodes) != 12:
+        errors.append("hardware matrix must retain twelve logical P150 nodes")
 
     for path in (
         ROOT / "TTTV2_MIGRATION_WORK_LOG.md",

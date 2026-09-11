@@ -37,7 +37,7 @@ python qualification/tools/run_hardware_matrix.py --validate
 python qualification/tools/run_hardware_matrix.py --list
 ```
 
-The active matrix contains 49 nodes: N150 13, N300 6, T3K 8, P150 11, and
+The active matrix contains 51 nodes: N150 13, N300 6, T3K 8, P150 11, and
 P150x4 11. The Llama HF generation gates cover single prompts, repeated calls,
 left-padded batches, and traced device-greedy generation compared with an
 explicit eager host-argmax reference on N150 and P150. The cached HF

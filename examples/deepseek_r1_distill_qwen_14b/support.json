@@ -73,14 +73,14 @@
   },
   "limits": {
     "source_proven": [
-      "Demo cases cover active batch 1 or 32",
+      "Benchmark cases cover active batch 1 or 32",
       "standard/CI sequence budgets are 1024/2048; retained DP smokes reach 4096",
       "TP1 is rejected; supported model lanes are TP2, TP4, or TP8",
       "N300 accuracy eval-32 and batch-32-ci are explicitly DRAM-infeasible"
     ]
   },
   "features": {
-    "device_sampling": "Host and on-device top-k paths exist; the demo default is on_device_topk.",
+    "device_sampling": "Host and on-device top-k paths exist; the benchmark default is on_device_topk.",
     "trace": "case_and_topology_specific"
   }
 }

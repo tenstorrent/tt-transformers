@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-_DEMO_PATH = "examples/qwen25_coder_32b/demo.py"
+_DEMO_PATH = "examples/qwen25_coder_32b/benchmark.py"
 _HARDWARE_DEMO_PATH = "tests/hardware/models/qwen25_coder_32b/test_demo.py"
 _DEMO_SOURCE = "\n".join(
     (Path(_DEMO_PATH).read_text(encoding="utf-8"), Path(_HARDWARE_DEMO_PATH).read_text(encoding="utf-8"))

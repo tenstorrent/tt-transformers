@@ -123,7 +123,7 @@
   },
   "limits": {
     "source_proven": [
-      "Demo cases cover active batch 1 or 32",
+      "Benchmark cases cover active batch 1 or 32",
       "standard/CI budgets are 1024/2048; the DP4 case reaches 4096",
       "Blackhole contract buckets are 1024, with P150x4 DP4 at 4096",
       "device sampling keeps Blackhole prefill sequential unless the controlled invariance experiment proves otherwise"

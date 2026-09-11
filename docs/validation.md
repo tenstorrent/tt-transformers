@@ -4,6 +4,17 @@ This page summarizes validation of the cleaned package candidate. Results
 apply only to the named revision or artifact, not as a blanket support
 promise.
 
+## Demo and benchmark coverage
+
+The short `examples/<model>/demo.py` exercises public loading, chat-template
+tokenization, `.generate()`, decoding, and cleanup. The separate `benchmark.py`
+retains accuracy/performance workloads; existing hardware wrappers named
+`test_demo.py` now delegate to that benchmark module.
+
+A passing text-generation demo or reference-accuracy gate does not imply that
+a benchmark meets its latency or throughput targets. Demo and benchmark
+results must identify the tested entry point and revision independently.
+
 ## Hardware
 
 - Tested code: `9134c399334240e3e4d35dfa93013c6c7293a3d1`
@@ -82,7 +93,7 @@ artifact store before publication.
 - All twelve model manifests remain experimental.
 - The recorded 42-node matrix covers selected regression cells, not every declared
   model geometry or workload.
-- The active matrix now contains 49 nodes, including the HF generation and
+- The active matrix now contains 51 nodes, including the HF generation and
   Wormhole cached-reference gates described in [tests](../tests/README.md).
   Their results require new evidence; the historical 42-node result does not
   qualify these additional gates.

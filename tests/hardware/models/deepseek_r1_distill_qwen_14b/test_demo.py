@@ -3,7 +3,7 @@
 import os
 
 import pytest
-from examples.deepseek_r1_distill_qwen_14b import demo as example
+from examples.deepseek_r1_distill_qwen_14b import benchmark as example
 from tests.support.marker_policy import selected_topology_marks
 
 try:

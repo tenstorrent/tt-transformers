@@ -105,10 +105,17 @@ stochastic generation uses host logits to preserve the requested top-k/top-p
 semantics. Trace configurations use the existing warmup and coverage checks;
 a request outside captured coverage raises an error.
 
-Existing demos and `vllm_generator.py` use the private `_load_model()` helper
-when constructing their own execution configuration. They retain one executor
-per tensor model and preserve scheduler-controlled cache allocation and async
-decode behavior. Applications should use the public `from_pretrained()` loader.
+Every repository `demo.py` follows this public API directly: load the model,
+apply its tokenizer's chat template, call `.generate()`, decode the continuation,
+and clean up. The [example commands](../../../examples/README.md#generate-text)
+accept `--prompt`, `--max-new-tokens`, `--max-seq-len`, and `--hf-model`.
+
+The separate `benchmark.py` workloads and `vllm_generator.py` use the private
+`_load_model()` helper when constructing their own execution configuration.
+Benchmarks retain their accuracy/performance policies; vLLM retains
+scheduler-controlled cache allocation and async decode behavior. Both keep
+one executor per tensor model. Applications use the public `from_pretrained()`
+loader.
 
 External vLLM registrations must point to the renamed module, for example
 `tt_transformers.models.llama3_8b.vllm_generator:Llama3Generator`. Class names

@@ -3,7 +3,7 @@
 import os
 
 import pytest
-from examples.phi4 import demo as example
+from examples.phi4 import benchmark as example
 from tests.support.marker_policy import selected_topology_marks
 
 try:

@@ -52,7 +52,7 @@
   },
   "limits": {
     "source_proven": [
-      "Demo cases cover active batch 1 or 32",
+      "Benchmark cases cover active batch 1 or 32",
       "standard/CI sequence budgets are 1024/2048",
       "weights and KV require T3K TP8",
       "all retained DP cases capacity-skip"

@@ -10,7 +10,7 @@ import pytest
 from examples.common.model_targets import resolve_accuracy_targets, resolve_metric_tolerance
 from examples.common.trace_region_sizes import resolve_trace_region_size
 
-_DEMO_PATH = "examples/llama33_70b/demo.py"
+_DEMO_PATH = "examples/llama33_70b/benchmark.py"
 _HARDWARE_DEMO_PATH = "tests/hardware/models/llama33_70b/test_demo.py"
 _DEMO_SOURCE = "\n".join(
     (Path(_DEMO_PATH).read_text(encoding="utf-8"), Path(_HARDWARE_DEMO_PATH).read_text(encoding="utf-8"))
