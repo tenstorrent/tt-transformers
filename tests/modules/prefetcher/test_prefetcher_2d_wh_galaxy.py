@@ -370,10 +370,20 @@ def test_prefetcher_2d_wh_galaxy_sealed_resources_are_real_on_device(mesh_device
         # Only decode streams weights through the ring, so only decode owns the
         # global CB and the borrowed weight tuple. Prefill runs plain DRAM
         # linears, so `global_cb is None` there is the contract, not a gap.
-        assert decode_context.global_cb is not None
         assert decode_context.weights == tuple(tensor for _, tensor in registered)
-        assert prefill_context.global_cb is None
         assert prefill_context.weights == ()
+
+        # **Sealing does not allocate the buffer on this mesh.** The Galaxy config
+        # sets `defer_global_cb=True` -- the CB is ~774 kB of L1 on every sender
+        # and receiver core, and holding it through a prefill makes that prefill
+        # unplaceable -- so after `seal()` *both* contexts carry `global_cb=None`
+        # and the buffer appears on the way into decode. The resolved size is
+        # published at seal either way, which is what separates "deferred" from
+        # "never configured". Asserted here because the two are indistinguishable
+        # from `global_cb` alone, and only one of them is the contract.
+        assert decode_context.global_cb is None
+        assert prefill_context.global_cb is None
+        assert prefetcher.resolved_global_cb_size == prefetcher.config.global_cb_size
 
         # The addresses are the whole point of sealing: every entry must be the
         # registered tensor's actual device buffer address, in registration order.
@@ -407,6 +417,17 @@ def test_prefetcher_2d_wh_galaxy_sealed_resources_are_real_on_device(mesh_device
         assert 0 < config.address_repeat_count <= len(config.sender_receiver_mapping)
         assert config.expected_weight_count % config.prefetch_num_layers == 0
         assert prefetcher.resolved_global_cb_size == config.global_cb_size
+
+        # **This test deliberately stops at sealing and does not activate.** The
+        # other half of the deferral contract -- that activating decode really
+        # does materialize the buffer -- belongs with the transition tests below,
+        # which drive a real MLP2D through the ring. Asserting it here would mean
+        # calling `resources.activate("decode")` with no module consuming the
+        # prefetch, which starts the DRAM producer against an idle ring and hangs
+        # `cleanup()` in `wait_for_outstanding_reads` (measured 2026-09-11: the
+        # assertions pass, then teardown never returns and the run is killed at
+        # its timeout with no summary). A test that has to hang to prove its point
+        # is not the right place for the point.
     finally:
         resources.cleanup()
         _release(None)
