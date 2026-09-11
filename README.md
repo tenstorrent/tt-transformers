@@ -72,6 +72,10 @@ from `tt_transformers.models`, while reusable building blocks live under
 See [CONTRIBUTING.md](https://github.com/tenstorrent/tt_transformers/blob/main/CONTRIBUTING.md),
 the [test guide](https://github.com/tenstorrent/tt_transformers/blob/main/tests/README.md),
 and the [tool guide](https://github.com/tenstorrent/tt_transformers/blob/main/tools/README.md).
+
+To develop against a selected tt-metal commit or edit TTNN alongside
+tt_transformers, see the [TTNN development guide](docs/ttnn-development.md).
+
 Report security issues through the process in
 [SECURITY.md](https://github.com/tenstorrent/tt_transformers/blob/main/SECURITY.md).
 
