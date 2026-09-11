@@ -23,6 +23,7 @@ from typing import Any
 import ttnn
 
 from tt_transformers.device_ownership import compatibility_default_device
+from tt_transformers.device_utils import has_l1_small_region
 from tt_transformers.modules.lazy_weight import LazyWeight, release_device_weights, resolve_lazy_weight
 from tt_transformers.modules.lightweightmodule import LightweightModule
 
@@ -384,6 +385,10 @@ class MLP2D(LightweightModule):
                 topology=resources.topology,
                 num_links=resources.num_links,
                 subdevice_id=ccl_context.worker_sub_device_id,
+                # The op creates three semaphores plus a barrier semaphore per compiled
+                # program and keeps them for the life of the cache entry. In main L1 they
+                # land mid-bank and strand it; see `GALAXY_L1_SMALL_SIZE`.
+                use_l1_small_for_semaphores=has_l1_small_region(cfg.mesh_device),
             )
         kwargs = dict(
             persistent_output_buffers=[*resources.intermediate_output_buffers, *resources.persistent_output_buffers],

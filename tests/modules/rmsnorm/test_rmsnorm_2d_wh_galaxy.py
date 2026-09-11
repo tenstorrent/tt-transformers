@@ -22,6 +22,7 @@ from tests.modules._wh_galaxy_hardware import (
 )
 from tests.support.comparison import comp_pcc
 
+from tt_transformers.device_utils import GALAXY_L1_SMALL_SIZE
 from tt_transformers.models.galaxy import (
     GalaxyCollectivePlan,
     GalaxyResourceKey,
@@ -200,7 +201,13 @@ def _invoke_decode_repeat(module, resources, mesh_device, x, residual, *, count)
 @pytest.mark.parametrize("dim", [8192, 5120], ids=["llama-final-8192", "qwen-final-5120"])
 @pytest.mark.parametrize(
     "device_params",
-    [{"dispatch_core_axis": ttnn.DispatchCoreAxis.COL, "fabric_config": ttnn.FabricConfig.FABRIC_1D_RING}],
+    [
+        {
+            "dispatch_core_axis": ttnn.DispatchCoreAxis.COL,
+            "fabric_config": ttnn.FabricConfig.FABRIC_1D_RING,
+            "l1_small_size": GALAXY_L1_SMALL_SIZE,
+        }
+    ],
     indirect=True,
 )
 @torch.no_grad()
@@ -245,7 +252,7 @@ def test_rmsnorm_2d_wh_galaxy_final_norm_decode_batch_32_fused_residual_repeat(m
 @pytest.mark.parametrize("seq_len", [128, 2048], ids=["seq128", "seq2048"])
 @pytest.mark.parametrize(
     "device_params",
-    [{"dispatch_core_axis": ttnn.DispatchCoreAxis.COL, "fabric_config": True}],
+    [{"dispatch_core_axis": ttnn.DispatchCoreAxis.COL, "fabric_config": True, "l1_small_size": GALAXY_L1_SMALL_SIZE}],
     indirect=True,
 )
 @torch.no_grad()
@@ -286,7 +293,7 @@ def test_rmsnorm_2d_wh_galaxy_final_norm_prefill_repeat(mesh_device, dim, seq_le
 @pytest.mark.parametrize("projection", ["q_norm", "k_norm"])
 @pytest.mark.parametrize(
     "device_params",
-    [{"dispatch_core_axis": ttnn.DispatchCoreAxis.COL, "fabric_config": True}],
+    [{"dispatch_core_axis": ttnn.DispatchCoreAxis.COL, "fabric_config": True, "l1_small_size": GALAXY_L1_SMALL_SIZE}],
     indirect=True,
 )
 @torch.no_grad()

@@ -119,33 +119,74 @@ a node result carries.
 - Green across both Llama and Qwen shapes: attention 2D, embedding 2D, lm_head
   2D, MLP 2D, RMSNorm 2D (final-norm and q/k-norm), rope 2D, sampling 2D (exact
   and stochastic), column user selector, worker partition, page-table placement.
-- **All 4 failures are in `tests/modules/prefetcher/test_prefetcher_2d_wh_galaxy.py`.**
-  Three are traced to one root cause, recorded below. The fourth
-  (`attention_decode_with_active_prefetch`) fails and then hangs in teardown, so it
-  was killed at its timeout and **its traceback was never written** — it is
-  unexplained rather than explained by the same cause.
+- **Re-run the same day after the `L1_SMALL` fix below, which moves every Galaxy
+  L1 address: 56 of 57 pass.** The 49 non-prefetcher ids were re-run as a
+  regression check on the 32 kB shrink and **all 49 passed** (23 minutes of
+  device time); 7 of the 8 prefetcher ids pass, against 4 before. The one
+  remaining failure is `attention_decode_with_active_prefetch`, a different
+  defect (below). Side evidence that the change does what it claims: 27 of the
+  pre-fix logs carry ttnn's `Allocating semaphores in L1, which may fragment L1`
+  warning and **none of the 54 post-fix logs do**.
+- **All 4 failures were in `tests/modules/prefetcher/test_prefetcher_2d_wh_galaxy.py`.**
+  Three were traced to one root cause and are **fixed**; see below. The fourth
+  (`attention_decode_with_active_prefetch`) is a **different, still-open**
+  defect: `Attention2D.decode_forward`'s QKV `ttnn.linear` is enqueued without
+  naming a sub-device while the prefetch decode partition has two — the sender
+  column and the worker grid — and the command queue refuses it with
+  `TT_FATAL ... sub_device_ids.size() == 1`, "Programs must be executed on a
+  single sub-device". The module's collectives pass `subdevice_id`; its matmuls
+  do not. The teardown hang that follows is the known trap — the failure leaves
+  the DRAM producer running against a ring nothing consumes, so `cleanup()`
+  never returns — which is also why the traceback took a plugin printing each
+  phase report as it is produced, rather than a pytest timeout, to recover.
 
-**Known defect — the global circular buffer cannot be re-placed after a prefill.**
-`Prefetcher2D._release_global_cb()` runs on every `activate("prefill")` when
-`release_global_cb_on_prefill` is set, and frees the buffer's L1 — but it does not
-invoke `on_global_cb_released`, which is wired only into `cleanup()`. On Galaxy
-that callback is what clears the mesh program cache and forgets the placement
-record. Without it the cached decode programs stay resident, and so do their
-semaphores; a semaphore is a 32-byte L1 allocation and `FreeListOpt::allocate`
-prefers the smallest fitting block, so those blocks are taken below the buffer's
-original address. The next `activate("decode")` then either trips the restore
-guard (measured: 12 stray 32-byte blocks at 880352, below the free top 1368992
-the first creation recorded) or fails outright in the allocator (792 064 B of CB
-needed per bank against 709 152 B free). The mechanism is described exactly, and
-independently, in `release_galaxy_global_cb_placement`'s own docstring — only the
-wiring to the per-prefill release is missing.
+**Fixed defect — the global circular buffer could not be re-placed after a
+prefill.** The prefill path's generic collectives, `ttnn.reduce_scatter` and
+`ttnn.all_gather`, create their synchronisation semaphores inside the program
+they compile, as 32-byte allocations owned by the program cache, and they do so
+while the buffer is released and the prefill's transient tensors are live. With
+no `L1_SMALL` bank those allocations land in main L1. Measured with the block
+table on `(8, 4)`: a prefill added 13 such blocks, twelve of them contiguous at
+880352, in the middle of the region the buffer had vacated; `clear_program_cache()`
+removed exactly those 13 and the buffer then restored to its original blocks with
+the placement record kept; a recompiled prefill put them back at the same
+addresses. Every Galaxy suite opened the mesh without an `L1_SMALL` bank (ttnn's
+default `l1_small_size` is 0), so the collectives fell back to main L1 and
+`all_gather` warned about it in the logs.
 
-Deliberately not patched here. Clearing the cache on every prefill→decode
-transition is correct by that docstring's argument but recompiles every program
-on the serving path; forgetting only the placement record is cheap and unsafe,
-since that record is what keeps the address stable for programs still cached.
-Which cost to pay is the module owners' call. **The restore guard raising is the
-system working — do not relax it.**
+The two symptoms were that one cause. A placement recorded before a prefill
+tripped the restore guard (`mode_transition_matrix`). A first creation *after* a
+prefill targeted `880352 - 65536 = 814816` and found only 709 152 B below it for
+a 792 064 B buffer, which was the allocator OOM in
+`failed_transition_rolls_back` and `cleanup_from_active_mode[prefill]`; the
+message's `allocated: 684320` is everything above that target, reservations
+included, not resident prefill state. An earlier version of this paragraph
+blamed decode programs' semaphores and the missing `on_global_cb_released` call
+from the per-prefill release; both were wrong, and two of the three failures
+happened with no placement record at all.
+
+**The fix removes the mechanism rather than paying for it per request.** Every
+Galaxy mesh is now opened with an `L1_SMALL` region — `GALAXY_L1_SMALL_SIZE`,
+32 kB, defined once in `src/tt_transformers/device_utils.py` and carried by
+`GALAXY_DEVICE_PARAMS` and every Galaxy suite's `device_params` — and the two
+prefill `ttnn.reduce_scatter` call sites (`mlp_2d.py`, `collectives.py`) pass
+`use_l1_small_for_semaphores=has_l1_small_region(mesh_device)`, so the
+semaphores are allocated out of main L1. `ttnn.all_gather` needs no argument: it
+makes the same bank-size check itself. The flag is conditional rather than a
+constant `True` because `reduce_scatter` allocates from `L1_SMALL`
+unconditionally when told to, so a blind `True` on a mesh opened without the
+region would turn a fragmentation warning into an allocation failure.
+
+Measured on `(8, 4)` after the change: **7 of the 8 prefetcher node ids pass**,
+including all 12 transitions of `mode_transition_matrix`. The buffer lands on
+`(543968, 192), (544160, 792064)` on every one of its five creations in that
+test, no `Allocating semaphores in L1` warning appears, the restore guard never
+fires, and PCC is 0.998219 decode / 0.999310 prefill. Main L1 is 32 kB smaller
+for every Galaxy op as a result, which is why the whole module sweep was re-run.
+The rejected alternative was clearing the program cache on every
+prefill→decode transition, which recreates every cached program of both modes
+per request. **The restore guard raising is the system working — do not relax
+it.**
 
 Two further limits are worth stating plainly:
 

@@ -10,6 +10,7 @@ import torch
 import ttnn
 from examples.common.auto_compose import to_torch_auto_compose
 
+from tt_transformers.device_utils import GALAXY_L1_SMALL_SIZE
 from tt_transformers.models.galaxy.recipes import (
     prefetch_sender_cores,
     ring_cores,
@@ -46,7 +47,13 @@ def _decode_partition(mesh_device):
 @pytest.mark.galaxy
 @pytest.mark.parametrize(
     "device_params",
-    [{"fabric_config": ttnn.FabricConfig.FABRIC_1D, "dispatch_core_axis": ttnn.DispatchCoreAxis.COL}],
+    [
+        {
+            "fabric_config": ttnn.FabricConfig.FABRIC_1D,
+            "dispatch_core_axis": ttnn.DispatchCoreAxis.COL,
+            "l1_small_size": GALAXY_L1_SMALL_SIZE,
+        }
+    ],
     indirect=True,
 )
 @pytest.mark.parametrize("mesh_device", [pytest.param((8, 4), id="8x4")], indirect=True)
@@ -108,7 +115,13 @@ def test_sampling_2d_wh_galaxy_exact_padded_vocab_exclusion(mesh_device):
 @pytest.mark.galaxy
 @pytest.mark.parametrize(
     "device_params",
-    [{"fabric_config": ttnn.FabricConfig.FABRIC_1D, "dispatch_core_axis": ttnn.DispatchCoreAxis.COL}],
+    [
+        {
+            "fabric_config": ttnn.FabricConfig.FABRIC_1D,
+            "dispatch_core_axis": ttnn.DispatchCoreAxis.COL,
+            "l1_small_size": GALAXY_L1_SMALL_SIZE,
+        }
+    ],
     indirect=True,
 )
 @pytest.mark.parametrize("mesh_device", [pytest.param((8, 4), id="8x4")], indirect=True)
@@ -186,7 +199,13 @@ def test_sampling_2d_wh_galaxy_subdevice_ordering_on_program_cache_hit(mesh_devi
 @pytest.mark.galaxy
 @pytest.mark.parametrize(
     "device_params",
-    [{"fabric_config": ttnn.FabricConfig.FABRIC_1D, "dispatch_core_axis": ttnn.DispatchCoreAxis.COL}],
+    [
+        {
+            "fabric_config": ttnn.FabricConfig.FABRIC_1D,
+            "dispatch_core_axis": ttnn.DispatchCoreAxis.COL,
+            "l1_small_size": GALAXY_L1_SMALL_SIZE,
+        }
+    ],
     indirect=True,
 )
 @pytest.mark.parametrize("mesh_device", [pytest.param((8, 4), id="8x4")], indirect=True)
@@ -280,7 +299,13 @@ _LLAMA_PADDED_VOCAB_SIZE = 129024
 @pytest.mark.galaxy
 @pytest.mark.parametrize(
     "device_params",
-    [{"fabric_config": ttnn.FabricConfig.FABRIC_1D, "dispatch_core_axis": ttnn.DispatchCoreAxis.COL}],
+    [
+        {
+            "fabric_config": ttnn.FabricConfig.FABRIC_1D,
+            "dispatch_core_axis": ttnn.DispatchCoreAxis.COL,
+            "l1_small_size": GALAXY_L1_SMALL_SIZE,
+        }
+    ],
     indirect=True,
 )
 @pytest.mark.parametrize("mesh_device", [pytest.param((8, 4), id="8x4")], indirect=True)
@@ -375,7 +400,13 @@ def test_sampling_2d_wh_galaxy_ring_sharded_logits_under_the_decode_partition(me
 @pytest.mark.galaxy
 @pytest.mark.parametrize(
     "device_params",
-    [{"fabric_config": ttnn.FabricConfig.FABRIC_1D, "dispatch_core_axis": ttnn.DispatchCoreAxis.COL}],
+    [
+        {
+            "fabric_config": ttnn.FabricConfig.FABRIC_1D,
+            "dispatch_core_axis": ttnn.DispatchCoreAxis.COL,
+            "l1_small_size": GALAXY_L1_SMALL_SIZE,
+        }
+    ],
     indirect=True,
 )
 @pytest.mark.parametrize("mesh_device", [pytest.param((8, 4), id="8x4")], indirect=True)

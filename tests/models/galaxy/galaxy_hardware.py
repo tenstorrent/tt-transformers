@@ -20,14 +20,22 @@ import pytest
 import torch
 import ttnn
 
+from tt_transformers.device_utils import GALAXY_L1_SMALL_SIZE
+
 GALAXY_MESH_SHAPE = (8, 4)
 GALAXY_PHYSICAL_BATCH = 32
 GALAXY_USERS_PER_COLUMN = 8
 
 #: The dispatch/fabric parameters every qualified Galaxy recipe was tuned with.
+#:
+#: ``l1_small_size`` is not a tuning parameter but a correctness one: it is where
+#: the generic collectives put their program-cache-lifetime semaphores, and
+#: without it they fragment main L1 and break the weight prefetcher's
+#: `prefill -> decode` restore. See `GALAXY_L1_SMALL_SIZE`.
 GALAXY_DEVICE_PARAMS = {
     "dispatch_core_axis": ttnn.DispatchCoreAxis.COL,
     "fabric_config": ttnn.FabricConfig.FABRIC_1D_RING,
+    "l1_small_size": GALAXY_L1_SMALL_SIZE,
 }
 
 #: Repository root, derived from this file rather than the working directory, so the

@@ -11,6 +11,7 @@ import ttnn
 from examples.common.auto_compose import to_torch_auto_compose
 from tests.support.comparison import comp_pcc
 
+from tt_transformers.device_utils import GALAXY_L1_SMALL_SIZE
 from tt_transformers.modules.lazy_weight import LazyWeight
 from tt_transformers.modules.lm_head.lm_head_2d import LMHead2D
 
@@ -43,7 +44,11 @@ def _deallocate(tensor):
 @pytest.mark.device
 @pytest.mark.wormhole
 @pytest.mark.galaxy
-@pytest.mark.parametrize("device_params", [{"fabric_config": ttnn.FabricConfig.FABRIC_1D}], indirect=True)
+@pytest.mark.parametrize(
+    "device_params",
+    [{"fabric_config": ttnn.FabricConfig.FABRIC_1D, "l1_small_size": GALAXY_L1_SMALL_SIZE}],
+    indirect=True,
+)
 @pytest.mark.parametrize("mesh_device", [pytest.param((8, 4), id="8x4")], indirect=True)
 @pytest.mark.parametrize(
     "dim,vocab_size,padded_vocab_size",

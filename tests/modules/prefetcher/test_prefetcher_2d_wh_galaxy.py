@@ -59,13 +59,18 @@ from tests.modules._wh_galaxy_hardware import (
     require_galaxy_hardware_resources,
 )
 
+from tt_transformers.device_utils import GALAXY_L1_SMALL_SIZE
 from tt_transformers.modules.mlp.mlp_2d import MLP2D, MLP2DConfig, _load_input_device_tensor
 from tt_transformers.modules.prefetcher import Prefetcher2D
 
 _DIM = 8192
 _HIDDEN_DIM = 28672
 _PREFILL_SEQUENCE = 128
-_DEVICE_PARAMS = {"dispatch_core_axis": ttnn.DispatchCoreAxis.COL, "fabric_config": ttnn.FabricConfig.FABRIC_1D_RING}
+_DEVICE_PARAMS = {
+    "dispatch_core_axis": ttnn.DispatchCoreAxis.COL,
+    "fabric_config": ttnn.FabricConfig.FABRIC_1D_RING,
+    "l1_small_size": GALAXY_L1_SMALL_SIZE,
+}
 
 # decode -> prefill -> decode -> prefill -> decode, twice over, so the whole cycle
 # repeats and the seam between the repeats is itself a decode -> decode; the tail

@@ -69,6 +69,7 @@ from tests.models.galaxy.galaxy_hardware import hf_config_or_skip
 from tests.modules._hf_reference import reverse_permute_1d
 from tests.support.comparison import comp_pcc
 
+from tt_transformers.device_utils import GALAXY_L1_SMALL_SIZE
 from tt_transformers.models.galaxy.collectives import compose_galaxy_logits
 from tt_transformers.models.qwen3_32b_galaxy.hf_adaptor import DEFAULT_HF_MODEL, convert_hf_model_weights
 from tt_transformers.models.qwen3_32b_galaxy.model import (
@@ -92,6 +93,7 @@ _PCC = 0.99
 _DEVICE_PARAMS = {
     "dispatch_core_axis": ttnn.DispatchCoreAxis.COL,
     "fabric_config": ttnn.FabricConfig.FABRIC_1D_RING,
+    "l1_small_size": GALAXY_L1_SMALL_SIZE,
 }
 
 

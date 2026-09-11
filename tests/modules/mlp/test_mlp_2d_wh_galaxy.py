@@ -31,6 +31,7 @@ from tests.modules._wh_galaxy_hardware import (
     require_galaxy_hardware_resources,
 )
 
+from tt_transformers.device_utils import GALAXY_L1_SMALL_SIZE
 from tt_transformers.modules.mlp.mlp_2d import MLP2D, MLP2DConfig, _load_input_device_tensor
 
 
@@ -68,7 +69,13 @@ def _invoke(
 )
 @pytest.mark.parametrize(
     "device_params",
-    [{"dispatch_core_axis": ttnn.DispatchCoreAxis.COL, "fabric_config": ttnn.FabricConfig.FABRIC_1D_RING}],
+    [
+        {
+            "dispatch_core_axis": ttnn.DispatchCoreAxis.COL,
+            "fabric_config": ttnn.FabricConfig.FABRIC_1D_RING,
+            "l1_small_size": GALAXY_L1_SMALL_SIZE,
+        }
+    ],
     indirect=True,
 )
 @torch.no_grad()
@@ -151,7 +158,13 @@ def test_mlp_2d_wh_galaxy_decode_batch_32_repeat(mesh_device, dim, hidden_dim):
 )
 @pytest.mark.parametrize(
     "device_params",
-    [{"dispatch_core_axis": ttnn.DispatchCoreAxis.COL, "fabric_config": ttnn.FabricConfig.FABRIC_1D_RING}],
+    [
+        {
+            "dispatch_core_axis": ttnn.DispatchCoreAxis.COL,
+            "fabric_config": ttnn.FabricConfig.FABRIC_1D_RING,
+            "l1_small_size": GALAXY_L1_SMALL_SIZE,
+        }
+    ],
     indirect=True,
 )
 @torch.no_grad()

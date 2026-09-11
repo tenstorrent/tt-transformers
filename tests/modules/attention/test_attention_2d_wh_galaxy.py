@@ -38,6 +38,7 @@ from tests.modules._wh_galaxy_hardware import (
 )
 from tests.support.comparison import comp_pcc
 
+from tt_transformers.device_utils import GALAXY_L1_SMALL_SIZE
 from tt_transformers.models.galaxy import (
     GalaxyCollectivePlan,
     GalaxyResourceKey,
@@ -1061,6 +1062,7 @@ def _assert_cache(
         {
             "dispatch_core_axis": ttnn.DispatchCoreAxis.COL,
             "fabric_config": ttnn.FabricConfig.FABRIC_1D_RING,
+            "l1_small_size": GALAXY_L1_SMALL_SIZE,
         }
     ],
     indirect=True,

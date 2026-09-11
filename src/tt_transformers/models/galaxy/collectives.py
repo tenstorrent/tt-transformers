@@ -23,6 +23,7 @@ from typing import Any
 import torch
 import ttnn
 
+from tt_transformers.device_utils import has_l1_small_region
 from tt_transformers.models.galaxy.plans import select_galaxy_resource
 from tt_transformers.models.galaxy.recipes import (
     GALAXY_COLUMNS,
@@ -1050,6 +1051,10 @@ class GalaxyAttentionCollectives:
                 topology=resource.topology,
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
                 subdevice_id=context.worker_sub_device_id,
+                # Program-cache-lifetime semaphores: out of main L1, or they strand
+                # the region the weight prefetcher's global CB has to return to.
+                # See `GALAXY_L1_SMALL_SIZE`.
+                use_l1_small_for_semaphores=has_l1_small_region(self.mesh_device),
             )
             try:
                 return ttnn.all_gather(

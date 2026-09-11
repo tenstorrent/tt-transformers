@@ -23,6 +23,7 @@ import ttnn
 from examples.common.auto_compose import to_torch_auto_compose
 from tests.modules._hf_reference import hf_valid_token_set
 
+from tt_transformers.device_utils import GALAXY_L1_SMALL_SIZE
 from tt_transformers.modules.sampling.sampling_2d import Sampling2D
 
 VOCAB_SIZE = 151936
@@ -41,7 +42,13 @@ _BASELINE = -20.0
 
 _DEVICE_PARAMS = pytest.mark.parametrize(
     "device_params",
-    [{"fabric_config": ttnn.FabricConfig.FABRIC_1D, "dispatch_core_axis": ttnn.DispatchCoreAxis.COL}],
+    [
+        {
+            "fabric_config": ttnn.FabricConfig.FABRIC_1D,
+            "dispatch_core_axis": ttnn.DispatchCoreAxis.COL,
+            "l1_small_size": GALAXY_L1_SMALL_SIZE,
+        }
+    ],
     indirect=True,
 )
 _MESH_8X4 = pytest.mark.parametrize("mesh_device", [pytest.param((8, 4), id="8x4")], indirect=True)
