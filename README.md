@@ -74,19 +74,16 @@ MESH_DEVICE=N150 python -m examples.llama3_8b.demo \
   --max-new-tokens 40 --max-seq-len 2048
 ```
 
-With an already-open TT mesh, the same demo flow is:
+With an already-open TT mesh, generate text using Llama 3.1 8B:
 
 ```python
-import os
-
-from tt_transformers.models.llama3_8b.hf_generator import DEFAULT_HF_MODEL, from_pretrained
+from tt_transformers.models.llama3_8b.hf_generator import from_pretrained
 
 
-def run(mesh_device, messages, *, hf_model=None, max_new_tokens=40, max_seq_len=2048):
-    hf_model = hf_model or os.environ.get("HF_MODEL") or DEFAULT_HF_MODEL
+def run(mesh_device, messages, *, max_new_tokens=40, max_seq_len=2048):
     model = from_pretrained(
         mesh_device,
-        hf_model=hf_model,
+        hf_model="meta-llama/Llama-3.1-8B-Instruct",
         max_batch_size=1,
         max_seq_len=max_seq_len,
     )
