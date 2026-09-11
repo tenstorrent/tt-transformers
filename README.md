@@ -74,6 +74,34 @@ MESH_DEVICE=N150 python -m examples.llama3_8b.demo \
   --max-new-tokens 40 --max-seq-len 2048
 ```
 
+With an already-open TT mesh, generate text using Llama 3.1 8B:
+
+```python
+from tt_transformers.models.llama3_8b.hf_generator import from_pretrained
+
+
+def run(mesh_device, messages, *, max_new_tokens=40, max_seq_len=2048):
+    model = from_pretrained(
+        mesh_device,
+        hf_model="meta-llama/Llama-3.1-8B-Instruct",
+        max_batch_size=1,
+        max_seq_len=max_seq_len,
+    )
+    try:
+        inputs = model.tokenizer.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        )
+        outputs = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+        continuation = outputs[:, inputs["input_ids"].shape[1] :]
+        return model.tokenizer.batch_decode(continuation, skip_special_tokens=True)[0]
+    finally:
+        model.cleanup()
+```
+
 Each model's `demo.py` shows the public `from_pretrained()` → tokenizer →
 `generate()` → cleanup flow. Inputs remain CPU PyTorch tensors; the model
 handles TTNN transfers and generation resources internally. See the
