@@ -9,4 +9,5 @@ __pycache__/
 .venv/
 build/
 dist/
+generated/
 model_cache/

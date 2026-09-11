@@ -12,6 +12,7 @@ validation. They are not installed by the wheel.
 | `probe_installed_package.py` | Probe a non-editable installed wheel outside the checkout | No |
 | `strict_install_dependency_locks.py` | Install locks in fresh environments and record results | Writes only the requested work/output paths |
 | `validate_lockfiles.py` | Validate lock syntax, hashes, and cross-group invariants | No |
+| `ttnn_dev.py` | Build, attach, validate, and run custom TTNN development runtimes | Writes the selected build/environment/output directories |
 
 Run tools from the repository root. Build output belongs under ignored `dist/`
 or a temporary directory. Never commit build directories, environments,
@@ -19,3 +20,6 @@ resolver caches, credentials, or machine-local output.
 
 Hardware/readiness-specific utilities are documented in
 `qualification/README.md`.
+
+See [Custom TTNN development](../docs/ttnn-development.md) for the source-linked
+and fixed-wheel workflows, including native rebuilds and CIv2 validation.
