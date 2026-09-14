@@ -416,3 +416,67 @@ Two rules follow. Never run `ruff format` over a directory here — name the fil
 `ruff format --check` under the pinned version as **unverified** for the files this work
 touched: they are internally consistent under 0.16.7, and the first real gate run may still
 reformat them. That is cosmetic, but it will show up as a diff.
+
+---
+
+## 5. The experiment vault
+
+[bh_galaxy_experiments/](bh_galaxy_experiments/) banks the eight questions the deviceless work
+could not answer. Three decisions about its shape are worth recording, because they are what
+make it usable rather than decorative.
+
+**Every folder states what each *outcome* means for the code, not just the hypothesis.** An
+experiment whose result nobody can act on is not worth a hardware window. The outcome tables are
+the largest part of each folder, deliberately, and several of them say "keep the current
+behaviour and write down why" — a negative result that gets recorded is worth as much as a
+positive one here, because the alternative is that the next person redoes the same inference.
+
+**Patches only where the change is already known.** E03's three arms are one-line constant
+flips and E04's is a design change that phase 3 deliberately deferred; both are real, generated
+against a pinned SHA, and verified to apply. E05–E07 ship a **specification of the test** and no
+patch, because the shape of their fix depends on what E04 reveals. A plausible-looking patch for
+an unmeasured failure is worse than no patch — it invites someone to apply it and believe the
+result.
+
+**E02 is a committed test, not a patch.** `tests/models/galaxy/test_topology_bh_galaxy.py`
+answers four of the plan's five open hardware questions in one read-only run, and it is the
+selector the disabled matrix node points at. Landing it in the tree rather than in the vault
+means it is subject to the taxonomy and matrix gates like anything else.
+
+### One thing found while writing it
+
+The exabox partition survey lists a **`cpu_only`** partition, which
+[the harness README](../../my-tt-dev-tools/exabox/README.md) §6 does not mention. E00 — the real
+host gates — needs Linux and `ttnn`, not silicon. If `cpu_only` can host a venv, the host gates
+come off the critical path without spending a Galaxy window, which is precisely the problem that
+section says it has no good answer for.
+
+---
+
+## 6. Where this leaves the port
+
+**Phases 1–4 are complete and committed. None of the Galaxy-specific test suites has ever been
+executed**, because they import `ttnn`. What was verified is recorded honestly per phase above;
+the short version:
+
+| | State |
+| --- | --- |
+| Four host gates | green locally |
+| `ruff check` | clean; `ruff format` **unverified** under the pinned version |
+| 307 host tests | pass, no new failures against HEAD, in a `ttnn`-free venv |
+| Topology descriptor, all validation paths | exercised directly, including every rejection case |
+| Blackhole resolver, 11x10 / 12x10 / 13x10 | exercised directly |
+| Everything importing `ttnn` | **never run** |
+
+The two risks worth stating plainly to whoever picks this up:
+
+1. **Phase 2 rewrote the geometry source of a hardware-qualified path and its exit criterion
+   cannot be run.** The golden tables check the resolver; nothing checks the callers.
+   [E01](bh_galaxy_experiments/E01-wh-byte-identical/) is that check and it needs a Wormhole
+   Galaxy.
+2. **The 2D module gates still accept Wormhole only**, so no module suite runs on Blackhole yet.
+   That is phase 5's first task and it is specified in
+   [E04](bh_galaxy_experiments/E04-module-capability-gates/), patch included.
+
+Neither is a blocker for what was built. Both are things that would be easy to discover the
+expensive way.

@@ -1,0 +1,13 @@
+diff --git a/src/tt_transformers/models/galaxy/topology.py b/src/tt_transformers/models/galaxy/topology.py
+index 1f7e35d..023f7c4 100644
+--- a/src/tt_transformers/models/galaxy/topology.py
++++ b/src/tt_transformers/models/galaxy/topology.py
+@@ -510,7 +510,7 @@ def _resolve_wormhole(compute_grid: Coord, dram_views: int) -> GalaxyChipTopolog
+ #: failure is asymmetric. Too few worker cores costs throughput and nothing else.
+ #: Too many puts tensors on a column that is reserved for a reason nobody has
+ #: written down, and every failure in that class is silent.
+-BLACKHOLE_FIRST_WORKER_COLUMN = 1
++BLACKHOLE_FIRST_WORKER_COLUMN = 0
+ 
+ #: Worker sub-device row cap, or `None` for the full grid height.
+ #:
