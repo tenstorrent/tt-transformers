@@ -27,8 +27,14 @@ TAXONOMY = {
     "p150",
     "p300",
     "p150x4",
-    "galaxy",
+    "galaxy_wh",
+    "galaxy_bh",
 }
+#: `galaxy` was one marker treated as an arch-implying SKU, which made a Galaxy
+#: test on Blackhole unexpressible: the rule below enforces SKU => arch, so
+#: `galaxy` + `blackhole` failed this gate. Galaxy is a *topology*, and both
+#: architectures ship one, so the marker splits per arch rather than dropping
+#: its arch implication -- that implication is what keeps the gate useful.
 SKU_ARCH = {
     "n150": "wormhole",
     "n300": "wormhole",
@@ -36,7 +42,8 @@ SKU_ARCH = {
     "p150": "blackhole",
     "p300": "blackhole",
     "p150x4": "blackhole",
-    "galaxy": "wormhole",
+    "galaxy_wh": "wormhole",
+    "galaxy_bh": "blackhole",
 }
 PROVEN_DEVICE_MARKS = {
     ("tests/modules/mlp/test_mlp_2d.py", "test_ttnn_linear_2d_mesh_topology_bug"): {"device", "wormhole"},

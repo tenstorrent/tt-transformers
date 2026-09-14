@@ -196,7 +196,7 @@ def _invoke_decode_repeat(module, resources, mesh_device, x, residual, *, count)
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.parametrize("mesh_device", [(8, 4)], indirect=True)
 @pytest.mark.parametrize("dim", [8192, 5120], ids=["llama-final-8192", "qwen-final-5120"])
 @pytest.mark.parametrize(
@@ -246,7 +246,7 @@ def test_rmsnorm_2d_wh_galaxy_final_norm_decode_batch_32_fused_residual_repeat(m
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.parametrize("mesh_device", [(8, 4)], indirect=True)
 @pytest.mark.parametrize("dim", [8192, 5120], ids=["llama-final-8192", "qwen-final-5120"])
 @pytest.mark.parametrize("seq_len", [128, 2048], ids=["seq128", "seq2048"])
@@ -288,7 +288,7 @@ def test_rmsnorm_2d_wh_galaxy_final_norm_prefill_repeat(mesh_device, dim, seq_le
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.parametrize("mesh_device", [(8, 4)], indirect=True)
 @pytest.mark.parametrize("projection", ["q_norm", "k_norm"])
 @pytest.mark.parametrize(

@@ -42,7 +42,7 @@ def _report(title: str, value: object) -> None:
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @galaxy_params
 @galaxy
@@ -71,7 +71,7 @@ def test_worker_partition_matches_the_real_compute_grid(mesh_device):
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @galaxy_params
 @galaxy

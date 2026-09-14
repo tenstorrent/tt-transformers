@@ -343,7 +343,7 @@ def _release_payload(payload: _Payload) -> None:
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.parametrize("mesh_device", [(8, 4)], indirect=True)
 @pytest.mark.parametrize("device_params", [_DEVICE_PARAMS], indirect=True)
 @torch.no_grad()
@@ -447,7 +447,7 @@ def test_prefetcher_2d_wh_galaxy_sealed_resources_are_real_on_device(mesh_device
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.parametrize("mesh_device", [(8, 4)], indirect=True)
 @pytest.mark.parametrize("device_params", [_DEVICE_PARAMS], indirect=True)
 @torch.no_grad()
@@ -494,7 +494,7 @@ def test_prefetcher_2d_wh_galaxy_mode_transition_matrix(mesh_device):
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.parametrize("mesh_device", [(8, 4)], indirect=True)
 @pytest.mark.parametrize("device_params", [_DEVICE_PARAMS], indirect=True)
 @torch.no_grad()
@@ -556,7 +556,7 @@ def test_prefetcher_2d_wh_galaxy_failed_transition_rolls_back_on_device(mesh_dev
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.parametrize("active_mode", ["decode", "prefill"])
 @pytest.mark.parametrize("mesh_device", [(8, 4)], indirect=True)
 @pytest.mark.parametrize("device_params", [_DEVICE_PARAMS], indirect=True)
@@ -634,7 +634,7 @@ def test_prefetcher_2d_wh_galaxy_cleanup_from_active_mode_frees_the_mesh(mesh_de
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.parametrize("mesh_device", [(8, 4)], indirect=True)
 @pytest.mark.parametrize("device_params", [_DEVICE_PARAMS], indirect=True)
 @torch.no_grad()
@@ -686,7 +686,7 @@ def test_prefetcher_2d_wh_galaxy_context_manager_cleanup_leaves_mesh_reusable(me
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.parametrize("mesh_device", [(8, 4)], indirect=True)
 @pytest.mark.parametrize("device_params", [_DEVICE_PARAMS], indirect=True)
 @torch.no_grad()
@@ -769,7 +769,7 @@ def test_prefetcher_2d_wh_galaxy_registration_and_sealing_rejections(mesh_device
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.parametrize("mesh_device", [(8, 4)], indirect=True)
 @pytest.mark.parametrize("device_params", [_DEVICE_PARAMS], indirect=True)
 @torch.no_grad()

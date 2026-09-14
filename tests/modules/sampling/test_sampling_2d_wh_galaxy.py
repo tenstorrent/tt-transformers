@@ -44,7 +44,7 @@ def _decode_partition(mesh_device):
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.parametrize(
     "device_params",
     [
@@ -112,7 +112,7 @@ def test_sampling_2d_wh_galaxy_exact_padded_vocab_exclusion(mesh_device):
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.parametrize(
     "device_params",
     [
@@ -196,7 +196,7 @@ def test_sampling_2d_wh_galaxy_subdevice_ordering_on_program_cache_hit(mesh_devi
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.parametrize(
     "device_params",
     [
@@ -296,7 +296,7 @@ _LLAMA_PADDED_VOCAB_SIZE = 129024
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.parametrize(
     "device_params",
     [
@@ -397,7 +397,7 @@ def test_sampling_2d_wh_galaxy_ring_sharded_logits_under_the_decode_partition(me
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.parametrize(
     "device_params",
     [

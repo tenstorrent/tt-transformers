@@ -43,7 +43,7 @@ def _deallocate(tensor):
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.parametrize(
     "device_params",
     [{"fabric_config": ttnn.FabricConfig.FABRIC_1D, "l1_small_size": GALAXY_L1_SMALL_SIZE}],

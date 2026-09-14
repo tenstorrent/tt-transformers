@@ -441,7 +441,7 @@ def _print_geometry(params: Any) -> None:
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize("device_params", [_DEVICE_PARAMS], indirect=True)
 @pytest.mark.parametrize("mesh_device", [pytest.param(_MESH_SHAPE, id="8x4")], indirect=True)
@@ -481,7 +481,7 @@ def test_qwen3_32b_galaxy_geometry_is_decoupled_8x4_qwen3_32b(mesh_device: ttnn.
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize("device_params", [_DEVICE_PARAMS], indirect=True)
 @pytest.mark.parametrize("mesh_device", [pytest.param(_MESH_SHAPE, id="8x4")], indirect=True)
@@ -642,7 +642,7 @@ def test_qwen3_32b_galaxy_qk_norm_head_local_8x4_qwen3_32b_decode_and_prefill(me
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize("device_params", [_DEVICE_PARAMS], indirect=True)
 @pytest.mark.parametrize("mesh_device", [pytest.param(_MESH_SHAPE, id="8x4")], indirect=True)
@@ -772,7 +772,7 @@ def test_qwen3_32b_galaxy_one_layer_prefill_and_decode_8x4_qwen3_32b_b32_s128(me
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize("device_params", [_DEVICE_PARAMS], indirect=True)
 @pytest.mark.parametrize("mesh_device", [pytest.param(_MESH_SHAPE, id="8x4")], indirect=True)
@@ -921,7 +921,7 @@ def _reference_decode_stages(hf: Any, tokens: torch.Tensor, position: int) -> di
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize("device_params", [_DEVICE_PARAMS], indirect=True)
 @pytest.mark.parametrize("mesh_device", [pytest.param(_MESH_SHAPE, id="8x4")], indirect=True)

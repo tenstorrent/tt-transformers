@@ -75,7 +75,7 @@ def _stage(mesh_device: ttnn.MeshDevice, rows: torch.Tensor, *, sharded: bool):
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @_PARAMS
 @_GALAXY
@@ -97,7 +97,7 @@ def test_a_column_sharded_page_tables_device_local_view_is_one_columns_users(mes
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @_PARAMS
 @_GALAXY
@@ -116,7 +116,7 @@ def test_a_replicated_page_tables_device_local_view_is_the_whole_physical_batch(
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @_PARAMS
 @_GALAXY

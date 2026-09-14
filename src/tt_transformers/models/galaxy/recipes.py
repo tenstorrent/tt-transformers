@@ -154,9 +154,57 @@ def validate_galaxy_mesh(name: str, mesh_device: Any) -> None:
         raise ValueError(f"{name} supports Wormhole only, got {mesh_device.arch()}")
 
 
-#: Worker cores a decode collective needs for itself, and which therefore may
-#: not be covered by the tensors it is given. One per fabric link, four links.
-GALAXY_CCL_RESERVED_WORKER_CORES = 4
+#: Fabric links per direction, per Galaxy architecture. The mesh graph
+#: descriptors are the source: `single_galaxy_mesh_graph_descriptor.textproto`
+#: declares `channels { count: 4 }`, and the Blackhole equivalent declares
+#: `channels { count: 2 }`.
+#:
+#: `tt_ccl.get_num_links` carries the same budget, independently derived from the
+#: device name (`("BHGLX", (2, 2))` against `("TG", (4, 4))`). This table is
+#: keyed on `arch()` rather than delegating to it because `get_num_links` needs
+#: `get_device_ids()` and a pybind arch probe, neither of which a host-mocked
+#: mesh can answer -- and every Galaxy geometry test here is host-only. The two
+#: agreeing is a real invariant and an unproven one: it is checked on hardware by
+#: `docs/bh_galaxy_experiments/E02-cluster-identity`, not on the host.
+GALAXY_FABRIC_LINKS = {
+    ttnn.device.Arch.WORMHOLE_B0: 4,
+    ttnn.device.Arch.BLACKHOLE: 2,
+}
+
+
+def galaxy_fabric_links(mesh_device: Any) -> int:
+    """Return the fabric links per direction for this mesh's architecture.
+
+    Fail closed: an unknown architecture has no measured link budget, and
+    guessing one is a deadlock rather than a wrong answer. An incorrect Galaxy
+    `num_links` does not degrade -- a hardcoded `num_links=1` on axis 1 stalled a
+    real CCL, and overrunning the available eth channels deadlocks, because the
+    ring and line CCLs index eth channels by link.
+    """
+
+    architecture = mesh_device.arch()
+    if architecture not in GALAXY_FABRIC_LINKS:
+        raise ValueError(f"no Galaxy fabric link budget for architecture {architecture}")
+    return GALAXY_FABRIC_LINKS[architecture]
+
+
+def galaxy_ccl_reserved_worker_cores(mesh_device: Any) -> int:
+    """Return the worker cores a decode collective reserves for itself.
+
+    One per fabric link, so this moves with the architecture: 4 on Wormhole, 2 on
+    Blackhole. These cores may not be covered by the tensors the collective is
+    given. Getting it wrong does not raise -- starving `all_reduce_async` of
+    worker cores warns and then segmentation-faults -- so it is derived rather
+    than named.
+    """
+
+    return galaxy_fabric_links(mesh_device)
+
+
+#: Wormhole's reserved-worker-core count, retained as the name the qualified
+#: Wormhole recipes were written against. Prefer
+#: `galaxy_ccl_reserved_worker_cores(mesh_device)`, which is architecture-aware.
+GALAXY_CCL_RESERVED_WORKER_CORES = GALAXY_FABRIC_LINKS[ttnn.device.Arch.WORMHOLE_B0]
 
 
 def lm_head_reduce_core_count(padded_local_vocab: int, available_cores: int) -> int:

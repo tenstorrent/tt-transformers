@@ -16,6 +16,9 @@ def selected_topology_marks(pytest_module):
         "P150": ("blackhole", "p150"),
         "P300": ("blackhole", "p300"),
         "P150X4": ("blackhole", "p150x4"),
-        "TG": ("wormhole", "galaxy"),
+        "TG": ("wormhole", "galaxy_wh"),
+        # `BHGLX` is the name `device_utils.get_device_name` already returns for a
+        # 32-device Blackhole mesh, so the convention is extended, not invented.
+        "BHGLX": ("blackhole", "galaxy_bh"),
     }
     return [getattr(pytest_module.mark, name) for name in mapping.get(selected, ())]

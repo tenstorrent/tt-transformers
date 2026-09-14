@@ -13,6 +13,7 @@ import pytest
 import ttnn
 
 from tt_transformers.models.galaxy.plans import (
+    _links,
     build_galaxy_resources_config,
     galaxy_decode_mode_plan,
     galaxy_prefill_mode_plan,
@@ -26,6 +27,8 @@ from tt_transformers.models.galaxy.prefetch import (
 from tt_transformers.models.galaxy.recipes import (
     GALAXY_MESH_SHAPE,
     GalaxyDenseGeometry,
+    galaxy_ccl_reserved_worker_cores,
+    galaxy_fabric_links,
     resolve_galaxy_decode_placements,
     worker_cores,
 )
@@ -316,3 +319,42 @@ def test_dram_prefetch_producer_fails_when_registration_is_short():
 
     with pytest.raises(RuntimeError, match="registered weights per layer"):
         start(context)
+
+
+@pytest.mark.host
+@pytest.mark.model
+@pytest.mark.parametrize("model", [LLAMA, QWEN], ids=["llama-3.3-70b", "qwen3-32b"])
+def test_wormhole_link_counts_are_unchanged_by_the_clamp(model):
+    """Routing `num_links` through the fabric budget must not move Wormhole.
+
+    These are the literals the plans carried before the clamp existed, and they
+    belong to a hardware-qualified path this repository cannot currently re-run.
+    `min(requested, 4)` has to reproduce every one of them, or the refactor has
+    silently retuned a collective.
+    """
+
+    _, config = _resources(model, lengths=(128,))
+
+    assert tuple(plan.num_links for plan in config.decode.collectives) == (3, 1, 4, 4, 4, 4, 1)
+    assert tuple(plan.num_links for plan in config.prefill.collectives) == (1, 4, 4, 4, 4, 4, 4, 1)
+
+
+@pytest.mark.host
+@pytest.mark.model
+def test_link_budget_follows_the_architecture_and_fails_closed():
+    """Blackhole Galaxy trains half the links, and an unknown arch has none."""
+
+    wormhole = _mesh()
+    blackhole = _mesh(arch=ttnn.device.Arch.BLACKHOLE)
+
+    assert [_links(wormhole, requested) for requested in (4, 3, 1)] == [4, 3, 1]
+    # The 4s and the 3 clamp to the budget; the deliberate 1s are already under it.
+    assert [_links(blackhole, requested) for requested in (4, 3, 1)] == [2, 2, 1]
+
+    assert galaxy_ccl_reserved_worker_cores(wormhole) == 4
+    assert galaxy_ccl_reserved_worker_cores(blackhole) == 2
+
+    # Guessing a link budget for an unrecognised architecture deadlocks rather
+    # than returning a wrong answer, so refuse instead.
+    with pytest.raises(ValueError, match="no Galaxy fabric link budget"):
+        galaxy_fabric_links(_mesh(arch="third-galaxy-architecture"))

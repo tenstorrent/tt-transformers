@@ -392,7 +392,7 @@ def _assert_kv_pcc(
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize(
     "device_params",
@@ -535,7 +535,7 @@ def test_llama33_70b_galaxy_one_layer_prefill_and_decode(mesh_device: ttnn.MeshD
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize(
     "device_params",
@@ -637,7 +637,7 @@ def test_llama33_70b_galaxy_one_layer_prefill_2048(mesh_device: ttnn.MeshDevice)
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize(
     "device_params",

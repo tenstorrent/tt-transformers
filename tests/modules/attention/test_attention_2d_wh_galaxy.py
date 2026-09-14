@@ -1075,7 +1075,7 @@ def _assert_cache(
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.parametrize(
     "device_params",
     [

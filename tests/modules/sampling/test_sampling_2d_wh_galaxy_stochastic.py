@@ -149,7 +149,7 @@ def _assert_within_tolerance(label, violations, allowed, total):
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @_DEVICE_PARAMS
 @_MESH_8X4
 @pytest.mark.parametrize(
@@ -220,7 +220,7 @@ def test_sampling_2d_wh_galaxy_stochastic_token_in_valid_set(
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @_DEVICE_PARAMS
 @_MESH_8X4
 def test_sampling_2d_wh_galaxy_stochastic_excludes_padded_vocab(mesh_device):
@@ -266,7 +266,7 @@ def test_sampling_2d_wh_galaxy_stochastic_excludes_padded_vocab(mesh_device):
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @_DEVICE_PARAMS
 @_MESH_8X4
 def test_sampling_2d_wh_galaxy_seeded_sampling_is_repeatable_and_slot_stable(mesh_device):
@@ -321,7 +321,7 @@ def test_sampling_2d_wh_galaxy_seeded_sampling_is_repeatable_and_slot_stable(mes
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @_DEVICE_PARAMS
 @_MESH_8X4
 def test_sampling_2d_wh_galaxy_unseeded_sampling_uses_fresh_randomness(mesh_device):
@@ -376,7 +376,7 @@ def test_sampling_2d_wh_galaxy_unseeded_sampling_uses_fresh_randomness(mesh_devi
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @_DEVICE_PARAMS
 @_MESH_8X4
 def test_sampling_2d_wh_galaxy_per_slot_heterogeneous_parameters(mesh_device):

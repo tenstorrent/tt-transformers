@@ -29,7 +29,7 @@ def _deallocate_all(tensors):
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.parametrize("mesh_device", [pytest.param((8, 4), id="8x4")], indirect=True)
 @pytest.mark.parametrize(
     "theta",

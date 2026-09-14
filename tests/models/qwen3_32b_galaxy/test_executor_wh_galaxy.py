@@ -315,7 +315,7 @@ def _decode_logits(result: Any) -> torch.Tensor:
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize("mesh_device", [GALAXY_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", [GALAXY_DEVICE_PARAMS], indirect=True)
@@ -367,7 +367,7 @@ def test_executor_decode_first_token(mesh_device: ttnn.MeshDevice, active_rows: 
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize("mesh_device", [GALAXY_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", [GALAXY_DEVICE_PARAMS], indirect=True)
@@ -446,7 +446,7 @@ def test_executor_paged_kv_contract(mesh_device: ttnn.MeshDevice, expect_error) 
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize("mesh_device", [GALAXY_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", [GALAXY_DEVICE_PARAMS], indirect=True)
@@ -520,7 +520,7 @@ def test_executor_paged_kv_shrinks_to_a_smaller_physical_pool(mesh_device: ttnn.
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize("mesh_device", [GALAXY_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", [GALAXY_DEVICE_PARAMS], indirect=True)
@@ -583,7 +583,7 @@ def test_executor_prefix_cached_prefill(mesh_device: ttnn.MeshDevice) -> None:
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize("mesh_device", [GALAXY_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", [GALAXY_DEVICE_PARAMS], indirect=True)
@@ -633,7 +633,7 @@ def test_executor_chunked_prefill(mesh_device: ttnn.MeshDevice) -> None:
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize("mesh_device", [GALAXY_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", [GALAXY_DEVICE_PARAMS], indirect=True)
@@ -718,7 +718,7 @@ def test_executor_warmup_and_program_identity(mesh_device: ttnn.MeshDevice, orde
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize("mesh_device", [GALAXY_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", [GALAXY_DEVICE_PARAMS], indirect=True)
@@ -770,7 +770,7 @@ def test_executor_repeated_startup_and_cleanup(mesh_device: ttnn.MeshDevice) -> 
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize("mesh_device", [GALAXY_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", [GALAXY_DEVICE_PARAMS], indirect=True)
@@ -837,7 +837,7 @@ def test_executor_teacher_forced_accuracy(mesh_device: ttnn.MeshDevice) -> None:
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize("mesh_device", [GALAXY_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", [GALAXY_DEVICE_PARAMS], indirect=True)

@@ -358,7 +358,7 @@ def _assert_nothing_retained(executor: Any, kv_cache: Any, model: Any, label: st
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize("mesh_device", [GALAXY_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", [GALAXY_TRACE_DEVICE_PARAMS], indirect=True)
@@ -401,7 +401,7 @@ def test_traced_decode_batch32(mesh_device: ttnn.MeshDevice) -> None:
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize("mesh_device", [GALAXY_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", [GALAXY_TRACE_DEVICE_PARAMS], indirect=True)
@@ -458,7 +458,7 @@ def test_traced_prefill_where_eligible(mesh_device: ttnn.MeshDevice) -> None:
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize("mesh_device", [GALAXY_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", [GALAXY_TRACE_DEVICE_PARAMS], indirect=True)
@@ -540,7 +540,7 @@ def test_trace_ineligible_prefill_is_an_explicit_eager_path(mesh_device: ttnn.Me
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize("mesh_device", [GALAXY_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", [GALAXY_TRACE_DEVICE_PARAMS], indirect=True)
@@ -581,7 +581,7 @@ def test_eager_and_traced_decode_logits_agree(mesh_device: ttnn.MeshDevice) -> N
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize("mesh_device", [GALAXY_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", [GALAXY_TRACE_DEVICE_PARAMS], indirect=True)
@@ -665,7 +665,7 @@ def test_eager_and_traced_decode_logits_agree_with_device_sampling_built(mesh_de
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize("mesh_device", [GALAXY_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", [GALAXY_TRACE_DEVICE_PARAMS], indirect=True)
@@ -736,7 +736,7 @@ def test_trace_identity_is_physical_geometry(mesh_device: ttnn.MeshDevice) -> No
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize("mesh_device", [GALAXY_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", [GALAXY_TRACE_DEVICE_PARAMS], indirect=True)
@@ -785,7 +785,7 @@ def test_eager_and_traced_sampled_tokens_are_identical(mesh_device: ttnn.MeshDev
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize("mesh_device", [GALAXY_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", [GALAXY_TRACE_DEVICE_PARAMS], indirect=True)
@@ -875,7 +875,7 @@ def _report_transition(name: str, phases: dict[str, Any]) -> None:
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize("mesh_device", [GALAXY_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", [GALAXY_TRACE_DEVICE_PARAMS], indirect=True)
@@ -1012,7 +1012,7 @@ def test_mode_transition(mesh_device: ttnn.MeshDevice, transition: str, expect_e
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize("mesh_device", [GALAXY_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", [GALAXY_TRACE_DEVICE_PARAMS], indirect=True)
@@ -1058,7 +1058,7 @@ def test_repeated_startup_serving_and_cleanup_with_tracing(mesh_device: ttnn.Mes
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @pytest.mark.parametrize("mesh_device", [GALAXY_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", [GALAXY_TRACE_DEVICE_PARAMS], indirect=True)

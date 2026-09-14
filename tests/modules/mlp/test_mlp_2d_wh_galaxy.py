@@ -60,7 +60,7 @@ def _invoke(
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.parametrize("mesh_device", [(8, 4)], indirect=True)
 @pytest.mark.parametrize(
     "dim,hidden_dim",
@@ -149,7 +149,7 @@ def test_mlp_2d_wh_galaxy_decode_batch_32_repeat(mesh_device, dim, hidden_dim):
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.parametrize("mesh_device", [(8, 4)], indirect=True)
 @pytest.mark.parametrize(
     "dim,hidden_dim",

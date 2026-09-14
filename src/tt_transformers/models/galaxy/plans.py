@@ -34,6 +34,7 @@ from tt_transformers.models.galaxy.recipes import (
     GalaxyDenseGeometry,
     core_ranges,
     distributed_norm_stats_memory_config,
+    galaxy_fabric_links,
     galaxy_prefill_mode_plan_cores,
     pad_ring_width,
     prefetch_sender_cores,
@@ -51,6 +52,33 @@ from tt_transformers.models.galaxy.resources import (
 _ALL_REDUCE_BUFFER_WIDTH = 50 * 1024
 _DECODE_PACKET_SHARD_WIDTH = 512
 _DECODE_PACKET_SHARDS = 8
+
+
+def _links(mesh_device: Any, requested: int) -> int:
+    """Return `requested` links, clamped to what this architecture's fabric has.
+
+    The plans below name two different kinds of number, and only one of them is
+    the mesh's link budget:
+
+    * `4` *is* the Wormhole budget -- "use every link".
+    * `3` and `1` are deliberate per-collective choices below that budget, kept
+      because the qualified Wormhole recipes measured them there. `num_links` on
+      one collective and the mesh's link budget are different quantities, and
+      centralising the first would erase a tuned value.
+
+    Clamping expresses both: on Wormhole, `min(4, 4)`, `min(3, 4)` and
+    `min(1, 4)` reproduce today's constants exactly, so this change cannot move
+    the qualified path. On Blackhole the budget is 2, so the 4s and the 3
+    become 2 and the 1s stay 1.
+
+    Clamping is not a nicety. The ring and line CCLs index ethernet channels by
+    link, so asking for more links than the fabric trained overruns the channel
+    array and deadlocks the host with no traceback -- and an under-specified
+    `num_links=1` on axis 1 has separately caused a real CCL stall. Neither
+    failure mode raises.
+    """
+
+    return min(requested, galaxy_fabric_links(mesh_device))
 
 
 def _spec(
@@ -139,7 +167,7 @@ def build_galaxy_decode_collectives(
     fused_qkv = GalaxyCollectivePlan(
         key=GalaxyResourceKey("all_reduce_create_qkv_heads", 1, qkv_shape, _sequence_key(qkv_shape)),
         topology=ttnn.Topology.Ring,
-        num_links=3,
+        num_links=_links(mesh_device, 3),
         persistent_output_specs=(
             _spec(
                 (*GALAXY_MESH_SHAPE, TILE, geometry.local_qkv_size * GALAXY_COLUMNS),
@@ -151,7 +179,7 @@ def build_galaxy_decode_collectives(
     gather_users = GalaxyCollectivePlan(
         key=GalaxyResourceKey("all_gather", 1, users_shape, _sequence_key(users_shape)),
         topology=ttnn.Topology.Ring,
-        num_links=1,
+        num_links=_links(mesh_device, 1),
         persistent_output_specs=(
             _spec(
                 (1, batch, geometry.local_heads, geometry.head_dim),
@@ -163,7 +191,7 @@ def build_galaxy_decode_collectives(
     mlp_reduce_scatter = GalaxyCollectivePlan(
         key=GalaxyResourceKey("reduce_scatter", 1, hidden_shape, _sequence_key(hidden_shape)),
         topology=ttnn.Topology.Ring,
-        num_links=4,
+        num_links=_links(mesh_device, 4),
         semaphores_per_slot=3,
         persistent_output_specs=(_spec(scattered_shape, placements.mlp_reduce_scatter_memcfg),),
         intermediate_output_specs=(
@@ -177,7 +205,7 @@ def build_galaxy_decode_collectives(
     mlp_all_gather = GalaxyCollectivePlan(
         key=GalaxyResourceKey("all_gather", 1, scattered_shape, _sequence_key(scattered_shape)),
         topology=ttnn.Topology.Ring,
-        num_links=4,
+        num_links=_links(mesh_device, 4),
         persistent_output_specs=(_spec(hidden_shape, placements.mlp_w2_input_memcfg),),
     )
     # Attention and MLP finish decode with the same axis-0 hidden reduction, so
@@ -185,7 +213,7 @@ def build_galaxy_decode_collectives(
     output_all_reduce = GalaxyCollectivePlan(
         key=GalaxyResourceKey("all_reduce", 0, output_shape, _sequence_key(output_shape)),
         topology=ttnn.Topology.Ring,
-        num_links=4,
+        num_links=_links(mesh_device, 4),
         persistent_output_specs=(
             _spec(
                 (*GALAXY_MESH_SHAPE, TILE, _ALL_REDUCE_BUFFER_WIDTH),
@@ -214,7 +242,7 @@ def build_galaxy_decode_collectives(
     lm_head_all_reduce = GalaxyCollectivePlan(
         key=GalaxyResourceKey("all_reduce", 1, logits_shape, _sequence_key(logits_shape)),
         topology=ttnn.Topology.Ring,
-        num_links=4,
+        num_links=_links(mesh_device, 4),
         # The L1 tensor the three peer column devices fabric-write into, owned by
         # the plan and allocated once for the life of the process.
         #
@@ -290,7 +318,7 @@ def build_galaxy_decode_collectives(
     norm_stats = GalaxyCollectivePlan(
         key=GalaxyResourceKey("all_gather", 1, stats_shape, _sequence_key(stats_shape)),
         topology=ttnn.Topology.Ring,
-        num_links=1,
+        num_links=_links(mesh_device, 1),
         semaphores_per_slot=1,
         persistent_output_specs=(
             _spec(
@@ -334,20 +362,20 @@ def build_galaxy_prefill_collectives(
     attention_qkv = GalaxyCollectivePlan(
         key=GalaxyResourceKey("all_reduce", 1, qkv_shape, _sequence_key(qkv_shape)),
         topology=ttnn.Topology.Linear,
-        num_links=1,
+        num_links=_links(mesh_device, 1),
         persistent_output_specs=(dram(qkv_shape),),
     )
     attention_output = GalaxyCollectivePlan(
         key=GalaxyResourceKey("all_reduce", 0, output_shape, _sequence_key(output_shape)),
         topology=ttnn.Topology.Ring,
-        num_links=4,
+        num_links=_links(mesh_device, 4),
         persistent_output_specs=(dram(output_shape),),
     )
     mlp_reduce_scatters = tuple(
         GalaxyCollectivePlan(
             key=GalaxyResourceKey("reduce_scatter", 1, hidden_shape, _sequence_key(hidden_shape, stage)),
             topology=ttnn.Topology.Ring,
-            num_links=4,
+            num_links=_links(mesh_device, 4),
             semaphores_per_slot=3,
             persistent_output_specs=(dram(gated_shape),),
             intermediate_output_specs=(dram(hidden_shape),),
@@ -357,13 +385,13 @@ def build_galaxy_prefill_collectives(
     mlp_all_gather = GalaxyCollectivePlan(
         key=GalaxyResourceKey("all_gather", 1, gated_shape, _sequence_key(gated_shape, "gated")),
         topology=ttnn.Topology.Ring,
-        num_links=4,
+        num_links=_links(mesh_device, 4),
         persistent_output_specs=(dram(hidden_shape),),
     )
     mlp_final_reduce_scatter = GalaxyCollectivePlan(
         key=GalaxyResourceKey("reduce_scatter", 0, output_shape, _sequence_key(output_shape, "final")),
         topology=ttnn.Topology.Ring,
-        num_links=4,
+        num_links=_links(mesh_device, 4),
         semaphores_per_slot=3,
         persistent_output_specs=(dram(scattered_output_shape),),
         intermediate_output_specs=(dram(output_shape),),
@@ -371,13 +399,13 @@ def build_galaxy_prefill_collectives(
     mlp_final_all_gather = GalaxyCollectivePlan(
         key=GalaxyResourceKey("all_gather", 0, scattered_output_shape, _sequence_key(scattered_output_shape, "final")),
         topology=ttnn.Topology.Ring,
-        num_links=4,
+        num_links=_links(mesh_device, 4),
         persistent_output_specs=(dram(output_shape),),
     )
     norm_stats = GalaxyCollectivePlan(
         key=GalaxyResourceKey("all_gather", 1, stats_shape, _sequence_key(stats_shape)),
         topology=ttnn.Topology.Linear,
-        num_links=1,
+        num_links=_links(mesh_device, 1),
         semaphores_per_slot=1,
         persistent_output_specs=(
             _spec(

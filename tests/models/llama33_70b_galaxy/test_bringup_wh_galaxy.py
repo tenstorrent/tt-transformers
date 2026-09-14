@@ -195,7 +195,7 @@ galaxy_params = pytest.mark.parametrize("device_params", [GALAXY_DEVICE_PARAMS],
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @galaxy_params
 @galaxy
@@ -244,7 +244,7 @@ def test_one_layer_model_constructs_and_closes(mesh_device, layer0_weights_and_p
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @galaxy_params
 @galaxy
@@ -325,7 +325,7 @@ def test_one_decode_step_executes(mesh_device, layer0_weights_and_params):
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @galaxy_params
 @galaxy
@@ -380,7 +380,7 @@ def test_one_prefill_executes(mesh_device, layer0_weights_and_params):
 
 @pytest.mark.device
 @pytest.mark.wormhole
-@pytest.mark.galaxy
+@pytest.mark.galaxy_wh
 @pytest.mark.model
 @galaxy_params
 @galaxy
