@@ -22,6 +22,7 @@ from typing import Any
 import ttnn
 
 from tt_transformers.models.galaxy.topology import (
+    GALAXY_FABRIC_LINKS,
     WORMHOLE_GALAXY_TOPOLOGY,
     GalaxyChipTopology,
     resolve_galaxy_chip_topology,
@@ -137,24 +138,6 @@ def galaxy_topology(mesh_device: Any) -> GalaxyChipTopology:
     return resolve_galaxy_chip_topology(mesh_device)
 
 
-#: Fabric links per direction, per Galaxy architecture. The mesh graph
-#: descriptors are the source: `single_galaxy_mesh_graph_descriptor.textproto`
-#: declares `channels { count: 4 }`, and the Blackhole equivalent declares
-#: `channels { count: 2 }`.
-#:
-#: `tt_ccl.get_num_links` carries the same budget, independently derived from the
-#: device name (`("BHGLX", (2, 2))` against `("TG", (4, 4))`). This table is
-#: keyed on `arch()` rather than delegating to it because `get_num_links` needs
-#: `get_device_ids()` and a pybind arch probe, neither of which a host-mocked
-#: mesh can answer -- and every Galaxy geometry test here is host-only. The two
-#: agreeing is a real invariant and an unproven one: it is checked on hardware by
-#: `docs/bh_galaxy_experiments/E02-cluster-identity`, not on the host.
-GALAXY_FABRIC_LINKS = {
-    ttnn.device.Arch.WORMHOLE_B0: 4,
-    ttnn.device.Arch.BLACKHOLE: 2,
-}
-
-
 def galaxy_fabric_links(mesh_device: Any) -> int:
     """Return the fabric links per direction for this mesh's architecture.
 
@@ -190,7 +173,12 @@ def galaxy_ccl_reserved_worker_cores(mesh_device: Any) -> int:
 GALAXY_CCL_RESERVED_WORKER_CORES = GALAXY_FABRIC_LINKS[ttnn.device.Arch.WORMHOLE_B0]
 
 
-def lm_head_reduce_core_count(padded_local_vocab: int, available_cores: int) -> int:
+def lm_head_reduce_core_count(
+    padded_local_vocab: int,
+    available_cores: int,
+    *,
+    reserved_worker_cores: int = GALAXY_CCL_RESERVED_WORKER_CORES,
+) -> int:
     """Return the core count the decode LM head all-reduce stages onto.
 
     The reduction does not run on the matmul's 24-core ring.
@@ -218,6 +206,11 @@ def lm_head_reduce_core_count(padded_local_vocab: int, available_cores: int) -> 
     Because the buffer is exactly ``GALAXY_COLUMNS`` times the width, one
     divisibility condition covers both.
 
+    ``reserved_worker_cores`` is one per fabric link, so it moves with the
+    architecture: 4 on Wormhole, 2 on Blackhole. It defaults to the Wormhole
+    value the qualified recipes were written against; a Blackhole caller passes
+    `topology.ccl_reserved_worker_cores`.
+
     **The reduction may not take the whole worker envelope.**
     ``all_reduce_async`` needs worker cores of its own - one per fabric link -
     and it takes them from what the sub-device has left after the tensors are
@@ -240,7 +233,7 @@ def lm_head_reduce_core_count(padded_local_vocab: int, available_cores: int) -> 
     """
 
     tiles = padded_local_vocab // TILE
-    usable = available_cores - GALAXY_CCL_RESERVED_WORKER_CORES
+    usable = available_cores - reserved_worker_cores
     if usable < 1:
         raise ValueError(f"{available_cores} worker cores cannot host a reduction and its collective")
     for count in range(min(usable, tiles), 0, -1):

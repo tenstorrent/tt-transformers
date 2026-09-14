@@ -49,6 +49,24 @@ import ttnn
 Coord = tuple[int, int]
 Rect = tuple[int, int, int, int]
 
+#: Fabric links per direction, per Galaxy architecture -- the single source, read
+#: by both resolvers below and re-exported through `recipes`.
+#:
+#: The mesh graph descriptors are the origin: `single_galaxy_mesh_graph_descriptor
+#: .textproto` declares `channels { count: 4 }` and the Blackhole equivalent
+#: declares `channels { count: 2 }`. `tt_ccl.get_num_links` carries the same
+#: budget derived independently from the device name (`("BHGLX", (2, 2))` against
+#: `("TG", (4, 4))`); that the two agree is a real invariant and an unproven one,
+#: checked on hardware by `docs/bh_galaxy_experiments/E02-cluster-identity`.
+#:
+#: Keyed on `arch()` rather than delegating to `get_num_links`, which needs
+#: `get_device_ids()` and a pybind arch probe that the host-mocked meshes every
+#: Galaxy geometry test uses cannot answer.
+GALAXY_FABRIC_LINKS = {
+    ttnn.device.Arch.WORMHOLE_B0: 4,
+    ttnn.device.Arch.BLACKHOLE: 2,
+}
+
 
 @dataclass(frozen=True)
 class GalaxyCapabilities:
@@ -145,7 +163,20 @@ class GalaxyChipTopology:
     sub_device_max_y: int | None = None
 
     #: L1 small region reserved on every mesh open, so generic collectives can
-    #: place the semaphores they create at program-compile time.
+    #: place the semaphores they create at program-compile time -- in main L1
+    #: mid-bank, where nothing can be placed across them afterwards.
+    #:
+    #: 32 kB was sized against Wormhole's 1 393 472 B L1 bank. Blackhole's bank
+    #: size is **[measure]**, and main L1 shrinks by this much for *every* Galaxy
+    #: op, so it is a field rather than a global. Confirm through
+    #: `device_utils.has_l1_small_region()` rather than assuming the number
+    #: carries; see `docs/bh_galaxy_experiments/E06-l1-small-region`.
+    #:
+    #: Deliberately a literal rather than an import of
+    #: `device_utils.GALAXY_L1_SMALL_SIZE`: that module pulls in `lazy_weight`,
+    #: `loguru` and `torch`, and this one's only dependency is `ttnn`'s enums --
+    #: which is what lets its whole validation surface be exercised without a
+    #: device. `test_topology.py` asserts the two agree, so they cannot drift.
     l1_small_size: int = 32768
 
     #: Populated by `resolve_galaxy_chip_topology`; see `validate_against_device`.
@@ -434,7 +465,7 @@ WORMHOLE_GALAXY_TOPOLOGY = GalaxyChipTopology(
     norm_origin=(2, 0),
     sampling_start_core=(1, 0),
     decode_sdpa_grid=(8, 4),
-    fabric_links=4,
+    fabric_links=GALAXY_FABRIC_LINKS[ttnn.device.Arch.WORMHOLE_B0],
     fabric_config=ttnn.FabricConfig.FABRIC_1D_RING,
     dispatch_core_axis=ttnn.DispatchCoreAxis.COL,
     # Wormhole Galaxy dispatch sits at column 7 and above, outside the 7-wide
@@ -443,14 +474,169 @@ WORMHOLE_GALAXY_TOPOLOGY = GalaxyChipTopology(
     sub_device_max_y=None,
 )
 
-_TOPOLOGIES = {WORMHOLE_GALAXY_TOPOLOGY.architecture: WORMHOLE_GALAXY_TOPOLOGY}
+
+def _resolve_wormhole(compute_grid: Coord, dram_views: int) -> GalaxyChipTopology:
+    """Return the Wormhole descriptor.
+
+    Wormhole Galaxy's `galaxy: col:` core-descriptor key is a fixed `7 x 10`, and
+    every core table above was qualified against exactly that grid, so this
+    refuses anything else rather than reinterpreting hand-measured coordinates
+    against a shape they were never checked on.
+    """
+
+    if compute_grid != WORMHOLE_GALAXY_TOPOLOGY.compute_grid:
+        raise ValueError(
+            f"Wormhole Galaxy expects compute grid {WORMHOLE_GALAXY_TOPOLOGY.compute_grid}, "
+            f"device reports {compute_grid}; the qualified core tables are specific to it"
+        )
+    return replace(WORMHOLE_GALAXY_TOPOLOGY, dram_views=dram_views)
+
+
+# --------------------------------------------------------------------------
+# Blackhole Galaxy -- milestone 1, prefetcher-free
+# --------------------------------------------------------------------------
+
+#: Lowest worker column on Blackhole. **This is the milestone-1 open question**,
+#: and it is named here rather than inferred so that settling it is a one-line
+#: change with a test attached (`docs/bh_galaxy_experiments/E05-worker-envelope`).
+#:
+#: The reference port's worker envelope is `cols 1..10`, and column 0 is excluded
+#: *because that is where its prefetcher senders live*. Milestone 1 has no
+#: senders, so there is no such reason, and the prefetcher-free envelope is
+#: plausibly `cols 0..10` -- 10 more cores. That is an inference, not a reading:
+#: the reference has no prefetcher-free Blackhole worker range to copy.
+#:
+#: 1 is the conservative choice, and conservative is right here because the
+#: failure is asymmetric. Too few worker cores costs throughput and nothing else.
+#: Too many puts tensors on a column that is reserved for a reason nobody has
+#: written down, and every failure in that class is silent.
+BLACKHOLE_FIRST_WORKER_COLUMN = 1
+
+#: Worker sub-device row cap, or `None` for the full grid height.
+#:
+#: The reference sets `sub_core_max_y = 7` on Blackhole unconditionally, but its
+#: recorded rationale is *"to match the 24-core ring geometry"* -- 8 rows x 3
+#: columns. Milestone 1 has no ring, so there is no row extent to match. Two
+#: facts corroborate treating the cap as prefetcher baggage: the reference writes
+#: it as `7 if is_blackhole else 9` rather than gating it on `use_prefetcher`,
+#: and its own Llama path does not apply it at all. Worth 12 worker cores, and
+#: still **[measure]** -- see `docs/bh_galaxy_experiments/E05-worker-envelope`.
+BLACKHOLE_SUB_DEVICE_MAX_Y: int | None = None
+
+
+def _resolve_blackhole(compute_grid: Coord, dram_views: int) -> GalaxyChipTopology:
+    """Return the Blackhole descriptor for whatever grid the device reports.
+
+    Unlike Wormhole, the grid is **derived**, because Blackhole harvesting is
+    per-part: the reference's chassis measures `12 x 10` (the 1x-harvested key),
+    but `13 x 10` unharvested and `11 x 10` are both shapes a real part can
+    present. Everything positional is expressed against the reported width so a
+    differently-harvested board resolves rather than failing.
+
+    The one thing that is **not** derived is the dispatch column. It sits inside
+    `compute_with_storage_grid_size()`, so a purely derived envelope would fold
+    it into the workers -- and the reference records that doing so *"regresses
+    prefill warmup"* with nothing raising. It is excluded by measurement.
+    """
+
+    width, height = compute_grid
+    dispatch_column = width - 1
+    last_worker_column = dispatch_column - 1
+    if last_worker_column < BLACKHOLE_FIRST_WORKER_COLUMN:
+        raise ValueError(f"Blackhole Galaxy compute grid {compute_grid} is too narrow to host a worker envelope")
+
+    max_y = height - 1 if BLACKHOLE_SUB_DEVICE_MAX_Y is None else min(BLACKHOLE_SUB_DEVICE_MAX_Y, height - 1)
+    workers = ((BLACKHOLE_FIRST_WORKER_COLUMN, 0, last_worker_column, max_y),)
+
+    return GalaxyChipTopology(
+        architecture=ttnn.device.Arch.BLACKHOLE,
+        # Milestone 1 is the prefetcher-free path: it matches the reference's own
+        # Blackhole default, which is where external runners are pointed, and it
+        # is the smaller port. Every capability below is False for a recorded
+        # reason, not as a placeholder -- see `blackhole_galaxy_port_plan.md` B2
+        # through B6. Turning one on is a deliberate, testable change.
+        capabilities=GalaxyCapabilities(
+            # The 12-DRAM-view, Wormhole-grid global-CB mechanism. Deferred.
+            has_prefetcher=False,
+            # The gather-in0 ring's memory configs are not placeable here: the
+            # ring memcfg's shard grid falls outside the auto-selected 1D matmul
+            # compute grid, and feeding a ring-sharded all-gather output into the
+            # interleaved W2 matmul mismatches per-device channel order and
+            # yields MLP decode PCC ~ 0 *silently*.
+            has_ring_matmul=False,
+            # `fused_rms_minimal`, `llama_rs_create_heads`, `all_gather_concat`,
+            # `llama_rs_matmul` and `llama_reduce_scatter` use 1D-multicast
+            # writers that **no-op** on the 2D-torus fabric. They move no data
+            # and raise nothing, so the collective appears to run.
+            has_fused_ccl=False,
+            # The non-fused distributed RMSNorm does not write the residual sum
+            # back in place, so relying on the fused path silently drops each
+            # layer's `ff_out` from the residual stream -- visible only across
+            # more than one layer.
+            has_fused_residual_norm=False,
+            # The Blackhole fallback is the non-fused rotary pair.
+            has_fused_qk_rotary=False,
+            # `ttnn.sampling`'s pipeline is unavailable; greedy sampling routes
+            # through all-gather plus `ttnn.argmax`, which also changes the
+            # return shape callers see.
+            has_distributed_sampling=False,
+        ),
+        compute_grid=compute_grid,
+        # 8 on Blackhole against Wormhole's 12. Sender count and shard widths
+        # follow from it.
+        dram_views=dram_views,
+        worker_core_ranges=workers,
+        # Mirrors Wormhole's three-column top-k. The reference moves top-k to
+        # cols 4-10 on Blackhole, but only to clear the *resident global CB* on
+        # receiver columns 1-3, which a prefetcher-free path does not have.
+        topk_core_ranges=((BLACKHOLE_FIRST_WORKER_COLUMN, 0, min(3, last_worker_column), max_y),),
+        # No ring matmul path: `has_ring_matmul` is False, and `None` makes any
+        # consumer that asks for one fail loudly instead of receiving Wormhole's
+        # coordinates. The deferred work restores these, it does not invent them.
+        ring_core_coords=None,
+        ring_receiver_coords=None,
+        ring_hop_coords=None,
+        ring_matmul_grid=None,
+        # Empty is the explicit prefetcher-free marker, not an absent field.
+        prefetch_sender_coords=(),
+        dummy_sender_coords=(),
+        receiver_column_pairs=(),
+        dummy_receiver_ranges=(),
+        norm_origin=(2, 0),
+        sampling_start_core=(BLACKHOLE_FIRST_WORKER_COLUMN, 0),
+        decode_sdpa_grid=(8, 4),
+        # Two, not four: the mesh graph descriptor declares `channels { count: 2 }`,
+        # and the ring/line CCLs index ethernet channels by link, so 4 overruns
+        # the available channels and deadlocks.
+        fabric_links=GALAXY_FABRIC_LINKS[ttnn.device.Arch.BLACKHOLE],
+        # Column-axis (cluster_axis=1) collectives run on device here and need a
+        # 2D torus. `FABRIC_1D` and `FABRIC_1D_RING` throw `IndexError: map::at`
+        # on the cross-column route. This is a device-open parameter, so it has
+        # to be known before the mesh is opened.
+        fabric_config=ttnn.FabricConfig.FABRIC_2D_TORUS_XY,
+        dispatch_core_axis=ttnn.DispatchCoreAxis.COL,
+        reserved_columns=(dispatch_column,),
+        sub_device_max_y=BLACKHOLE_SUB_DEVICE_MAX_Y,
+    )
+
+
+_RESOLVERS = {
+    ttnn.device.Arch.WORMHOLE_B0: _resolve_wormhole,
+    ttnn.device.Arch.BLACKHOLE: _resolve_blackhole,
+}
+
+#: The Blackhole chassis shape the reference port measured, and the one this port
+#: expects to deploy on. The others resolve too; this is the default when no
+#: device is at hand.
+BLACKHOLE_GALAXY_COMPUTE_GRID = (12, 10)
+BLACKHOLE_GALAXY_DRAM_VIEWS = 8
 
 
 def supported_galaxy_architectures() -> tuple[Any, ...]:
-    return tuple(_TOPOLOGIES)
+    return tuple(_RESOLVERS)
 
 
-def galaxy_chip_topology(architecture: Any) -> GalaxyChipTopology:
+def galaxy_chip_topology(architecture: Any, compute_grid: Coord | None = None, dram_views: int | None = None):
     """Return the descriptor for one architecture, without a device to check it.
 
     Fails closed. The mesh contract is an allowlist, and a second architecture
@@ -459,13 +645,43 @@ def galaxy_chip_topology(architecture: Any) -> GalaxyChipTopology:
     than an error.
     """
 
-    if architecture not in _TOPOLOGIES:
-        supported = ", ".join(str(arch) for arch in _TOPOLOGIES)
+    if architecture not in _RESOLVERS:
+        supported = ", ".join(str(arch) for arch in _RESOLVERS)
         raise ValueError(f"no Galaxy topology for architecture {architecture}; supported: {supported}")
-    return _TOPOLOGIES[architecture]
+    if architecture == ttnn.device.Arch.BLACKHOLE:
+        compute_grid = compute_grid or BLACKHOLE_GALAXY_COMPUTE_GRID
+        dram_views = BLACKHOLE_GALAXY_DRAM_VIEWS if dram_views is None else dram_views
+    else:
+        compute_grid = compute_grid or WORMHOLE_GALAXY_TOPOLOGY.compute_grid
+        dram_views = WORMHOLE_GALAXY_TOPOLOGY.dram_views if dram_views is None else dram_views
+    return _RESOLVERS[architecture](compute_grid, dram_views)
 
 
 def resolve_galaxy_chip_topology(mesh_device: Any) -> GalaxyChipTopology:
-    """Return the descriptor for this mesh, validated against what it reports."""
+    """Return the descriptor for this mesh, built and checked against what it reports."""
 
-    return galaxy_chip_topology(mesh_device.arch()).validate_against_device(mesh_device)
+    architecture = mesh_device.arch()
+    if architecture not in _RESOLVERS:
+        supported = ", ".join(str(arch) for arch in _RESOLVERS)
+        raise ValueError(f"no Galaxy topology for architecture {architecture}; supported: {supported}")
+    grid = mesh_device.compute_with_storage_grid_size()
+    topology = _RESOLVERS[architecture]((int(grid.x), int(grid.y)), int(mesh_device.dram_grid_size().x))
+    return topology.validate_against_device(mesh_device)
+
+
+def galaxy_device_params(architecture: Any) -> dict[str, Any]:
+    """Return the `open_mesh_device` parameters one Galaxy architecture needs.
+
+    The fabric configuration is chosen **before** the mesh opens, which is why it
+    lives on the descriptor rather than being probed afterwards. Opening a
+    Blackhole Galaxy with `FABRIC_1D_RING` -- the Wormhole value, and until now
+    the only one this repository had -- throws `IndexError: map::at` on the first
+    cross-column collective.
+    """
+
+    topology = galaxy_chip_topology(architecture)
+    return {
+        "dispatch_core_axis": topology.dispatch_core_axis,
+        "fabric_config": topology.fabric_config,
+        "l1_small_size": topology.l1_small_size,
+    }

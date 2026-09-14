@@ -20,7 +20,7 @@ import pytest
 import torch
 import ttnn
 
-from tt_transformers.device_utils import GALAXY_L1_SMALL_SIZE
+from tt_transformers.models.galaxy.topology import galaxy_device_params
 
 GALAXY_MESH_SHAPE = (8, 4)
 GALAXY_PHYSICAL_BATCH = 32
@@ -32,11 +32,19 @@ GALAXY_USERS_PER_COLUMN = 8
 #: the generic collectives put their program-cache-lifetime semaphores, and
 #: without it they fragment main L1 and break the weight prefetcher's
 #: `prefill -> decode` restore. See `GALAXY_L1_SMALL_SIZE`.
-GALAXY_DEVICE_PARAMS = {
-    "dispatch_core_axis": ttnn.DispatchCoreAxis.COL,
-    "fabric_config": ttnn.FabricConfig.FABRIC_1D_RING,
-    "l1_small_size": GALAXY_L1_SMALL_SIZE,
-}
+#:
+#: **The fabric configuration is architecture-specific and chosen before the mesh
+#: opens**, which is why it comes from the topology descriptor rather than being
+#: probed afterwards. Blackhole Galaxy runs its column-axis (``cluster_axis=1``)
+#: collectives on device and needs ``FABRIC_2D_TORUS_XY``; opening it with the
+#: Wormhole ``FABRIC_1D_RING`` below throws ``IndexError: map::at`` on the first
+#: cross-column route.
+GALAXY_DEVICE_PARAMS = galaxy_device_params(ttnn.device.Arch.WORMHOLE_B0)
+
+#: The Blackhole Galaxy equivalent. Separate rather than resolved at fixture time
+#: because ``device_params`` is a collection-time parametrization: the value has
+#: to exist before any device is open to be read from.
+BHGLX_DEVICE_PARAMS = galaxy_device_params(ttnn.device.Arch.BLACKHOLE)
 
 #: Repository root, derived from this file rather than the working directory, so the
 #: asset lookups below do not depend on where pytest was invoked.
@@ -154,6 +162,7 @@ def teacher_forcing_accuracy(predictions: Sequence[int], reference_top5: torch.T
 
 
 __all__ = [
+    "BHGLX_DEVICE_PARAMS",
     "GALAXY_DEVICE_PARAMS",
     "GALAXY_MESH_SHAPE",
     "GALAXY_PHYSICAL_BATCH",

@@ -30,6 +30,7 @@ from tt_transformers.models.galaxy.prefetch import galaxy_sender_receiver_mappin
 from tt_transformers.models.galaxy.topology import (
     WORMHOLE_GALAXY_TOPOLOGY,
     galaxy_chip_topology,
+    galaxy_device_params,
     resolve_galaxy_chip_topology,
     supported_galaxy_architectures,
 )
@@ -286,3 +287,219 @@ def test_capabilities_keep_prefetcher_and_fused_ccl_on_separate_axes():
 
     hybrid = replace(capabilities, has_fused_ccl=False)
     assert hybrid.has_prefetcher is True and hybrid.has_fused_ccl is False
+
+
+# ---------------------------------------------------------------------------
+# Blackhole Galaxy -- milestone 1, prefetcher-free
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.host
+@pytest.mark.model
+@pytest.mark.parametrize("grid", [(11, 10), (12, 10), (13, 10)], ids=["11x10", "12x10", "13x10"])
+def test_blackhole_descriptor_resolves_for_every_harvesting_shape(grid):
+    """Blackhole harvesting is per-part, so the envelope is derived from the grid.
+
+    `12 x 10` is the shape the reference measured and the one this port expects
+    to deploy on; `13 x 10` unharvested and `11 x 10` are both shapes a real part
+    can present, and a differently-harvested board must resolve rather than fail.
+    """
+
+    topology = resolve_galaxy_chip_topology(_mesh(arch=ttnn.device.Arch.BLACKHOLE, grid=grid, dram_width=8))
+
+    width = grid[0]
+    assert topology.compute_grid == grid
+    assert topology.worker_core_ranges == ((1, 0, width - 2, 9),)
+
+    # The dispatch column is excluded by *measurement*, not derivation: it sits
+    # inside `compute_with_storage_grid_size()`, and folding it into the workers
+    # regresses prefill warmup with nothing raising.
+    assert topology.reserved_columns == (width - 1,)
+    assert all(x != width - 1 for x, _ in topology.worker_coords)
+
+
+@pytest.mark.host
+@pytest.mark.model
+def test_blackhole_milestone_one_is_prefetcher_free_by_explicit_marker():
+    """Absence is expressed, not implied.
+
+    `prefetch_sender_coords = ()` plus `has_prefetcher = False` are the markers.
+    A path expressed as "the prefetcher fields do not exist" could not later grow
+    one without touching every consumer, which is the whole cost the deferred
+    work is trying to avoid.
+    """
+
+    topology = resolve_galaxy_chip_topology(_mesh(arch=ttnn.device.Arch.BLACKHOLE, grid=(12, 10), dram_width=8))
+
+    assert topology.prefetch_sender_coords == ()
+    assert topology.dummy_sender_coords == ()
+    assert topology.capabilities.has_prefetcher is False
+
+    # No ring path: `None` rather than Wormhole's coordinates, so a consumer that
+    # asks for one fails loudly instead of receiving geometry for another chip.
+    assert topology.ring_core_coords is None
+    assert topology.ring_matmul_grid is None
+    with pytest.raises(ValueError, match="has no ring matmul path"):
+        recipes.ring_cores(topology)
+
+    assert topology.worker_coords  # 100 cores at 12x10
+    assert len(topology.worker_coords) == 100
+
+
+@pytest.mark.host
+@pytest.mark.model
+def test_blackhole_fabric_and_link_budget():
+    """The fabric config is a device-open parameter, so it lives on the descriptor.
+
+    Column-axis (`cluster_axis=1`) collectives run on device on Blackhole Galaxy
+    and require a 2D torus; `FABRIC_1D` and `FABRIC_1D_RING` throw
+    `IndexError: map::at` on the cross-column route. The value therefore has to
+    be known before the mesh opens, which is why it is not probed afterwards.
+    """
+
+    topology = resolve_galaxy_chip_topology(_mesh(arch=ttnn.device.Arch.BLACKHOLE, grid=(12, 10), dram_width=8))
+
+    assert topology.fabric_config is ttnn.FabricConfig.FABRIC_2D_TORUS_XY
+    assert topology.dispatch_core_axis is ttnn.DispatchCoreAxis.COL
+    assert topology.dram_views == 8
+
+    # Two links, not four: the ring and line CCLs index ethernet channels by
+    # link, so four overruns the available channels and deadlocks.
+    assert topology.fabric_links == 2
+    assert topology.ccl_reserved_worker_cores == 2
+
+    params = galaxy_device_params(ttnn.device.Arch.BLACKHOLE)
+    assert params["fabric_config"] is ttnn.FabricConfig.FABRIC_2D_TORUS_XY
+    assert params["dispatch_core_axis"] is ttnn.DispatchCoreAxis.COL
+    assert galaxy_device_params(ttnn.device.Arch.WORMHOLE_B0)["fabric_config"] is ttnn.FabricConfig.FABRIC_1D_RING
+
+
+@pytest.mark.host
+@pytest.mark.model
+def test_blackhole_capabilities_are_all_false_for_a_recorded_reason():
+    """Milestone 1 turns off exactly the four mechanisms the Wormhole recipes assume."""
+
+    capabilities = resolve_galaxy_chip_topology(
+        _mesh(arch=ttnn.device.Arch.BLACKHOLE, grid=(12, 10), dram_width=8)
+    ).capabilities
+
+    assert capabilities == replace(
+        capabilities,
+        has_prefetcher=False,
+        has_ring_matmul=False,
+        has_fused_ccl=False,
+        has_fused_residual_norm=False,
+        has_fused_qk_rotary=False,
+        has_distributed_sampling=False,
+    )
+
+
+@pytest.mark.host
+@pytest.mark.model
+def test_wormhole_descriptor_is_untouched_by_the_blackhole_branch():
+    """No Wormhole value moves when a second architecture is added."""
+
+    wormhole = resolve_galaxy_chip_topology(_mesh())
+
+    assert wormhole.compute_grid == GOLDEN_COMPUTE_GRID
+    assert wormhole.worker_core_ranges == GOLDEN_WORKER_RANGES
+    assert wormhole.ring_core_coords == GOLDEN_RING_CORES
+    assert wormhole.prefetch_sender_coords == GOLDEN_PREFETCH_SENDERS
+    assert wormhole.fabric_links == 4
+    assert wormhole.fabric_config is ttnn.FabricConfig.FABRIC_1D_RING
+    assert wormhole.reserved_columns == ()
+    assert wormhole.capabilities.has_prefetcher is True
+
+    # Wormhole Galaxy's core-descriptor key is a fixed 7x10 and every table above
+    # was qualified against it, so a differently-shaped grid is refused rather
+    # than reinterpreted.
+    with pytest.raises(ValueError, match="specific to it"):
+        resolve_galaxy_chip_topology(_mesh(grid=(12, 10)))
+
+
+@pytest.mark.host
+@pytest.mark.model
+def test_galaxy_mesh_gate_now_admits_blackhole():
+    """`validate_galaxy_mesh` admits an architecture once its geometry exists."""
+
+    assert supported_galaxy_architectures() == (ttnn.device.Arch.WORMHOLE_B0, ttnn.device.Arch.BLACKHOLE)
+    recipes.validate_galaxy_mesh("probe", _mesh(arch=ttnn.device.Arch.BLACKHOLE, grid=(12, 10), dram_width=8))
+
+    # The mesh shape stays a hard equality on both architectures: Blackhole
+    # Galaxy declares the same `device_topology { dims: [8, 4] }`, so `(8, 4)` is
+    # architecture-invariant and generalizing it would weaken the gate for no gain.
+    wrong_shape = _mesh(arch=ttnn.device.Arch.BLACKHOLE, grid=(12, 10), dram_width=8)
+    wrong_shape.shape = (4, 8)
+    with pytest.raises(ValueError, match="logical mesh shape"):
+        recipes.validate_galaxy_mesh("probe", wrong_shape)
+
+
+@pytest.mark.host
+@pytest.mark.model
+@pytest.mark.parametrize(
+    "vocab_size,expected",
+    [(128256, 129024), (151936, 153600)],
+    ids=["llama-3.3-70b", "qwen3-32b"],
+)
+def test_vocabulary_padding_is_identical_on_both_architectures(vocab_size, expected):
+    """The Blackhole padded vocabulary must equal the Wormhole one.
+
+    `galaxy_padded_vocab_size` pads to `GALAXY_ROWS * RING_ALIGNMENT`, and
+    `RING_ALIGNMENT` is a function of the ring size. Ring-exactness is
+    load-bearing rather than cosmetic: `all_reduce_async`'s reduction kernel
+    opens with `cb_in.wait_front(ring_size * block_num_tiles)` on *every* output
+    core, so a width with no divisor in the chosen core count leaves the last
+    core waiting for tiles the fabric never sends, the program never signals
+    completion, and the host blocks in `wait_for_outstanding_reads` with no
+    traceback and no abort -- the mesh has to be reset.
+
+    The values are expected to carry because the Galaxy reference holds
+    `RING_SIZE = 24` on Blackhole *deliberately*, keeping all the weight-sharding
+    math by widening receivers-per-reader from 2 to 3 (`8 x 3 = 24 = 12 x 2`).
+    **If this assertion ever fails, the ring size moved**, and every constraint
+    stated in terms of `ring_size` has to be re-walked -- starting with
+    `lm_head_reduce_core_count`'s divisor search, which this padding is what
+    makes exact by construction.
+
+    Beware the `24 -> 16` figure that circulates for Blackhole: that is the 1D
+    LM head, a different path with different weight sharding, and carrying it
+    into Galaxy vocabulary arithmetic would break exactly this invariant.
+    """
+
+    assert recipes.galaxy_padded_vocab_size(vocab_size) == expected
+
+    # Divisor-exactness, which is the property the padding exists to guarantee.
+    local = expected // recipes.GALAXY_ROWS
+    assert local % recipes.TILE == 0
+    assert recipes.pad_ring_width(local) == local
+
+    # Worker counts differ between the architectures (50 on Wormhole, 100 on
+    # Blackhole at 12x10), so check the reduction resolves on both.
+    # Worker counts and the per-link reserve both differ between the
+    # architectures (50 cores / 4 links on Wormhole, 100 / 2 on Blackhole at
+    # 12x10), and starving `all_reduce_async` of worker cores warns and then
+    # segmentation-faults rather than raising, so check both resolve.
+    for available, reserved in ((50, 4), (100, 2)):
+        count = recipes.lm_head_reduce_core_count(local, available, reserved_worker_cores=reserved)
+        assert (local // recipes.TILE) % count == 0
+        assert count <= available - reserved
+
+
+@pytest.mark.host
+@pytest.mark.model
+def test_l1_small_region_matches_the_shared_device_constant():
+    """The descriptor's literal must equal `device_utils.GALAXY_L1_SMALL_SIZE`.
+
+    `topology.py` keeps its own literal rather than importing that module, whose
+    chain reaches `lazy_weight`, `loguru` and `torch`; the descriptor's only
+    dependency is `ttnn`'s enums, which is what lets its validation surface be
+    exercised without a device at all. This test is the price of that, and it is
+    the right trade: the drift it guards against is a host-testable equality,
+    where the testability it buys is not replaceable.
+    """
+
+    from tt_transformers.device_utils import GALAXY_L1_SMALL_SIZE
+
+    assert WORMHOLE_GALAXY_TOPOLOGY.l1_small_size == GALAXY_L1_SMALL_SIZE
+    for architecture in supported_galaxy_architectures():
+        assert galaxy_device_params(architecture)["l1_small_size"] == GALAXY_L1_SMALL_SIZE

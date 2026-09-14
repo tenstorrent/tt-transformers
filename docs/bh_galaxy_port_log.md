@@ -250,3 +250,97 @@ It now admits any architecture that **has a topology descriptor**, rather than a
 allowlist. On Wormhole-only that is behaviourally identical to before; in phase 3 Blackhole
 becomes admissible the moment its geometry is written down, and not one commit earlier. The mesh
 shape stays a hard equality, because `(8, 4)` is architecture-invariant.
+
+---
+
+## 3. Phase 3 — the Blackhole resolver
+
+### 3.1 Blackhole's geometry is derived; Wormhole's is refused if it moves **[decision]**
+
+The two architectures get opposite treatment, and that is deliberate.
+
+Wormhole's resolver **refuses** any grid but `7 x 10`. Its core tables were hand-measured
+against exactly that shape, and reinterpreting hand-measured coordinates against a grid they
+were never checked on is how a silent misplacement happens.
+
+Blackhole's resolver **derives** the envelope from whatever the device reports, because
+harvesting is per-part: `12 x 10` is the reference's chassis (the 1x-harvested key), and `13 x 10`
+unharvested and `11 x 10` are shapes a real board can present. All three resolve, with the worker
+columns and the dispatch column expressed against the reported width.
+
+That is what makes the plan's phase-3 exit criterion meaningful rather than three copies of a
+literal.
+
+### 3.2 The dispatch column is the one thing not derived
+
+It sits *inside* `compute_with_storage_grid_size()`, so a purely derived envelope folds it into
+the workers — and the reference records that doing so *"regresses prefill warmup"*, with nothing
+raising. `reserved_columns` carries it, and `validate_against_device` rejects any descriptor
+whose workers reach into it.
+
+This is the concrete case §6.1's rule has to bend for: "derive, never name" applies to geometry
+that follows from the grid, and cannot apply to a fact only measurement knows.
+
+### 3.3 §8 Q2 is one named constant with one switch point **[measure]**
+
+The largest genuinely unanswered geometry question — worth ~22 worker cores — is two linked
+unknowns, and both are now single constants in `topology.py` with their reasoning attached:
+
+- `BLACKHOLE_FIRST_WORKER_COLUMN = 1`. The reference excludes column 0 *because its prefetcher
+  senders live there*. Milestone 1 has no senders, so `cols 0..10` is plausible — but that is an
+  inference, and the reference has no prefetcher-free Blackhole worker range to copy.
+- `BLACKHOLE_SUB_DEVICE_MAX_Y = None` (rows 0-9). The reference's `sub_core_max_y = 7` exists
+  *"to match the 24-core ring geometry"*; with no ring there is no extent to match. It is written
+  unconditionally rather than gated on `use_prefetcher`, and the reference's own Llama path does
+  not apply it at all.
+
+**Conservative on the first, optimistic on the second**, because the failures are not
+symmetrical. Too few worker cores costs throughput and nothing else. Too many puts tensors on a
+column reserved for a reason nobody wrote down — and every failure in that class is silent. The
+row cap is different: it has a *recorded* rationale that demonstrably does not apply here, so
+inheriting it would be cargo-culting a constraint, not being careful.
+
+Settling either is a one-line change. `E05` in the vault is the experiment.
+
+### 3.4 The link table is now one table **[correction]**
+
+Phase 1 put `GALAXY_FABRIC_LINKS` in `recipes.py`; phase 3 would have made it a second source
+beside `GalaxyChipTopology.fabric_links`. It now lives in `topology.py`, both resolvers read it,
+and `recipes` re-exports it. `ccl_reserved_worker_cores` is a property over the same number, so
+"one per fabric link" cannot drift from the link count.
+
+`lm_head_reduce_core_count` grew a `reserved_worker_cores` parameter defaulting to the Wormhole
+value. It subtracted the Wormhole `4` unconditionally, which on Blackhole would have reserved
+twice what the fabric needs — not a failure, but wrong for a reason that would have been hard to
+find later, since starving that collective segmentation-faults rather than raising.
+
+### 3.5 `topology.py` deliberately imports nothing but `ttnn` **[decision]**
+
+`l1_small_size` was briefly an import of `device_utils.GALAXY_L1_SMALL_SIZE`. That pulled
+`lazy_weight`, `loguru` and `torch` into a geometry module — and, concretely, **broke the ability
+to exercise the descriptor without a device**, which is the single most valuable verification
+tool this session found.
+
+It is a literal again, with a host test asserting equality with the shared constant. The trade is
+explicit: the drift risk is a one-line host-testable equality, while the testability it buys is
+not replaceable. Keep `topology.py`'s import surface at `ttnn` alone.
+
+### 3.6 `NullPrefetcher2D` honours the protocol rather than bypassing it
+
+Prefetcher-free is a *design task* here, not a config change: every prefetched decode weight is
+registered with `Prefetcher2D` and the module configs receive its resolved contexts. So the
+absence is an object implementing register → seal → activate → cleanup, returning contexts with
+`global_cb=None` and `sub_device_manager_id=None`, leaving weights DRAM-interleaved.
+
+Two checks are kept rather than dropped as "not applicable", because neither is about the
+prefetcher:
+
+- duplicate and count checks on registration, which catch model-side wiring mistakes;
+- `borrow_context`'s sub-device policy check. A module that disagrees about the partition places
+  tensors on cores the loaded sub-device manager does not own and aborts with *"Kernel group
+  cores do not match sub device cores"* — a failure that does not care whether a prefetcher
+  exists.
+
+`sub_device_id` still resolves, so confined matmuls are told their sub-device instead of silently
+defaulting to sub-device zero — the prefetch senders. The entire global-CB apparatus is untouched
+and merely unused, so the deferred work is additive.

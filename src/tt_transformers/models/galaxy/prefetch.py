@@ -13,17 +13,19 @@ contexts to its module configs.
 from __future__ import annotations
 
 import functools
+from types import MappingProxyType
 from typing import Any
 
 import ttnn
 
 from tt_transformers.models.galaxy.recipes import prefetch_sender_cores
-from tt_transformers.models.galaxy.topology import WORMHOLE_GALAXY_TOPOLOGY, GalaxyChipTopology
 from tt_transformers.models.galaxy.resources import GalaxyModePlan, GalaxyResourcesConfig
+from tt_transformers.models.galaxy.topology import WORMHOLE_GALAXY_TOPOLOGY, GalaxyChipTopology
 from tt_transformers.modules.prefetcher import (
     GlobalCBPlacement,
     Prefetcher2D,
     Prefetcher2DConfig,
+    Prefetcher2DContext,
     Prefetcher2DModeConfig,
 )
 
@@ -293,3 +295,203 @@ def build_galaxy_prefetcher(
         prefetcher.cleanup()
         raise
     return prefetcher
+
+
+class NullPrefetcher2D:
+    """A prefetcher-shaped object for a mesh that has no prefetcher.
+
+    Milestone 1 on Blackhole is prefetcher-free, and in this repository that is a
+    design task rather than a flag: every prefetched decode weight is registered
+    with `Prefetcher2D`, and the module configs receive its resolved contexts. A
+    path expressed as *"the prefetcher fields are absent"* cannot later grow one
+    without touching every consumer, so the absence is expressed as an object
+    honouring the same **register -> seal -> activate -> cleanup** protocol and
+    returning contexts whose `global_cb` is `None`. `model.py` and `executor.py`
+    keep one code path.
+
+    The shape is not new and not a draft. `_UnprefetchedContext` in each Galaxy
+    `model.py` already hands `Attention2D` a context that names the worker
+    sub-device but no global CB, and `sub_device_only_prefetch_context()` in the
+    Wormhole hardware helpers is the adapter that closed defect D-2 on silicon.
+    This generalizes those from "one module opts out" to "this architecture has
+    no prefetcher at all".
+
+    **Weights stay where they are.** Registration records the tensor so the
+    sealed contexts can report addresses exactly as the real prefetcher does, but
+    nothing is copied, no global circular buffer is created, and the weights stay
+    DRAM-interleaved. `launch_sender` is a no-op because there is no sender.
+
+    Two properties matter for the deferred work, and both are cheap to keep:
+    `sub_device_id` still resolves, so confined matmuls are told their
+    sub-device rather than silently defaulting to sub-device zero; and the whole
+    global-CB apparatus in this module is untouched, merely unused, so restoring
+    the prefetcher is additive.
+    """
+
+    def __init__(self, mesh_device: Any, resources_config: GalaxyResourcesConfig, *, expected_weight_count: int = 0):
+        self._mesh_device = mesh_device
+        self._resources_config = resources_config
+        self._expected_weight_count = expected_weight_count
+        self._registered_weights: dict[str, Any] = {}
+        self._contexts: dict[str, Any] = {}
+        self._initialized = False
+        self._sealed = False
+        self._closed = False
+        self._active_mode: str | None = None
+
+    # -- introspection, matching `Prefetcher2D` ---------------------------
+
+    @property
+    def mesh_device(self) -> Any:
+        return self._mesh_device
+
+    @property
+    def initialized(self) -> bool:
+        return self._initialized
+
+    @property
+    def sealed(self) -> bool:
+        return self._sealed
+
+    @property
+    def active_mode(self) -> str | None:
+        return self._active_mode
+
+    @property
+    def prefetch_result(self) -> None:
+        return None
+
+    @property
+    def resolved_global_cb_size(self) -> int:
+        return 0
+
+    @property
+    def borrowed_weights(self) -> tuple[Any, ...]:
+        return ()
+
+    @property
+    def owned_resources(self) -> tuple[Any, ...]:
+        return ()
+
+    # -- lifecycle --------------------------------------------------------
+
+    def _ensure_open(self) -> None:
+        if self._closed:
+            raise RuntimeError("NullPrefetcher2D has been cleaned up")
+
+    def initialize(self) -> None:
+        self._ensure_open()
+        self._initialized = True
+
+    def register_weight(self, name: str, tensor: Any) -> None:
+        """Record a weight without moving it.
+
+        The duplicate and count checks are kept because they catch model-side
+        wiring mistakes that have nothing to do with the prefetcher, and a
+        prefetcher-free path that accepted a double registration would let a
+        Blackhole bring-up diverge from Wormhole for a reason no test names.
+        """
+
+        self._ensure_open()
+        if self._sealed:
+            raise RuntimeError("NullPrefetcher2D registration is sealed")
+        if name in self._registered_weights:
+            raise ValueError(f"weight is already registered: {name}")
+        if self._expected_weight_count and len(self._registered_weights) >= self._expected_weight_count:
+            raise ValueError("registered weight count exceeds the resolved configuration")
+        self._registered_weights[name] = tensor
+
+    def seal(self) -> tuple[Any, Any]:
+        self._ensure_open()
+        if not self._initialized:
+            raise RuntimeError("NullPrefetcher2D must be initialized before sealing")
+        if self._sealed:
+            return self.context("prefill"), self.context("decode")
+        if self._expected_weight_count and len(self._registered_weights) != self._expected_weight_count:
+            raise RuntimeError(
+                f"expected {self._expected_weight_count} registered weights, got {len(self._registered_weights)}"
+            )
+        self._contexts = {
+            mode: self._make_context(getattr(self._resources_config, mode)) for mode in ("prefill", "decode")
+        }
+        self._sealed = True
+        return self._contexts["prefill"], self._contexts["decode"]
+
+    def _make_context(self, plan: GalaxyModePlan) -> Prefetcher2DContext:
+        return Prefetcher2DContext(
+            mode=plan.mode,
+            mesh_device=self._mesh_device,
+            # No global circular buffer means no sub-device manager of the
+            # prefetcher's own; the mode plan still names the worker sub-device,
+            # which is the part confined matmuls actually need.
+            sub_device_manager_id=None,
+            worker_sub_device_id=plan.worker_sub_device_id,
+            stall_group=plan.stall_group,
+            global_cb=None,
+            weights=(),
+            weight_addresses=MappingProxyType(dict.fromkeys(self._registered_weights, None)),
+            weight_address_metadata=None,
+        )
+
+    def context(self, mode: str) -> Prefetcher2DContext:
+        self._ensure_open()
+        if not self._sealed:
+            raise RuntimeError("NullPrefetcher2D contexts are unavailable until registration is sealed")
+        try:
+            return self._contexts[mode]
+        except KeyError as exc:
+            raise ValueError(f"unsupported prefetcher mode: {mode}") from exc
+
+    def borrow_context(
+        self,
+        mode: str,
+        *,
+        sub_devices: tuple[Any, ...],
+        worker_sub_device_id: Any,
+        stall_group: tuple[Any, ...],
+        local_l1_size: int,
+    ) -> Prefetcher2DContext:
+        """Return the sealed context after checking the caller's sub-device policy.
+
+        The real owner validates the borrower's policy exactly, because a module
+        that disagrees about the partition places tensors on cores the loaded
+        sub-device manager does not own and aborts with *"Kernel group cores do
+        not match sub device cores"*. That failure does not depend on there being
+        a prefetcher, so the check is kept.
+        """
+
+        del sub_devices, local_l1_size
+        context = self.context(mode)
+        if worker_sub_device_id != context.worker_sub_device_id:
+            raise ValueError(
+                f"{mode} borrower expects worker sub-device {worker_sub_device_id}, "
+                f"resolved plan uses {context.worker_sub_device_id}"
+            )
+        if tuple(stall_group) != tuple(context.stall_group):
+            raise ValueError(f"{mode} borrower's stall group does not match the resolved plan")
+        return context
+
+    def activate(self, mode: str) -> Prefetcher2DContext:
+        context = self.context(mode)
+        self._active_mode = mode
+        return context
+
+    def launch_sender(self) -> None:
+        """No sender exists, so there is nothing to launch."""
+
+    def set_capture_probe(self, probe: Any) -> None:
+        del probe
+
+    def set_sender_launch_site(self, site: str) -> None:
+        del site
+
+    @property
+    def sender_launch_site(self) -> None:
+        return None
+
+    def cleanup(self) -> None:
+        self._contexts = {}
+        self._registered_weights = {}
+        self._active_mode = None
+        self._sealed = False
+        self._closed = True
