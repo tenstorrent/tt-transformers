@@ -57,7 +57,7 @@ Rect = tuple[int, int, int, int]
 #: declares `channels { count: 2 }`. `tt_ccl.get_num_links` carries the same
 #: budget derived independently from the device name (`("BHGLX", (2, 2))` against
 #: `("TG", (4, 4))`); that the two agree is a real invariant and an unproven one,
-#: checked on hardware by `docs/bh_galaxy_experiments/E02-cluster-identity`.
+#: checked on hardware by `docs/bh_galaxy_experiments/E02-bh-day0-probe`.
 #:
 #: Keyed on `arch()` rather than delegating to `get_num_links`, which needs
 #: `get_device_ids()` and a pybind arch probe that the host-mocked meshes every
@@ -170,7 +170,7 @@ class GalaxyChipTopology:
     #: size is **[measure]**, and main L1 shrinks by this much for *every* Galaxy
     #: op, so it is a field rather than a global. Confirm through
     #: `device_utils.has_l1_small_region()` rather than assuming the number
-    #: carries; see `docs/bh_galaxy_experiments/E06-l1-small-region`.
+    #: carries; see `docs/bh_galaxy_experiments/E02-bh-day0-probe`.
     #:
     #: Deliberately a literal rather than an import of
     #: `device_utils.GALAXY_L1_SMALL_SIZE`: that module pulls in `lazy_weight`,
@@ -498,7 +498,7 @@ def _resolve_wormhole(compute_grid: Coord, dram_views: int) -> GalaxyChipTopolog
 
 #: Lowest worker column on Blackhole. **This is the milestone-1 open question**,
 #: and it is named here rather than inferred so that settling it is a one-line
-#: change with a test attached (`docs/bh_galaxy_experiments/E05-worker-envelope`).
+#: change with a test attached (`docs/bh_galaxy_experiments/E03-worker-envelope`).
 #:
 #: The reference port's worker envelope is `cols 1..10`, and column 0 is excluded
 #: *because that is where its prefetcher senders live*. Milestone 1 has no
@@ -520,7 +520,7 @@ BLACKHOLE_FIRST_WORKER_COLUMN = 1
 #: facts corroborate treating the cap as prefetcher baggage: the reference writes
 #: it as `7 if is_blackhole else 9` rather than gating it on `use_prefetcher`,
 #: and its own Llama path does not apply it at all. Worth 12 worker cores, and
-#: still **[measure]** -- see `docs/bh_galaxy_experiments/E05-worker-envelope`.
+#: still **[measure]** -- see `docs/bh_galaxy_experiments/E03-worker-envelope`.
 BLACKHOLE_SUB_DEVICE_MAX_Y: int | None = None
 
 
