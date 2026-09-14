@@ -64,8 +64,8 @@ def _dry_args(tmp_path):
 @pytest.mark.host
 def test_checked_in_matrix_validates_and_covers_every_required_mesh():
     counts = runner.validate_matrix(_matrix())
-    assert counts == {"N150": 9, "N300": 6, "T3K": 8, "P150": 8, "P150x4": 11, "TG": 1}
-    assert sum(counts.values()) == 43
+    assert counts == {"N150": 9, "N300": 6, "T3K": 8, "P150": 8, "P150x4": 11, "TG": 1, "BHGLX": 1}
+    assert sum(counts.values()) == 44
 
 
 @pytest.mark.host
@@ -93,8 +93,11 @@ def test_the_tg_galaxy_node_is_a_disabled_proposal_and_cannot_be_selected():
     assert machine["expected_inventory"]["device_count"] == 32
     assert machine["supported_mesh_devices"] == ["TG"]
 
-    # Every other node is live; TG is the only deferral in the matrix.
-    assert [entry["id"] for entry in matrix["nodes"] if not entry["enabled"]] == [node["id"]]
+    # The Blackhole Galaxy proposal is the only other deferral in the matrix.
+    assert sorted(entry["id"] for entry in matrix["nodes"] if not entry["enabled"]) == [
+        "bh-glx-topology-probe",
+        node["id"],
+    ]
 
     with pytest.raises(runner.MatrixError, match="different_hardware_deferred"):
         runner.select_node(matrix, node["id"])
@@ -407,3 +410,51 @@ def test_every_node_uses_the_complete_evidence_schema():
         "reset",
     } <= set(required)
     assert all(node["required_evidence_fields"] == required for node in matrix["nodes"])
+
+
+@pytest.mark.host
+def test_the_bh_galaxy_node_is_a_disabled_proposal_and_cannot_be_selected():
+    """The Blackhole Galaxy node is a proposal, not a gate, and must stay unselectable.
+
+    Same discipline as the TG node above, for a stronger reason: **nothing in
+    this node has been measured.** Its geometry is declared from `tt-metal`'s
+    mesh graph descriptors and read off a third-party reference port, and no
+    Blackhole Galaxy run has ever been taken by this repository. Checking it in
+    disabled makes that shape reviewable as a diff instead of negotiated in the
+    abstract, and whoever enables it has to delete this test -- which is the
+    conversation, made unavoidable.
+
+    Two things must be settled before that happens, and neither is code:
+
+    * the machine identity is an **example**, not an allocation. Blackhole Galaxy
+      nodes are scheduled per window, so `allowed_identities` has to name the
+      node the allocation sheet actually granted;
+    * the 2D module gates still accept Wormhole only, so the modules this node
+      would eventually exercise reject a Blackhole mesh by design. The probe this
+      node selects deliberately needs none of them.
+    """
+
+    matrix = _matrix()
+    node = next(entry for entry in matrix["nodes"] if entry["mesh_device"] == "BHGLX")
+    assert node["id"] == "bh-glx-topology-probe"
+    assert node["enabled"] is False
+    assert node["disabled_classification"] == "different_hardware_deferred"
+    assert node["machine_pool"] == ["bh-glx-32"]
+
+    machine = matrix["machines"]["bh-glx-32"]
+    assert machine["architecture"] == "blackhole"
+    assert machine["expected_inventory"]["device_count"] == 32
+    assert machine["expected_inventory"]["cluster_type"] == "BLACKHOLE_GALAXY"
+    assert machine["supported_mesh_devices"] == ["BHGLX"]
+
+    # The provenance must not claim a measurement nobody took.
+    assert any("NOT measured" in basis for basis in node["source_basis"])
+
+    # Both Galaxy nodes are deferrals, and they are the only ones in the matrix.
+    assert sorted(entry["id"] for entry in matrix["nodes"] if not entry["enabled"]) == [
+        "bh-glx-topology-probe",
+        "wh-tg-rmsnorm-2d-qk-norm",
+    ]
+
+    with pytest.raises(runner.MatrixError, match="different_hardware_deferred"):
+        runner.select_node(matrix, node["id"])

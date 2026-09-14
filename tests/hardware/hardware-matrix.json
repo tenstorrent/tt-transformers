@@ -157,6 +157,25 @@
         "TG"
       ],
       "tt_visible_devices_policy": "unset; the Galaxy suites parametrize the (8, 4) mesh explicitly"
+    },
+    "bh-glx-32": {
+      "architecture": "blackhole",
+      "allowed_identities": [
+        "bh-glx-110-c08u02",
+        "bh-glx-110-c08u02.yyz2.tenstorrent.com"
+      ],
+      "physical_role": "32-device Blackhole Galaxy; one bh-glx-* node is one 32-chip chassis. The identity above is an example from the cluster's bh-glx-<rack>-<row><unit> naming and MUST be replaced with the node the allocation sheet actually grants before this machine is used. Nodes here are scheduled per window, so the identity is not stable the way a dedicated host's is.",
+      "expected_inventory": {
+        "device_count": 32,
+        "board_types": [
+          "tt-galaxy-bh"
+        ],
+        "cluster_type": "BLACKHOLE_GALAXY"
+      },
+      "supported_mesh_devices": [
+        "BHGLX"
+      ],
+      "tt_visible_devices_policy": "unset; the Galaxy suites parametrize the (8, 4) mesh explicitly, as on TG"
     }
   },
   "nodes": [
@@ -3125,6 +3144,65 @@
       "source_basis": [
         "extracted pytest markers/parameters",
         "measured on wh-glx6u-05"
+      ],
+      "enabled": false,
+      "disabled_classification": "different_hardware_deferred"
+    },
+    {
+      "id": "bh-glx-topology-probe",
+      "priority": 44,
+      "stage": "module",
+      "architecture": "blackhole",
+      "mesh_device": "BHGLX",
+      "machine_pool": [
+        "bh-glx-32"
+      ],
+      "selector": {
+        "target": "tests/models/galaxy/test_topology_bh_galaxy.py::test_blackhole_galaxy_reports_the_geometry_the_descriptor_expects"
+      },
+      "timeout_seconds": 900,
+      "environment": {
+        "MESH_DEVICE": "BHGLX"
+      },
+      "machine_environment_overrides": {},
+      "cache_requirement": {
+        "kind": "writable_node_local",
+        "path": "{run_root}/cache/{node_id}",
+        "writable": true
+      },
+      "physical_sku_provenance": {
+        "claim": "full 32-board Blackhole Galaxy (8, 4) mesh; not a submesh of a larger chassis",
+        "required_host_role": "32-device Blackhole Galaxy"
+      },
+      "acceptance_types": [
+        "clean_teardown"
+      ],
+      "required_evidence_fields": [
+        "started_utc",
+        "finished_utc",
+        "branch",
+        "full_sha",
+        "caller_machine_identity",
+        "actual_fqdn",
+        "architecture",
+        "physical_inventory",
+        "mesh_device",
+        "tt_visible_devices",
+        "selector",
+        "environment",
+        "cache_paths",
+        "exit_code",
+        "failure_classification",
+        "acceptance_types",
+        "metrics",
+        "teardown_status",
+        "reset",
+        "stdout_log_path",
+        "evidence_json_path"
+      ],
+      "source_basis": [
+        "declared from tt-metal mesh graph descriptors and the llama3_70b_galaxy reference port",
+        "NOT measured: no Blackhole Galaxy run has been taken by this repository"
       ],
       "enabled": false,
       "disabled_classification": "different_hardware_deferred"

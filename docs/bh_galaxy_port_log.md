@@ -344,3 +344,75 @@ prefetcher:
 `sub_device_id` still resolves, so confined matmuls are told their sub-device instead of silently
 defaulting to sub-device zero — the prefetch senders. The entire global-CB apparatus is untouched
 and merely unused, so the deferred work is additive.
+
+---
+
+## 4. Phase 4 — matrix and capability registration
+
+### 4.1 `ALLOWED_MESH_DEVICES` is what forces a node to exist **[finding]**
+
+`run_hardware_matrix.validate_matrix` requires **every** mesh name in
+`ALLOWED_MESH_DEVICES` to be covered by at least one node. So adding `BHGLX` is not a
+formality — it makes a Blackhole Galaxy node mandatory, and the node's selector must resolve to
+a real test function in a real file. There is no way to register the mesh name and defer the
+node.
+
+That is a good constraint and it decided what phase 4 ships.
+
+### 4.2 The node selects a topology probe, not a ported module **[decision]**
+
+The obvious mirror of the TG proposal node would be a Blackhole RMSNorm2D suite. That would be
+a large piece of unverifiable code, and it would fail for an uninteresting reason:
+**the 2D module gates still accept Wormhole only** (§4.4).
+
+`tests/models/galaxy/test_topology_bh_galaxy.py` is the better first artifact. It opens the
+mesh, reads what the device reports, and resolves the descriptor against it — answering four of
+the plan's five §8 open questions in one cheap, read-only run that allocates no tensor and runs
+no collective, so it cannot leave the mesh needing a reset:
+
+| Probe | Question |
+| --- | --- |
+| grid and DRAM views, descriptor resolves | §8 Q1 shape, and every containment check at once |
+| per-device grid enumeration | §8 Q1 uniformity — the part that is genuinely unknown |
+| `fabric_links` vs `tt_ccl.get_num_links` | §8 Q5, and the cross-check §1.5 could not do on the host |
+| `has_l1_small_region` + bank sizes | §8 Q4 |
+| worker envelope vs dispatch column | the §4.2 rule, plus a report of what `BLACKHOLE_FIRST_WORKER_COLUMN` costs |
+
+Opening the mesh *at all*, with `FABRIC_2D_TORUS_XY`, is itself the §3 measurement.
+
+### 4.3 The capability geometry is `additive_functional`, and Qwen-only
+
+Declaring the geometry makes it visible to the contract validator. Declaring it **required**
+would assert a coverage obligation no measurement supports. `role: additive_functional` is the
+honest encoding, and a host test pins it there — promoting it means deleting that test.
+
+It is declared on **Qwen3-32B alone**. Qwen is tier-1 CI on both architectures upstream, so
+"the reference runs on Blackhole Galaxy" means *Qwen* runs on it. Llama-3.3-70B Galaxy has never
+run on Blackhole anywhere — its demo hardcodes `fabric_config: True` with no 2D-torus variant,
+its CI lists only the Wormhole Galaxy SKU, its arg bag has no Blackhole opt-in, and its
+model-level test is explicitly skipped for Blackhole. A geometry entry there would be fiction.
+
+### 4.4 The 2D module gates still accept Wormhole only — deliberately, and this is phase 5's first task
+
+§6.2 wants the module gates to become capability checks. They have not, and the reason is §2.4's
+layering: `GalaxyCapabilities` lives under `models/`, and `modules/` never imports `models/`.
+
+The clean fix is **injection, not import** — the capability record reaching `MLP2D` and
+`RMSNorm2D` through their configs, the way `tt_ccl` and the prefetch contexts already do. That
+is a module-surface change that wants a hardware run to mean anything, so it belongs at the top
+of phase 5 rather than bolted onto a deviceless phase.
+
+Until then a Blackhole mesh is rejected by the modules by design, with a clear message. The
+matrix node is `enabled: false` and its probe deliberately needs no module, so nothing here
+claims otherwise.
+
+### 4.5 Caveat — do not run `ruff format` with the unpinned version **[correction]**
+
+`uv tool run ruff` resolves 0.16.7 against the repo's pinned `ruff>=0.11.0`, and the two
+**formatters** disagree, not only the `I001` lint. A single `ruff format` over `src/ tests/
+qualification/` rewrote 16 files, 14 of them unrelated to this work; they were reverted.
+
+Two rules follow. Never run `ruff format` over a directory here — name the files. And treat
+`ruff format --check` under the pinned version as **unverified** for the files this work
+touched: they are internally consistent under 0.16.7, and the first real gate run may still
+reformat them. That is cosmetic, but it will show up as a diff.

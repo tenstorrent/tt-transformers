@@ -19,7 +19,12 @@ ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MATRIX = ROOT / "tests/hardware/hardware-matrix.json"
 ALLOWED_STAGES = {"module", "runtime", "smoke", "e2e"}
 ALLOWED_ARCHITECTURES = {"wormhole", "blackhole"}
-ALLOWED_MESH_DEVICES = {"N150", "N300", "T3K", "P150", "P150x4", "TG"}
+#: `BHGLX` is the name `device_utils.get_device_name` already returns for a
+#: 32-device Blackhole mesh, and `model_targets` already normalizes it to
+#: `bh_galaxy_perf`. Every mesh named here must be covered by at least one node,
+#: so adding it is what forces a Blackhole Galaxy node to exist -- even a
+#: disabled one.
+ALLOWED_MESH_DEVICES = {"N150", "N300", "T3K", "P150", "P150x4", "TG", "BHGLX"}
 ALLOWED_RESULT_CLASSIFICATIONS = {
     "passed",
     "functional_failure",

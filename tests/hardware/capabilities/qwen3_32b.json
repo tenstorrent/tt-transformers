@@ -35,6 +35,20 @@
       "dp": 1,
       "fabric_config": "FABRIC_1D_RING",
       "role": "required"
+    },
+    {
+      "id": "bhglx_tp32_dp1",
+      "ci_sku": "bh_galaxy_perf",
+      "mesh_name": "BHGLX",
+      "mesh_shape": [
+        8,
+        4
+      ],
+      "dies": 32,
+      "tp_per_lane": 32,
+      "dp": 1,
+      "fabric_config": "FABRIC_2D_TORUS_XY",
+      "role": "additive_functional"
     }
   ],
   "demo_requirements": [
