@@ -159,3 +159,94 @@ faults, so it is §8 Q5 and it is in the vault.
 for lacking the `model` mark under `tests/models/`. Worth recording because it is the concrete
 argument for running these gates locally rather than banking them: the finding cost one command,
 and would otherwise have surfaced on an allocated node.
+
+---
+
+## 2. Phase 2 — the topology descriptor, Wormhole only
+
+### 2.1 The descriptor holds plain tuples, not `ttnn.CoreRangeSet` **[decision]**
+
+The plan sketches `GalaxyChipTopology` with `worker_cores: ttnn.CoreRangeSet` and
+`ring_cores: tuple[ttnn.CoreCoord, ...]`. It holds `(x, y)` tuples and `(x0, y0, x1, y1)`
+rectangles instead.
+
+Three reasons, and the third is the one that decided it:
+
+1. A frozen dataclass wants hashable, comparable fields. Tuples are; pybind objects are not
+   reliably so.
+2. The golden-table test compares **order**, and tuple comparison is unambiguous about it.
+   Asserting order through `CoreRangeSet` would depend on pybind equality semantics that this
+   repo has never leaned on — it uses `num_cores()`, `bounding_box()` and `subtract()`, never
+   `ranges()`.
+3. **It makes the descriptor testable without a device.** `topology.py` touches `ttnn` only for
+   enum values, so its entire validation surface is pure Python set arithmetic. All 19
+   validation paths were verified on this Mac against a 12-line stand-in for those enums —
+   including every rejection case. That would have been impossible with `CoreRangeSet` fields.
+
+The recipes build `CoreRangeSet`s at the point of use, freshly, exactly as before. Nothing is
+cached and shared, so no caller can mutate another's core set.
+
+### 2.2 Callers were deliberately not moved
+
+The plan expects `recipes.py`'s module-level functions to "become methods or take this
+descriptor … mechanical but wide". They instead take an **optional** descriptor defaulting to
+Wormhole:
+
+```python
+def worker_cores(topology: GalaxyChipTopology | None = None) -> ttnn.CoreRangeSet:
+    return core_ranges(*_topology(topology).worker_core_ranges)
+```
+
+Zero call sites move, the Wormhole answer is byte-identical by construction, and phase 3 threads
+a Blackhole descriptor through the same parameter. This matters more than usual here: phase 2
+rewrites the geometry source of a hardware-qualified path whose bit-identical exit criterion
+**cannot be run** — there is no Wormhole Galaxy access either. Minimising the diff is the only
+mitigation available, and the golden test in `test_topology.py` is the other half.
+
+### 2.3 The descriptor validates; it does not derive **[finding]**
+
+§6.1 says "derive, never name". Applied to Wormhole it mostly cannot be: `_RING_CORE_COORDS` is
+a physical walk of the chip, not a comprehension, which is why the reference port's Wormhole
+tables are hand-written literals while its Blackhole ones are generated. Deriving them would
+mean inventing an order, and order is the load-bearing part.
+
+So the descriptor **names** the geometry and **derives the checks**. That is where the new value
+is, and the checks are not hypothetical — each is a failure the reference or this project has
+already paid for:
+
+| Check | The failure it front-runs |
+| --- | --- |
+| every named core inside `compute_with_storage_grid_size()` | *"Tensor shard spec grid … must lie within compute grid"* |
+| top-k / ring / norm / sampling inside the worker envelope | *"Kernel group cores do not match sub device cores"* |
+| senders disjoint from workers | silent misplacement |
+| reserved columns absent from workers | regressed prefill warmup, nothing raised |
+| receiver mapping covers every worker core | *"Specified cores are not contained in associated GlobalCircularBuffer"* |
+| senders ∪ receivers == the whole grid | the property that makes the 8 dummy entries load-bearing |
+| sender count == receiver-group count | the lists are `zip`ped, so a mismatch silently truncates |
+
+### 2.4 `WH_GALAXY_MESH_SHAPE` was **not** deduplicated, on purpose **[decision]**
+
+§2.1 of the plan wants the duplicate constant in `mlp_2d.py` and `rmsnorm_2d.py` to become one
+shared value. It stays duplicated, because the only shared home is `models/galaxy/topology.py`
+and **`modules/` never imports `models/`** — verified: the dependency runs the other way at four
+sites (`collectives.py`, `kv_contract.py`, `prefetch.py`, `resources.py` all import
+`modules.*`), and never back. Deduplicating through `models` would invert the layering.
+
+The right fix is for the capability record to be reachable from `modules/`, which is a phase-3
+question about where `GalaxyCapabilities` lives. Deferred rather than solved by a layering
+violation.
+
+### 2.5 The two bare asserts are now raises (B9)
+
+`mlp_2d.py` and `rmsnorm_2d.py` gated the mesh with bare `assert`, which `python -O` strips.
+Both are now `TypeError`/`ValueError`. The regression test requires `ValueError` specifically:
+an `assert` can only raise `AssertionError`, so demanding a different type is a direct proof
+that the gate is not compiled away — and it needs no `-O` subprocess, which could not run here
+anyway.
+
+### 2.6 `validate_galaxy_mesh` generalizes on geometry, not on architecture
+
+It now admits any architecture that **has a topology descriptor**, rather than a widened
+allowlist. On Wormhole-only that is behaviourally identical to before; in phase 3 Blackhole
+becomes admissible the moment its geometry is written down, and not one commit earlier. The mesh
+shape stays a hard equality, because `(8, 4)` is architecture-invariant.

@@ -18,6 +18,7 @@ from typing import Any
 import ttnn
 
 from tt_transformers.models.galaxy.recipes import prefetch_sender_cores
+from tt_transformers.models.galaxy.topology import WORMHOLE_GALAXY_TOPOLOGY, GalaxyChipTopology
 from tt_transformers.models.galaxy.resources import GalaxyModePlan, GalaxyResourcesConfig
 from tt_transformers.modules.prefetcher import (
     GlobalCBPlacement,
@@ -120,47 +121,42 @@ def release_galaxy_global_cb_placement(mesh_device: Any) -> None:
         forget_galaxy_global_cb_placement(mesh_device)
 
 
-_RECEIVER_COLUMN_PAIRS = tuple(((1, y), (2, y)) for y in (9, 0, 4, 5)) + tuple(
-    ((5, y), (6, y)) for y in (0, 9, 1, 7, 6, 2, 4, 5)
-)
-_DUMMY_SENDER_COORDS = ((0, 1), (0, 2), (0, 3), (0, 6), (0, 7), (0, 8), (4, 3), (4, 8))
-_DUMMY_RECEIVER_RANGES = (
-    ((3, 0, 3, 0), (1, 1, 3, 1)),
-    ((1, 2, 3, 2),),
-    ((1, 3, 3, 3), (3, 4, 3, 4)),
-    ((3, 5, 3, 5), (1, 6, 3, 6)),
-    ((1, 7, 3, 7),),
-    ((1, 8, 3, 8), (3, 9, 3, 9)),
-    ((5, 3, 6, 3),),
-    ((5, 8, 6, 8),),
-)
-
-
 def _ranges(coordinates: tuple[tuple[int, int, int, int], ...]) -> ttnn.CoreRangeSet:
     return ttnn.CoreRangeSet(
         [ttnn.CoreRange(ttnn.CoreCoord(x0, y0), ttnn.CoreCoord(x1, y1)) for x0, y0, x1, y1 in coordinates]
     )
 
 
-def galaxy_sender_receiver_mapping() -> tuple[tuple[Any, Any], ...]:
-    """Return the canonical `(sender core, receiver core set)` prefetch mapping."""
+def galaxy_sender_receiver_mapping(topology: GalaxyChipTopology | None = None) -> tuple[tuple[Any, Any], ...]:
+    """Return the canonical `(sender core, receiver core set)` prefetch mapping.
 
-    senders = prefetch_sender_cores() + tuple(ttnn.CoreCoord(x, y) for x, y in _DUMMY_SENDER_COORDS)
+    The trailing entries carry dummy senders that read nothing. They are not
+    padding: the leading entries are the active DRAM readers, and the rest exist
+    so the global circular buffer's `all_cores()` covers the complete worker set.
+    A minimal mapping of only the active senders passes every module test and
+    then fails a hard superset check -- *"Specified cores are not contained in
+    associated GlobalCircularBuffer"* -- the first time an unrelated fused matmul
+    reaches a hop core. On Wormhole that core is `(3, 6)`, present only in dummy
+    entry 16. `GalaxyChipTopology` asserts that coverage on the host.
+    """
+
+    resolved = topology if topology is not None else WORMHOLE_GALAXY_TOPOLOGY
+    senders = prefetch_sender_cores(resolved) + tuple(ttnn.CoreCoord(x, y) for x, y in resolved.dummy_sender_coords)
     receivers = tuple(
         ttnn.CoreRangeSet({ttnn.CoreRange(ttnn.CoreCoord(*start), ttnn.CoreCoord(*end))})
-        for start, end in _RECEIVER_COLUMN_PAIRS
-    ) + tuple(_ranges(coordinates) for coordinates in _DUMMY_RECEIVER_RANGES)
+        for start, end in resolved.receiver_column_pairs
+    ) + tuple(_ranges(coordinates) for coordinates in resolved.dummy_receiver_ranges)
     if len(senders) != len(receivers):
         raise ValueError("Galaxy prefetch sender and receiver counts must match")
     return tuple(zip(senders, receivers))
 
 
-def galaxy_address_memory_config(weight_count: int) -> ttnn.MemoryConfig:
+def galaxy_address_memory_config(weight_count: int, topology: GalaxyChipTopology | None = None) -> ttnn.MemoryConfig:
     """Return the packed weight-address placement on the real sender cores."""
 
     if weight_count <= 0:
         raise ValueError("prefetched weight count must be positive")
-    senders = prefetch_sender_cores()
+    senders = prefetch_sender_cores(topology)
     sender_cores = ttnn.CoreRangeSet([ttnn.CoreRange(core, core) for core in senders])
     return ttnn.MemoryConfig(
         ttnn.TensorMemoryLayout.HEIGHT_SHARDED,

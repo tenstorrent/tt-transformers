@@ -560,7 +560,8 @@ def _resolve_2d_config(config: RMSNorm2DConfig) -> RMSNorm2DConfig:
     if config.mesh_device is None:
         to_set["mesh_device"] = mesh_device
 
-    assert mesh_device is not None, "mesh_device must be available!"
+    if mesh_device is None:
+        raise TypeError("RMSNorm2D requires a mesh_device; none was configured and no default is available")
 
     # Derive cluster_shape from mesh_device if not provided
     cluster_shape = config.cluster_shape
@@ -568,12 +569,21 @@ def _resolve_2d_config(config: RMSNorm2DConfig) -> RMSNorm2DConfig:
         cluster_shape = tuple(mesh_device.shape)
         to_set["cluster_shape"] = cluster_shape
 
-    assert tuple(cluster_shape) == WH_GALAXY_MESH_SHAPE, (
-        f"RMSNorm2D requires WH Galaxy mesh {WH_GALAXY_MESH_SHAPE}, got {tuple(cluster_shape)}"
-    )
-    assert tuple(mesh_device.shape) == tuple(cluster_shape), "cluster_shape must match the configured mesh"
-    assert mesh_device.get_num_devices() == 32, "RMSNorm2D requires exactly 32 devices"
-    assert mesh_device.arch() == ttnn.device.Arch.WORMHOLE_B0, "RMSNorm2D requires Wormhole"
+    # Raised, not asserted. `python -O` strips `assert`, and these are the only
+    # thing standing between a wrong mesh and a module that silently places
+    # tensors on cores the partition does not own -- a class of failure that
+    # hangs the host with no traceback rather than reporting anything. A gate
+    # that can be compiled away is not fail-closed.
+    if tuple(cluster_shape) != WH_GALAXY_MESH_SHAPE:
+        raise ValueError(f"RMSNorm2D requires WH Galaxy mesh {WH_GALAXY_MESH_SHAPE}, got {tuple(cluster_shape)}")
+    if tuple(mesh_device.shape) != tuple(cluster_shape):
+        raise ValueError(
+            f"RMSNorm2D cluster_shape {tuple(cluster_shape)} must match the configured mesh {tuple(mesh_device.shape)}"
+        )
+    if mesh_device.get_num_devices() != 32:
+        raise ValueError(f"RMSNorm2D requires exactly 32 devices, got {mesh_device.get_num_devices()}")
+    if mesh_device.arch() != ttnn.device.Arch.WORMHOLE_B0:
+        raise ValueError(f"RMSNorm2D requires Wormhole, got {mesh_device.arch()}")
 
     num_rows, num_cols = cluster_shape
     if geometry is RMSNorm2DGeometry.DISTRIBUTED:

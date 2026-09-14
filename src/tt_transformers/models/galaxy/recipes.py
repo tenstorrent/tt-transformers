@@ -21,6 +21,13 @@ from typing import Any
 
 import ttnn
 
+from tt_transformers.models.galaxy.topology import (
+    WORMHOLE_GALAXY_TOPOLOGY,
+    GalaxyChipTopology,
+    resolve_galaxy_chip_topology,
+    supported_galaxy_architectures,
+)
+
 GALAXY_MESH_SHAPE = (8, 4)
 GALAXY_ROWS, GALAXY_COLUMNS = GALAXY_MESH_SHAPE
 GALAXY_DEVICE_COUNT = GALAXY_ROWS * GALAXY_COLUMNS
@@ -33,75 +40,19 @@ TILE = ttnn.TILE_SIZE
 RING_CORE_COUNT = 24
 RING_ALIGNMENT = TILE * RING_CORE_COUNT
 
-_RING_CORE_COORDS = (
-    (6, 6),
-    (6, 7),
-    (6, 9),
-    (6, 0),
-    (6, 1),
-    (6, 2),
-    (6, 4),
-    (6, 5),
-    (5, 5),
-    (5, 6),
-    (5, 7),
-    (5, 9),
-    (5, 0),
-    (5, 1),
-    (5, 2),
-    (5, 4),
-    (1, 4),
-    (1, 5),
-    (1, 9),
-    (1, 0),
-    (2, 0),
-    (2, 4),
-    (2, 5),
-    (2, 9),
-)
-_RING_RECEIVER_COORDS = (
-    (1, 9),
-    (2, 9),
-    (1, 0),
-    (2, 0),
-    (1, 4),
-    (2, 4),
-    (1, 5),
-    (2, 5),
-    (5, 0),
-    (6, 0),
-    (5, 9),
-    (6, 9),
-    (5, 1),
-    (6, 1),
-    (5, 7),
-    (6, 7),
-    (5, 6),
-    (6, 6),
-    (5, 2),
-    (6, 2),
-    (5, 4),
-    (6, 4),
-    (5, 5),
-    (6, 5),
-)
-_HOP_CORE_COORDS = ((3, 6),)
-_WORKER_CORE_RANGES = ((1, 0, 3, 9), (5, 0, 6, 9))
-_TOPK_CORE_RANGES = ((1, 0, 3, 9),)
-_PREFETCH_SENDER_COORDS = (
-    (0, 9),
-    (0, 0),
-    (0, 4),
-    (0, 5),
-    (4, 0),
-    (4, 9),
-    (4, 1),
-    (4, 7),
-    (4, 6),
-    (4, 2),
-    (4, 4),
-    (4, 5),
-)
+#: The architecture whose geometry the no-argument helpers below describe.
+#:
+#: Every core set here used to be a module-level literal. They now live in
+#: `topology.py`, keyed by architecture and validated against the live device,
+#: because a second Galaxy architecture changes every one of them. The helpers
+#: keep their signatures and their Wormhole default so no caller moves, and
+#: `test_topology.py` asserts the Wormhole descriptor reproduces the previous
+#: literals element-wise and in order.
+_DEFAULT_TOPOLOGY = WORMHOLE_GALAXY_TOPOLOGY
+
+
+def _topology(topology: GalaxyChipTopology | None) -> GalaxyChipTopology:
+    return _DEFAULT_TOPOLOGY if topology is None else topology
 
 
 def core_points(coords: tuple[tuple[int, int], ...]) -> ttnn.CoreRangeSet:
@@ -116,42 +67,74 @@ def core_ranges(*ranges: tuple[int, int, int, int]) -> ttnn.CoreRangeSet:
     )
 
 
-def ring_cores() -> ttnn.CoreRangeSet:
-    return core_points(_RING_CORE_COORDS)
+def _require_ring(topology: GalaxyChipTopology, coords: tuple[tuple[int, int], ...] | None, name: str):
+    if coords is None:
+        raise ValueError(f"{topology.architecture} has no {name}; check `capabilities.has_ring_matmul` first")
+    return coords
 
 
-def ring_receiver_cores() -> ttnn.CoreRangeSet:
-    return core_points(_RING_RECEIVER_COORDS)
+def ring_cores(topology: GalaxyChipTopology | None = None) -> ttnn.CoreRangeSet:
+    resolved = _topology(topology)
+    return core_points(_require_ring(resolved, resolved.ring_core_coords, "ring matmul path"))
 
 
-def ring_hop_cores() -> ttnn.CoreRangeSet:
-    return core_points(_HOP_CORE_COORDS)
+def ring_receiver_cores(topology: GalaxyChipTopology | None = None) -> ttnn.CoreRangeSet:
+    resolved = _topology(topology)
+    return core_points(_require_ring(resolved, resolved.ring_receiver_coords, "global CB receiver set"))
 
 
-def worker_cores() -> ttnn.CoreRangeSet:
+def ring_hop_cores(topology: GalaxyChipTopology | None = None) -> ttnn.CoreRangeSet:
+    resolved = _topology(topology)
+    return core_points(_require_ring(resolved, resolved.ring_hop_coords, "ring hop core"))
+
+
+def worker_cores(topology: GalaxyChipTopology | None = None) -> ttnn.CoreRangeSet:
     """Return the decode worker subdevice envelope shared by every collective."""
 
-    return core_ranges(*_WORKER_CORE_RANGES)
+    return core_ranges(*_topology(topology).worker_core_ranges)
 
 
-def topk_cores() -> ttnn.CoreRangeSet:
-    return core_ranges(*_TOPK_CORE_RANGES)
+def topk_cores(topology: GalaxyChipTopology | None = None) -> ttnn.CoreRangeSet:
+    return core_ranges(*_topology(topology).topk_core_ranges)
 
 
-def prefetch_sender_cores() -> tuple[ttnn.CoreCoord, ...]:
-    return tuple(ttnn.CoreCoord(x, y) for x, y in _PREFETCH_SENDER_COORDS)
+def prefetch_sender_cores(topology: GalaxyChipTopology | None = None) -> tuple[ttnn.CoreCoord, ...]:
+    """Return the active prefetch senders, empty on a prefetcher-free path."""
+
+    return tuple(ttnn.CoreCoord(x, y) for x, y in _topology(topology).prefetch_sender_coords)
 
 
 def validate_galaxy_mesh(name: str, mesh_device: Any) -> None:
-    """Fail closed unless the mesh is exactly a 32-device Wormhole `(8, 4)`."""
+    """Fail closed unless the mesh is a 32-device Galaxy `(8, 4)` we have geometry for.
+
+    The mesh shape stays a hard equality. That is not conservatism: Blackhole
+    Galaxy declares the same `device_topology { dims: [8, 4] }`, so `(8, 4)` is
+    architecture-invariant and everything derived from it -- the weight splits,
+    the mesh mappers, the row/column sharding, `n_kv_heads == 8` per mesh row --
+    carries unchanged. Only the architecture check generalizes.
+
+    It generalizes to *"a topology descriptor exists for this architecture"*
+    rather than to a wider allowlist, so an architecture can only pass here once
+    someone has written down its intra-chip geometry. The contract stays an
+    allowlist; a second architecture extends it by construction.
+    """
 
     shape = tuple(mesh_device.shape)
     if shape != GALAXY_MESH_SHAPE:
         raise ValueError(f"{name} requires logical mesh shape {GALAXY_MESH_SHAPE}, got {shape}")
     if mesh_device.get_num_devices() != GALAXY_DEVICE_COUNT:
         raise ValueError(f"{name} requires exactly {GALAXY_DEVICE_COUNT} devices")
-    if mesh_device.arch() != GALAXY_ARCHITECTURE:
-        raise ValueError(f"{name} supports Wormhole only, got {mesh_device.arch()}")
+    architecture = mesh_device.arch()
+    if architecture not in supported_galaxy_architectures():
+        supported = ", ".join(str(arch) for arch in supported_galaxy_architectures())
+        raise ValueError(f"{name} has no Galaxy topology for {architecture}; supported: {supported}")
+
+
+def galaxy_topology(mesh_device: Any) -> GalaxyChipTopology:
+    """Return the validated topology descriptor for a Galaxy mesh."""
+
+    validate_galaxy_mesh("Galaxy topology", mesh_device)
+    return resolve_galaxy_chip_topology(mesh_device)
 
 
 #: Fabric links per direction, per Galaxy architecture. The mesh graph
@@ -361,7 +344,13 @@ def dram_sharded_weight_memory_config(mesh_device: Any, local_k: int, local_n: i
     )
 
 
-def ring_matmul_program_config(local_k: int, padded_local_n: int, *, global_cb_receivers: int = 2) -> Any:
+def ring_matmul_program_config(
+    local_k: int,
+    padded_local_n: int,
+    *,
+    global_cb_receivers: int = 2,
+    topology: GalaxyChipTopology | None = None,
+) -> Any:
     """Return the qualified 24-core gather-in0 ring matmul program config.
 
     ``global_cb_receivers`` is ``num_global_cb_receivers``, which describes how
@@ -372,12 +361,13 @@ def ring_matmul_program_config(local_k: int, padded_local_n: int, *, global_cb_r
     passes 1 rather than describing a global CB that was never bound.
     """
 
+    resolved = _topology(topology)
     out_block_w = padded_local_n // RING_CORE_COUNT // TILE
     out_subblock_w = min(8, out_block_w)
     while out_block_w % out_subblock_w:
         out_subblock_w -= 1
     return ttnn.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-        compute_with_storage_grid_size=(8, 3),
+        compute_with_storage_grid_size=_require_ring(resolved, resolved.ring_matmul_grid, "ring matmul grid"),
         in0_block_w=local_k // RING_CORE_COUNT // TILE,
         out_subblock_h=1,
         out_subblock_w=out_subblock_w,
@@ -387,7 +377,7 @@ def ring_matmul_program_config(local_k: int, padded_local_n: int, *, global_cb_r
         fused_activation=None,
         mcast_in0=False,
         gather_in0=True,
-        hop_cores=ring_hop_cores(),
+        hop_cores=ring_hop_cores(resolved),
         num_global_cb_receivers=global_cb_receivers,
         untilize_out=False,
     )
@@ -663,10 +653,15 @@ def column_user_selector_program_config(users_per_column: int, padded_local_voca
 
 
 def sdpa_program_config(
-    sequence_length: int, *, decode: bool, sub_core_grids: ttnn.CoreRangeSet | None = None
+    sequence_length: int,
+    *,
+    decode: bool,
+    sub_core_grids: ttnn.CoreRangeSet | None = None,
+    topology: GalaxyChipTopology | None = None,
 ) -> ttnn.SDPAProgramConfig:
     """Return the qualified decode/prefill SDPA geometry."""
 
+    resolved = _topology(topology)
     if decode:
         q_chunk_size = k_chunk_size = 0
     elif sequence_length < 2048:
@@ -674,7 +669,7 @@ def sdpa_program_config(
     else:
         q_chunk_size, k_chunk_size = 256, 512
     return ttnn.SDPAProgramConfig(
-        compute_with_storage_grid_size=(8, 4) if decode else (7, 10),
+        compute_with_storage_grid_size=resolved.decode_sdpa_grid if decode else resolved.compute_grid,
         sub_core_grids=sub_core_grids,
         exp_approx_mode=False,
         q_chunk_size=q_chunk_size,
@@ -683,7 +678,10 @@ def sdpa_program_config(
 
 
 def chunked_sdpa_program_config(
-    *, sub_core_grids: ttnn.CoreRangeSet | None = None, chunk_alignment: int = 128
+    *,
+    sub_core_grids: ttnn.CoreRangeSet | None = None,
+    chunk_alignment: int = 128,
+    topology: GalaxyChipTopology | None = None,
 ) -> ttnn.SDPAProgramConfig:
     """Return the prefix-cached/chunked prefill SDPA geometry.
 
@@ -693,7 +691,7 @@ def chunked_sdpa_program_config(
     """
 
     return ttnn.SDPAProgramConfig(
-        compute_with_storage_grid_size=(7, 10),
+        compute_with_storage_grid_size=_topology(topology).compute_grid,
         sub_core_grids=sub_core_grids,
         exp_approx_mode=False,
         q_chunk_size=chunk_alignment,
@@ -950,13 +948,16 @@ class GalaxyPrefillPlacements:
     chunked_sdpa_program_config: Any = None
 
 
-def _subgrid_cores(count: int, *, row_wise: bool) -> ttnn.CoreRangeSet:
+def _subgrid_cores(count: int, *, row_wise: bool, topology: GalaxyChipTopology | None = None) -> ttnn.CoreRangeSet:
+    resolved = _topology(topology)
     return ttnn.num_cores_to_corerangeset_in_subcoregrids(
-        ttnn.CoreCoord(1, 0), count, worker_cores(), row_wise=row_wise
+        ttnn.CoreCoord(*resolved.sampling_start_core), count, worker_cores(resolved), row_wise=row_wise
     )
 
 
-def distributed_norm_decode_memory_config(geometry: GalaxyDenseGeometry) -> ttnn.MemoryConfig:
+def distributed_norm_decode_memory_config(
+    geometry: GalaxyDenseGeometry, topology: GalaxyChipTopology | None = None
+) -> ttnn.MemoryConfig:
     """Return the residual-stream placement, identical to RMSNorm2D's default.
 
     ``RMSNorm2D`` resolves its decode input, residual, and output placement to
@@ -975,8 +976,12 @@ def distributed_norm_decode_memory_config(geometry: GalaxyDenseGeometry) -> ttnn
     columns wide and the grid is ``local_dim / 256`` rows tall.
     """
 
+    resolved = _topology(topology)
+    origin_x, origin_y = resolved.norm_origin
     grid_height = geometry.local_dim // (GALAXY_ROWS * TILE)
-    cores = ttnn.CoreRangeSet({ttnn.CoreRange(ttnn.CoreCoord(2, 0), ttnn.CoreCoord(3, grid_height - 1))})
+    cores = ttnn.CoreRangeSet(
+        {ttnn.CoreRange(ttnn.CoreCoord(origin_x, origin_y), ttnn.CoreCoord(origin_x + 1, origin_y + grid_height - 1))}
+    )
     return width_sharded_memory_config(geometry.local_dim, cores)
 
 
@@ -1185,10 +1190,13 @@ def galaxy_prefill_mode_plan_cores(mesh_device: Any) -> ttnn.CoreRangeSet:
     return ttnn.CoreRangeSet({ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(grid.x - 1, grid.y - 1))})
 
 
-def sampling_core_grids() -> tuple[ttnn.CoreRangeSet, ttnn.CoreRangeSet, ttnn.CoreCoord]:
+def sampling_core_grids(
+    topology: GalaxyChipTopology | None = None,
+) -> tuple[ttnn.CoreRangeSet, ttnn.CoreRangeSet, ttnn.CoreCoord]:
     """Return the qualified Sampling2D `(sub_core_grids, topk grid, start core)`."""
 
-    return worker_cores(), topk_cores(), ttnn.CoreCoord(1, 0)
+    resolved = _topology(topology)
+    return worker_cores(resolved), topk_cores(resolved), ttnn.CoreCoord(*resolved.sampling_start_core)
 
 
 def rope_core_grids(mesh_device: Any, *, use_qk_fused: bool) -> tuple[Any, ttnn.CoreRangeSet]:

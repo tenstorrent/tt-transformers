@@ -98,8 +98,17 @@ def test_resolves_representative_norm_geometries(dim):
     ],
 )
 def test_resolution_fails_closed_on_non_wh_galaxy(shape, devices, arch, error, expect_error):
+    """The mesh gate must survive `python -O`, which strips every `assert`.
+
+    `ValueError` rather than `AssertionError` is the whole point: an `assert`
+    can only ever raise `AssertionError`, so requiring a different type is a
+    direct proof that the gate is not compiled away under optimization. Without
+    it, an optimized run places tensors on cores the partition does not own and
+    hangs the host with no traceback.
+    """
+
     mesh = _mesh(shape, devices=devices, arch=arch)
-    with expect_error(AssertionError, error):
+    with expect_error(ValueError, error):
         _resolve_2d_config(RMSNorm2DConfig(weight=_weight(8192, mesh), mesh_device=mesh, tt_ccl=_ccl(mesh)))
 
 
