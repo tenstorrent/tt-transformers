@@ -168,14 +168,15 @@ did not fire: `CoreRangeSet.__eq__` exists, is order-sensitive, and the golden t
 
 ### The one remaining failure, and why it stays
 
-`validate_support_docs.py` reports 8 broken local links, and
-`tests/host/test_support_documentation.py` wraps it, so `pytest -m host` is red on the same cause:
+`validate_support_docs.py` reports 7 broken local links, and
+`tests/host/test_support_documentation.py` wraps it, so `python -m pytest -m host` is red on the
+same cause:
 
 ```
 docs/bh_galaxy_experiments/README.md: broken local link '../blackhole_galaxy_port_plan.md'
 docs/bh_galaxy_experiments/README.md: broken local link '../../../my-tt-dev-tools/exabox/README.md'
 docs/bh_galaxy_experiments/README.md: broken local link '../bh_galaxy_deferred_work.md'
-docs/bh_galaxy_handoff.md: broken local link 'blackhole_galaxy_port_plan.md'   (x2)
+docs/bh_galaxy_handoff.md: broken local link 'blackhole_galaxy_port_plan.md'
 docs/bh_galaxy_port_log.md: broken local link 'blackhole_galaxy_port_plan.md'
 docs/bh_galaxy_port_log.md: broken local link 'bh_galaxy_deferred_work.md'
 docs/bh_galaxy_port_log.md: broken local link '../../my-tt-dev-tools/exabox/README.md'
