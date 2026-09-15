@@ -19,12 +19,16 @@ the lot on both commits and diff the text.
 pins what the *callers* build out of them, which is the half those tables cannot
 reach.
 
-Usage:
+Usage. **Copy this script out of the worktree first.** It was added after the
+base commit, so `git checkout 0a3e045` deletes it and the base dump cannot run
+from its in-tree path -- the mistake produces an empty base file and a "diff"
+that is just the whole head dump, which looks like a total regression:
 
+    cp docs/bh_galaxy_experiments/E01-wh-byte-identical/dump_resolved_geometry.py /tmp/dump.py
     git checkout 0a3e045    # phase 1: the last commit before the descriptor
-    python docs/bh_galaxy_experiments/E01-wh-byte-identical/dump_resolved_geometry.py > /tmp/base.txt
+    python /tmp/dump.py > /tmp/base.txt
     git checkout <head>
-    python docs/bh_galaxy_experiments/E01-wh-byte-identical/dump_resolved_geometry.py > /tmp/head.txt
+    python /tmp/dump.py > /tmp/head.txt
     diff -u /tmp/base.txt /tmp/head.txt && echo "IDENTICAL"
 
 Deliberately uses only the API that exists on **both** commits, so it can be run
@@ -36,6 +40,7 @@ rest still dumps, because a partial diff is worth more than an aborted one.
 from __future__ import annotations
 
 import dataclasses
+import importlib.metadata
 import sys
 import traceback
 from types import SimpleNamespace
@@ -71,8 +76,38 @@ def wormhole_galaxy_mesh():
     return mesh
 
 
+def render(value: object) -> str:
+    """Render one value deterministically, tolerating a broken pybind `__repr__`.
+
+    `ttnn.SDPAProgramConfig` on 0.77.0 raises `TypeError` out of **both**
+    `__repr__` and `__str__` -- the binding cannot convert its own
+    `std::string` return value -- which aborted two entire sections of this dump
+    the first time it ran against real `ttnn`. Every one of its fields reads back
+    fine, so fall back to an ordered field walk. That is not a workaround with a
+    cost: a field-wise line is a *finer* diff than the repr string it replaces,
+    because it names the field that moved.
+    """
+
+    try:
+        return repr(value)
+    except TypeError:
+        pass
+
+    fields = []
+    for name in sorted(attribute for attribute in dir(value) if not attribute.startswith("_")):
+        try:
+            attribute = getattr(value, name)
+        except Exception:  # noqa: BLE001 - an unreadable attribute must not abort the dump
+            fields.append(f"{name}=<unreadable>")
+            continue
+        if callable(attribute):
+            continue
+        fields.append(f"{name}={render(attribute)}")
+    return f"<{type(value).__qualname__} {' '.join(fields)}>"
+
+
 def emit(label: str, value: object) -> None:
-    print(f"{label} = {value!r}")
+    print(f"{label} = {render(value)}")
 
 
 def emit_dataclass(prefix: str, instance: object) -> None:
@@ -218,8 +253,17 @@ def dump_resource_plans(mesh) -> None:
                 emit(f"{model_name}.{mode}.collectives[{index}].intermediate", collective.intermediate_output_specs)
 
 
+def ttnn_version() -> str:
+    """Return the installed `ttnn` version. It publishes no `__version__`."""
+
+    try:
+        return importlib.metadata.version("ttnn")
+    except importlib.metadata.PackageNotFoundError:
+        return "unknown"
+
+
 def main() -> int:
-    print(f"# ttnn {getattr(ttnn, '__version__', 'unknown')}")
+    print(f"# ttnn {ttnn_version()}")
     mesh = wormhole_galaxy_mesh()
     dump_core_sets()
     dump_prefetch_mapping()
