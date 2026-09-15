@@ -1,5 +1,10 @@
 # Contributing
 
+Bugs are reported via [GitHub Issues](https://github.com/tenstorrent/tt_transformers/issues).
+Bug fixes and new functionality are submitted via GitHub Pull Requests, which
+are reviewed on a weekly cadence. By participating in this project, you agree
+to abide by our [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Set up a development environment
 
 Use CPython 3.10 or 3.12 on Linux. For a normal editable checkout:

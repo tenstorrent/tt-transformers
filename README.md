@@ -139,3 +139,21 @@ The initial standalone source was extracted from `tt-metal` commit
 `00748e6ac7b65f50e5c2af07f6e7c1c535c7f4c0`. MoE was intentionally excluded.
 The compact source map is retained under
 [`docs/provenance`](https://github.com/tenstorrent/tt_transformers/tree/main/docs/provenance).
+
+## Contributing
+
+Bugs are reported via [GitHub Issues](https://github.com/tenstorrent/tt_transformers/issues),
+and bug fixes and new functionality are submitted via Pull Requests, which are
+reviewed on a weekly cadence. See
+[CONTRIBUTING.md](https://github.com/tenstorrent/tt_transformers/blob/main/CONTRIBUTING.md)
+for how to set up a development environment and our
+[Code of Conduct](https://github.com/tenstorrent/tt_transformers/blob/main/CODE_OF_CONDUCT.md)
+for community expectations.
+
+## License
+
+This project is licensed under the terms of the
+[Apache License 2.0](https://github.com/tenstorrent/tt_transformers/blob/main/LICENSE),
+except where specified. See
+[LICENSE_understanding.txt](https://github.com/tenstorrent/tt_transformers/blob/main/LICENSE_understanding.txt)
+for a plain-language summary of how the license applies to this project.
