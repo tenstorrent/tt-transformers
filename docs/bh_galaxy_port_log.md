@@ -55,10 +55,31 @@ This does **not** retire [E00](bh_galaxy_experiments/README.md): the real `pytes
 ~2612 tests against the real `ttnn`, and every Galaxy geometry suite is in the 149 that cannot
 collect here. It does mean a deviceless phase can be wrong in fewer ways before it gets there.
 
-**Caveat — `ruff` version skew.** The repo pins `ruff>=0.11.0`; `uv tool run ruff` resolves 0.16.7,
-whose `I001` disagrees with the pinned version about whether `qualification` and `tests` are
-first-party. It reports 11 pre-existing files as un-sorted. Treat `I001` as advisory locally and
-keep matching the surrounding files' convention; every other rule is trustworthy.
+**Caveat — `ruff` version skew.** The repo's `pyproject.toml` pins `ruff>=0.11.0`; `uv tool run
+ruff` resolves 0.16.7, whose `I001` disagrees with the pinned version about whether `qualification`
+and `tests` are first-party. It reports 11 pre-existing files as un-sorted.
+
+**Correction (2026-09-15): do not treat `I001` as advisory — pin the version instead.** This entry
+originally said to treat `I001` as advisory locally and match the surrounding convention. That
+advice cost a real defect. The version of record is not `>=0.11.0` at all: CI installs the
+hash-locked **`ruff==0.11.0`** from `constraints/locks/build-dev-py310.txt`, which is also the rev
+pinned in `.pre-commit-config.yaml`, and it scopes both ruff commands to
+`src tests examples tools qualification` rather than `.`.
+
+Run that way, the tree has exactly **one** `I001` — in `tests/host/test_galaxy_arch_taxonomy.py`,
+a file this work added, while `main` is clean — and `ruff format --check` reports **431 files
+already formatted**. Run the other way, 12 errors and 18 reformats, 11 and 16 of which `main`
+"fails" too. So the noise did not merely obscure the one real finding; it made the entire gate look
+like a known version artifact, which is how the finding survived to be caught on a Linux host
+instead of here. Two commands are enough to remove the ambiguity:
+
+```bash
+uvx ruff@0.11.0 check src tests examples tools qualification
+uvx ruff@0.11.0 format --check src tests examples tools qualification
+```
+
+Pinning also makes the Mac gate *stronger* than this section claimed, not weaker: with the right
+version, `ruff` locally is exactly what CI will say.
 
 ---
 
@@ -455,28 +476,39 @@ section says it has no good answer for.
 
 ## 6. Where this leaves the port
 
-**Phases 1–4 are complete and committed. None of the Galaxy-specific test suites has ever been
-executed**, because they import `ttnn`. What was verified is recorded honestly per phase above;
-the short version:
+**Phases 1–4 are complete and committed.** As of 2026-09-15 the Wormhole window has closed the
+larger half of the verification gap; what remains open is Blackhole, which has still been measured
+zero times.
 
 | | State |
 | --- | --- |
-| Four host gates | green locally |
-| `ruff check` | clean; `ruff format` **unverified** under the pinned version |
-| 307 host tests | pass, no new failures against HEAD, in a `ttnn`-free venv |
+| Seven host gates | **green** on Linux + `ttnn`, ttnn 0.77.0 — `wh-glx6u-05`, 2026-09-15 |
+| `ruff check` / `ruff format` | **both green** under the locked `ruff==0.11.0` at CI's scope |
+| `mypy` | **green**, 6 source files, mypy 1.15.0 |
+| Host tests | **2641 passed**, 87 skipped, 81 subtests; 1 failed, a doc-link gate held red by a docs-location decision |
+| Galaxy geometry suites | **executed for the first time**; found 3 stale assertions, all fixed |
+| Phase 2, host-resolved geometry | **byte-identical** to `0a3e045`: 395 fields, same sha256 ([E01](bh_galaxy_experiments/E01-wh-byte-identical/)) |
 | Topology descriptor, all validation paths | exercised directly, including every rejection case |
-| Blackhole resolver, 11x10 / 12x10 / 13x10 | exercised directly |
-| Everything importing `ttnn` | **never run** |
+| Blackhole resolver, 11x10 / 12x10 / 13x10 | exercised directly, **on host only** |
+| Anything on Blackhole silicon | **never run** |
 
-The two risks worth stating plainly to whoever picks this up:
+Where the two risks now stand:
 
-1. **Phase 2 rewrote the geometry source of a hardware-qualified path and its exit criterion
-   cannot be run.** The golden tables check the resolver; nothing checks the callers.
-   [E01](bh_galaxy_experiments/E01-wh-byte-identical/) is that check and it needs a Wormhole
-   Galaxy.
-2. **The 2D module gates still accept Wormhole only**, so no module suite runs on Blackhole yet.
-   That is phase 5's first task and it is specified in
-   [E04](bh_galaxy_experiments/E04-module-capability-gates/), patch included.
+1. **Phase 2's exit criterion is met on the host, and that is the stronger half of it.** Every
+   host-resolved memory config, program config, core range set, sub-device partition, ordered
+   `num_links` tuple and collective spec is byte-identical to the pre-descriptor commit, for both
+   models in both modes. The device programs built from identical host configs are identical by
+   construction, so the remaining exposure is narrow — and it is no longer true that "the golden
+   tables check the resolver and nothing checks the callers".
+2. **The 2D module gates still accept Wormhole only.** Unchanged, and worth being precise about
+   now that the two gates have diverged: the *mesh* contract, `recipes.validate_galaxy_mesh`,
+   generalised in phase 3 and admits any architecture with a topology descriptor — which is what
+   three of E00's failures were about. The *module* gates did not: `embedding_2d`, `rmsnorm_2d`,
+   `rope_2d`, `lm_head_2d`, `sampling_2d` and `prefetcher_2d` each still test
+   `mesh_device.arch() != ttnn.device.Arch.WORMHOLE_B0` directly. So a Blackhole mesh now passes
+   the mesh gate and is then refused by every module. That is phase 5's first task and it is
+   specified in [E04](bh_galaxy_experiments/E04-module-capability-gates/), patch included.
 
-Neither is a blocker for what was built. Both are things that would be easy to discover the
-expensive way.
+A third item, new and cheap to state: **the tooling advice in this log was wrong in a way that hid
+a defect**, corrected in §0 above. An unpinned `ruff` reports 12 errors where the locked one
+reports 1, and the one real error was inside the noise.

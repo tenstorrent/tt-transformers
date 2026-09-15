@@ -73,8 +73,8 @@ window is spent measuring rather than authoring.
 
 | # | Question | Decides | Hardware | Ships | Status |
 | --- | --- | --- | --- | --- | --- |
-| [E00](E00-host-gates/) | Do the real host gates pass? | whether phases 1–4 are sound at all | none — Linux + `ttnn` | commands | **not run** |
-| [E01](E01-wh-byte-identical/) | Is Wormhole decode byte-identical after the phase-2 refactor? | whether the topology descriptor may keep the qualified path | **WH** Galaxy | procedure + script | **not run** |
+| [E00](E00-host-gates/) | Do the real host gates pass? | whether phases 1–4 are sound at all | none — Linux + `ttnn` | commands | **green** — found 3 stale assertions + 1 lint error, all fixed; doc links red by decision |
+| [E01](E01-wh-byte-identical/) | Is Wormhole decode byte-identical after the phase-2 refactor? | whether the topology descriptor may keep the qualified path | **WH** Galaxy | procedure + script | **host half `IDENTICAL`** (395 fields, same sha256); device half run 2026-09-15 |
 | [E02](E02-bh-day0-probe/) | What does a Blackhole Galaxy actually report? | §8 Q1, Q3, Q4, Q5 — four open questions in one read-only run | BH Galaxy | in-tree test | **not run** |
 | [E03](E03-worker-envelope/) | Does column 0 rejoin the workers, and does the row cap apply? | §8 Q2 — worth ~22 worker cores | BH Galaxy | **patch**, 3 arms | **not run** |
 | [E04](E04-module-capability-gates/) | Do the 2D modules accept a Blackhole mesh once gated on capability? | phase 5's first task, and it unblocks every module suite | BH Galaxy | **patch** | **not run** |

@@ -99,22 +99,26 @@ on a Mac.
 ### Stage 1 — E00, the real host gates (10–20 min, no device)
 
 Commands are in [E00's README](bh_galaxy_experiments/E00-host-gates/). Expected:
-**`pytest -m host` reports 2612–2613 passed**, and the six tool gates are clean.
+**`python -m pytest -q -m host` reports ~2641 passed**, and the seven tool gates are clean.
 
 **This is the stage that can invalidate phases 1–4, and it costs nothing. Do not skip it to save
 time.**
 
-**If it is red**, stop and do not spend device time. Two outcomes are worth pre-empting:
+**It has now been run, and it was worth every minute of the estimate**: it found three stale
+assertions in the new Galaxy tests and one real lint error, all fixed. The readings and the
+diagnosis are in E00's README under `## Result`. Two of the three predictions below turned out
+to be wrong in useful ways, so they are corrected rather than deleted:
 
-- **`tests/models/galaxy/test_topology.py` fails.** The most likely single failure, and E00's
-  README explains precisely why and what to do. In short: its pure-Python half was verified, but
-  its `CoreRangeSet` equality assertions were not, because that needs real pybind. If equality
-  does not behave, the fix is mechanical — **but do not weaken the test to membership-only.**
-  Order is the load-bearing property; a ring built from a `set` once produced bit-for-bit
-  identical *wrong* output across runs.
-- **`ruff format --check` rewrites files.** Expected and cosmetic. The repo pins `ruff>=0.11.0`
-  and the unpinned 0.16.7 used during development formats differently. Land the reformat as its
-  own commit; it is not a defect.
+- **`test_topology.py`'s `CoreRangeSet` equality held.** This was flagged as the most likely
+  single failure, because the operator was assumed rather than exercised. It exists, it is
+  order-sensitive, and the golden tables pass. Risk closed.
+- **`test_topology.py` did fail, for a different reason** — two of its assertions encoded the
+  phase-1 world in which Wormhole was the only architecture with a descriptor. So did one in
+  `test_recipes.py`. These are the stale-test failures, not ordering failures.
+- **`ruff format --check` does not rewrite anything.** The predicted cosmetic reformat was an
+  artifact of running an unpinned `ruff` over `.`; with the locked **0.11.0** and CI's scope,
+  431 files are already formatted. Do not land a reformat commit — and do pin the version, because
+  0.16.7 reports 12 lint errors on this tree and the one real error hides among them.
 
 ---
 
@@ -128,10 +132,14 @@ memory configs, program configs, core range sets, sub-device partitions. So reso
 both commits and diff the text.
 
 ```bash
-D=docs/bh_galaxy_experiments/E01-wh-byte-identical/dump_resolved_geometry.py
+# Copy the script OUT of the worktree: it postdates the base commit, so checking
+# that commit out deletes it. And strip UMD's stdout logging, whose timestamps
+# differ on every run.
+cp docs/bh_galaxy_experiments/E01-wh-byte-identical/dump_resolved_geometry.py /tmp/dump.py
+LOG='^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+ \|'
 git stash -u
-git checkout 0a3e045 && python $D > /tmp/base.txt          # phase 1: last commit before the descriptor
-git checkout tttv2-galaxy-2d-modules-port && python $D > /tmp/head.txt
+git checkout 0a3e045 && python /tmp/dump.py | grep -Ev "$LOG" > /tmp/base.txt   # last commit before the descriptor
+git checkout tttv2-galaxy-2d-modules-port && python /tmp/dump.py | grep -Ev "$LOG" > /tmp/head.txt
 git stash pop
 diff -u /tmp/base.txt /tmp/head.txt && echo "IDENTICAL"
 ```
@@ -139,7 +147,24 @@ diff -u /tmp/base.txt /tmp/head.txt && echo "IDENTICAL"
 The script uses only API present on **both** commits — verified symbol by symbol and
 signature by signature — so it runs unmodified from either checkout.
 
-**Expected: `IDENTICAL`.**
+**Expected: `IDENTICAL`. This has now been run, and it is.** 408 lines, 395 resolved geometry
+fields, the same sha256 on both commits. Phase 2's exit criterion is met on the host; the readings
+are in [E01's README](bh_galaxy_experiments/E01-wh-byte-identical/) under `## Result`.
+
+**Both of the deviations in that snippet were found by getting them wrong, and each returns a
+convincing wrong answer rather than an error.** Running the script from its in-tree path makes the
+base dump fail with `No such file or directory`, which leaves an empty base file and a diff that
+is the whole head dump — 359 lines that read as total regression. And the script **opens the
+cluster** despite allocating nothing, so it logs ~17 timestamped lines to stdout: the first honest
+comparison came back as 47 differing lines, every one of them a clock reading. Strip them and
+it is byte-identical.
+
+It also silently measured only part of what it claims to before being fixed:
+`ttnn.SDPAProgramConfig` on 0.77.0 raises `TypeError` from both `__repr__` and `__str__`, which
+voided the *mesh-derived helpers* and *resolved placements* sections — between them most of what
+phase 2 could have moved. The section guard that kept the rest of the dump alive is what made the
+loss easy to miss. **If a section prints `FAILED TO RESOLVE`, do not accept the diff for the
+others without reading why.**
 
 **If the diff is non-empty:** you have found the phase-2 regression, on the host, in two minutes,
 with the exact field named. That is the best possible outcome short of identity. Read the
