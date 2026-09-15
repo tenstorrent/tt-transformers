@@ -28,6 +28,34 @@ rests on two things:
 Both are real, and both check the **resolver**. Neither checks the **callers**. That gap is what
 this experiment closes.
 
+## Do the host half first — it is cheaper and more complete
+
+**Added after this folder was first written**, because it is a better measurement than the device
+run and it needs no allocation.
+
+Everything phase 2 could have broken is resolved **on the host, before any module hot path runs**:
+memory configs, program configs, core range sets, sub-device partitions. So resolve all of it on
+both commits and diff the text.
+
+```bash
+D=docs/bh_galaxy_experiments/E01-wh-byte-identical/dump_resolved_geometry.py
+git checkout 0a3e045 && python $D > /tmp/base.txt
+git checkout tttv2-galaxy-2d-modules-port && python $D > /tmp/head.txt
+diff -u /tmp/base.txt /tmp/head.txt && echo "IDENTICAL"
+```
+
+[`dump_resolved_geometry.py`](dump_resolved_geometry.py) uses only API present on **both**
+commits — verified symbol by symbol and signature by signature — so it runs unmodified from
+either checkout. It needs `ttnn` importable but **opens no device**, so it runs on any Linux box,
+in seconds.
+
+**Expected: `IDENTICAL`.** A non-empty diff names the model, the mode and the field that moved —
+which is the whole finding, obtained in two minutes instead of two hours.
+
+**This changes what the device run has to prove.** If the host-resolved configs are identical,
+the device programs built from them are identical by construction, so running *both* commits on
+silicon is no longer the primary evidence. Run HEAD only and keep the base commit for triage.
+
 ## Hypothesis
 
 Every Wormhole Galaxy module suite produces output byte-identical to the pre-refactor commit.
@@ -39,28 +67,27 @@ thresholds did not catch it and why it took weeks to find.
 
 ## Run
 
-```bash
-# The commit before the descriptor existed. `0a3e045` is phase 1, which changed
-# no geometry; `b0f0024` is the refactor itself.
-BASE=0a3e045
-HEAD=$(git rev-parse HEAD)
+Run the host diff above first. Then, on HEAD only:
 
-for SHA in $BASE $HEAD; do
-  git checkout $SHA
-  # One node id per process. The ttnn program cache belongs to the mesh device
-  # and the process, and the weight cache is keyed on MeshDevice.id().
-  MESH_DEVICE=TG pytest tests/modules/mlp/test_mlp_2d_wh_galaxy.py -sv \
-      2>&1 | tee wh-$SHA-mlp.log
-  MESH_DEVICE=TG pytest tests/modules/rmsnorm/test_rmsnorm_2d_wh_galaxy.py -sv \
-      2>&1 | tee wh-$SHA-rmsnorm.log
-  # ... and the rest of the 57 cheap module ids.
-done
+```bash
+# The marker was renamed in phase 1: `-m galaxy` now selects NOTHING.
+pytest tests/modules tests/models/galaxy --collect-only -q -m galaxy_wh | grep '::' > /tmp/ids.txt
+
+# One pytest node id per process. The ttnn program cache belongs to the mesh device
+# and the process, and the weight cache is keyed on MeshDevice.id().
+while read -r id; do
+  MESH_DEVICE=TG timeout 900 pytest "$id" -sv 2>&1 | tee "/tmp/wh-$(echo "$id" | tr '/:[]' '____').log"
+done < /tmp/ids.txt
 ```
 
-Then compare. **Comparing the logs is not enough** — they carry timings and addresses. The
-comparison has to be on tensor contents, so the suites need to dump them; add a
-`torch.save` of each decode output under a path keyed by SHA, and compare with
-`torch.equal`, not `allclose`.
+**No checkpoint is needed.** All eight `tests/modules/*/test_*_2d_wh_galaxy.py` files and all
+three `tests/models/galaxy/test_*_wh_galaxy.py` files have zero references to
+`hf_config_or_skip`, `LLAMA_DIR`, `HF_MODEL` or `from_pretrained` — so there is no 138 GB weight
+staging on this path, and the trap where a wrong `HF_HOME` silently skips every real-checkpoint
+test cannot fire here.
+
+**Keep the base commit for triage, not for a full second pass.** Re-run a *failing* node id on
+`0a3e045` to establish whether it predates this work; the pre-existing state was 56/57.
 
 ### Two things that will otherwise waste the window
 

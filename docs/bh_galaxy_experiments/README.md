@@ -74,7 +74,7 @@ window is spent measuring rather than authoring.
 | # | Question | Decides | Hardware | Ships | Status |
 | --- | --- | --- | --- | --- | --- |
 | [E00](E00-host-gates/) | Do the real host gates pass? | whether phases 1–4 are sound at all | none — Linux + `ttnn` | commands | **not run** |
-| [E01](E01-wh-byte-identical/) | Is Wormhole decode byte-identical after the phase-2 refactor? | whether the topology descriptor may keep the qualified path | **WH** Galaxy | procedure | **not run** |
+| [E01](E01-wh-byte-identical/) | Is Wormhole decode byte-identical after the phase-2 refactor? | whether the topology descriptor may keep the qualified path | **WH** Galaxy | procedure + script | **not run** |
 | [E02](E02-bh-day0-probe/) | What does a Blackhole Galaxy actually report? | §8 Q1, Q3, Q4, Q5 — four open questions in one read-only run | BH Galaxy | in-tree test | **not run** |
 | [E03](E03-worker-envelope/) | Does column 0 rejoin the workers, and does the row cap apply? | §8 Q2 — worth ~22 worker cores | BH Galaxy | **patch**, 3 arms | **not run** |
 | [E04](E04-module-capability-gates/) | Do the 2D modules accept a Blackhole mesh once gated on capability? | phase 5's first task, and it unblocks every module suite | BH Galaxy | **patch** | **not run** |
@@ -85,7 +85,12 @@ window is spent measuring rather than authoring.
 ### Suggested order
 
 **E00 first, always** — it needs no silicon, and it is the only thing that can tell you the
-deviceless work is sound before you spend a window on it.
+deviceless work is sound before you spend a window on it. **E01's host half is the same shape**:
+its `dump_resolved_geometry.py` diff needs `ttnn` but no device, and it is a stronger check on
+phase 2 than the device run it precedes. Both belong on any Linux box before any allocation.
+
+[bh_galaxy_handoff.md](../bh_galaxy_handoff.md) stages all of this against a real Wormhole
+window, with times and a failure playbook.
 
 Then, on the first Blackhole window: **E02**, which is read-only and answers four questions in
 about as long as opening the mesh takes. Then **E03**, whose arms are one-line constant flips,
