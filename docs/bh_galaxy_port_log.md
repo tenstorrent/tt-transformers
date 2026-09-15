@@ -488,18 +488,21 @@ zero times.
 | Host tests | **2641 passed**, 87 skipped, 81 subtests; 1 failed, a doc-link gate held red by a docs-location decision |
 | Galaxy geometry suites | **executed for the first time**; found 3 stale assertions, all fixed |
 | Phase 2, host-resolved geometry | **byte-identical** to `0a3e045`: 395 fields, same sha256 ([E01](bh_galaxy_experiments/E01-wh-byte-identical/)) |
+| Wormhole Galaxy module suites | **56 / 57 green** on device — exactly the pre-refactor baseline; the one red prints `PASSED` then hangs in teardown |
+| Numerical stability, 3 fresh processes | MLP and fused-residual RMSNorm decode PCC **identical to 16 digits** |
 | Topology descriptor, all validation paths | exercised directly, including every rejection case |
 | Blackhole resolver, 11x10 / 12x10 / 13x10 | exercised directly, **on host only** |
 | Anything on Blackhole silicon | **never run** |
 
 Where the two risks now stand:
 
-1. **Phase 2's exit criterion is met on the host, and that is the stronger half of it.** Every
-   host-resolved memory config, program config, core range set, sub-device partition, ordered
-   `num_links` tuple and collective spec is byte-identical to the pre-descriptor commit, for both
-   models in both modes. The device programs built from identical host configs are identical by
-   construction, so the remaining exposure is narrow — and it is no longer true that "the golden
-   tables check the resolver and nothing checks the callers".
+1. **Closed. Phase 2's exit criterion is met on both halves.** Every host-resolved memory config,
+   program config, core range set, sub-device partition, ordered `num_links` tuple and collective
+   spec is byte-identical to the pre-descriptor commit, for both models in both modes; the device
+   run reproduces the pre-refactor 56/57 exactly; and the two highest-signal suites give PCC
+   identical to 16 digits across three fresh processes. It is no longer true that "the golden
+   tables check the resolver and nothing checks the callers" — **the topology descriptor may keep
+   the qualified path**, and this is the evidence the refactor was missing.
 2. **The 2D module gates still accept Wormhole only.** Unchanged, and worth being precise about
    now that the two gates have diverged: the *mesh* contract, `recipes.validate_galaxy_mesh`,
    generalised in phase 3 and admits any architecture with a topology descriptor — which is what

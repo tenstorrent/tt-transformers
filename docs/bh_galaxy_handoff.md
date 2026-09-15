@@ -10,17 +10,23 @@ Branch: `tttv2-galaxy-2d-modules-port`. Six commits, **none pushed**, no PR open
 
 ## 1. Where the work stands in one paragraph
 
-Phases 1–4 of [blackhole_galaxy_port_plan.md](blackhole_galaxy_port_plan.md) — everything that
-needs no hardware — are written and committed. The Galaxy geometry now lives in a validated
-per-architecture descriptor, Blackhole resolves against it, and a disabled matrix node and
-capability geometry are registered. **What has never run is anything that imports `ttnn`**, which
-includes every Galaxy test suite. Four host gates and 307 host tests were run on a Mac in a
-`ttnn`-free venv, differentially; that is real but partial coverage, and
-[bh_galaxy_port_log.md](bh_galaxy_port_log.md) §0 and §6 say exactly what it does and does not
-cover.
+> **Status: the Wormhole window described below was run on 2026-09-15 and all four stages are
+> complete.** Phase 2's exit criterion is met — host geometry byte-identical, 56/57 on device,
+> numerics stable across processes. The stage instructions are kept because several of them were
+> *wrong* in ways that produce convincing wrong answers, and the corrections are inline; the
+> readings are in each experiment folder under `## Result`. What remains is Blackhole, which has
+> been measured zero times. Skip to §7.
 
-So the job now is to close that gap, in a specific order, and the Wormhole Galaxy window closes
-most of it.
+Phases 1–4 of the port plan — everything that needs no hardware — are written and committed. The
+Galaxy geometry now lives in a validated per-architecture descriptor, Blackhole resolves against
+it, and a disabled matrix node and capability geometry are registered. **What had never run was
+anything that imports `ttnn`**, which includes every Galaxy test suite. Four host gates and 307
+host tests were run on a Mac in a `ttnn`-free venv, differentially; that was real but partial
+coverage, and [bh_galaxy_port_log.md](bh_galaxy_port_log.md) §0 and §6 say exactly what it did and
+did not cover.
+
+That gap is now closed for Wormhole. It was worth closing: the real host gates found three stale
+assertions in the new Galaxy tests and one real lint error, none of which the Mac could see.
 
 ---
 
@@ -83,12 +89,20 @@ your problem in this window.
 git fetch && git checkout tttv2-galaxy-2d-modules-port
 uv python install 3.12
 uv venv --python 3.12 && source .venv/bin/activate
-uv pip install -e '.[test,examples]'
-python -c "import ttnn; print(ttnn.__version__)"     # expect 0.77.0
+uv pip install -e '.[test,examples,dev]'
+python -c "import ttnn, importlib.metadata as m; print(m.version('ttnn'))"    # expect 0.77.0
 ```
 
 The package is pure Python; its only heavy dependency is the `ttnn` wheel from PyPI. There is no
 `tt-metal` build and no C++ toolchain. Most of the estimate is the wheel download.
+
+**Two corrections from the first real run.** `ruff` and `mypy` live in the **`dev`** extra, so
+without it stage 1's last three gates have no binary. And `ttnn` publishes no `__version__` —
+`import ttnn; print(ttnn.__version__)` raises `AttributeError` on a perfectly good install, which
+is an alarming way to start; ask `importlib.metadata` instead.
+
+If a hash-locked environment is wanted rather than a resolved one, CI's is
+`constraints/locks/host-py310.txt` plus `constraints/locks/build-dev-py310.txt`.
 
 **If `ttnn` will not install:** check the interpreter is cp310 or cp312 and the platform is
 `manylinux_2_34_x86_64`. Those are the only wheels published. This is also why none of this ran
@@ -204,18 +218,34 @@ done < /tmp/ids.txt
 **Expected: 56 of 57 green**, in roughly 50 minutes. Individual suites run 7–107 s; most of the
 rest is mesh open and close per process.
 
+**Run on 2026-09-15: 56 of 57, in 50 minutes, mean 53 s.** Exactly the pre-refactor baseline, so
+no regression. Readings per file are in E01's README.
+
 **One known-red baseline, and it is not yours.** `attention_decode_with_active_prefetch` passes
 setup, call, PCC and its own cleanup and **still exits non-zero**, because
 `ttnn.close_mesh_device` hangs in the fixture afterwards: the test starts the DRAM producer, but
 attention decode is precisely the module that must *not* consume the global CB, so nothing drains
 the ring. That is a test-design defect recorded before this work. Treat it as red and move on.
 
+**Budget 15 minutes for it, though.** It does not exit quickly: its log prints `PASSED` and then
+the process hangs after `Clearing program cache on MeshDevice 0` until `timeout` kills it, so it
+burns the full 900 s — 15 of the sweep's 50 minutes for a verdict you already have. Deselect the
+id, or give it a short timeout. SIGTERM was enough to clear it: no lingering process, 32 devices
+still present, the next suite green, **no reset needed**.
+
 **Then check stability on the two highest-signal suites** — three fresh processes each, output
 compared, not just PCC-passing:
 
+**Run one node id, not the file**: the MLP file holds both models, and two models in one process
+is the pattern that hangs at the second model's first decode.
+
 ```bash
+MLP='tests/modules/mlp/test_mlp_2d_wh_galaxy.py::test_mlp_2d_wh_galaxy_decode_batch_32_repeat[wormhole_b0-device_params0-llama-8192x28672-mesh_device0]'
+NORM='tests/modules/rmsnorm/test_rmsnorm_2d_wh_galaxy.py::test_rmsnorm_2d_wh_galaxy_final_norm_decode_batch_32_fused_residual_repeat[wormhole_b0-device_params0-llama-final-8192-mesh_device0]'
 for i in 1 2 3; do
-  MESH_DEVICE=TG pytest tests/modules/mlp/test_mlp_2d_wh_galaxy.py -sv 2>&1 | tee /tmp/mlp-$i.log
+  for id in "$MLP" "$NORM"; do
+    MESH_DEVICE=TG python -m pytest -p pcc_probe "$id" -sv 2>&1 | tee "/tmp/stab-$i.log"
+  done
 done
 ```
 
@@ -223,6 +253,37 @@ The bar is three fresh processes because the fused-RMSNorm stats CB binds to the
 the norm input shard grid and aliases whatever the allocator left there — it has produced PCC of
 0.0977 / 0.1394 / 0.1701 / 0.9999 **on an unchanged test**. One run that passes proves less than
 it looks like.
+
+**"Output compared" needs one extra piece: these suites print no PCC on success.** They assert
+internally, so three green runs are indistinguishable from three *identical* green runs, which is
+the entire question. Wrap the comparison functions from a plugin **outside** the repository — so
+the checkout stays a clean pull target — and load it with `-p`:
+
+```python
+# pcc_probe.py, on PYTHONPATH, outside the repo
+import functools
+
+def _wrap(fn, label):
+    @functools.wraps(fn)
+    def probe(*args, **kwargs):
+        result = fn(*args, **kwargs)
+        print(f"PCC_PROBE {label} -> {result!r}", flush=True)
+        return result
+    probe._pcc_probe = True
+    return probe
+
+def pytest_runtest_setup(item):
+    for name in ("comp_pcc", "mlp_pcc"):           # rmsnorm imports one, mlp the other
+        fn = getattr(item.module, name, None)
+        if callable(fn) and not getattr(fn, "_pcc_probe", False):
+            setattr(item.module, name, _wrap(fn, name))
+    import tests.modules._mlp_2d_galaxy as shared  # assert_mlp_pcc calls this module-global
+    if not getattr(shared.mlp_pcc, "_pcc_probe", False):
+        shared.mlp_pcc = _wrap(shared.mlp_pcc, "mlp_pcc")
+```
+
+**Run on 2026-09-15: identical to 16 significant digits**, three processes, both suites — MLP
+`0.9982189986169618`, fused-residual RMSNorm `0.9999860329520437` and `0.9999979576039204`.
 
 ---
 
@@ -330,14 +391,29 @@ of them produces arm D by accident.
 
 ## 7. After the Wormhole window
 
-The two open risks, in priority order:
+The two open risks, in priority order. **Risk 1 from the earlier revision — phase 2 carrying an
+unverified refactor of a qualified path — is closed**, so what follows is what is left:
 
 1. **The 2D module gates still accept Wormhole only**, so no module suite runs on Blackhole yet.
    This is phase 5's first task and it is specified with a working patch in
    [E04](bh_galaxy_experiments/E04-module-capability-gates/). **Its host half needs no Blackhole
-   machine** — `pytest -m host tests/modules/mlp tests/modules/rmsnorm` after applying the patch
-   is runnable on the Wormhole host, or any Linux box, and it is where a resolution error would
-   surface. Worth doing in this window if stages 0–3 finish early.
+   machine** — `python -m pytest -m host tests/modules/mlp tests/modules/rmsnorm` after applying
+   the patch is runnable on the Wormhole host, or any Linux box, and it is where a resolution
+   error would surface. It was **not** done in the 2026-09-15 window: it is a production change on
+   a new phase rather than verification of the old one, and it was left for whoever owns phase 5
+   to decide.
+
+   One thing measured in that window sharpens the task. The two gates have now **diverged**: the
+   mesh contract `recipes.validate_galaxy_mesh` generalised in phase 3 and admits any architecture
+   holding a topology descriptor — which is what three of E00's failures were about — while seven
+   modules still compare `mesh_device.arch()` against `WORMHOLE_B0` directly. So a Blackhole mesh
+   now passes the mesh gate and is then refused by every module. The seven, and what each needs:
+
+   | Module | State |
+   | --- | --- |
+   | `mlp_2d`, `rmsnorm_2d` | E04's patch covers these two |
+   | `prefetcher_2d` | **leave it.** Milestone 1 is prefetcher-free on Blackhole, so a Wormhole-only gate here is correct by design, not a gap |
+   | `embedding_2d`, `lm_head_2d`, `rope_2d`, `sampling_2d` | same shape as E04's two, **not in the patch**, and needed before any model-level Blackhole run |
 2. **The Blackhole side has been measured zero times.** [E02](bh_galaxy_experiments/E02-bh-day0-probe/)
    answers four of the plan's five open hardware questions in one read-only run that allocates no
    tensor and runs no collective, so it cannot leave the mesh needing a reset. It is the right

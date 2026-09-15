@@ -4,9 +4,22 @@
 
 """Dump every host-resolved Galaxy placement, so two commits can be diffed.
 
-**This needs `ttnn` importable, but opens no device.** It runs in seconds on any
-Linux box with the package installed, including the Wormhole Galaxy host before
-its allocation is spent on anything.
+**It opens the cluster.** This was written expecting it not to -- it allocates no
+tensor, enqueues no program and calls no `open_mesh_device` -- but resolution
+reaches pybind bindings that initialise UMD, and a run on `wh-glx6u-05` logged
+*"Opening user mode device driver"*, topology discovery, and all 32 local chip
+ids, then closed them again. Two consequences:
+
+1. It needs a host **with devices**, not any Linux box. It still needs no
+   allocation and no mesh, so it is cheap and cannot leave the mesh dirty -- but
+   plan it as the first thing in a hardware window, not as something that runs
+   beforehand elsewhere.
+2. **UMD logs to stdout**, interleaved into this dump, ~17 timestamped lines per
+   run. Those timestamps differ on every run, so a raw `diff` of two dumps is
+   never empty and reports a difference in whatever field the log happened to
+   land next to. Strip them before diffing:
+
+       grep -Ev '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]+ \\|' dump.txt
 
 Why it exists: phase 2 replaced the intra-chip core coordinates in `recipes.py`
 and `prefetch.py` with a `GalaxyChipTopology` descriptor. Everything that could
@@ -25,10 +38,11 @@ from its in-tree path -- the mistake produces an empty base file and a "diff"
 that is just the whole head dump, which looks like a total regression:
 
     cp docs/bh_galaxy_experiments/E01-wh-byte-identical/dump_resolved_geometry.py /tmp/dump.py
+    LOG='^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]+ \\|'
     git checkout 0a3e045    # phase 1: the last commit before the descriptor
-    python /tmp/dump.py > /tmp/base.txt
+    python /tmp/dump.py | grep -Ev "$LOG" > /tmp/base.txt
     git checkout <head>
-    python /tmp/dump.py > /tmp/head.txt
+    python /tmp/dump.py | grep -Ev "$LOG" > /tmp/head.txt
     diff -u /tmp/base.txt /tmp/head.txt && echo "IDENTICAL"
 
 Deliberately uses only the API that exists on **both** commits, so it can be run

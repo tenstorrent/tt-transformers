@@ -107,6 +107,22 @@ The gate is widened but the modules are not yet *capability-driven* — they sti
 through the module configs is the natural next step, and E05–E07 are precisely the measurements
 that say which ones matter. Do that with evidence rather than ahead of it.
 
+### This patch covers two of seven modules — know which before planning a Blackhole run
+
+Measured 2026-09-15, and worth stating here because the patch's scope is easy to over-read. Seven
+modules compare `mesh_device.arch()` against `ttnn.device.Arch.WORMHOLE_B0` directly:
+
+| Module | State |
+| --- | --- |
+| `mlp_2d`, `rmsnorm_2d` | **this patch** |
+| `prefetcher_2d` | **leave it.** Milestone 1 is prefetcher-free on Blackhole, so Wormhole-only is correct by design |
+| `embedding_2d`, `lm_head_2d`, `rope_2d`, `sampling_2d` | same shape, **not in this patch**, and each one blocks a model-level Blackhole run |
+
+Note also that the *mesh* contract already generalised ahead of the modules:
+`recipes.validate_galaxy_mesh` admits any architecture with a topology descriptor, so a Blackhole
+mesh passes it and is then refused by each module gate above. The two layers disagree today, and
+this patch is the first step in closing that — not the whole of it.
+
 ---
 
 ## Result

@@ -28,16 +28,43 @@ The seven host gates pass, and `pytest -m host` reports 2612–2613 passed.
 
 ```bash
 # On a Linux x86_64 host; no device needed.
-uv venv --python 3.12 && uv pip install -e '.[test,examples]'
+uv venv --python 3.12 && uv pip install -e '.[test,examples,dev]'
 
-pytest -m host                                          # expect 2612-2613 passed
+python -m pytest -q -m host                             # expect ~2638 passed
 python qualification/tools/audit_test_taxonomy.py
 python tools/check_import_boundaries.py
+python qualification/tools/validate_support_docs.py
 python qualification/tools/run_hardware_matrix.py --validate
 python qualification/tools/validate_bh_required_capabilities.py
-ruff check . && ruff format --check .
+ruff check src tests examples tools qualification
+ruff format --check src tests examples tools qualification
 mypy
 ```
+
+**Four corrections to the commands, each of which cost time the first time this
+ran.** They are here rather than in a footnote because three of them look like
+findings when they are not:
+
+- **`python -m pytest`, not `pytest`.** `addopts` sets
+  `--import-mode=importlib` and nothing sets `pythonpath`, so bare `pytest`
+  never puts the repository root on `sys.path` and `tests/conftest.py` dies on
+  `import examples`. It exits 4 -- a usage error, collected nothing -- which is
+  easy to read as a catastrophic failure. `python -m pytest` inserts the working
+  directory, which is what `CONTRIBUTING.md`, `README.md` and
+  `.github/workflows/host.yml` all use.
+- **`ruff` and `mypy` are in the `dev` extra**, not `test` or `examples`, so the
+  install line above must ask for it or the last three gates have no binary.
+- **Pin ruff, and scope it.** The repo's version of record is the hash-locked
+  `ruff==0.11.0` in `constraints/locks/build-dev-py310.txt`, which is also what
+  `.pre-commit-config.yaml` pins. An unpinned install resolves 0.16.7, whose
+  formatter disagrees; see the caveat below. CI also scopes both ruff commands
+  to `src tests examples tools qualification` -- **not `.`** -- which excludes
+  `docs/`, where 0.16.7 reformats Python code blocks inside Markdown.
+- **`validate_support_docs.py` belongs in this list.** CI runs it and the
+  original list omitted it. It is also wrapped by
+  `tests/host/test_support_documentation.py`, so `pytest -m host` covers it
+  either way -- but the standalone run names the failing link, and the test only
+  names the test.
 
 The exabox partition survey lists a **`cpu_only`** partition. Try there first: this needs Linux
 and `ttnn`, not silicon, and it should not cost a Galaxy window.
