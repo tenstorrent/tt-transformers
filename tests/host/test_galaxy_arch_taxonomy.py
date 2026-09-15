@@ -16,10 +16,10 @@ import ast
 from pathlib import Path
 
 import pytest
-
-from qualification.tools.audit_test_taxonomy import ROOT, SKU_ARCH, TAXONOMY, configured_markers, marks
 from tests.support import fixture_policy
 from tests.support.marker_policy import selected_topology_marks
+
+from qualification.tools.audit_test_taxonomy import ROOT, SKU_ARCH, TAXONOMY, configured_markers, marks
 
 TESTS = ROOT / "tests"
 
