@@ -156,14 +156,19 @@ def test_geometry_fails_closed_on_unsupported_shapes(overrides, message):
 
 @pytest.mark.host
 @pytest.mark.model
-def test_mesh_validation_requires_wormhole_galaxy():
+def test_mesh_validation_requires_a_galaxy_with_a_topology_descriptor():
     validate_galaxy_mesh("test", _mesh())
     with pytest.raises(ValueError, match=r"logical mesh shape \(8, 4\)"):
         validate_galaxy_mesh("test", _mesh(shape=(4, 8)))
     with pytest.raises(ValueError, match="exactly 32 devices"):
         validate_galaxy_mesh("test", _mesh(devices=31))
-    with pytest.raises(ValueError, match="Wormhole only"):
-        validate_galaxy_mesh("test", _mesh(arch=ttnn.device.Arch.BLACKHOLE))
+
+    # The architecture check is the only one that generalized: it admits an
+    # architecture once someone has written its intra-chip geometry down, so
+    # Blackhole passes here and an architecture with no descriptor does not.
+    validate_galaxy_mesh("test", _mesh(arch=ttnn.device.Arch.BLACKHOLE))
+    with pytest.raises(ValueError, match="has no Galaxy topology"):
+        validate_galaxy_mesh("test", _mesh(arch=ttnn.device.Arch.QUASAR))
 
 
 @pytest.mark.host

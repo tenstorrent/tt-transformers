@@ -177,10 +177,22 @@ def test_descriptor_validates_against_a_live_grid():
 
     with pytest.raises(ValueError, match="expects compute grid"):
         resolve_galaxy_chip_topology(_mesh(grid=(12, 10)))
+
+    # Resolution *adopts* the reported DRAM view count instead of refusing it:
+    # `dram_views` sizes the DRAM-sharded weight configs and is a property of the
+    # chassis, not of the hand-measured core tables that the compute grid gates.
+    # So the descriptor's own `DRAM views` guard cannot fire through the
+    # resolver -- which never disagrees with itself -- and fires where it is
+    # actually load-bearing: a descriptor built without a device, then checked
+    # against one that disagrees.
+    assert resolve_galaxy_chip_topology(_mesh(dram_width=8)).dram_views == 8
     with pytest.raises(ValueError, match="DRAM views"):
-        resolve_galaxy_chip_topology(_mesh(dram_width=8))
+        WORMHOLE_GALAXY_TOPOLOGY.validate_against_device(_mesh(dram_width=8))
+
+    # Blackhole has a descriptor, so it resolves; an architecture without one
+    # still fails closed.
     with pytest.raises(ValueError, match="no Galaxy topology"):
-        resolve_galaxy_chip_topology(_mesh(arch=ttnn.device.Arch.BLACKHOLE))
+        resolve_galaxy_chip_topology(_mesh(arch=ttnn.device.Arch.QUASAR))
 
 
 @pytest.mark.host
@@ -252,13 +264,17 @@ def test_validation_rejects_an_incomplete_prefetch_mapping():
 def test_galaxy_mesh_gate_is_an_allowlist_keyed_on_available_geometry():
     """`validate_galaxy_mesh` admits exactly the architectures with a descriptor."""
 
-    assert supported_galaxy_architectures() == (ttnn.device.Arch.WORMHOLE_B0,)
+    # Both architectures with a descriptor, in registration order. Blackhole
+    # joined when its resolver landed: the allowlist extends by construction,
+    # which is the property this asserts -- not that the list stays at one.
+    assert supported_galaxy_architectures() == (ttnn.device.Arch.WORMHOLE_B0, ttnn.device.Arch.BLACKHOLE)
     recipes.validate_galaxy_mesh("probe", _mesh())
+    recipes.validate_galaxy_mesh("probe", _mesh(arch=ttnn.device.Arch.BLACKHOLE))
 
     with pytest.raises(ValueError, match="has no Galaxy topology"):
-        recipes.validate_galaxy_mesh("probe", _mesh(arch=ttnn.device.Arch.BLACKHOLE))
+        recipes.validate_galaxy_mesh("probe", _mesh(arch=ttnn.device.Arch.QUASAR))
     with pytest.raises(ValueError, match="no Galaxy topology for"):
-        galaxy_chip_topology(ttnn.device.Arch.BLACKHOLE)
+        galaxy_chip_topology(ttnn.device.Arch.QUASAR)
 
     # The mesh shape stays a hard equality: `(8, 4)` is architecture-invariant,
     # so generalizing it would weaken the gate for no gain.
