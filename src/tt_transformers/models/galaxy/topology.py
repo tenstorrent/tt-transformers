@@ -56,8 +56,16 @@ Rect = tuple[int, int, int, int]
 #: .textproto` declares `channels { count: 4 }` and the Blackhole equivalent
 #: declares `channels { count: 2 }`. `tt_ccl.get_num_links` carries the same
 #: budget derived independently from the device name (`("BHGLX", (2, 2))` against
-#: `("TG", (4, 4))`); that the two agree is a real invariant and an unproven one,
-#: checked on hardware rather than here.
+#: `("TG", (4, 4))`); that the two agree is a real invariant, and on Blackhole it
+#: is now a **measured** one: on 2026-09-16 a live BHGLX mesh reported
+#: `get_num_links` of 2 on both cluster axes against this table's 2, and
+#: `ccl_reserved_worker_cores` of 2.
+#:
+#: The chassis has more ethernet channels than that on some edges -- the control
+#: plane warns `4 eth channels, but only 2 routing planes are available` on four
+#: of the 32 devices -- which is consistent with 2 rather than in conflict with
+#: it: the budget counts routing planes. Do not read the spare channels as room
+#: for 4. An over-requested Galaxy `num_links` deadlocks with no traceback.
 #:
 #: Keyed on `arch()` rather than delegating to `get_num_links`, which needs
 #: `get_device_ids()` and a pybind arch probe that the host-mocked meshes every
@@ -166,11 +174,17 @@ class GalaxyChipTopology:
     #: place the semaphores they create at program-compile time -- in main L1
     #: mid-bank, where nothing can be placed across them afterwards.
     #:
-    #: 32 kB was sized against Wormhole's 1 393 472 B L1 bank. Blackhole's bank
-    #: size is **[measure]**, and main L1 shrinks by this much for *every* Galaxy
-    #: op, so it is a field rather than a global. Confirm through
-    #: `device_utils.has_l1_small_region()` rather than assuming the number
-    #: carries.
+    #: 32 kB was sized against Wormhole's 1 393 472 B L1 bank, and main L1
+    #: shrinks by this much for *every* Galaxy op, so it is a field rather than
+    #: a global.
+    #:
+    #: **Measured on a Blackhole Galaxy, 2026-09-16**: the region is present,
+    #: `L1_SMALL` reports exactly 32 768 B per bank, and main L1 reports
+    #: 1 428 608 B -- *larger* than Wormhole's bank, so the carve-out costs
+    #: marginally less here than where the number was tuned. 32 kB carries; no
+    #: per-architecture value is needed. Re-confirm through
+    #: `device_utils.has_l1_small_region()` on a new chassis rather than
+    #: assuming this reading does.
     #:
     #: Deliberately a literal rather than an import of
     #: `device_utils.GALAXY_L1_SMALL_SIZE`: that module pulls in `lazy_weight`,
@@ -628,6 +642,15 @@ _RESOLVERS = {
 #: The Blackhole chassis shape the reference port measured, and the one this port
 #: expects to deploy on. The others resolve too; this is the default when no
 #: device is at hand.
+#:
+#: **Confirmed on silicon, 2026-09-16**: `bh-glx-120-c02u02` reports
+#: `compute_with_storage_grid_size()` of 12 x 10 and `dram_grid_size().x` of 8,
+#: so this chassis *is* the one the reference characterized -- which is why the
+#: other reference-sourced numbers in this file keep their weight instead of
+#: becoming suspect. Grid *uniformity across the 32 devices* remains unchecked:
+#: `MeshDevice` exposes no `get_devices()` on ttnn 0.77.0, so per-device
+#: geometry is unreadable rather than merely unmeasured, and the descriptor
+#: still resolves one grid for the whole mesh.
 BLACKHOLE_GALAXY_COMPUTE_GRID = (12, 10)
 BLACKHOLE_GALAXY_DRAM_VIEWS = 8
 
