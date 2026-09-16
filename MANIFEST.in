@@ -1,6 +1,8 @@
 include CHANGELOG.md
+include CODE_OF_CONDUCT.md
 include CONTRIBUTING.md
 include LICENSE
+include LICENSE_understanding.txt
 include .pre-commit-config.yaml
 include NOTICE
 include README.md
