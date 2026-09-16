@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright 2026 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
-"""TTTv2 rotary setup for the canonical Wormhole Galaxy (8, 4) mesh."""
+"""TTTv2 rotary setup for the canonical Galaxy (8, 4) mesh."""
 
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 import ttnn
 
 from tt_transformers.device_ownership import compatibility_default_device
+from tt_transformers.modules.galaxy_mesh import GALAXY_MESH_SHAPE, require_galaxy_mesh
 from tt_transformers.modules.lazy_weight import LazyWeight, resolve_lazy_weight
 from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.tensor_utils import TILE_SIZE, get_rot_transformation_mat, parse_shard_dims_from_mesh_mapper_config
@@ -16,7 +17,9 @@ from tt_transformers.tensor_utils import TILE_SIZE, get_rot_transformation_mat, 
 if TYPE_CHECKING:
     import torch
 
-_GALAXY_MESH_SHAPE = (8, 4)
+#: Retained as a name because the arithmetic below uses it; the shape itself is
+#: identical on both Galaxy architectures.
+_GALAXY_MESH_SHAPE = GALAXY_MESH_SHAPE
 
 
 @dataclass(frozen=True)
@@ -276,7 +279,7 @@ def _resolve_rope2d_config(config: RotarySetup2DConfig) -> RotarySetup2DConfig:
     for name, weight in (("cos", config.cos_matrix), ("sin", config.sin_matrix)):
         if weight.device is not None and weight.device is not mesh_device:
             raise ValueError(f"RotarySetup2D {name} table belongs to a different mesh")
-    _validate_galaxy_mesh(mesh_device)
+    require_galaxy_mesh("RotarySetup2D", mesh_device)
 
     cos_shape = tuple(config.cos_matrix.source.shape)
     sin_shape = tuple(config.sin_matrix.source.shape)
@@ -428,12 +431,3 @@ def _reshape_decode_embedding(tensor: ttnn.Tensor, rows: int) -> ttnn.Tensor:
         ttnn.Shape((rows, 1, tensor.shape[-1])),
         ttnn.Shape((rows, TILE_SIZE, tensor.shape[-1])),
     )
-
-
-def _validate_galaxy_mesh(mesh_device) -> None:
-    if tuple(mesh_device.shape) != _GALAXY_MESH_SHAPE:
-        raise ValueError(f"RotarySetup2D requires logical mesh shape (8, 4), got {tuple(mesh_device.shape)}")
-    if mesh_device.get_num_devices() != 32:
-        raise ValueError("RotarySetup2D requires exactly 32 devices")
-    if mesh_device.arch() != ttnn.device.Arch.WORMHOLE_B0:
-        raise ValueError("RotarySetup2D supports Wormhole only")

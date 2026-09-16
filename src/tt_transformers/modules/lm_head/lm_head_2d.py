@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright 2026 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
-"""TTTv2 LM head for the canonical Wormhole Galaxy (8, 4) mesh."""
+"""TTTv2 LM head for the canonical Galaxy (8, 4) mesh."""
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
@@ -10,11 +10,14 @@ import torch
 import ttnn
 
 from tt_transformers.device_ownership import compatibility_default_device
+from tt_transformers.modules.galaxy_mesh import GALAXY_MESH_SHAPE, require_galaxy_mesh
 from tt_transformers.modules.lazy_weight import LazyWeight, resolve_lazy_weight
 from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.tensor_utils import TILE_SIZE
 
-_GALAXY_MESH_SHAPE = (8, 4)
+#: Retained as a name because the arithmetic below uses it; the shape itself is
+#: identical on both Galaxy architectures.
+_GALAXY_MESH_SHAPE = GALAXY_MESH_SHAPE
 Collective = Callable[[ttnn.Tensor], ttnn.Tensor]
 
 
@@ -265,7 +268,7 @@ def _resolve_lm_head2d_config(config: LMHead2DConfig) -> LMHead2DConfig:
     for index, weight in enumerate(all_weights):
         if weight.device is not None and weight.device is not mesh_device:
             raise ValueError(f"LMHead2D weight {index} belongs to a different mesh")
-    _validate_galaxy_mesh(mesh_device)
+    require_galaxy_mesh("LMHead2D", mesh_device)
     _validate_collective("decode", config.decode_collective, mesh_device)
     _validate_collective("prefill", prefill_collective, mesh_device)
 
@@ -517,12 +520,3 @@ def _validate_input_shape(shape, config: LMHead2DConfig, mode: str) -> None:
         )
     if mode == "decode" and shape[-2] != config.max_batch_size:
         raise ValueError(f"LMHead2D decode input requires physical batch {config.max_batch_size}, got {shape[-2]}")
-
-
-def _validate_galaxy_mesh(mesh_device) -> None:
-    if tuple(mesh_device.shape) != _GALAXY_MESH_SHAPE:
-        raise ValueError(f"LMHead2D requires logical mesh shape (8, 4), got {tuple(mesh_device.shape)}")
-    if mesh_device.get_num_devices() != 32:
-        raise ValueError("LMHead2D requires exactly 32 devices")
-    if mesh_device.arch() != ttnn.device.Arch.WORMHOLE_B0:
-        raise ValueError("LMHead2D supports Wormhole only")

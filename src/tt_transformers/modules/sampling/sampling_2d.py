@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Sampling for the canonical Wormhole Galaxy ``(8, 4)`` mesh.
+"""Sampling for the canonical Galaxy ``(8, 4)`` mesh.
 
 The vocabulary is sharded over mesh rows and user slots are sharded over mesh
 columns. Sampling controls are invocation data: the config owns only the
@@ -20,11 +20,14 @@ import torch
 import ttnn
 
 from tt_transformers.device_ownership import compatibility_default_device
+from tt_transformers.modules.galaxy_mesh import (
+    GALAXY_MESH_SHAPE,
+    is_galaxy_architecture_name,
+    require_galaxy_mesh,
+)
 from tt_transformers.modules.lazy_buffer import LazyBuffer, resolve_lazy_buffer
 from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.sampling.vocab_padding import build_invalid_vocab_mask
-
-GALAXY_MESH_SHAPE = (8, 4)
 
 
 @dataclass(frozen=True)
@@ -651,12 +654,7 @@ def _resolve_sampling2d_config(config: Sampling2DConfig) -> Sampling2DConfig:
     )
     if mesh_device is None:
         raise ValueError("Sampling2D mesh_device must be provided")
-    if tuple(mesh_device.shape) != GALAXY_MESH_SHAPE:
-        raise ValueError(f"Sampling2D requires mesh shape {GALAXY_MESH_SHAPE}, got {tuple(mesh_device.shape)}")
-    if mesh_device.get_num_devices() != 32:
-        raise ValueError(f"Sampling2D requires 32 devices, got {mesh_device.get_num_devices()}")
-    if mesh_device.arch() != ttnn.device.Arch.WORMHOLE_B0:
-        raise ValueError("Sampling2D supports Wormhole only")
+    require_galaxy_mesh("Sampling2D", mesh_device)
 
     padded_vocab_size = config.padded_vocab_size or config.vocab_size
     vocab_shards = config.cluster_shape[config.sampling_all_gather_axis]
@@ -801,9 +799,8 @@ def _resolve_sampling2d_config(config: Sampling2DConfig) -> Sampling2DConfig:
 def _validate_static_config(config: Sampling2DConfig) -> None:
     if tuple(config.cluster_shape) != GALAXY_MESH_SHAPE:
         raise ValueError(f"Sampling2D supports only cluster_shape {GALAXY_MESH_SHAPE}")
-    architecture = str(config.architecture).lower()
-    if "wormhole" not in architecture and "wormhole_b0" not in architecture:
-        raise ValueError(f"Sampling2D supports only Wormhole, got {config.architecture}")
+    if not is_galaxy_architecture_name(config.architecture):
+        raise ValueError(f"Sampling2D supports only Galaxy architectures, got {config.architecture}")
     if config.sampling_all_gather_axis != 0 or config.user_shard_axis != 1:
         raise ValueError("Sampling2D requires vocabulary axis 0 and user axis 1")
     if config.vocab_size <= 0:

@@ -24,10 +24,13 @@ import ttnn
 
 from tt_transformers.device_ownership import compatibility_default_device
 from tt_transformers.device_utils import has_l1_small_region
+from tt_transformers.modules.galaxy_mesh import GALAXY_MESH_SHAPE, require_galaxy_mesh
 from tt_transformers.modules.lazy_weight import LazyWeight, release_device_weights, resolve_lazy_weight
 from tt_transformers.modules.lightweightmodule import LightweightModule
 
-WH_GALAXY_MESH_SHAPE = (8, 4)
+#: Retained as a name because the arithmetic below uses it; the shape itself is
+#: identical on both Galaxy architectures.
+WH_GALAXY_MESH_SHAPE = GALAXY_MESH_SHAPE
 PrefillProgramConfigFactory = Callable[[int], Any]
 
 # =============================================================================
@@ -886,20 +889,7 @@ def _resolve_mlp2d_config(config: MLP2DConfig) -> MLP2DConfig:
     if config.mesh_device is None:
         to_set["mesh_device"] = mesh_device
 
-    # Raised, not asserted. `python -O` strips `assert`, and these three are the
-    # only thing standing between a wrong mesh and a module that silently places
-    # tensors on cores the partition does not own -- a class of failure that
-    # hangs the host with no traceback rather than reporting anything. A gate
-    # that can be compiled away is not fail-closed.
-    if mesh_device is None:
-        raise TypeError("MLP2D requires a mesh_device; none was configured and no default is available")
-    cluster_shape = tuple(mesh_device.shape)
-    if cluster_shape != WH_GALAXY_MESH_SHAPE:
-        raise ValueError(f"MLP2D requires WH Galaxy mesh {WH_GALAXY_MESH_SHAPE}, got {cluster_shape}")
-    if mesh_device.get_num_devices() != 32:
-        raise ValueError(f"MLP2D requires exactly 32 devices, got {mesh_device.get_num_devices()}")
-    if mesh_device.arch() != ttnn.device.Arch.WORMHOLE_B0:
-        raise ValueError(f"MLP2D requires Wormhole, got {mesh_device.arch()}")
+    cluster_shape = require_galaxy_mesh("MLP2D", mesh_device)
 
     assert dim % cluster_shape[1] == 0, f"dim={dim} must be divisible by Galaxy columns={cluster_shape[1]}"
     assert hidden_dim % cluster_shape[0] == 0, (

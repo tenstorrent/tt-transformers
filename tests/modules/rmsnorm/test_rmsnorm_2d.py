@@ -92,12 +92,12 @@ def test_resolves_representative_norm_geometries(dim):
 @pytest.mark.parametrize(
     "shape,devices,arch,error",
     [
-        ((4, 8), 32, ttnn.device.Arch.WORMHOLE_B0, "WH Galaxy mesh"),
+        ((4, 8), 32, ttnn.device.Arch.WORMHOLE_B0, "Galaxy mesh"),
         ((8, 4), 31, ttnn.device.Arch.WORMHOLE_B0, "exactly 32 devices"),
-        ((8, 4), 32, ttnn.device.Arch.BLACKHOLE, "requires Wormhole"),
+        ((8, 4), 32, ttnn.device.Arch.QUASAR, "Galaxy architecture"),
     ],
 )
-def test_resolution_fails_closed_on_non_wh_galaxy(shape, devices, arch, error, expect_error):
+def test_resolution_fails_closed_outside_a_galaxy_mesh(shape, devices, arch, error, expect_error):
     """The mesh gate must survive `python -O`, which strips every `assert`.
 
     `ValueError` rather than `AssertionError` is the whole point: an `assert`
@@ -571,3 +571,24 @@ def test_head_local_compute_grid_must_be_a_one_wide_rectangle():
     ragged = ttnn.CoreRangeSet({ttnn.CoreRange(ttnn.CoreCoord(1, 0), ttnn.CoreCoord(1, 2))})
     with pytest.raises(ValueError, match="do not divide"):  # allow-pytest.raises: module-level helper, no fixture
         rmsnorm_2d._head_local_compute_memory_config(tensor, ragged)
+
+
+@pytest.mark.host
+def test_resolution_now_accepts_a_blackhole_galaxy_mesh():
+    """The mesh gate admits Blackhole; it no longer names an architecture.
+
+    This row used to assert `requires Wormhole`. Blackhole Galaxy is a 32-device
+    `(8, 4)` mesh like Wormhole, so a gate that rejects it by name rejects a mesh
+    it can describe. What the gate checks now is that the mesh is a Galaxy mesh
+    of an architecture the modules accept; whether that architecture has a
+    *qualified intra-chip geometry* is a stronger question, and it belongs to
+    `recipes.validate_galaxy_mesh`, which the model layer runs.
+
+    Accepting the mesh is not a claim that the resolved config is correct on
+    Blackhole. It is not: the memory configs, dtypes and program configs below
+    are still the Wormhole recipe.
+    """
+
+    mesh = _mesh((8, 4), devices=32, arch=ttnn.device.Arch.BLACKHOLE)
+    resolved = _resolve_2d_config(RMSNorm2DConfig(weight=_weight(8192, mesh), mesh_device=mesh, tt_ccl=_ccl(mesh)))
+    assert resolved.is_resolved()

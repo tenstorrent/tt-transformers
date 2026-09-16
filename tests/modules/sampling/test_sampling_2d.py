@@ -68,7 +68,7 @@ def test_qwen_padded_vocab_is_tile_aligned_per_vocab_shard():
     ("field", "value", "message"),
     [
         ("cluster_shape", (4, 8), "cluster_shape"),
-        ("architecture", "blackhole", "Wormhole"),
+        ("architecture", "quasar", "Galaxy architectures"),
         ("max_batch_size", 16, "physical batch 32"),
         ("sampling_all_gather_axis", 1, "vocabulary axis 0"),
     ],
@@ -88,10 +88,10 @@ def test_config_rejects_wrong_device_count(expect_error):
 
 
 @pytest.mark.host
-def test_config_rejects_non_wormhole_mesh(expect_error):
+def test_config_rejects_a_non_galaxy_architecture(expect_error):
     mesh = _galaxy_mesh()
-    mesh.arch.return_value = ttnn.device.Arch.BLACKHOLE
-    with expect_error(ValueError, "Wormhole"):
+    mesh.arch.return_value = ttnn.device.Arch.QUASAR
+    with expect_error(ValueError, "Galaxy architecture"):
         _resolve_sampling2d_config(_config(vocab_size=256, mesh_device=mesh))
 
 
@@ -525,3 +525,29 @@ def test_sharded_users_remain_the_default_placement_exactly():
     assert config.local_indices.mesh_mapper.dims == (None, 2)
     assert config.top_k_buffer.mesh_mapper.dims == (None, 0)
     assert config.user_ids.source.tolist() == list(range(8))
+
+
+@pytest.mark.host
+def test_config_now_accepts_a_blackhole_galaxy_mesh():
+    """The mesh gate admits Blackhole; it no longer names an architecture.
+
+    Accepting the mesh is not a claim that the resolved config is correct on
+    Blackhole. It is not: the memory configs, dtypes and program configs are
+    still the Wormhole recipe. What the gate asks now is whether this is a
+    Galaxy mesh of an architecture the modules run on; whether that
+    architecture has a *qualified intra-chip geometry* is the stronger
+    question, and it belongs to `recipes.validate_galaxy_mesh`.
+    """
+
+    mesh = _galaxy_mesh()
+    mesh.arch.return_value = ttnn.device.Arch.BLACKHOLE
+    config = _resolve_sampling2d_config(
+        _config(
+            vocab_size=128256,
+            padded_vocab_size=128256,
+            mesh_device=mesh,
+            architecture=ttnn.device.Arch.BLACKHOLE,
+        )
+    )
+
+    assert config.is_resolved()

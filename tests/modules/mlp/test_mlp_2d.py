@@ -122,12 +122,12 @@ def test_resolves_representative_model_geometry(dim, hidden_dim):
 @pytest.mark.parametrize(
     "shape,devices,arch,error",
     [
-        ((4, 8), 32, ttnn.device.Arch.WORMHOLE_B0, "WH Galaxy mesh"),
+        ((4, 8), 32, ttnn.device.Arch.WORMHOLE_B0, "Galaxy mesh"),
         ((8, 4), 8, ttnn.device.Arch.WORMHOLE_B0, "exactly 32 devices"),
-        ((8, 4), 32, ttnn.device.Arch.BLACKHOLE, "requires Wormhole"),
+        ((8, 4), 32, ttnn.device.Arch.QUASAR, "Galaxy architecture"),
     ],
 )
-def test_resolution_fails_closed_on_non_wh_galaxy(shape, devices, arch, error):
+def test_resolution_fails_closed_outside_a_galaxy_mesh(shape, devices, arch, error):
     """The mesh gate must survive `python -O`, which strips every `assert`.
 
     `ValueError` rather than `AssertionError` is the whole point: an `assert`
@@ -842,3 +842,17 @@ def test_ttnn_linear_2d_mesh_topology_bug(ttnn_linear_2d_mesh_has_topology_bug: 
 
 
 # [INFO] currently tt_transformers is not testing 2D mesh MLP in CI -- existing TG tests are DP only that runs 1D MLPs in parallel
+
+
+@pytest.mark.host
+def test_resolution_now_accepts_a_blackhole_galaxy_mesh():
+    """The mesh gate admits Blackhole; it no longer names an architecture.
+
+    See the RMSNorm2D twin of this test. Accepting the mesh is not a claim that
+    the resolved config is correct on Blackhole -- the memory configs, dtypes and
+    program configs are still the Wormhole recipe.
+    """
+
+    mesh = _mesh((8, 4), devices=32, arch=ttnn.device.Arch.BLACKHOLE)
+    resolved = _resolve_mlp2d_config(_config(mesh_device=mesh))
+    assert resolved.is_resolved()

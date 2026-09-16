@@ -108,9 +108,9 @@ def test_lm_head_2d_config_is_immutable():
 @pytest.mark.parametrize(
     "shape,devices,arch,error",
     [
-        ((4, 8), 32, ttnn.device.Arch.WORMHOLE_B0, r"shape \(8, 4\)"),
+        ((4, 8), 32, ttnn.device.Arch.WORMHOLE_B0, r"Galaxy mesh \(8, 4\)"),
         ((8, 4), 16, ttnn.device.Arch.WORMHOLE_B0, "exactly 32"),
-        ((8, 4), 32, ttnn.device.Arch.BLACKHOLE, "Wormhole only"),
+        ((8, 4), 32, ttnn.device.Arch.QUASAR, "Galaxy architecture"),
     ],
 )
 def test_lm_head_2d_fails_closed_on_platform(shape, devices, arch, error):
@@ -369,3 +369,22 @@ def test_lm_head_2d_release_deduplicates_shared_values_across_distinct_lazy_weig
     assert deallocated == [shared_value, mask_value]
     assert module.config.output_weights[0]._value is None
     assert module.config.prefill_output_weights[0]._value is None
+
+
+@pytest.mark.host
+def test_lm_head_2d_now_accepts_a_blackhole_galaxy_mesh():
+    """The mesh gate admits Blackhole; it no longer names an architecture.
+
+    Accepting the mesh is not a claim that the resolved config is correct on
+    Blackhole. It is not: the memory configs, dtypes and program configs are
+    still the Wormhole recipe. What the gate asks now is whether this is a
+    Galaxy mesh of an architecture the modules run on; whether that
+    architecture has a *qualified intra-chip geometry* is the stronger
+    question, and it belongs to `recipes.validate_galaxy_mesh`.
+    """
+
+    mesh = _galaxy(arch=ttnn.device.Arch.BLACKHOLE)
+    weight = LazyWeight(source=_ShapeOnly(8192, 128256), device=mesh, dtype=ttnn.bfloat8_b)
+    module = LMHead2D([weight], 128256, _Collective(mesh))
+
+    assert module.config.is_resolved()

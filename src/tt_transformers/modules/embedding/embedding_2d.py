@@ -1,17 +1,20 @@
 # SPDX-FileCopyrightText: Copyright 2026 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
-"""TTTv2 embedding for the canonical Wormhole Galaxy (8, 4) mesh."""
+"""TTTv2 embedding for the canonical Galaxy (8, 4) mesh."""
 
 from dataclasses import dataclass, replace
 
 import ttnn
 
 from tt_transformers.device_ownership import compatibility_default_device
+from tt_transformers.modules.galaxy_mesh import GALAXY_MESH_SHAPE, require_galaxy_mesh
 from tt_transformers.modules.lazy_weight import LazyWeight, resolve_lazy_weight
 from tt_transformers.modules.lightweightmodule import LightweightModule
 
-_GALAXY_MESH_SHAPE = (8, 4)
+#: Retained as a name because the arithmetic below uses it; the shape itself is
+#: identical on both Galaxy architectures.
+_GALAXY_MESH_SHAPE = GALAXY_MESH_SHAPE
 
 
 @dataclass(frozen=True)
@@ -108,7 +111,7 @@ class Embedding2D(LightweightModule):
 
 def _resolve_embedding2d_config(config: Embedding2DConfig) -> Embedding2DConfig:
     mesh_device = _derive_mesh_device("Embedding2D", config.mesh_device, (config.weights,))
-    _validate_galaxy_mesh("Embedding2D", mesh_device)
+    require_galaxy_mesh("Embedding2D", mesh_device)
 
     shape = tuple(config.weights.source.shape)
     if len(shape) != 2:
@@ -191,13 +194,3 @@ def _derive_mesh_device(name: str, configured, weights: tuple[LazyWeight, ...]):
         if weight.device is not None and weight.device is not mesh_device:
             raise ValueError(f"{name} weight {index} belongs to a different mesh")
     return mesh_device
-
-
-def _validate_galaxy_mesh(name: str, mesh_device) -> None:
-    shape = tuple(mesh_device.shape)
-    if shape != _GALAXY_MESH_SHAPE:
-        raise ValueError(f"{name} requires logical mesh shape (8, 4), got {shape}")
-    if mesh_device.get_num_devices() != 32:
-        raise ValueError(f"{name} requires exactly 32 devices")
-    if mesh_device.arch() != ttnn.device.Arch.WORMHOLE_B0:
-        raise ValueError(f"{name} supports Wormhole only")

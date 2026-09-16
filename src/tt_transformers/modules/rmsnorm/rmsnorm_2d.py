@@ -23,6 +23,7 @@ from typing import Any
 import ttnn
 
 from tt_transformers.device_ownership import compatibility_default_device
+from tt_transformers.modules.galaxy_mesh import GALAXY_MESH_SHAPE, require_galaxy_mesh
 from tt_transformers.modules.lazy_weight import LazyWeight, release_device_weights, resolve_lazy_weight
 from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.tensor_utils import TILE_SIZE
@@ -32,7 +33,9 @@ from tt_transformers.tensor_utils import TILE_SIZE
 # =============================================================================
 
 SHARD_HEIGHT = TILE_SIZE
-WH_GALAXY_MESH_SHAPE = (8, 4)
+#: Retained as a name for existing references; the shape itself is identical on
+#: both Galaxy architectures.
+WH_GALAXY_MESH_SHAPE = GALAXY_MESH_SHAPE
 
 
 class RMSNorm2DResidualPolicy(Enum):
@@ -560,8 +563,7 @@ def _resolve_2d_config(config: RMSNorm2DConfig) -> RMSNorm2DConfig:
     if config.mesh_device is None:
         to_set["mesh_device"] = mesh_device
 
-    if mesh_device is None:
-        raise TypeError("RMSNorm2D requires a mesh_device; none was configured and no default is available")
+    require_galaxy_mesh("RMSNorm2D", mesh_device)
 
     # Derive cluster_shape from mesh_device if not provided
     cluster_shape = config.cluster_shape
@@ -575,15 +577,11 @@ def _resolve_2d_config(config: RMSNorm2DConfig) -> RMSNorm2DConfig:
     # hangs the host with no traceback rather than reporting anything. A gate
     # that can be compiled away is not fail-closed.
     if tuple(cluster_shape) != WH_GALAXY_MESH_SHAPE:
-        raise ValueError(f"RMSNorm2D requires WH Galaxy mesh {WH_GALAXY_MESH_SHAPE}, got {tuple(cluster_shape)}")
+        raise ValueError(f"RMSNorm2D requires Galaxy mesh {WH_GALAXY_MESH_SHAPE}, got {tuple(cluster_shape)}")
     if tuple(mesh_device.shape) != tuple(cluster_shape):
         raise ValueError(
             f"RMSNorm2D cluster_shape {tuple(cluster_shape)} must match the configured mesh {tuple(mesh_device.shape)}"
         )
-    if mesh_device.get_num_devices() != 32:
-        raise ValueError(f"RMSNorm2D requires exactly 32 devices, got {mesh_device.get_num_devices()}")
-    if mesh_device.arch() != ttnn.device.Arch.WORMHOLE_B0:
-        raise ValueError(f"RMSNorm2D requires Wormhole, got {mesh_device.arch()}")
 
     num_rows, num_cols = cluster_shape
     if geometry is RMSNorm2DGeometry.DISTRIBUTED:

@@ -102,9 +102,9 @@ def test_rope_2d_config_is_immutable():
 @pytest.mark.parametrize(
     "shape,devices,arch,error",
     [
-        ((4, 8), 32, ttnn.device.Arch.WORMHOLE_B0, r"shape \(8, 4\)"),
+        ((4, 8), 32, ttnn.device.Arch.WORMHOLE_B0, r"Galaxy mesh \(8, 4\)"),
         ((8, 4), 16, ttnn.device.Arch.WORMHOLE_B0, "exactly 32"),
-        ((8, 4), 32, ttnn.device.Arch.BLACKHOLE, "Wormhole only"),
+        ((8, 4), 32, ttnn.device.Arch.QUASAR, "Galaxy architecture"),
     ],
 )
 def test_rope_2d_fails_closed_on_platform(shape, devices, arch, error):
@@ -264,3 +264,32 @@ def test_rope_2d_prefill_table_copy_is_tilized_and_decode_table_is_not(monkeypat
     # cos, sin, decode transform, prefill transform, and the two prefill copies.
     assert requested.count(ttnn.TILE_LAYOUT) >= 2
     assert rope_2d._materialize_table_copy.__doc__ is not None
+
+
+@pytest.mark.host
+def test_rope_2d_now_accepts_a_blackhole_galaxy_mesh():
+    """The mesh gate admits Blackhole; it no longer names an architecture.
+
+    Accepting the mesh is not a claim that the resolved config is correct on
+    Blackhole. It is not: the memory configs, dtypes and program configs are
+    still the Wormhole recipe. What the gate asks now is whether this is a
+    Galaxy mesh of an architecture the modules run on; whether that
+    architecture has a *qualified intra-chip geometry* is the stronger
+    question, and it belongs to `recipes.validate_galaxy_mesh`.
+    """
+
+    mesh = _galaxy(arch=ttnn.device.Arch.BLACKHOLE)
+    cos = LazyWeight(source=_ShapeOnly(1, 1, 16384, 128), device=mesh)
+    sin = LazyWeight(source=_ShapeOnly(1, 1, 16384, 128), device=mesh)
+    module = RotarySetup2D.from_config(
+        RotarySetup2DConfig(
+            cos,
+            sin,
+            max_batch_size=32,
+            rope_theta=500000.0,
+            core_grid=_grid_resources()[0],
+            batch_grid=_grid_resources()[1],
+        )
+    )
+
+    assert module.config.is_resolved()
