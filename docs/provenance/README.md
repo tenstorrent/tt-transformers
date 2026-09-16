@@ -8,6 +8,10 @@ destination, or identifies migration-only context archived with the audit tag.
 MoE is the only implementation subsystem excluded from that initial extraction;
 the Galaxy port below adds two further exclusion categories of its own.
 
+`issue_migration.md` records the recreation of the `tt_transformer v2.1.0`
+milestone and its open issues from `tt-metal`, and the back-pointer work still
+outstanding on the `tt-metal` originals.
+
 Detailed migration work logs, generated analyses, and intermediate evidence
 are intentionally not part of the active repository. The pre-cleanup audit
 tree is preserved by Git tag `tttv2-migration-audit-54648bc`.
