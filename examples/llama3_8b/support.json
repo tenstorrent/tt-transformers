@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "model": {
+    "package": "llama3_8b",
+    "hf_id": "meta-llama/Llama-3.1-8B-Instruct",
+    "hf_revision": "0e9e39f249a16976918f6564b8830bc894c89659"
+  },
+  "status": "experimental",
+  "software": {
+    "tt_transformers": "2.0.0.dev0",
+    "ttnn": "0.77.0",
+    "python": [
+      "3.10",
+      "3.12"
+    ],
+    "torch": "2.11.0",
+    "transformers": "5.12.1"
+  },
+  "hardware": [
+    {
+      "architecture": "wormhole",
+      "sku": "N150",
+      "mesh": "1x1",
+      "tp": 1,
+      "dp": 1
+    },
+    {
+      "architecture": "wormhole",
+      "sku": "N300",
+      "mesh": "1x2",
+      "tp": 2,
+      "dp": 1
+    },
+    {
+      "architecture": "wormhole",
+      "sku": "N300",
+      "mesh": "1x2",
+      "tp": 1,
+      "dp": 2
+    },
+    {
+      "architecture": "wormhole",
+      "sku": "T3K",
+      "mesh": "1x8",
+      "tp": 8,
+      "dp": 1
+    },
+    {
+      "architecture": "wormhole",
+      "sku": "T3K",
+      "mesh": "1x8",
+      "tp": 4,
+      "dp": 2
+    },
+    {
+      "architecture": "wormhole",
+      "sku": "T3K",
+      "mesh": "1x8",
+      "tp": 2,
+      "dp": 4
+    },
+    {
+      "architecture": "wormhole",
+      "sku": "T3K",
+      "mesh": "1x8",
+      "tp": 1,
+      "dp": 8
+    },
+    {
+      "architecture": "blackhole",
+      "sku": "P150",
+      "mesh": "1x1",
+      "tp": 1,
+      "dp": 1
+    },
+    {
+      "architecture": "blackhole",
+      "sku": "P150_X4",
+      "mesh": "1x4",
+      "tp": 4,
+      "dp": 1
+    },
+    {
+      "architecture": "blackhole",
+      "sku": "P150_X4",
+      "mesh": "1x4",
+      "tp": 1,
+      "dp": 4
+    },
+    {
+      "architecture": "blackhole",
+      "sku": "physical_P300",
+      "mesh": "1x2",
+      "tp": 1,
+      "dp": 2
+    }
+  ],
+  "assets": {
+    "reference_root": "tests/assets/reference_outputs/llama3_8b",
+    "hf_assets_external": true,
+    "offline_environment": [
+      "HF_HOME",
+      "HF_HUB_OFFLINE=1",
+      "TRANSFORMERS_OFFLINE=1"
+    ],
+    "tt_cache_writable": true,
+    "remote_code_default": false,
+    "cwd_relative_cache_default": false,
+    "cache_resolver": "tt_transformers.cache_environment.resolve_model_cache_path",
+    "tt_cache_path_semantics": "append topology exactly once"
+  },
+  "known_gaps": [
+    "Current regression evidence does not qualify the complete declared model contract",
+    "TTTv1 DRAM prefetcher",
+    "P100 and 128K P300 acceptance",
+    "development two-P150 stand-in as real-P300 evidence",
+    "any geometry not declared in support.json"
+  ],
+  "validation": {
+    "date": null,
+    "git_sha": null,
+    "evidence": []
+  },
+  "limits": {
+    "source_proven": [
+      "Benchmark cases cover active batch 1 or 32",
+      "standard/CI budgets are 1024/2048; the DP4 case reaches 4096",
+      "Blackhole contract buckets are 1024, with P150x4 DP4 at 4096",
+      "device sampling keeps Blackhole prefill sequential unless the controlled invariance experiment proves otherwise"
+    ]
+  },
+  "features": {
+    "device_sampling": "Host and on-device top-k paths exist; seeded device-sampling cross-cardinality diagnostics are retained.",
+    "trace": "case_and_topology_specific"
+  }
+}

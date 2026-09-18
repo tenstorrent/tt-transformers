@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "model": {
+    "package": "llama32_1b",
+    "hf_id": "meta-llama/Llama-3.2-1B-Instruct",
+    "hf_revision": "9213176726f574b556790deb65791e0c5aa438b6"
+  },
+  "status": "experimental",
+  "software": {
+    "tt_transformers": "2.0.0.dev0",
+    "ttnn": "0.77.0",
+    "python": [
+      "3.10",
+      "3.12"
+    ],
+    "torch": "2.11.0",
+    "transformers": "5.12.1"
+  },
+  "hardware": [
+    {
+      "architecture": "wormhole",
+      "sku": "N150",
+      "mesh": "1x1",
+      "tp": 1,
+      "dp": 1
+    },
+    {
+      "architecture": "wormhole",
+      "sku": "N300",
+      "mesh": "1x2",
+      "tp": 2,
+      "dp": 1
+    },
+    {
+      "architecture": "wormhole",
+      "sku": "N300",
+      "mesh": "1x2",
+      "tp": 1,
+      "dp": 2
+    },
+    {
+      "architecture": "wormhole",
+      "sku": "T3K",
+      "mesh": "1x8",
+      "tp": 8,
+      "dp": 1
+    },
+    {
+      "architecture": "wormhole",
+      "sku": "T3K",
+      "mesh": "1x8",
+      "tp": 2,
+      "dp": 4
+    },
+    {
+      "architecture": "wormhole",
+      "sku": "T3K",
+      "mesh": "1x8",
+      "tp": 1,
+      "dp": 8
+    }
+  ],
+  "assets": {
+    "reference_root": "tests/assets/reference_outputs/llama32_1b",
+    "hf_assets_external": true,
+    "offline_environment": [
+      "HF_HOME",
+      "HF_HUB_OFFLINE=1",
+      "TRANSFORMERS_OFFLINE=1"
+    ],
+    "tt_cache_writable": true,
+    "remote_code_default": false,
+    "cwd_relative_cache_default": false,
+    "cache_resolver": "tt_transformers.cache_environment.resolve_model_cache_path",
+    "tt_cache_path_semantics": "append topology exactly once"
+  },
+  "known_gaps": [
+    "Current regression evidence does not qualify the complete declared model contract",
+    "TP4 lanes",
+    "N150 batch-32-ci sequence 2048",
+    "any geometry not declared in support.json"
+  ],
+  "validation": {
+    "date": null,
+    "git_sha": null,
+    "evidence": []
+  },
+  "limits": {
+    "source_proven": [
+      "Benchmark cases cover active batch 1 or 32",
+      "standard/CI sequence budgets are 1024/2048; DP smokes reach 4096",
+      "TP1, TP2, and TP8 model paths are declared; TP4 DP lanes are deliberately rejected",
+      "N150 batch-32-ci at sequence 2048 is not enabled",
+      "traced prefill is Q128 on N150 and Q128/Q1024 on N300/T3K"
+    ]
+  },
+  "features": {
+    "device_sampling": "Host and on-device paths exist; the benchmark default is host sampling.",
+    "trace": "case_and_topology_specific"
+  }
+}

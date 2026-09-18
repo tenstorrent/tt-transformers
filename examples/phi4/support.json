@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "model": {
+    "package": "phi4",
+    "hf_id": "microsoft/phi-4",
+    "hf_revision": "187ef0342fff0eb3333be9f00389385e95ef0b61"
+  },
+  "status": "experimental",
+  "software": {
+    "tt_transformers": "2.0.0.dev0",
+    "ttnn": "0.77.0",
+    "python": [
+      "3.10",
+      "3.12"
+    ],
+    "torch": "2.11.0",
+    "transformers": "5.12.1"
+  },
+  "hardware": [
+    {
+      "architecture": "wormhole",
+      "sku": "N300",
+      "mesh": "1x2",
+      "tp": 2,
+      "dp": 1
+    },
+    {
+      "architecture": "wormhole",
+      "sku": "T3K",
+      "mesh": "1x8",
+      "tp": 2,
+      "dp": 4
+    }
+  ],
+  "assets": {
+    "reference_root": "tests/assets/reference_outputs/phi4",
+    "hf_assets_external": true,
+    "offline_environment": [
+      "HF_HOME",
+      "HF_HUB_OFFLINE=1",
+      "TRANSFORMERS_OFFLINE=1"
+    ],
+    "tt_cache_writable": true,
+    "remote_code_default": false,
+    "cwd_relative_cache_default": false,
+    "cache_resolver": "tt_transformers.cache_environment.resolve_model_cache_path",
+    "tt_cache_path_semantics": "append topology exactly once"
+  },
+  "known_gaps": [
+    "Current regression evidence does not qualify the complete declared model contract",
+    "N150",
+    "ordinary T3K/TG tensor parallelism",
+    "DP layouts other than T3K DP4/TP2",
+    "any geometry not declared in support.json"
+  ],
+  "validation": {
+    "date": null,
+    "git_sha": null,
+    "evidence": []
+  },
+  "limits": {
+    "source_proven": [
+      "Benchmark cases cover active batch 1 or 32",
+      "standard/CI budgets are 1024/2048; DP smoke metadata reaches 4096",
+      "ordinary execution is N300 TP2; physical T3K is admitted only as four TP2 lanes",
+      "N150 exceeds the source L1 capacity guard"
+    ]
+  },
+  "features": {
+    "device_sampling": "Host and on-device top-k paths exist.",
+    "trace": "case_and_topology_specific"
+  }
+}

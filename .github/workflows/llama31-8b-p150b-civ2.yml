@@ -1,0 +1,125 @@
+name: CIv2 P150b Llama 3.1 8B example
+
+on:
+  push:
+    branches:
+      - ci/runner-access-probe-sodf2p8q
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  prepare-environment:
+    name: Prepare pinned Llama environment
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      PIP_INDEX_URL: https://pypi.org/simple
+      PIP_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.10.19"
+      - name: Download hash-locked runtime wheels
+        run: |
+          python -m pip download --require-hashes \
+            -r constraints/locks/host-py310.txt --dest wheelhouse
+      - name: Build standalone package wheel
+        run: python -m pip wheel --no-deps --wheel-dir dist .
+      - name: Upload Python environment
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: llama-python-environment
+          path: |
+            wheelhouse/
+            dist/
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+
+  p150-access:
+    name: Llama 3.1 8B token accuracy on CIv2 P150b
+    needs: prepare-environment
+    # Shared CIv2 pool: tt-metal/.github/sku_config.yaml, bh_p150b_civ2_viommu.
+    runs-on: tt-ubuntu-2204-P150b-viommu-stable
+    timeout-minutes: 90
+    env:
+      MESH_DEVICE: P150
+      HF_MODEL: meta-llama/Llama-3.1-8B-Instruct
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      TT_TRANSFORMERS_OFFLINE: "1"
+      PYTHONUNBUFFERED: "1"
+    container:
+      # Image from the successful tt-metal P150 job 101918474077 (2026-09-08).
+      # tt-metal's development image includes tt-smi in /usr/local/bin.
+      image: ghcr.io/tenstorrent/tt-metal/tt-metalium/ubuntu-22.04-dev-amd64@sha256:8920406917d04f92ecc147d9e9a307c667551e21694945f4652dcd0beb4eb0c6
+      # CIv2 device options from tt-metal's blackhole-e2e-tests-impl.yaml.
+      # The viommu runners do not require the legacy hugepage mount.
+      options: "--device /dev/tenstorrent -e TT_GH_CI_INFRA"
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Confirm runner assignment
+        shell: bash
+        run: |
+          printf 'Runner access confirmed for tt_transformers\n'
+          printf 'Runner name: %s\n' "$RUNNER_NAME"
+          printf 'Runner OS: %s\n' "$RUNNER_OS"
+          printf 'Runner architecture: %s\n' "$RUNNER_ARCH"
+          printf 'CI infrastructure: %s\n' "${TT_GH_CI_INFRA:-unset}"
+      - name: Inspect P150b hardware
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          mkdir -p generated
+          ls -l /dev/tenstorrent
+          tt-smi -s | tee generated/hardware-before.json
+      - name: Download Python environment
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: llama-python-environment
+          path: python-environment
+      - name: Install isolated runtime from prepared wheels
+        shell: bash
+        run: |
+          python3 -m venv "${RUNNER_TEMP}/llama-venv"
+          LLAMA_PYTHON="${RUNNER_TEMP}/llama-venv/bin/python"
+          "$LLAMA_PYTHON" -m pip install --no-index \
+            --find-links python-environment/wheelhouse --require-hashes \
+            -r constraints/locks/host-py310.txt
+          "$LLAMA_PYTHON" -m pip install --no-index --no-deps \
+            python-environment/dist/tt_transformers-*.whl
+          "$LLAMA_PYTHON" -m pip check
+          "$LLAMA_PYTHON" -m pip freeze > generated/python-packages.txt
+          echo "${RUNNER_TEMP}/llama-venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=${RUNNER_TEMP}/llama-venv" >> "$GITHUB_ENV"
+          echo "HF_HOME=${RUNNER_TEMP}/llama-hf" >> "$GITHUB_ENV"
+          echo "TT_CACHE_PATH=${RUNNER_TEMP}/llama-tt-cache" >> "$GITHUB_ENV"
+      - name: Download and verify pinned Llama checkpoint from CIv2 LFC
+        shell: bash
+        timeout-minutes: 30
+        run: |
+          python .github/scripts/download_llama31_8b.py \
+            --hf-home "$HF_HOME" --report generated/checkpoint.json \
+            2>&1 | tee generated/checkpoint-download.log
+      - name: Run Llama 3.1 8B token-accuracy example
+        shell: bash
+        timeout-minutes: 45
+        run: |
+          python -m examples.llama3_8b.benchmark \
+            --case token-accuracy --optimizations performance \
+            2>&1 | tee generated/llama-token-accuracy.log
+      - name: Inspect hardware after model execution
+        shell: bash
+        timeout-minutes: 2
+        run: tt-smi -s | tee generated/hardware-after.json
+      - name: Upload Llama execution evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: llama31-8b-p150b-evidence
+          path: generated/
+          retention-days: 14
+          if-no-files-found: warn

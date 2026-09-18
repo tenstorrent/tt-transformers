@@ -1,0 +1,12 @@
+tt-transformers
+Copyright 2026 Tenstorrent AI ULC
+
+This product includes software developed by Tenstorrent.
+
+Portions of the original standalone implementation were derived from the
+Tenstorrent tt-metal project (https://github.com/tenstorrent/tt-metal) and
+remain licensed under the Apache License, Version 2.0.
+
+Third-party Python packages are dependencies rather than source bundled in the
+tt-transformers wheel. Those packages are distributed under their respective
+licenses.

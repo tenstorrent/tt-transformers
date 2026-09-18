@@ -1,0 +1,124 @@
+[build-system]
+requires = ["setuptools==84.0.0", "wheel==0.48.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tt-transformers"
+version = "2.0.0.dev0"
+description = "Transformer building blocks, runtimes, and models for Tenstorrent TTNN"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+license = "Apache-2.0"
+authors = [
+  {name = "Tenstorrent", email = "info@tenstorrent.com"},
+]
+keywords = ["tenstorrent", "ttnn", "transformers", "inference"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.12",
+  "Operating System :: POSIX :: Linux",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+  "ttnn==0.77.0",
+  "torch==2.11.0",
+  "loguru==0.6.0",
+  "transformers==5.12.1",
+]
+
+[project.optional-dependencies]
+examples = [
+  "PyYAML>=6.0,<7",
+  "pytz>=2024.1",
+  "tqdm==4.66.3",
+]
+test = [
+  "pytest==9.0.3",
+  "pytest-cov==7.0.0",
+  "pytest-timeout==2.4.0",
+  "jsonschema>=4.23,<5",
+  "pytz>=2024.1",
+  "huggingface-hub>=0.30.0",
+  "tqdm==4.66.3",
+]
+yaml = [
+  "PyYAML>=6.0,<7",
+]
+dev = [
+  "build>=1.2.2",
+  "mypy>=1.15.0",
+  "pre-commit>=4.0.0",
+  "ruff>=0.11.0",
+  "twine>=6.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/tenstorrent/tt_transformers"
+Repository = "https://github.com/tenstorrent/tt_transformers"
+Documentation = "https://github.com/tenstorrent/tt_transformers#readme"
+Changelog = "https://github.com/tenstorrent/tt_transformers/blob/main/CHANGELOG.md"
+Issues = "https://github.com/tenstorrent/tt_transformers/issues"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = false
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+src = ["src", "tests", "examples", "qualification", "tools"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+ignore = ["E501", "UP038"]
+
+[tool.ruff.lint.per-file-ignores]
+"qualification/tools/validate_hardware_evidence.py" = ["E402"]
+"tests/conftest.py" = ["E402"]
+
+[tool.mypy]
+python_version = "3.10"
+files = [
+  "src/tt_transformers/__init__.py",
+  "src/tt_transformers/cache_environment.py",
+  "src/tt_transformers/device_ownership.py",
+  "src/tt_transformers/mesh_utils.py",
+  "src/tt_transformers/sampling/sampling_params.py",
+  "src/tt_transformers/tensor_utils.py",
+]
+warn_unused_configs = true
+check_untyped_defs = true
+no_implicit_optional = true
+ignore_missing_imports = true
+disable_error_code = ["import-untyped"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-config --strict-markers --import-mode=importlib"
+testpaths = ["tests"]
+markers = [
+  "host: does not open a Tenstorrent device",
+  "device: opens one or more Tenstorrent devices",
+  "slow: long-running test",
+  "model: executes a concrete model surface",
+  "wormhole: requires Wormhole hardware",
+  "blackhole: requires Blackhole hardware",
+  "n150: requires an N150-compatible mesh",
+  "n300: requires an N300-compatible mesh",
+  "t3k: requires an eight-device T3K mesh",
+  "p150: requires a P150-compatible mesh",
+  "p300: requires a P300-compatible mesh",
+  "p150x4: requires a four-die P150x4-compatible mesh",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["tt_transformers"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

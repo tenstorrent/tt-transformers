@@ -1,0 +1,393 @@
+# SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+# SPDX-License-Identifier: Apache-2.0
+
+"""Host-only validation for serialized hardware qualification readiness."""
+
+from __future__ import annotations
+
+import copy
+from types import SimpleNamespace
+
+import pytest
+
+from qualification.tools import run_hardware_matrix as runner
+
+pytestmark = pytest.mark.host
+
+
+def _matrix():
+    return runner.load_json(runner.DEFAULT_MATRIX)
+
+
+def _wh_inventory():
+    return {
+        "captured_utc": "2026-09-02T00:00:00Z",
+        "architecture": "wormhole",
+        "physical_sku": "T3K",
+        "device_count": 8,
+        "board_types": ["n300 L", "n300 R"],
+        "cluster_type": "T3K",
+        "system_mesh": "2x4",
+        "tt_visible_devices": None,
+        "source_command": "tt-smi -s",
+    }
+
+
+def _bh_qb_inventory():
+    return {
+        "captured_utc": "2026-09-03T00:00:00Z",
+        "architecture": "blackhole",
+        "physical_sku": "P150_X4 quietbox (four physical P150B boards)",
+        "device_count": 4,
+        "board_types": ["p150b"],
+        "cluster_type": "P150_X4",
+        "system_mesh": "2x2",
+        "tt_visible_devices": None,
+        "source_command": "tt-smi -s",
+    }
+
+
+def _dry_args(tmp_path):
+    return SimpleNamespace(
+        common_sha="a" * 40,
+        branch="qualified-branch",
+        machine_class="host-t3k",
+        sync_gate_passed=True,
+        hf_home="/fixture/hf-cache",
+        output_dir=tmp_path / "results",
+        checkout=runner.ROOT,
+        python="/qualified/python",
+    )
+
+
+@pytest.mark.host
+def test_checked_in_matrix_validates_and_covers_every_required_mesh():
+    counts = runner.validate_matrix(_matrix())
+    assert counts == {"N150": 14, "N300": 6, "T3K": 8, "P150": 12, "P150x4": 11}
+    assert sum(counts.values()) == 51
+
+
+@pytest.mark.host
+def test_all_single_p150_nodes_admit_bh_qb_05_with_only_mesh_selection(tmp_path):
+    matrix = _matrix()
+    machine = matrix["machines"]["host-p150x4"]
+    assert "P150" in machine["supported_mesh_devices"]
+
+    nodes = [node for node in matrix["nodes"] if node["mesh_device"] == "P150"]
+    assert {node["priority"] for node in nodes} == {*range(24, 31), 38, 45, 46, 48, 51}
+    for node in nodes:
+        assert node["machine_pool"] == ["host-p150x8", "host-p150x4"]
+        assert node["environment"]["MESH_DEVICE"] == "P150"
+        assert "machine_environment_overrides" not in node
+        assert node["physical_sku_provenance"]["selection_environment"] == {"MESH_DEVICE": "P150"}
+
+    node = runner.select_node(matrix, "bh-p150-rmsnorm-decode")
+    args = _dry_args(tmp_path)
+    args.machine_class = "host-p150x4"
+    result = runner.preview(matrix, node, args, _bh_qb_inventory())
+
+    assert result["machine_pool_entry"] == "host-p150x4"
+    assert result["environment"]["MESH_DEVICE"] == "P150"
+    assert result["environment"]["TT_VISIBLE_DEVICES"] is None
+
+
+@pytest.mark.host
+def test_matrix_refuses_a_pool_entry_that_does_not_support_the_requested_mesh():
+    matrix = copy.deepcopy(_matrix())
+    matrix["machines"]["host-p150x4"]["supported_mesh_devices"].remove("P150")
+
+    with pytest.raises(runner.MatrixError, match="machine mesh support mismatch"):
+        runner.validate_matrix(matrix)
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("suffix", ["single", "batch"])
+def test_hf_generation_p150_nodes_accept_current_loudbox_inventory(suffix):
+    matrix = _matrix()
+    node = runner.select_node(matrix, f"bh-p150-llama3-8b-hf-generate-{suffix}")
+    inventory = {
+        "captured_utc": "2026-09-11T04:50:00Z",
+        "architecture": "blackhole",
+        "physical_sku": "eight P150B boards",
+        "device_count": 8,
+        "board_types": ["p150b", "P150"],
+        "cluster_type": "P150_X8",
+        "system_mesh": "2x4",
+        "tt_visible_devices": None,
+        "source_command": "tt-smi -s",
+    }
+    runner.validate_physical_inventory(matrix, node, "host-p150x8", inventory)
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("cluster_type", "CUSTOM", "physical cluster provenance"),
+        ("system_mesh", "1x1", "physical system_mesh mismatch"),
+        (
+            "tt_visible_devices",
+            "any-explicit-selection",
+            "sole topology selector",
+        ),
+    ],
+)
+def test_bh_qb_single_p150_rejects_wrong_physical_provenance(field, value, message):
+    matrix = _matrix()
+    node = runner.select_node(matrix, "bh-p150-rmsnorm-decode")
+    inventory = _bh_qb_inventory()
+    inventory[field] = value
+
+    with pytest.raises(runner.MatrixError, match=message):
+        runner.validate_physical_inventory(
+            matrix,
+            node,
+            "host-p150x4",
+            inventory,
+        )
+
+
+@pytest.mark.host
+def test_matrix_requires_serial_execution_and_forbids_automatic_reset():
+    matrix = _matrix()
+    assert matrix["serialization"]["max_concurrent_processes"] == 1
+    assert matrix["serialization"]["scope"] == "physical_host"
+    assert matrix["serialization"]["automatic_reset"] is False
+    assert "tt-smi -r" not in runner.Path(runner.__file__).read_text()
+
+    parallel = copy.deepcopy(matrix)
+    parallel["serialization"]["max_concurrent_processes"] = 2
+    with pytest.raises(runner.MatrixError, match="exactly one"):
+        runner.validate_matrix(parallel)
+
+    global_scope = copy.deepcopy(matrix)
+    global_scope["serialization"]["scope"] = "global"
+    with pytest.raises(runner.MatrixError, match="physical_host"):
+        runner.validate_matrix(global_scope)
+
+    resetting = copy.deepcopy(matrix)
+    resetting["serialization"]["automatic_reset"] = True
+    with pytest.raises(runner.MatrixError, match="automatic reset"):
+        runner.validate_matrix(resetting)
+
+    missing_classification = copy.deepcopy(matrix)
+    missing_classification["failure_classifications"].remove("no_passing_tests")
+    with pytest.raises(runner.MatrixError, match="failure classifications"):
+        runner.validate_matrix(missing_classification)
+
+
+@pytest.mark.host
+def test_model_cache_roots_are_namespaced_by_model_family():
+    seen = {}
+    for node in _matrix()["nodes"]:
+        cache = node["cache_requirement"]
+        if cache["kind"] != "established_warm_model_cache":
+            continue
+        model = cache["model"]
+        root = node["environment"]["TT_CACHE_PATH"]
+        assert root.endswith(f"/{model}"), node["id"]
+        assert seen.setdefault(root, model) == model
+
+
+@pytest.mark.host
+def test_llama_p150x4_smoke_uses_the_collected_parameter_id():
+    node = runner.select_node(_matrix(), "bh-p150x4-llama33-one-layer-smoke")
+    assert node["selector"]["target"].endswith("[physical-BH-TP4-ring]")
+
+
+@pytest.mark.host
+def test_dry_run_serializes_one_exact_node_without_starting_a_process(tmp_path):
+    matrix = _matrix()
+    node = runner.select_node(matrix, "wh-n150-rmsnorm-prefill")
+    result = runner.preview(matrix, node, _dry_args(tmp_path), _wh_inventory())
+
+    assert result["classification"] == "not_executed_dry_run"
+    assert result["node"] == node["id"]
+    assert result["command"][-1] == node["selector"]["target"]
+    assert "--color=no" in result["command"]
+    assert result["environment"]["MESH_DEVICE"] == "N150"
+    assert result["environment"]["TT_CACHE_PATH"].endswith(node["id"])
+    assert result["automatic_reset"] is False
+    assert not (tmp_path / "results").exists()
+
+
+@pytest.mark.host
+def test_attestation_requires_full_sha_external_gate_and_allowed_machine():
+    matrix = _matrix()
+    node = runner.select_node(matrix, "wh-n150-rmsnorm-prefill")
+    with pytest.raises(runner.MatrixError, match="not attested"):
+        runner.validate_attestation(
+            matrix,
+            node,
+            common_sha="a" * 40,
+            branch="branch",
+            machine_class="host-t3k",
+            sync_gate_passed=False,
+        )
+    with pytest.raises(runner.MatrixError, match="40 lowercase"):
+        runner.validate_attestation(
+            matrix,
+            node,
+            common_sha="short",
+            branch="branch",
+            machine_class="host-t3k",
+            sync_gate_passed=True,
+        )
+    with pytest.raises(runner.MatrixError, match="not in the pool"):
+        runner.validate_attestation(
+            matrix,
+            node,
+            common_sha="a" * 40,
+            branch="branch",
+            machine_class="host-p150x8",
+            sync_gate_passed=True,
+        )
+
+
+@pytest.mark.host
+def test_existing_lock_refuses_a_second_process(tmp_path):
+    lock = tmp_path / "hardware.lock"
+    lock.write_text("another-pid\n")
+    with pytest.raises(runner.MatrixError, match="already exists"):
+        with runner.ProcessLock(lock):
+            pass
+    assert lock.read_text() == "another-pid\n"
+
+
+@pytest.mark.host
+def test_process_lock_is_removed_after_serial_owner_exits(tmp_path):
+    lock = tmp_path / "hardware.lock"
+    with runner.ProcessLock(lock):
+        assert lock.exists()
+    assert not lock.exists()
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["pytest", "-n", "2", "test.py"],
+        ["pytest", "--numprocesses=auto", "test.py"],
+        ["pytest", "--dist=load", "test.py"],
+    ],
+)
+def test_parallel_pytest_arguments_are_refused(argv):
+    assert runner.contains_parallel_pytest_args(argv)
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(
+    "exit_code,output,timed_out,expected",
+    [
+        (0, "===================== 1 passed in 0.12s =====================", False, "passed"),
+        (
+            0,
+            "================ 2 passed, 1 skipped in 0.12s ================",
+            False,
+            "passed",
+        ),
+        (0, "===================== 1 skipped in 0.12s ====================", False, "no_passing_tests"),
+        (0, "==================== no tests ran in 0.12s ==================", False, "no_passing_tests"),
+        (0, "test_gate.py::test_gate PASSED", False, "no_passing_tests"),
+        (
+            0,
+            "\n".join(
+                (
+                    "===================== 1 passed in 0.12s =====================",
+                    "===================== 1 skipped in 0.13s ====================",
+                )
+            ),
+            False,
+            "no_passing_tests",
+        ),
+        (1, "assert PCC failed", False, "functional_failure"),
+        (1, "device unresponsive; reset required", False, "hardware_lifecycle_failure"),
+        (None, "", True, "hardware_lifecycle_failure"),
+    ],
+)
+def test_failure_classification_is_separate(exit_code, output, timed_out, expected):
+    assert runner.classify_failure(exit_code, output, timed_out) == expected
+
+
+@pytest.mark.host
+def test_unrelated_hardware_terms_across_log_are_a_functional_failure():
+    output = "\n".join(
+        (
+            "Metal | Initializing Fabric (fabric_firmware_initializer.cpp:296)",
+            "This will become a hard error in a future release",
+            "tests/test_attention.py::test_attention FAILED",
+            "E   AssertionError: timeout value did not meet the expected result",
+            "===================== 1 failed in 2.14s =====================",
+        )
+    )
+
+    assert runner.classify_failure(1, output) == "functional_failure"
+
+
+@pytest.mark.parametrize(
+    "signature",
+    [
+        "Watcher reported a fatal device event",
+        "Device 0 is unresponsive",
+        "Metal fatal: dispatch core halted",
+        "Reset required before the next test",
+    ],
+)
+@pytest.mark.host
+def test_local_hardware_fatal_signatures_remain_lifecycle_failures(signature):
+    output = f"pytest setup completed\n{signature}\npytest session aborted"
+
+    assert runner.classify_failure(1, output) == "hardware_lifecycle_failure"
+
+
+@pytest.mark.host
+def test_p150x4_inventory_rejects_nonphysical_cluster_and_missing_bdfs():
+    matrix = _matrix()
+    node = runner.select_node(matrix, "bh-p150x4-rmsnorm")
+    inventory = {
+        "captured_utc": "2026-09-02T00:00:00Z",
+        "architecture": "blackhole",
+        "physical_sku": "arbitrary-submesh",
+        "device_count": 8,
+        "board_types": ["P150"],
+        "cluster_type": "CUSTOM",
+        "system_mesh": "2x4",
+        "tt_visible_devices": None,
+        "source_command": "tt-smi -s",
+        "selected_bdfs": [],
+    }
+    with pytest.raises(runner.MatrixError, match="physical cluster provenance"):
+        runner.validate_physical_inventory(
+            matrix,
+            node,
+            "host-p150x8",
+            inventory,
+        )
+    inventory["cluster_type"] = "P150_X4"
+    with pytest.raises(runner.MatrixError, match="four-BDF Ring"):
+        runner.validate_physical_inventory(
+            matrix,
+            node,
+            "host-p150x8",
+            inventory,
+        )
+
+
+@pytest.mark.host
+def test_every_node_uses_the_complete_evidence_schema():
+    matrix = _matrix()
+    required = matrix["required_evidence_fields"]
+    assert {
+        "started_utc",
+        "branch",
+        "full_sha",
+        "actual_fqdn",
+        "physical_inventory",
+        "exit_code",
+        "metrics",
+        "teardown_status",
+        "reset",
+    } <= set(required)
+    # The list is declared once, at matrix level. A per-node copy is drift waiting
+    # to happen, so the runner refuses one outright rather than comparing them.
+    assert not any("required_evidence_fields" in node for node in matrix["nodes"])

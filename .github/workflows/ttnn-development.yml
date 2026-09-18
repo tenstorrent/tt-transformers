@@ -1,0 +1,253 @@
+name: TTNN development runtime
+run-name: TTNN ${{ inputs.metal_ref || 'main' }} | ${{ inputs.request_id || github.run_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      metal_ref:
+        description: tt-metal branch, tag, or full commit SHA
+        type: string
+        default: main
+        required: true
+      request_id:
+        description: Optional identifier used by the development launcher
+        type: string
+      runtime_run_id:
+        description: Optional prior run ID whose ttnn-runtime bundle should be revalidated
+        type: string
+      image:
+        description: Pinned Ubuntu 22.04 development image (empty uses the tested default)
+        type: string
+      run_hardware:
+        description: Run P150b JIT, RMSNorm, and Llama token-accuracy checks
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: read
+  actions: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    outputs:
+      metal_sha: ${{ steps.resolve.outputs.metal_sha }}
+      image: ${{ steps.resolve.outputs.image }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12.13"
+      - run: python -m pip install packaging==26.3
+      - name: Resolve immutable build inputs
+        id: resolve
+        env:
+          METAL_REF: ${{ inputs.metal_ref }}
+          INPUT_IMAGE: ${{ inputs.image }}
+        run: |
+          python - <<'PY'
+          import os, re
+          from tools.ttnn_dev_support.build import resolve_ref
+          image = os.environ['INPUT_IMAGE'] or (
+              'ghcr.io/tenstorrent/tt-metal/tt-metalium/ubuntu-22.04-dev-amd64'
+              '@sha256:8920406917d04f92ecc147d9e9a307c667551e21694945f4652dcd0beb4eb0c6'
+          )
+          if not re.fullmatch(r'[^\s]+@sha256:[0-9a-f]{64}', image):
+              raise SystemExit('image must be pinned by sha256 digest')
+          sha = resolve_ref(os.environ['METAL_REF'])
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'metal_sha={sha}\nimage={image}\n')
+          print(f'tt-metal commit: {sha}\nRuntime image: {image}')
+          PY
+
+  build:
+    name: Prepare TTNN runtime on CPU
+    needs: resolve
+    runs-on: ${{ inputs.runtime_run_id != '' && 'ubuntu-24.04' || 'tt-ubuntu-2204-large-stable' }}
+    timeout-minutes: 180
+    container:
+      image: ${{ needs.resolve.outputs.image }}
+    env:
+      TTNN_DEV_IMAGE: ${{ needs.resolve.outputs.image }}
+      METAL_SHA: ${{ needs.resolve.outputs.metal_sha }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - name: Prepare isolated launcher
+        shell: bash
+        run: |
+          python3 -m venv "$RUNNER_TEMP/launcher"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          from tools.validate_lockfiles import parse_lock
+          rows = parse_lock(Path('constraints/locks/host-py310.txt'))
+          path = Path(os.environ['RUNNER_TEMP']) / 'launcher-requirements.txt'
+          path.write_text(''.join(f'{name}=={rows[name][0]} --hash=sha256:{rows[name][1]}\n' for name in ('packaging', 'tomli')))
+          PY
+          "$RUNNER_TEMP/launcher/bin/python" -m pip install --require-hashes \
+            -r "$RUNNER_TEMP/launcher-requirements.txt"
+          echo "$RUNNER_TEMP/launcher/bin" >> "$GITHUB_PATH"
+      - name: Build source runtime and export a fixed wheel
+        id: build_runtime
+        if: ${{ inputs.runtime_run_id == '' }}
+        shell: bash
+        run: |
+          python3 tools/ttnn_dev.py build --executor native \
+            --tt-metal-ref "$METAL_SHA" --jobs 8 \
+            --image "$TTNN_DEV_IMAGE" --output "$RUNNER_TEMP/ttnn-build" \
+            2>&1 | tee tt-metal-build.log
+      - name: Retrieve an existing runtime bundle
+        if: ${{ inputs.runtime_run_id != '' }}
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ttnn-runtime
+          path: ${{ runner.temp }}/ttnn-build/bundle
+          run-id: ${{ inputs.runtime_run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify requested runtime identity
+        id: verify_runtime
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          from tools.ttnn_dev_support.common import load_runtime
+          runtime = load_runtime(Path(os.environ['RUNNER_TEMP']) / 'ttnn-build/bundle/runtime.json')
+          if runtime['mode'] != 'wheel' or runtime['metal']['sha'] != os.environ['METAL_SHA']:
+              raise SystemExit('Runtime artifact does not match the requested tt-metal commit')
+          if runtime['recipe']['image'] != os.environ['TTNN_DEV_IMAGE']:
+              raise SystemExit('Runtime artifact does not match the requested image')
+          if runtime['python']['minor'] != '3.10':
+              raise SystemExit('This CI profile requires a Python 3.10 runtime')
+          PY
+      - name: Verify a fresh wheel environment
+        shell: bash
+        run: |
+          python3 tools/ttnn_dev.py env \
+            --runtime "$RUNNER_TEMP/ttnn-build/bundle/runtime.json" \
+            --output "$RUNNER_TEMP/wheel-environment"
+          python3 tools/ttnn_dev.py doctor \
+            --environment "$RUNNER_TEMP/wheel-environment/environment.json" \
+            --output wheel-doctor.json
+          python3 tools/ttnn_dev.py run \
+            --environment "$RUNNER_TEMP/wheel-environment/environment.json" -- \
+            python -m pytest -q -m host tests/host/test_package_surface.py \
+            tests/host/test_import_boundaries.py tests/host/test_ttnn_development.py
+      - name: Upload runtime bundle
+        if: ${{ !cancelled() && steps.verify_runtime.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ttnn-runtime
+          path: ${{ runner.temp }}/ttnn-build/bundle/
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - name: Upload build evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ttnn-build-evidence
+          path: |
+            tt-metal-build.log
+            wheel-doctor.json
+            ${{ runner.temp }}/ttnn-build/source/runtime.json
+          retention-days: 14
+
+  hardware:
+    name: Validate candidate TTNN on P150b
+    needs: [resolve, build]
+    if: ${{ inputs.run_hardware }}
+    runs-on: tt-ubuntu-2204-P150b-viommu-stable
+    timeout-minutes: 90
+    container:
+      image: ${{ needs.resolve.outputs.image }}
+      options: --device /dev/tenstorrent -e TT_GH_CI_INFRA
+    env:
+      HF_MODEL: meta-llama/Llama-3.1-8B-Instruct
+      MESH_DEVICE: P150
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      TT_TRANSFORMERS_OFFLINE: "1"
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ttnn-runtime
+          path: ${{ runner.temp }}/ttnn-bundle
+      - name: Prepare isolated launcher from bundled wheels
+        shell: bash
+        run: |
+          python3 -m venv "$RUNNER_TEMP/launcher"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          from tools.validate_lockfiles import parse_lock
+          rows = parse_lock(Path('constraints/locks/host-py310.txt'))
+          path = Path(os.environ['RUNNER_TEMP']) / 'launcher-requirements.txt'
+          path.write_text(''.join(f'{name}=={rows[name][0]} --hash=sha256:{rows[name][1]}\n' for name in ('packaging', 'tomli')))
+          PY
+          "$RUNNER_TEMP/launcher/bin/python" -m pip install --no-index --require-hashes \
+            --find-links "$RUNNER_TEMP/ttnn-bundle/dependencies/wheels" \
+            -r "$RUNNER_TEMP/launcher-requirements.txt"
+          echo "$RUNNER_TEMP/launcher/bin" >> "$GITHUB_PATH"
+      - name: Prepare candidate runtime
+        shell: bash
+        run: |
+          mkdir -p generated
+          tt-smi -s | tee generated/hardware-before.json
+          python3 tools/ttnn_dev.py env --runtime "$RUNNER_TEMP/ttnn-bundle/runtime.json" \
+            --output "$RUNNER_TEMP/candidate"
+          python3 tools/ttnn_dev.py doctor --environment "$RUNNER_TEMP/candidate/environment.json" \
+            --output generated/runtime-doctor.json
+          echo "HF_HOME=$RUNNER_TEMP/llama-hf" >> "$GITHUB_ENV"
+      - name: Run JIT and module checks
+        shell: bash
+        run: |
+          export MODULE_REPORT_DIR="$(mktemp -d generated/module-check-XXXXXXXX)"
+          python3 tools/ttnn_dev.py run --environment "$RUNNER_TEMP/candidate/environment.json" -- \
+            python -m tools.ttnn_dev_support.smoke 2>&1 | tee generated/jit-smoke.log
+          python3 tools/ttnn_dev.py run --environment "$RUNNER_TEMP/candidate/environment.json" -- \
+            python -m pytest -v -s \
+            'tests/modules/rmsnorm/test_rmsnorm_1d.py::test_rmsnorm_1d_blackhole_common_config_correctness_cache_and_timing[p150-local-decode]' \
+            --junitxml="$MODULE_REPORT_DIR/module.xml" -o junit_family=xunit1 2>&1 | tee generated/module.log
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          reports = list(Path(os.environ['MODULE_REPORT_DIR']).glob('*.xml'))
+          if len(reports) != 1:
+              raise SystemExit('Expected one JUnit report from the selected module test')
+          cases = list(ET.parse(reports[0]).iter('testcase'))
+          if len(cases) != 1 or any(case.find(tag) is not None for case in cases for tag in ('skipped', 'failure', 'error')):
+              raise SystemExit('Module check requires actual passing, non-skipped tests')
+          PY
+      - name: Download and verify Llama checkpoint
+        shell: bash
+        timeout-minutes: 30
+        run: |
+          python3 .github/scripts/download_llama31_8b.py --hf-home "$HF_HOME" \
+            --report generated/checkpoint.json 2>&1 | tee generated/checkpoint-download.log
+      - name: Run Llama token accuracy
+        shell: bash
+        timeout-minutes: 45
+        run: |
+          python3 tools/ttnn_dev.py run --environment "$RUNNER_TEMP/candidate/environment.json" -- \
+            python -m examples.llama3_8b.benchmark --case token-accuracy --optimizations performance \
+            2>&1 | tee generated/llama-token-accuracy.log
+          tt-smi -s > generated/hardware-after.json
+      - name: Upload hardware evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ttnn-hardware-evidence
+          path: |
+            generated/
+            ${{ runner.temp }}/candidate/runs/
+          retention-days: 14
