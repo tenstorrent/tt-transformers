@@ -62,7 +62,9 @@ SDIST_REQUIRED_DIRECTORIES = {
     "tests",
     "tools",
 }
-ABSOLUTE_TEXT_PATTERNS = (b"/home/", b"/tmp/", b"/Users/", b"C:\\")
+# Home-directory shapes only. A bare "/tmp/" prefix is not a workspace identity and
+# would reject the product's own TT_CACHE_FALLBACK_PATH default.
+ABSOLUTE_TEXT_PATTERNS = (b"/home/", b"/Users/", b"C:\\")
 EXPECTED_BASE_REQUIRES = {"ttnn==0.77.0", "torch==2.11.0", "loguru==0.6.0", "transformers==5.12.1"}
 
 

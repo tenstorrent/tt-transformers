@@ -117,7 +117,7 @@ def audit_installed_source(package_root: pathlib.Path) -> dict[str, int]:
     python_files = sorted(package_root.rglob("*.py"))
     for path in python_files:
         source = path.read_text(encoding="utf-8")
-        if any(marker in source for marker in ("/home/", "/tmp/", "/Users/", "C:\\")):
+        if any(marker in source for marker in ("/home/", "/Users/", "C:\\")):
             raise AssertionError(f"workspace absolute path in installed source: {path}")
         tree = ast.parse(source, filename=str(path))
         for node in ast.walk(tree):
