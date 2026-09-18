@@ -36,6 +36,11 @@ import ttnn
 from examples.common.auto_compose import to_torch_auto_compose
 
 # Reuse helpers from the main test file
+# `HfAttentionWrapper` and `get_attention_weights_from_ref_model` were defined inside
+# test_attention_1d.py at the standalone extraction. The Galaxy/2D port extracts them to
+# tests/modules/_hf_reference.py so the 2D suites can share one reference implementation,
+# so they are imported from their owner here rather than through a test module.
+from tests.modules._hf_reference import HfAttentionWrapper, get_attention_weights_from_ref_model
 from tests.modules.attention.test_attention_1d import (
     DEEPSEEK_R1_14B,
     LLAMA_1B,
@@ -51,11 +56,9 @@ from tests.modules.attention.test_attention_1d import (
     QWEN25_7B,
     QWEN25_72B,
     QWEN25_CODER_32B,
-    HfAttentionWrapper,
     PagedAttentionConfig,
     RotarySetupHelper,
     _get_or_init_attn_weights,
-    get_attention_weights_from_ref_model,
     get_rot_mats_from_hf,
 )
 from tests.support.comparison import comp_pcc

@@ -11,9 +11,47 @@ import ttnn
 
 from tt_transformers.modules.lazy_weight import LazyWeight
 
+#: The ``L1_SMALL`` region every Galaxy mesh is opened with.
+#:
+#: The generic collectives `ttnn.reduce_scatter` and `ttnn.all_gather` create their
+#: internal global synchronisation semaphores when their program is **compiled**,
+#: and those 32-byte allocations live for the life of the program cache entry. With
+#: no ``L1_SMALL`` bank they land in main L1, wherever the transients live at that
+#: moment leave room - mid-bank - and nothing can be placed across them afterwards.
+#: On Galaxy that breaks the weight prefetcher outright: its global circular buffer
+#: is released for prefill and can then neither be restored over the stranded
+#: semaphores nor placed below them, so `prefill -> decode` - the serving loop -
+#: fails with either the restore guard or an allocator OOM.
+#:
+#: 32 kB is far more than the semaphores need (about five 32-byte semaphores per
+#: distinct collective program, so a few hundred bytes for a whole model); it is
+#: the smallest round size that leaves the region's sizing a non-question, and it
+#: is the size the fix was measured with. Main L1 shrinks by exactly this much for
+#: every Galaxy op, which is why the number lives here once rather than per suite.
+GALAXY_L1_SMALL_SIZE = 32768
+
 
 def is_blackhole() -> bool:
     return "blackhole" in ttnn.get_arch_name()
+
+
+def has_l1_small_region(mesh_device: ttnn.MeshDevice) -> bool:
+    """Return whether this mesh was opened with a non-empty ``L1_SMALL`` bank.
+
+    The caller's question is always "can a collective put its semaphores out of
+    main L1", so the mesh is asked rather than assumed: `ttnn.reduce_scatter` takes
+    `use_l1_small_for_semaphores` and allocates from ``L1_SMALL``
+    *unconditionally* when told to, so passing a blind `True` to a mesh opened
+    without the region turns a fragmentation warning into an allocation failure.
+    `ttnn.all_gather` makes exactly this check for itself
+    (`all_gather_multicast_factory.cpp` ~35: bank size ``> 0`` or fall back to L1
+    with a warning); this is the same rule, one level up, for the ops that do not.
+    """
+
+    try:
+        return ttnn.get_memory_view(mesh_device, ttnn.BufferType.L1_SMALL).total_bytes_per_bank > 0
+    except Exception:  # noqa: BLE001 - an allocator that cannot describe the region does not have one
+        return False
 
 
 def get_device_name(mesh_device: ttnn.MeshDevice, num_devices: int | None = None) -> str:

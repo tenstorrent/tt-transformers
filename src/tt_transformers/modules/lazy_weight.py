@@ -30,6 +30,49 @@ if TYPE_CHECKING:
     import torch
 
 
+def release_device_weights(weights) -> None:
+    """Deallocate each distinct materialized weight once and clear its memo.
+
+    A `LazyWeight` memoizes its device tensor in `_value`, so dropping the Python
+    reference to a module is not what returns the device memory: the weight is
+    reachable for as long as anything holds the model, and a caller that keeps a
+    closed executor for its metrics keeps the weights too. Modules that own
+    weights therefore need an explicit release, which is what
+    `Embedding2D.release` and `LMHead2D.release` already do by hand.
+
+    Two aliases have to be tolerated, and both occur in this tree:
+
+    * one `LazyWeight` reached through two config fields - `Attention2D` resolves
+      `prefill_wqkv = resolved.prefill_wqkv or wqkv`, so the prefill and decode
+      fields are the *same object* whenever no separate prefill weight was given;
+    * two `LazyWeight`s memoizing the same device tensor.
+
+    Deduping on both is what keeps this from double-freeing. Failures are
+    collected and the first re-raised, so one bad handle cannot leave the rest of
+    a model's weights resident.
+    """
+
+    failures = []
+    seen_weights: set[int] = set()
+    seen_values: set[int] = set()
+    for weight in weights:
+        if weight is None or id(weight) in seen_weights:
+            continue
+        seen_weights.add(id(weight))
+        value = weight._value
+        if value is None:
+            continue
+        if id(value) not in seen_values:
+            seen_values.add(id(value))
+            try:
+                ttnn.deallocate(value)
+            except Exception as error:  # noqa: BLE001 - collect, then raise the first
+                failures.append(error)
+        weight._value = None
+    if failures:
+        raise failures[0]
+
+
 # todo)) maybe useful to support a mechanism that can be used to disable the cache for every LazyWeight instance
 # todo)) needs unit tests to provide coverage
 @dataclass
