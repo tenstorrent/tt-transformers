@@ -63,8 +63,43 @@ def _dry_args(tmp_path):
 @pytest.mark.host
 def test_checked_in_matrix_validates_and_covers_every_required_mesh():
     counts = runner.validate_matrix(_matrix())
-    assert counts == {"N150": 14, "N300": 6, "T3K": 8, "P150": 12, "P150x4": 11}
-    assert sum(counts.values()) == 51
+    assert counts == {"N150": 14, "N300": 6, "T3K": 8, "P150": 12, "P150x4": 11, "TG": 1, "BHGLX": 1}
+    assert sum(counts.values()) == 53
+
+
+@pytest.mark.host
+def test_the_tg_galaxy_node_is_a_disabled_proposal_and_cannot_be_selected():
+    """The one TG node is a proposal, not a gate, and must stay unselectable.
+
+    A 32-board Galaxy is an infrastructure commitment the port cannot make on its
+    own: it means claiming a machine pool and extending the serial-reservation
+    policy from an 8-device host to a 32-board chassis, which is the one place the
+    existing `scope: physical_host` policy may genuinely not stretch. The node is
+    checked in `enabled: false` so the shape is reviewable as a diff rather than
+    negotiated in the abstract. Whoever enables it should have settled the
+    serialization question first -- and will have to delete this test to do it,
+    which is the point.
+    """
+
+    matrix = _matrix()
+    node = next(entry for entry in matrix["nodes"] if entry["mesh_device"] == "TG")
+    assert node["id"] == "wh-tg-rmsnorm-2d-qk-norm"
+    assert node["enabled"] is False
+    assert node["disabled_classification"] == "different_hardware_deferred"
+    assert node["machine_pool"] == ["host-whglx"]
+
+    machine = matrix["machines"]["host-whglx"]
+    assert machine["expected_inventory"]["device_count"] == 32
+    assert machine["supported_mesh_devices"] == ["TG"]
+
+    # The Blackhole Galaxy proposal is the only other deferral in the matrix.
+    assert sorted(entry["id"] for entry in matrix["nodes"] if not entry["enabled"]) == [
+        "bh-glx-topology-probe",
+        node["id"],
+    ]
+
+    with pytest.raises(runner.MatrixError, match="different_hardware_deferred"):
+        runner.select_node(matrix, node["id"])
 
 
 @pytest.mark.host
@@ -391,3 +426,49 @@ def test_every_node_uses_the_complete_evidence_schema():
     # The list is declared once, at matrix level. A per-node copy is drift waiting
     # to happen, so the runner refuses one outright rather than comparing them.
     assert not any("required_evidence_fields" in node for node in matrix["nodes"])
+
+
+@pytest.mark.host
+def test_the_bh_galaxy_node_is_a_disabled_proposal_and_cannot_be_selected():
+    """The Blackhole Galaxy node is a proposal, not a gate, and must stay unselectable.
+
+    Same discipline as the TG node above. Checking it in disabled makes the shape
+    reviewable as a diff instead of negotiated in the abstract, and whoever
+    enables it has to delete this test -- which is the conversation, made
+    unavoidable.
+
+    Two things keep it disabled:
+
+    * **a Blackhole Galaxy chassis is allocated per window, not owned.** The
+      matrix cannot bind the node to a stable machine the way a dedicated host's
+      entry does, and CI has no route to whichever chassis a window granted.
+      This is the blocker, and it is not a code problem;
+    * **this node's own selected test has not yet completed on the hardware.**
+      Enabling a node whose selector has never passed would be enabling it on
+      the strength of a diff.
+    """
+
+    matrix = _matrix()
+    node = next(entry for entry in matrix["nodes"] if entry["mesh_device"] == "BHGLX")
+    assert node["id"] == "bh-glx-topology-probe"
+    assert node["enabled"] is False
+    assert node["disabled_classification"] == "different_hardware_deferred"
+    assert node["machine_pool"] == ["host-bhglx"]
+
+    machine = matrix["machines"]["host-bhglx"]
+    assert machine["architecture"] == "blackhole"
+    assert machine["expected_inventory"]["device_count"] == 32
+    assert machine["expected_inventory"]["cluster_type"] == "BLACKHOLE_GALAXY"
+    assert machine["supported_mesh_devices"] == ["BHGLX"]
+
+    # The provenance must not claim a measurement nobody took.
+    assert any("NOT measured" in basis for basis in node["source_basis"])
+
+    # Both Galaxy nodes are deferrals, and they are the only ones in the matrix.
+    assert sorted(entry["id"] for entry in matrix["nodes"] if not entry["enabled"]) == [
+        "bh-glx-topology-probe",
+        "wh-tg-rmsnorm-2d-qk-norm",
+    ]
+
+    with pytest.raises(runner.MatrixError, match="different_hardware_deferred"):
+        runner.select_node(matrix, node["id"])

@@ -48,11 +48,24 @@ class WarmupConfig:
     prefill_seq_lens: tuple[int, ...] | None = None
     prefill_batch_sizes: tuple[int, ...] = (1, 2, 4, 8, 16, 32)
     include_decode_top_k: bool = False
+    #: Prefix length of the warmup plan's cached-prefill coverage case.
+    #: ``None`` keeps the historical value, one page-table block, which is what
+    #: every caller before this field resolved to. A model whose attention
+    #: refuses a chunk start that is not a multiple of some larger alignment
+    #: sets it to that alignment; the value is a token count and carries no
+    #: topology, architecture or model identity.
+    cached_prefill_tokens: int | None = None
 
     def __post_init__(self) -> None:
         if self.prefill_seq_lens is not None:
             self._validate_positive_tuple("prefill_seq_lens", self.prefill_seq_lens)
         self._validate_positive_tuple("prefill_batch_sizes", self.prefill_batch_sizes)
+        if self.cached_prefill_tokens is not None and (
+            not isinstance(self.cached_prefill_tokens, int)
+            or isinstance(self.cached_prefill_tokens, bool)
+            or self.cached_prefill_tokens <= 0
+        ):
+            raise ValueError("cached_prefill_tokens must be a positive integer when set")
 
     @staticmethod
     def _validate_positive_tuple(name: str, values: tuple[int, ...]) -> None:

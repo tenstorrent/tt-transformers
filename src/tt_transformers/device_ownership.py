@@ -26,12 +26,20 @@ DEFAULT_DEVICE_FALLBACK_LEDGER = (
         "simple/power config may omit mesh_device; wqkv.device is preferred first",
     ),
     DefaultDeviceFallback(
+        "modules.embedding._derive_mesh_device",
+        "legacy 2D constructor permits mesh_device=None after weight-device inference",
+    ),
+    DefaultDeviceFallback(
         "modules.embedding._resolve_embedding1d_config",
         "legacy simple constructor permits mesh_device=None after weight-device inference",
     ),
     DefaultDeviceFallback(
         "modules.lm_head._derive_lm_head_mesh_device",
         "legacy simple constructor permits mesh_device=None after weight-device inference",
+    ),
+    DefaultDeviceFallback(
+        "modules.lm_head._resolve_lm_head2d_config",
+        "legacy 2D constructor permits mesh_device=None after weight-device inference",
     ),
     DefaultDeviceFallback(
         "modules.mlp._resolve_mlp1d_mesh",
@@ -50,6 +58,10 @@ DEFAULT_DEVICE_FALLBACK_LEDGER = (
         "legacy 2D constructor permits mesh_device=None after weight-device inference",
     ),
     DefaultDeviceFallback(
+        "modules.rope._resolve_rope2d_config",
+        "legacy 2D constructor may omit device after LazyWeight inference",
+    ),
+    DefaultDeviceFallback(
         "modules.rope._resolve_rope_config",
         "legacy simple constructor may omit device after LazyWeight inference",
     ),
@@ -60,6 +72,10 @@ DEFAULT_DEVICE_FALLBACK_LEDGER = (
     DefaultDeviceFallback(
         "modules.sampling._resolve_sampling1d_config",
         "legacy convenience constructor accepts mesh_device=None",
+    ),
+    DefaultDeviceFallback(
+        "modules.sampling._resolve_sampling2d_config",
+        "legacy 2D convenience constructor accepts mesh_device=None",
     ),
 )
 _FALLBACK_OWNERS = frozenset(record.owner for record in DEFAULT_DEVICE_FALLBACK_LEDGER)

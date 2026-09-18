@@ -17,6 +17,7 @@ from qualification.tools.validate_bh_required_capabilities import (
     _QWEN_DEMO_MANIFEST_SHA256,
     DEFAULT_CONTRACTS,
     DEFAULT_SCHEMA,
+    REPOSITORY_ROOT,
     CapabilityContractValidationError,
     _demo_manifest_digest,
     load_schema,
@@ -565,3 +566,48 @@ class TestBhRequiredCapabilities(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@pytest.mark.host
+def test_blackhole_galaxy_geometry_is_declared_but_not_yet_required():
+    """The BHGLX geometry is `additive_functional`, and must stay that way for now.
+
+    Declaring the geometry is what makes it visible to this validator and to
+    anyone reading the contract; declaring it *required* would assert a coverage
+    obligation that no measurement supports -- nothing in this repository has run
+    on a Blackhole Galaxy, and both Blackhole Galaxy CI SKUs upstream are
+    `release_ready: false`.
+
+    It is declared on Qwen3-32B alone, deliberately. Qwen is tier-1 CI on both
+    architectures upstream, so "the reference runs on Blackhole Galaxy" means
+    *Qwen* runs on it. Llama-3.3-70B Galaxy has never run on Blackhole anywhere:
+    its demo hardcodes `fabric_config: True` with no 2D-torus variant, its CI
+    lists only the Wormhole Galaxy SKU, its arg bag has no Blackhole opt-in, and
+    its model-level test is explicitly skipped for Blackhole. A geometry entry
+    there would be fiction.
+
+    Promoting this to `required` is the deliberate act of taking on the
+    obligation, and it means deleting this test.
+    """
+
+    contract = json.loads((REPOSITORY_ROOT / "tests/hardware/capabilities/qwen3_32b.json").read_text())
+    geometries = {geometry["id"]: geometry for geometry in contract["geometries"]}
+
+    galaxy = geometries["bhglx_tp32_dp1"]
+    assert galaxy["role"] == "additive_functional"
+    assert galaxy["mesh_name"] == "BHGLX"
+    assert galaxy["mesh_shape"] == [8, 4]
+    assert galaxy["dies"] == 32
+    # The fabric is the whole reason this is a distinct geometry rather than a
+    # bigger P150x4: column-axis collectives need the 2D torus here.
+    assert galaxy["fabric_config"] == "FABRIC_2D_TORUS_XY"
+
+    # No requirement may reference it yet; that is what `required` would mean.
+    referenced = {item["geometry_id"] for item in contract.get("demo_requirements", [])}
+    referenced |= {row["geometry_id"] for row in contract.get("serving_rows", [])}
+    assert "bhglx_tp32_dp1" not in referenced
+
+    # And it is declared on Qwen alone.
+    for package in ("llama3_8b", "llama33_70b"):
+        other = json.loads((REPOSITORY_ROOT / f"tests/hardware/capabilities/{package}.json").read_text())
+        assert all(geometry["mesh_name"] != "BHGLX" for geometry in other["geometries"])

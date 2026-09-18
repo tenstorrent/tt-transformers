@@ -24,7 +24,9 @@ from tt_transformers.llm_runtime.tensor_resources import (
     raise_cleanup_failures,
     release_orphans,
 )
-from tt_transformers.modules.rope.rope_1d import prepare_rot_idxs
+from tt_transformers.modules.rope.rope_1d import prepare_rot_idxs as _prepare_rot_idxs_1d
+from tt_transformers.modules.rope.rope_2d import RotarySetup2DConfig
+from tt_transformers.modules.rope.rope_2d import prepare_rot_idxs as _prepare_rot_idxs_2d
 from tt_transformers.modules.sampling.params import (
     PreparedSamplingParams,
     place_prepared_sampling_params,
@@ -691,10 +693,18 @@ class DecodeRuntime:
     def _convert_logits(self, value: Any) -> torch.Tensor:
         if isinstance(value, torch.Tensor):
             output = value.float()
-        elif self.config.num_devices == 1:
-            output = ttnn.to_torch(value).float()
         else:
-            output = _concat_host_output(value, self.config.cluster_shape).float()
+            compose = getattr(self.config.model, "compose_decode_logits", None)
+            if callable(compose):
+                # A model whose decode body must end on device - because that body
+                # is also a trace capture region - composes its own logits behind
+                # this read instead of inside the graph. Absent the method the
+                # composition is unchanged.
+                output = compose(value).float()
+            elif self.config.num_devices == 1:
+                output = ttnn.to_torch(value).float()
+            else:
+                output = _concat_host_output(value, self.config.cluster_shape).float()
         return self._slice_logits(output)
 
     def _slice_logits(self, output: torch.Tensor) -> torch.Tensor:
@@ -726,7 +736,15 @@ class DecodeRuntime:
         else:
             output, log_probs = host_output, None
         if is_tokens:
-            tokens = _process_output_tokens(output, self.config.lane_capacity, self.config.cluster_shape)
+            # Ours: a model may own token composition. Theirs: sampled
+            # log-probs get the same lane-capacity post-processing as tokens. The two
+            # changes are orthogonal — one picks `tokens`, the other shapes `log_probs`.
+            compose = getattr(self.config.model, "compose_decode_tokens", None)
+            tokens = (
+                compose(output)
+                if callable(compose)
+                else _process_output_tokens(output, self.config.lane_capacity, self.config.cluster_shape)
+            )
             return tokens.to(torch.int64), _process_sampled_log_probs(log_probs, self.config.lane_capacity)
         return self._convert_logits(output), log_probs
 
@@ -784,7 +802,15 @@ class DecodeRuntime:
             )
         )
         nonnegative = torch.maximum(prepared.start_pos, torch.zeros_like(prepared.start_pos))
-        rotary = prepare_rot_idxs(config.model.rope_setup.config, nonnegative, on_host=True)
+        # 1D and 2D rope carry different config shapes -- `Rope1DConfig.device` vs
+        # `RotarySetup2DConfig.mesh_device` -- and each module owns a `prepare_rot_idxs`
+        # for its own. They cannot be merged behind one method: `test_legacy_rope_adapters_are_not_public`
+        # deliberately forbids `get_rot_idxs` on `RotarySetup1D`. So the runtime selects
+        # by config type. A `singledispatch` registry would be tidier and is the right
+        # long-term shape; see the port handoff.
+        rope_config = config.model.rope_setup.config
+        prepare = _prepare_rot_idxs_2d if isinstance(rope_config, RotarySetup2DConfig) else _prepare_rot_idxs_1d
+        rotary = prepare(rope_config, nonnegative, on_host=True)
         mapper = ttnn.ShardTensor2dMesh(
             config.mesh_device,
             dims=(None, None),

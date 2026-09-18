@@ -317,7 +317,14 @@ class TracedExecutor:
     `eager_executor` directly.
     """
 
-    def __init__(self, *, eager: EagerExecutor, trace_compiler: TraceCompiler, trace_mode: str = "all") -> None:
+    def __init__(
+        self,
+        *,
+        eager: EagerExecutor,
+        trace_compiler: TraceCompiler,
+        trace_mode: str = "all",
+        capture_context: Any = None,
+    ) -> None:
         if not isinstance(eager, EagerExecutor):
             raise TypeError("eager must be an EagerExecutor")
         if not isinstance(trace_compiler, TraceCompiler):
@@ -326,9 +333,15 @@ class TracedExecutor:
             raise ValueError("trace_compiler must compose eager.program_compiler")
         if trace_mode not in ("decode_only", "all"):
             raise ValueError("TracedExecutor trace_mode must be 'decode_only' or 'all'")
+        if capture_context is not None and not callable(capture_context):
+            raise TypeError("capture_context must be callable when supplied")
         self.eager_executor = eager
         self.trace_compiler = trace_compiler
         self.trace_mode = trace_mode
+        #: Called with one operation name ("prefill"/"decode") immediately before
+        #: that operation's trace capture, outside the capture region. A model
+        #: whose prefill and decode share one device context leaves it unset.
+        self.capture_context = capture_context
         self._coverage_miss_count = 0
         self._recent_prefill_replay_evidence: tuple[PrefillReplayEvidence, ...] = ()
 
@@ -578,9 +591,17 @@ class TracedExecutor:
                         else None
                     ),
                     release_prime_output=operation_plan.release_prime_output,
+                    prepare_context=self._capture_context_for("prefill"),
                 )
             )
         return programs
+
+    def _capture_context_for(self, operation: str):
+        """Bind one operation's pre-capture context establishment, or nothing."""
+
+        if self.capture_context is None:
+            return None
+        return lambda: self.capture_context(operation)
 
     def _preflight_prefill(self, prepared: Any):
         # A compiled eager program can share geometry with a request that is not
@@ -727,6 +748,7 @@ class TracedExecutor:
                         full_without_device_feedback=operation_plan.refresh_policy.full_without_device_feedback,
                         refresh_page_table_on_change=operation_plan.refresh_policy.refresh_page_table_on_change,
                     ),
+                    prepare_context=self._capture_context_for("decode"),
                 )
             )
         return program
