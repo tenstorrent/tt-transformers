@@ -55,11 +55,11 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/tenstorrent/tt_transformers"
-Repository = "https://github.com/tenstorrent/tt_transformers"
-Documentation = "https://github.com/tenstorrent/tt_transformers#readme"
-Changelog = "https://github.com/tenstorrent/tt_transformers/blob/main/CHANGELOG.md"
-Issues = "https://github.com/tenstorrent/tt_transformers/issues"
+Homepage = "https://github.com/tenstorrent/tt-transformers"
+Repository = "https://github.com/tenstorrent/tt-transformers"
+Documentation = "https://github.com/tenstorrent/tt-transformers#readme"
+Changelog = "https://github.com/tenstorrent/tt-transformers/blob/main/CHANGELOG.md"
+Issues = "https://github.com/tenstorrent/tt-transformers/issues"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

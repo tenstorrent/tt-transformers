@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+# SPDX-License-Identifier: Apache-2.0
+
 """One upstream native build/install recipe for editable and fixed-wheel runtimes."""
 
 from __future__ import annotations

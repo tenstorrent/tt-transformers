@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+# SPDX-License-Identifier: Apache-2.0
+
 """Executed in an isolated child interpreter, never imported by production code."""
 
 from __future__ import annotations
