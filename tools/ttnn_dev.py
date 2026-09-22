@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+# SPDX-License-Identifier: Apache-2.0
+
 """Develop tt_transformers with editable TTNN or a commit-addressed wheel bundle."""
 
 from __future__ import annotations
@@ -44,7 +47,7 @@ from tools.ttnn_dev_support.common import (  # noqa: E402
 from tools.ttnn_dev_support.environment import create_environment, doctor, requirements, run_environment  # noqa: E402
 
 WORKFLOW = "ttnn-development.yml"
-GITHUB_REPOSITORY = "tenstorrent/tt_transformers"
+GITHUB_REPOSITORY = "tenstorrent/tt-transformers"
 
 
 def config_path(args) -> Path:

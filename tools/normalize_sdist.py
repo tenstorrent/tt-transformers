@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+# SPDX-License-Identifier: Apache-2.0
+
 """Normalize a generated source distribution for byte-reproducible release builds."""
 
 from __future__ import annotations

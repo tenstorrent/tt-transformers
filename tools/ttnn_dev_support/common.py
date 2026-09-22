@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+# SPDX-License-Identifier: Apache-2.0
+
 """Runtime identity, source provenance, locking, and subprocess helpers."""
 
 from __future__ import annotations

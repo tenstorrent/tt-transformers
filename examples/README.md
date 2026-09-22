@@ -6,8 +6,8 @@ wheel. Every model is currently experimental.
 ## Set up
 
 ```bash
-git clone https://github.com/tenstorrent/tt_transformers.git
-cd tt_transformers
+git clone https://github.com/tenstorrent/tt-transformers.git
+cd tt-transformers
 python -m pip install -e '.[examples,test]'
 ```
 

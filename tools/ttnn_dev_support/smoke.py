@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+# SPDX-License-Identifier: Apache-2.0
+
 """Explicit on-device JIT smoke check for a selected TTNN development runtime."""
 
 from __future__ import annotations
