@@ -74,6 +74,10 @@ class Qwen2Generator:
         "supports_async_decode": True,
         "supports_sample_on_device": True,
         "accepts_trace_mode": True,
+        # The only supported multi-device geometry is N300, which the vLLM plugin
+        # (vllm-tt-plugin #116) already defaults to FABRIC_1D. Declared explicitly
+        # so the choice is a visible one-liner rather than an inherited default.
+        "fabric_config": {"config": ttnn.FabricConfig.FABRIC_1D},
     }
     requires_prefill_trace_warmup = True
 
