@@ -223,10 +223,7 @@ def _structural_violations(path: Path, relative: Path, tree: ast.AST) -> list[Vi
                     reason="direct TTNN default-device access is forbidden outside the scoped owner",
                 )
             )
-        if isinstance(node, ast.ImportFrom) and node.module in {
-            "tt_transformers.sampling",
-            "tt_transformers.sampling.generator",
-        }:
+        if isinstance(node, ast.ImportFrom) and node.module == "tt_transformers.sampling":
             if any(alias.name == "SamplingParams" for alias in node.names):
                 violations.append(
                     Violation(
