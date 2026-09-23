@@ -24,7 +24,12 @@ from loguru import logger
 from tests.support.comparison import comp_allclose, comp_pcc
 
 from tt_transformers.modules.lazy_weight import LazyWeight
-from tt_transformers.modules.lm_head.lm_head_1d import LMHead1D, LMHead1DConfig, resolve_lm_head_1d_arch_config
+from tt_transformers.modules.lm_head.lm_head_1d import (
+    LMHead1D,
+    LMHead1DConfig,
+    _validate_lm_head_program_configs,
+    resolve_lm_head_1d_arch_config,
+)
 from tt_transformers.tensor_utils import TILE_SIZE
 
 # 1D module suites target the T3K; skip when the host system is a Galaxy.
@@ -216,6 +221,94 @@ def test_lm_head_construction_is_only_architecture_query():
     _ = module.config.compute_kernel_config
     assert config.mesh_device.arch.call_count == 1
     assert not hasattr(module, "arch_config")
+
+
+def _pure_dram_sharded_lm_head_config(
+    *, grid, dim, num_devices, logical_width, physical_width, input_cores, dram_cores, per_core_n
+):
+    # Upstream also sets num_workers_per_dram_bank on the program config; that keyword does not
+    # exist on MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig at the pinned ttnn. Nothing
+    # is lost: the admission check never reads it, and the reader count these cases exercise is
+    # carried by dram_cores.
+    from tt_transformers.modules.lm_head.lm_head_1d import _create_dram_sharded_mem_config
+
+    mesh = MagicMock()
+    mesh.get_num_devices.return_value = num_devices
+    mesh.compute_with_storage_grid_size.return_value = ttnn.CoreCoord(*grid)
+    # Admission only needs source metadata; do not allocate model-sized weights.
+    weight = MagicMock()
+    weight.source.shape = (dim, physical_width * num_devices)
+    input_grid = ttnn.CoreRangeSet({ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(7, input_cores // 8 - 1))})
+    dram_grid = ttnn.CoreRangeSet({ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(dram_cores - 1, 0))})
+    return LMHead1DConfig(
+        output_weights=[weight],
+        mesh_device=mesh,
+        dim=dim,
+        max_batch_size=1,
+        program_configs=[
+            ttnn.MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig(
+                in0_block_w=dim // (TILE_SIZE * input_cores),
+                per_core_M=1,
+                per_core_N=per_core_n,
+            )
+        ],
+        output_split_sizes=[logical_width],
+        input_memcfg=ttnn.MemoryConfig(
+            ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+            ttnn.BufferType.L1,
+            ttnn.ShardSpec(input_grid, (TILE_SIZE, dim // input_cores), ttnn.ShardOrientation.ROW_MAJOR),
+        ),
+        weights_memcfgs=[_create_dram_sharded_mem_config(dim, physical_width, dram_grid, dram_cores=dram_cores)],
+    )
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(
+    "grid,dim,num_devices,logical_width,physical_width,input_cores,dram_cores,per_core_n",
+    [
+        pytest.param((8, 8), 8192, 8, 8192, 8192, 32, 12, 8, id="llama33-wormhole"),
+        pytest.param((11, 8), 8192, 4, 4008, 4032, 32, 8, 4, id="llama33-blackhole"),
+        pytest.param((11, 8), 4096, 4, 32768, 32768, 8, 8, 64, id="llama31-qb2"),
+    ],
+)
+def test_lm_head_output_storage_is_independent_of_inputs_and_readers(
+    grid, dim, num_devices, logical_width, physical_width, input_cores, dram_cores, per_core_n
+):
+    # All three recipes need more output cores than they have DRAM readers; the QB2 one also
+    # needs more than it has activation shards. Ported from tenstorrent/tt-metal#55922.
+    config = _pure_dram_sharded_lm_head_config(
+        grid=grid,
+        dim=dim,
+        num_devices=num_devices,
+        logical_width=logical_width,
+        physical_width=physical_width,
+        input_cores=input_cores,
+        dram_cores=dram_cores,
+        per_core_n=per_core_n,
+    )
+    _validate_lm_head_program_configs(config)
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("grid,dram_cores", [((8, 8), 12), ((11, 8), 8)])
+@pytest.mark.parametrize("extra_tile", [0, 1])
+def test_lm_head_output_storage_capacity_uses_physical_width(grid, dram_cores, extra_tile, expect_error):
+    capacity = grid[0] * grid[1]
+    config = _pure_dram_sharded_lm_head_config(
+        grid=grid,
+        dim=4096,
+        num_devices=1,
+        logical_width=capacity * TILE_SIZE,
+        physical_width=(capacity + extra_tile) * TILE_SIZE,
+        input_cores=8,
+        dram_cores=dram_cores,
+        per_core_n=1,
+    )
+    if extra_tile:
+        with expect_error(ValueError, f"requires {capacity + 1} output storage cores"):
+            _validate_lm_head_program_configs(config)
+    else:
+        _validate_lm_head_program_configs(config)
 
 
 @pytest.mark.host
