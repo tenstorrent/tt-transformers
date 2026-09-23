@@ -295,6 +295,23 @@ def test_prefill_request_rows_are_placed_into_lane_local_slots_with_history():
         ("src/tt_transformers/models/qwen3_32b/vllm_generator.py", "Qwen3_32BGenerator"),
     ],
 )
+def _literal_capabilities(dict_node):
+    """Read a ``model_capabilities`` dict literal from AST without importing ttnn.
+
+    Values that are not Python literals — e.g. ``fabric_config``, whose value is a
+    ``ttnn.FabricConfig`` enum member — cannot be ``literal_eval``-ed on host, so
+    they are represented by their source text instead of being evaluated. The
+    literal-valued keys this test asserts on are unaffected."""
+    capabilities = {}
+    for key_node, value_node in zip(dict_node.keys, dict_node.values):
+        key = ast.literal_eval(key_node)
+        try:
+            capabilities[key] = ast.literal_eval(value_node)
+        except (ValueError, SyntaxError):
+            capabilities[key] = ast.unparse(value_node)
+    return capabilities
+
+
 def test_target_generator_capabilities_advertise_exact_device_top_k(relative_path, class_name):
     repository_root = Path(__file__).parents[3]
     source = (repository_root / relative_path).read_text(encoding="utf-8")
@@ -306,7 +323,7 @@ def test_target_generator_capabilities_advertise_exact_device_top_k(relative_pat
         if isinstance(node, ast.Assign)
         and any(isinstance(target, ast.Name) and target.id == "model_capabilities" for target in node.targets)
     )
-    capabilities = ast.literal_eval(assignment.value)
+    capabilities = _literal_capabilities(assignment.value)
 
     assert capabilities["supports_sample_on_device"] is True
     assert capabilities["max_device_top_k"] == 32
