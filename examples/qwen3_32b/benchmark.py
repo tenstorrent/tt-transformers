@@ -61,6 +61,7 @@ from examples.common.run_helpers import (
     run_eval_repeat_batch32,
     run_perf_benchmark,
     run_teacher_forcing,
+    warmup_demo_executor,
 )
 from examples.common.runtime import UnsupportedConfiguration, open_mesh_device
 from examples.common.trace_region_sizes import resolve_trace_region_size
@@ -357,46 +358,6 @@ def lazy_weight_cache_dir_for_demo(mesh_device: ttnn.MeshDevice, hf_model_id: st
         append_topology_to_tt_cache_path=True,
         mesh_device=mesh_device,
     )
-
-
-def _warmup_demo_executor(
-    executor,
-    *,
-    kv_cache,
-    page_table,
-    prefill_compile_case=None,
-    prefill_sampling_params=None,
-    prefill_compile_execution=None,
-):
-    """Compile eager programs and representative requests before trace activation."""
-    config = executor.config
-    prefill_kwargs = {
-        "kv_cache": kv_cache,
-        "can_sample_on_device": config.device_sampling_enabled,
-    }
-    decode_kwargs = {
-        "kv_cache": kv_cache,
-        "max_batch_size": int(executor.model.config.max_batch_size),
-        "num_blocks": int(page_table.shape[-1]),
-        "can_sample_on_device": config.device_sampling_enabled,
-    }
-    executor.warmup_model_decode(enable_trace=False, **decode_kwargs)
-    executor.warmup_model_prefill(enable_trace=False, **prefill_kwargs)
-    if prefill_compile_case is not None:
-        tokens, prompt_lens = prefill_compile_case
-        executor.compile_prefill(
-            tokens=tokens,
-            page_table=page_table,
-            kv_cache=kv_cache,
-            prompt_lens=prompt_lens,
-            empty_slots=list(range(tokens.shape[0])),
-            sampling_params=prefill_sampling_params,
-            execution=prefill_compile_execution if prefill_compile_execution is not None else executor.eager_execution,
-        )
-    if config.trace.prefill_enabled:
-        executor.warmup_model_prefill(enable_trace=True, **prefill_kwargs)
-    if config.trace.decode_enabled:
-        executor.warmup_model_decode(enable_trace=True, **decode_kwargs)
 
 
 def ref_basename_for_hf(hf_model_id: str) -> str:
@@ -1651,7 +1612,7 @@ def _run_perf_benchmark(
         # benchmark runner attempts its first traced replay.  In particular, a natural Q128 prompt
         # may end in any 32-token tile; compiling through the traced target associates that exact
         # tile program with the sampling-independent Q128 trace captured by this warmup barrier.
-        _warmup_demo_executor(
+        warmup_demo_executor(
             traced_executor,
             kv_cache=kv_cache,
             page_table=page_table,
@@ -1864,14 +1825,14 @@ def _run_eval_repeat_batch32(
 
     def allocate_kv_cache(executor):
         kv_cache = executor.allocate_kv_cache(kv_cache_shape, torch.bfloat16, ma.n_layers)
-        _warmup_demo_executor(
+        warmup_demo_executor(
             executor,
             kv_cache=kv_cache,
             page_table=page_table,
             prefill_compile_case=representative_prefill,
             prefill_sampling_params=sampling_params,
             # Full-trace replay requires the exact concrete program alias to be registered before
-            # `_warmup_demo_executor` crosses the capture barrier. Decode-only determinism keeps its
+            # `warmup_demo_executor` crosses the capture barrier. Decode-only determinism keeps its
             # established eager compile path.
             prefill_compile_execution=executor.traced_prefill_execution if perf_report else None,
         )
