@@ -286,15 +286,6 @@ def test_prefill_request_rows_are_placed_into_lane_local_slots_with_history():
     )
 
 
-@pytest.mark.host
-@pytest.mark.parametrize(
-    ("relative_path", "class_name"),
-    [
-        ("src/tt_transformers/models/llama3_8b/vllm_generator.py", "Llama3Generator"),
-        ("src/tt_transformers/models/llama33_70b/vllm_generator.py", "Llama33_70BGenerator"),
-        ("src/tt_transformers/models/qwen3_32b/vllm_generator.py", "Qwen3_32BGenerator"),
-    ],
-)
 def _literal_capabilities(dict_node):
     """Read a ``model_capabilities`` dict literal from AST without importing ttnn.
 
@@ -312,6 +303,15 @@ def _literal_capabilities(dict_node):
     return capabilities
 
 
+@pytest.mark.host
+@pytest.mark.parametrize(
+    ("relative_path", "class_name"),
+    [
+        ("src/tt_transformers/models/llama3_8b/vllm_generator.py", "Llama3Generator"),
+        ("src/tt_transformers/models/llama33_70b/vllm_generator.py", "Llama33_70BGenerator"),
+        ("src/tt_transformers/models/qwen3_32b/vllm_generator.py", "Qwen3_32BGenerator"),
+    ],
+)
 def test_target_generator_capabilities_advertise_exact_device_top_k(relative_path, class_name):
     repository_root = Path(__file__).parents[3]
     source = (repository_root / relative_path).read_text(encoding="utf-8")
