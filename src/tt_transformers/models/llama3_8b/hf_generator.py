@@ -120,7 +120,7 @@ def compute_gather_cos_sin(
 
 def should_pad_sampling_logits_to_power_of_2(padded_vocab_size: int, sampling_splits: int) -> bool:
     if sampling_splits < 1:
-        return False
+        raise ValueError(f"sampling_splits must be >= 1, got {sampling_splits}")
     per_device_vocab = padded_vocab_size // sampling_splits
     return per_device_vocab > 0 and (per_device_vocab & (per_device_vocab - 1)) != 0
 
