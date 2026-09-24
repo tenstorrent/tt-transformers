@@ -762,7 +762,7 @@ class Mistral7BExecutor:
         )
 
     def _resolve_prefill_execution(self, *, tokens, prompt_lens, start_pos, empty_slots):
-        """Choose the prefill executor for one request (Option B guarded eager degrade).
+        """Choose the prefill executor for one request (guarded eager degrade).
 
         A request whose padded bucket was never captured has no required trace, so it
         runs eager against a program pre-compiled at warmup instead of raising a trace

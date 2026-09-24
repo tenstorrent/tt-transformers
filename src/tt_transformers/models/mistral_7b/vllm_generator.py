@@ -346,7 +346,7 @@ class Mistral7BGenerator:
         normalized: NormalizedPrefillKwargs,
         trace_requested: bool,
     ):
-        # Option B guarded eager degrade. Static trace intent still gates whether a trace
+        # Guarded eager degrade. Static trace intent still gates whether a trace
         # is attempted, but a request whose padded bucket was never captured has no
         # required trace, so it runs eager (against a program pre-compiled at warmup)
         # rather than raising. A trace-eligible request still selects the traced target,

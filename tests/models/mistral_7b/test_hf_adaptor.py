@@ -42,7 +42,7 @@ def test_runtime_config_preserves_per_sku_trace_and_batched_prefill_policy():
 @pytest.mark.host
 @pytest.mark.model
 def test_trace_warmup_seq_lens_cover_every_bucket_up_to_the_chunk_cap():
-    # The eager-degrade path (Option B) needs a pre-compiled program for every bucket a
+    # The guarded eager-degrade path needs a pre-compiled program for every bucket a
     # prompt can pad to up to the chunk cap, so the warmup ladder must mirror the runtime's
     # bucket ladder (128, 1024, then next power of two) up to max_prefill_chunk_size and be
     # a superset of the traced buckets.
