@@ -462,9 +462,8 @@ vLLM
        -> require explicit Boolean enable_trace
        -> normalize torch dtypes
   -> Llama3Generator._select_prefill_execution(...)
-       -> if trace requested, target.can_trace_prefill(...)
-       -> cached/chunked/unsupported requests select eager
-       -> eligible requests select traced
+       -> enable_trace false -> target.eager_execution
+       -> enable_trace true  -> target.traced_prefill_execution
   -> target.prefill_forward(execution=selected, ...)
        -> Llama3Executor, or LaneGroupExecutor -> each Llama3Executor
   -> selected EagerExecutor or TracedExecutor
@@ -472,8 +471,17 @@ vLLM
   -> Llama3Transformer1D
 ```
 
-The fallback belongs here, at the vLLM/model boundary. `TracedExecutor` never
-silently invokes eager execution.
+For Llama-3.1-8B the static trace intent is authoritative: when trace is
+requested the traced executor is always selected, and a request whose padded
+prefill bucket was never captured **raises** rather than degrading to eager.
+The facade never turns a required trace miss into eager KV writes, and
+`TracedExecutor` never silently invokes eager execution.
+
+A guarded per-request eager degrade — probing `can_trace_prefill` so that a
+request whose bucket was never captured runs eager against a program
+pre-compiled at warmup, while a trace-eligible request still traces-or-raises —
+is implemented for **`mistral_7b` only**, as a reference. It is not general to
+every model, and Llama-3.1-8B does not use it.
 
 ### 5. Decode dispatch
 

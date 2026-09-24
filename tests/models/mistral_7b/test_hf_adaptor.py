@@ -13,6 +13,7 @@ from tt_transformers.models.mistral_7b.hf_generator import (
     Mistral7BForCausalLM,
     Mistral7BRuntimeConfig,
     _trace_seq_lens,
+    _trace_warmup_seq_lens,
     convert_hf_model_weights,
 )
 
@@ -36,6 +37,25 @@ def test_runtime_config_preserves_per_sku_trace_and_batched_prefill_policy():
     assert _trace_seq_lens(1, 2048, 4096) == (128,)
     assert _trace_seq_lens(2, 2048, 4096) == (128, 1024)
     assert _trace_seq_lens(8, 2048, 4096) == (128, 1024)
+
+
+@pytest.mark.host
+@pytest.mark.model
+def test_trace_warmup_seq_lens_cover_every_bucket_up_to_the_chunk_cap():
+    # The eager-degrade path (Option B) needs a pre-compiled program for every bucket a
+    # prompt can pad to up to the chunk cap, so the warmup ladder must mirror the runtime's
+    # bucket ladder (128, 1024, then next power of two) up to max_prefill_chunk_size and be
+    # a superset of the traced buckets.
+    warmup = _trace_warmup_seq_lens(2048, 4096)
+    assert warmup == (128, 1024, 2048)
+    # Covers the chunk cap, which is exactly the bucket that a 1025..2048-token prompt pads
+    # to and which the N300 traced set (128, 1024) does not capture.
+    assert 2048 in warmup
+    for supported in (_trace_seq_lens(1, 2048, 4096), _trace_seq_lens(2, 2048, 4096)):
+        assert set(supported) <= set(warmup)
+    # max_seq_len clamps the ladder.
+    assert _trace_warmup_seq_lens(2048, 1024) == (128, 1024)
+    assert _trace_warmup_seq_lens(4096, 8192) == (128, 1024, 2048, 4096)
 
 
 @pytest.mark.host
