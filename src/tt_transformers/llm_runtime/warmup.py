@@ -16,6 +16,7 @@ from loguru import logger
 from tt_transformers.llm_runtime.config import PageTableLayout, TraceConfig, WarmupConfig
 from tt_transformers.llm_runtime.decode import DecodeRuntimeConfig
 from tt_transformers.llm_runtime.prefill.config import PrefillRuntimeConfig
+from tt_transformers.llm_runtime.prefill.plan import _max_prefill_chunk_size, _padded_prefill_length
 from tt_transformers.llm_runtime.program_compiler import CompiledProgram
 from tt_transformers.sampling.sampling_params import SamplingParams
 
@@ -70,6 +71,7 @@ class WarmupCoordinatorConfig:
     decode_trace_enabled: bool
     eager_plan: WarmupPlan
     sampled_plan: WarmupPlan
+    prefill_trace_sequence_lengths: tuple[int, ...]  # Plan lengths whose first invocation has a trace family.
 
     def __post_init__(self) -> None:
         if not isinstance(self.warmup, WarmupConfig):
@@ -79,6 +81,12 @@ class WarmupCoordinatorConfig:
         if not isinstance(self.page_table_layout, PageTableLayout):
             raise TypeError("page_table_layout must be a PageTableLayout")
         _validate_prefill_sequence_lengths(self.prefill_sequence_lengths)
+        if not isinstance(self.prefill_trace_sequence_lengths, tuple) or any(
+            length not in self.prefill_sequence_lengths for length in self.prefill_trace_sequence_lengths
+        ):
+            raise ValueError("prefill trace sequence lengths must be a subset of the prefill sequence lengths")
+        if self.prefill_trace_sequence_lengths and not self.prefill_trace_enabled:
+            raise ValueError("prefill trace sequence lengths require prefill trace")
         _require_positive_int("lane_batch_size", self.lane_batch_size)
         for name in (
             "device_sampling_enabled",
@@ -123,6 +131,11 @@ class WarmupCoordinatorConfig:
         if self.eager_plan != expected_eager or self.sampled_plan != expected_sampled:
             raise ValueError("warmup plans must match resolved policy and geometry")
 
+    def traces_prefill_case(self, case: WarmupCase) -> bool:
+        """Whether trace warmup registers this prefill case instead of compiling it eagerly."""
+
+        return case.sequence_length in self.prefill_trace_sequence_lengths
+
     @classmethod
     def resolve(
         cls,
@@ -160,6 +173,11 @@ class WarmupCoordinatorConfig:
         if source_lengths is None:
             source_lengths = prefill_sequence_lengths
         _validate_prefill_sequence_lengths(source_lengths)
+        prefill_trace_sequence_lengths = (
+            tuple(length for length in source_lengths if _prefill_invocation_can_trace(prefill, length))
+            if trace.prefill_enabled
+            else ()
+        )
 
         lane_batch_size = prefill.max_batch_size
         device_sampling_enabled = prefill.device_sampling_enabled
@@ -194,6 +212,7 @@ class WarmupCoordinatorConfig:
             decode_trace_enabled=trace.decode_enabled,
             eager_plan=eager_plan,
             sampled_plan=sampled_plan,
+            prefill_trace_sequence_lengths=prefill_trace_sequence_lengths,
             page_table_layout_ceiling=prefill.page_table_layout_ceiling,
         )
 
@@ -312,7 +331,8 @@ class WarmupCoordinator:
             return False
         if not self.config.prefill_trace_enabled or self._trace_decisions.get("prefill") is False:
             return True
-        return required.issubset(self._trace_registered) and self._captured
+        required_trace = {case for case in required if self.config.traces_prefill_case(case)}
+        return required_trace.issubset(self._trace_registered) and self._captured
 
     @property
     def coverage_manifest(self) -> CoverageManifest | None:
@@ -390,7 +410,6 @@ class WarmupCoordinator:
         if can_sample_on_device:
             self._ensure_sampling_buffers()
         plan = self._plan(can_sample_on_device=can_sample_on_device)
-        destination = self._trace_registered if enable_trace else self._eager
         cases = plan.prefill
         if enable_trace and can_sample_on_device:
             # The hidden-body trace is sampling-independent, but its retained
@@ -398,6 +417,10 @@ class WarmupCoordinator:
             # top-k variant first so the shared artifact owns a K/P/T buffer.
             cases = tuple(sorted(cases, key=lambda case: case.sampling_path != "topk"))
         for case in cases:
+            # A case without a trace family compiles eagerly even in the trace
+            # pass, so the eager degrade has a program whichever pass runs first.
+            traced = enable_trace and self.config.traces_prefill_case(case)
+            destination = self._trace_registered if traced else self._eager
             if case in destination:
                 continue
             sampling = None
@@ -428,7 +451,7 @@ class WarmupCoordinator:
                 start_pos = (
                     torch.full((case.batch_size,), case.cached_tokens, dtype=torch.long) if case.cached_tokens else None
                 )
-                compile_target = self.execution if enable_trace else self.eager
+                compile_target = self.execution if traced else self.eager
                 programs = compile_target.compile_prefill(
                     tokens=tokens,
                     page_table=page_table,
@@ -437,7 +460,7 @@ class WarmupCoordinator:
                     empty_slots=list(range(case.batch_size)),
                     sampling_params=sampling,
                 )
-                self._record_required_programs(programs, traced=enable_trace)
+                self._record_required_programs(programs, traced=traced)
             destination.add(case)
         self._maybe_capture()
 
@@ -504,7 +527,7 @@ class WarmupCoordinator:
                 return
             if prefill_decision:
                 prefill_plan = self._plan(can_sample_on_device=self._sampling_decisions["prefill"])
-                required_trace.update(prefill_plan.prefill)
+                required_trace.update(case for case in prefill_plan.prefill if self.config.traces_prefill_case(case))
         if self.config.decode_trace_enabled:
             decode_decision = self._trace_decisions.get("decode")
             if decode_decision is None:
@@ -563,12 +586,11 @@ class WarmupCoordinator:
         ):
             return
         prefill_can_sample = self._sampling_decisions.get("prefill", self.config.device_sampling_enabled)
-        if not prefill_can_sample or not self.config.allow_force_argmax:
+        traced_lengths = self.config.prefill_trace_sequence_lengths
+        if not prefill_can_sample or not self.config.allow_force_argmax or not traced_lengths:
             self._prefill_trace_postprocess_primed = True
             return
-        sequence_length = (
-            128 if 128 in self.config.prefill_sequence_lengths else int(self.config.prefill_sequence_lengths[0])
-        )
+        sequence_length = 128 if 128 in traced_lengths else int(traced_lengths[0])
         width = _ceil_div(sequence_length, self.config.page_table_layout.block_size)
         self.execution.prefill_forward(
             tokens=torch.zeros((1, sequence_length), dtype=torch.long),
@@ -651,6 +673,19 @@ def _resolve_coverage_manifest(
         trace_signatures=tuple(trace_signatures_by_key.values()),
         aliases=tuple(aliases),
     )
+
+
+def _prefill_invocation_can_trace(prefill: PrefillRuntimeConfig, sequence_length: int) -> bool:
+    # Mirror PrefillRuntime.can_trace: trace capability belongs to the first
+    # invocation's geometry, the padded length clamped to the chunk cap. Cached
+    # starts are runtime tensors, so they do not change eligibility.
+    padded_length = _padded_prefill_length(sequence_length)
+    invocation_length = (
+        _max_prefill_chunk_size(padded_length, prefill.max_prefill_chunk_size)
+        if padded_length > prefill.max_prefill_chunk_size
+        else padded_length
+    )
+    return bool(prefill.can_enable_trace(invocation_length, 0))
 
 
 def _require_positive_int(name: str, value: Any) -> None:

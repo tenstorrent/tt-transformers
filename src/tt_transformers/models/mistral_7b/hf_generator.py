@@ -698,7 +698,11 @@ class Mistral7BExecutor:
         self._ensure_active()
         self._validate_bound_cache(kv_cache)
         self._ensure_sampling_for(sampling_params)
-        return (execution or self._prefill_execution).compile_prefill(
+        if execution is None:
+            execution = self._resolve_prefill_execution(
+                tokens=tokens, prompt_lens=prompt_lens, start_pos=start_pos, empty_slots=empty_slots
+            )
+        return execution.compile_prefill(
             tokens=tokens,
             page_table=page_table,
             prompt_lens=prompt_lens,

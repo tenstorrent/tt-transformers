@@ -124,6 +124,8 @@ def make_runtime_configs(
     page_table_layout=None,
     sampling_config=None,
     model=None,
+    max_prefill_chunk_size=2048,
+    can_enable_trace=None,
 ):
     mesh = Mesh()
     sampling_config = sampling_config or SimpleNamespace(
@@ -160,9 +162,9 @@ def make_runtime_configs(
             output_reader=output_reader,
             page_table_layout=layout,
             max_batch_size=lane_capacity,
-            max_prefill_chunk_size=128,
+            max_prefill_chunk_size=max_prefill_chunk_size,
             device_sampling_enabled=sampling,
-            can_enable_trace=lambda _sequence_length, _batch_size: True,
+            can_enable_trace=can_enable_trace or (lambda _sequence_length, _num_cached_tokens: True),
         ),
         DecodeRuntimeConfig.resolve(
             model=model,
@@ -187,6 +189,9 @@ def make_coordinator(
     allow_force_argmax=True,
     page_table_layout=None,
     sampling_config=None,
+    eager_execution=None,
+    max_prefill_chunk_size=2048,
+    can_enable_trace=None,
 ):
     events = events if events is not None else []
     execution = execution or RecordingExecution(events)
@@ -214,10 +219,13 @@ def make_coordinator(
         allow_force_argmax=allow_force_argmax,
         page_table_layout=layout,
         sampling_config=sampling_config,
+        max_prefill_chunk_size=max_prefill_chunk_size,
+        can_enable_trace=can_enable_trace,
     )
-    execution.prefill = SimpleNamespace(config=prefill_config)
-    execution.decode = SimpleNamespace(config=decode_config)
-    execution.eager_executor = execution
+    eager = eager_execution or execution
+    eager.prefill = SimpleNamespace(config=prefill_config)
+    eager.decode = SimpleNamespace(config=decode_config)
+    execution.eager_executor = eager
     execution.trace_compiler = trace_compiler
 
     coordinator = WarmupCoordinator(
@@ -1051,3 +1059,107 @@ def test_dynamic_hints_cannot_expand_static_trace_or_sampling_ceilings(expect_er
         )
 
     coordinator.warmup_prefill(kv_cache="cache", enable_trace=False, can_sample_on_device=False)
+
+
+def _uncached_prefill_lengths(execution):
+    return [
+        int(call["tokens"].shape[-1]) - (0 if call["start_pos"] is None else int(call["start_pos"][0]))
+        for call in execution.prefill_calls
+    ]
+
+
+def make_split_coordinator(*, sequence_lengths, eligible_lengths, max_prefill_chunk_size=2048, trace_mode="all"):
+    """A coordinator whose traced and eager targets record separately."""
+
+    events = []
+    traced = RecordingExecution(events)
+    eager = RecordingExecution(events)
+    predicate_calls = []
+
+    def can_enable_trace(sequence_length, num_cached_tokens):
+        predicate_calls.append((sequence_length, num_cached_tokens))
+        return sequence_length in eligible_lengths
+
+    coordinator, _, trace_compiler, *_ = make_coordinator(
+        trace_mode=trace_mode,
+        sampling=False,
+        warmup_config=WarmupConfig(prefill_batch_sizes=(1,)),
+        sequence_lengths=sequence_lengths,
+        lane_capacity=1,
+        execution=traced,
+        eager_execution=eager,
+        events=events,
+        max_prefill_chunk_size=max_prefill_chunk_size,
+        can_enable_trace=can_enable_trace,
+    )
+    return coordinator, traced, eager, trace_compiler, predicate_calls
+
+
+PREFILL_KWARGS = {"kv_cache": "cache", "can_sample_on_device": False}
+DECODE_KWARGS = {"kv_cache": "cache", "max_batch_size": 1, "num_blocks": 8, "can_sample_on_device": False}
+
+
+@pytest.mark.host
+def test_trace_warmup_traces_only_eligible_lengths_and_eager_compiles_the_whole_ladder():
+    coordinator, traced, eager, _, _ = make_split_coordinator(
+        sequence_lengths=(128, 1024, 2048),
+        eligible_lengths={128, 1024},
+    )
+
+    assert coordinator.config.prefill_trace_sequence_lengths == (128, 1024)
+    coordinator.warmup_prefill(enable_trace=False, **PREFILL_KWARGS)
+    coordinator.warmup_prefill(enable_trace=True, **PREFILL_KWARGS)
+
+    assert set(_uncached_prefill_lengths(traced)) == {128, 1024}
+    assert set(_uncached_prefill_lengths(eager)) == {128, 1024, 2048}
+
+
+@pytest.mark.host
+def test_trace_warmup_before_any_eager_pass_still_eager_compiles_ineligible_lengths():
+    coordinator, traced, eager, _, _ = make_split_coordinator(
+        sequence_lengths=(128, 1024, 2048),
+        eligible_lengths={128, 1024},
+    )
+
+    coordinator.warmup_prefill(enable_trace=True, **PREFILL_KWARGS)
+
+    assert set(_uncached_prefill_lengths(traced)) == {128, 1024}
+    # Both the regular and the cached-prefix 2048 cases land on the eager target.
+    assert _uncached_prefill_lengths(eager) == [2048, 2048]
+    assert {call["start_pos"] is None for call in eager.prefill_calls} == {True, False}
+
+
+@pytest.mark.host
+def test_trace_capture_fires_when_the_ladder_exceeds_the_trace_eligible_set():
+    coordinator, _, _, trace_compiler, _ = make_split_coordinator(
+        sequence_lengths=(128, 1024, 2048),
+        eligible_lengths={128, 1024},
+    )
+
+    coordinator.warmup_prefill(enable_trace=False, **PREFILL_KWARGS)
+    coordinator.warmup_decode(enable_trace=False, **DECODE_KWARGS)
+    coordinator.warmup_prefill(enable_trace=True, **PREFILL_KWARGS)
+    assert trace_compiler.calls == 0
+    coordinator.warmup_decode(enable_trace=True, **DECODE_KWARGS)
+
+    assert trace_compiler.calls == 1
+    assert coordinator.trace_activated
+    assert coordinator.already_warmed_up_prefill
+
+
+@pytest.mark.host
+def test_ladder_length_above_the_chunk_cap_is_classified_by_its_invocation_length():
+    coordinator, traced, eager, trace_compiler, predicate_calls = make_split_coordinator(
+        sequence_lengths=(128, 2048, 4096),
+        eligible_lengths={128, 2048},
+        max_prefill_chunk_size=2048,
+    )
+
+    assert coordinator.config.prefill_trace_sequence_lengths == (128, 2048, 4096)
+    assert (4096, 0) not in predicate_calls
+    coordinator.warmup_prefill(enable_trace=True, **PREFILL_KWARGS)
+    coordinator.warmup_decode(enable_trace=True, **DECODE_KWARGS)
+
+    assert 4096 in _uncached_prefill_lengths(traced)
+    assert eager.prefill_calls == []
+    assert trace_compiler.calls == 1

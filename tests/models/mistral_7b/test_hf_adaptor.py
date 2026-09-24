@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 # SPDX-License-Identifier: Apache-2.0
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 import torch
@@ -10,6 +11,7 @@ from tt_transformers.models.mistral_7b import hf_generator as hf_adaptor
 from tt_transformers.models.mistral_7b import model as mistral_model
 from tt_transformers.models.mistral_7b import weight_utils
 from tt_transformers.models.mistral_7b.hf_generator import (
+    Mistral7BExecutor,
     Mistral7BForCausalLM,
     Mistral7BRuntimeConfig,
     _trace_seq_lens,
@@ -56,6 +58,52 @@ def test_trace_warmup_seq_lens_cover_every_bucket_up_to_the_chunk_cap():
     # max_seq_len clamps the ladder.
     assert _trace_warmup_seq_lens(2048, 1024) == (128, 1024)
     assert _trace_warmup_seq_lens(4096, 8192) == (128, 1024, 2048, 4096)
+
+
+def _executor_with_split_prefill_targets(*, traceable):
+    executor = object.__new__(Mistral7BExecutor)
+    executor.traced_prefill_execution = MagicMock(name="traced")
+    executor.eager_executor = MagicMock(name="eager")
+    executor._prefill_execution = executor.traced_prefill_execution
+    executor._ensure_active = lambda: None
+    executor._validate_bound_cache = lambda _cache: None
+    executor._ensure_sampling_for = lambda _params: None
+    executor.can_trace_prefill = MagicMock(return_value=traceable)
+    return executor
+
+
+@pytest.mark.host
+@pytest.mark.model
+@pytest.mark.parametrize(("traceable", "expected"), [(True, "traced"), (False, "eager")])
+def test_compile_prefill_without_an_execution_selects_the_prefill_forward_target(traceable, expected):
+    # Serving compiles the concrete request before its forward with no explicit
+    # target. An uncovered bucket must compile on eager, as its forward runs,
+    # instead of reaching the traced compiler, which has no trace family for it.
+    executor = _executor_with_split_prefill_targets(traceable=traceable)
+    tokens = torch.zeros((1, 1500), dtype=torch.long)
+    page_table = torch.zeros((1, 64), dtype=torch.int32)
+
+    executor.compile_prefill(tokens=tokens, page_table=page_table)
+
+    chosen = executor.traced_prefill_execution if expected == "traced" else executor.eager_executor
+    other = executor.eager_executor if expected == "traced" else executor.traced_prefill_execution
+    chosen.compile_prefill.assert_called_once()
+    other.compile_prefill.assert_not_called()
+    executor.can_trace_prefill.assert_called_once()
+
+
+@pytest.mark.host
+@pytest.mark.model
+def test_compile_prefill_explicit_execution_wins_over_selection():
+    executor = _executor_with_split_prefill_targets(traceable=True)
+    tokens = torch.zeros((1, 128), dtype=torch.long)
+    page_table = torch.zeros((1, 4), dtype=torch.int32)
+
+    executor.compile_prefill(tokens=tokens, page_table=page_table, execution=executor.eager_executor)
+
+    executor.eager_executor.compile_prefill.assert_called_once()
+    executor.traced_prefill_execution.compile_prefill.assert_not_called()
+    executor.can_trace_prefill.assert_not_called()
 
 
 @pytest.mark.host
