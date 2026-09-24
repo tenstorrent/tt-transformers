@@ -770,11 +770,15 @@ class Mistral7BExecutor:
         hard-fails if its captured artifact is missing, so a required trace miss is never
         silently turned into eager KV writes.
         """
-        if self.traced_prefill_execution is None:
-            return self.eager_executor
+        traced = getattr(self, "traced_prefill_execution", None)
+        eager = getattr(self, "eager_executor", None)
+        if traced is None or eager is None:
+            # No traced prefill target, or a partially constructed executor: host contract
+            # tests bind only _prefill_execution. Keep the pre-existing selection.
+            return self._prefill_execution
         if self.can_trace_prefill(tokens=tokens, prompt_lens=prompt_lens, start_pos=start_pos, empty_slots=empty_slots):
-            return self.traced_prefill_execution
-        return self.eager_executor
+            return traced
+        return eager
 
     def decode_forward(
         self,

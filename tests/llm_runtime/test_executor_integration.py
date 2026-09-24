@@ -1223,8 +1223,30 @@ def test_generator_preserves_required_trace_intent_for_ineligible_prefill(bindin
     generator = binding.generator_class(target, binding.generator_module._build_vllm_adapter(target))
     tokens = __import__("torch").tensor([[1]])
     page_table = __import__("torch").tensor([[0]], dtype=__import__("torch").int32)
+    if binding.generator_module is mistral_generator:
+        # Mistral-7B runs the guarded eager degrade (tt-metal #55343's shape): a request
+        # that was never trace-eligible has no required trace, so the facade probes
+        # can_trace_prefill and routes it to eager, against a program pre-compiled at
+        # warmup. The eligible half of the invariant is the test directly below.
+        assert generator.prefill_forward(tokens, page_table, enable_trace=True) is target.eager_execution
+        assert [name for name, _ in target.calls] == ["can_trace_prefill", "prefill_forward"]
+        return
     assert generator.prefill_forward(tokens, page_table, enable_trace=True) is target.traced_prefill_execution
     assert [name for name, _ in target.calls] == ["prefill_forward"]
+
+
+@pytest.mark.host
+def test_mistral_guarded_degrade_still_traces_an_eligible_prefill():
+    # The degrade must not swallow the eligible path: if every request fell back to eager
+    # the serve would still succeed and all prefill trace performance would be lost.
+    binding = EXECUTOR_BINDINGS["mistral_7b"]
+    target = binding.make_recording_target(traceable=True)
+    target.config = binding.make_executor_config("all")
+    generator = binding.generator_class(target, binding.generator_module._build_vllm_adapter(target))
+    tokens = __import__("torch").tensor([[1]])
+    page_table = __import__("torch").tensor([[0]], dtype=__import__("torch").int32)
+    assert generator.prefill_forward(tokens, page_table, enable_trace=True) is target.traced_prefill_execution
+    assert [name for name, _ in target.calls] == ["can_trace_prefill", "prefill_forward"]
 
 
 @pytest.mark.host
