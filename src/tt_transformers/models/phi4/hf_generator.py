@@ -32,7 +32,11 @@ from tt_transformers.llm_runtime.prefill.runtime import PrefillRuntime
 from tt_transformers.llm_runtime.program_compiler import ProgramCompiler
 from tt_transformers.llm_runtime.tensor_resources import attach_cleanup_failures
 from tt_transformers.llm_runtime.trace_compiler import TraceCompiler
-from tt_transformers.llm_runtime.warmup import WarmupCoordinator, WarmupCoordinatorConfig
+from tt_transformers.llm_runtime.warmup import (
+    WarmupCoordinator,
+    WarmupCoordinatorConfig,
+    resolve_prefill_warmup_seq_lens,
+)
 from tt_transformers.models.phi4 import weight_utils
 from tt_transformers.models.phi4.model import (
     PHI4_ACCURACY,
@@ -520,7 +524,7 @@ class Phi4Executor:
         self._prefill_execution = self.traced_prefill_execution or self.eager_executor
         self._decode_execution = self.traced_decode_execution or self.eager_executor
 
-        prefill_sequence_lengths = getattr(runtime_config, "trace_prefill_supported_seq_lens", (128,))
+        prefill_sequence_lengths = resolve_prefill_warmup_seq_lens(runtime_config, config.trace)
         self.warmup = WarmupCoordinator(
             config=WarmupCoordinatorConfig.resolve(
                 warmup=config.warmup,
@@ -643,7 +647,11 @@ class Phi4Executor:
         self._ensure_active()
         self._validate_bound_cache(kv_cache)
         self._ensure_sampling_for(sampling_params)
-        return (execution or self._prefill_execution).compile_prefill(
+        if execution is None:
+            execution = self._resolve_prefill_execution(
+                tokens=tokens, prompt_lens=prompt_lens, start_pos=start_pos, empty_slots=empty_slots
+            )
+        return execution.compile_prefill(
             tokens=tokens,
             page_table=page_table,
             prompt_lens=prompt_lens,
@@ -693,7 +701,11 @@ class Phi4Executor:
         self._ensure_active()
         self._validate_bound_cache(kv_cache)
         self._ensure_sampling_for(sampling_params)
-        return (execution or self._prefill_execution).prefill_forward(
+        if execution is None:
+            execution = self._resolve_prefill_execution(
+                tokens=tokens, prompt_lens=prompt_lens, start_pos=start_pos, empty_slots=empty_slots
+            )
+        return execution.prefill_forward(
             tokens=tokens,
             page_table=page_table,
             prompt_lens=prompt_lens,
@@ -701,6 +713,25 @@ class Phi4Executor:
             empty_slots=empty_slots,
             sampling_params=sampling_params,
         )
+
+    def _resolve_prefill_execution(self, *, tokens, prompt_lens, start_pos, empty_slots):
+        """Choose the prefill executor for one request (guarded eager degrade).
+
+        A request whose padded bucket was never captured has no required trace, so it
+        runs eager against a program pre-compiled at warmup instead of raising a trace
+        coverage error. A trace-eligible request still selects the traced executor, which
+        hard-fails if its captured artifact is missing, so a required trace miss is never
+        silently turned into eager KV writes.
+        """
+        traced = getattr(self, "traced_prefill_execution", None)
+        eager = getattr(self, "eager_executor", None)
+        if traced is None or eager is None:
+            # No traced prefill target, or a partially constructed executor: host contract
+            # tests bind only _prefill_execution. Keep the pre-existing selection.
+            return self._prefill_execution
+        if self.can_trace_prefill(tokens=tokens, prompt_lens=prompt_lens, start_pos=start_pos, empty_slots=empty_slots):
+            return traced
+        return eager
 
     def decode_forward(
         self,
@@ -853,7 +884,9 @@ class Phi4Executor:
             top_k=torch.full((1,), 32, dtype=torch.int32),
             top_p=torch.full((1,), 0.08),
         )
-        execution = self.traced_executor if enable_trace else self.eager_executor
+        # Without a Q128 trace family the trace pass primes these programs eagerly.
+        traced = enable_trace and 128 in self.warmup.config.prefill_trace_sequence_lengths
+        execution = self.traced_executor if traced else self.eager_executor
         for sequence_length in (32, 64, 96):
             page_table_width = (
                 sequence_length + self.page_table_layout.block_size - 1

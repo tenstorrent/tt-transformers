@@ -346,10 +346,22 @@ class Qwen25Generator:
         normalized: NormalizedPrefillKwargs,
         trace_requested: bool,
     ):
-        # Static trace intent is authoritative. Eligibility and configured
-        # coverage are preflighted by the selected execution target; this
-        # facade must never turn a required trace miss into eager KV writes.
-        return self._select_execution("prefill", trace_requested)
+        # Guarded eager degrade. Static trace intent still gates whether a trace
+        # is attempted, but a request whose padded bucket was never captured has no
+        # required trace, so it runs eager (against a program pre-compiled at warmup)
+        # rather than raising. A trace-eligible request still selects the traced target,
+        # which hard-fails on a missing artifact, so a required trace miss is never turned
+        # into eager KV writes.
+        if not trace_requested:
+            return self.target.eager_execution
+        if self.target.can_trace_prefill(
+            tokens=normalized["tokens"],
+            prompt_lens=normalized.get("prompt_lens"),
+            start_pos=normalized.get("start_pos"),
+            empty_slots=normalized.get("empty_slots"),
+        ):
+            return self._select_execution("prefill", True)
+        return self.target.eager_execution
 
     def _select_execution(self, operation: str, enable_trace: bool):
         if not enable_trace:

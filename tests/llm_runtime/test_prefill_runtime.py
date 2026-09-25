@@ -25,7 +25,12 @@ from tt_transformers.llm_runtime.config import PageTableLayout
 from tt_transformers.llm_runtime.output_reader import OutputReader
 from tt_transformers.llm_runtime.prefill.config import PrefillRuntimeConfig
 from tt_transformers.llm_runtime.prefill.inputs import PrefillDeviceInputs, PrefillHostInputs, PrefillPositionInputs
-from tt_transformers.llm_runtime.prefill.plan import _plan_prefill_requests
+from tt_transformers.llm_runtime.prefill.plan import (
+    _max_prefill_chunk_size,
+    _padded_prefill_length,
+    _plan_prefill_requests,
+    prefill_bucket_ladder,
+)
 from tt_transformers.llm_runtime.prefill.postprocess import fit_prefill_sampling_logits
 from tt_transformers.llm_runtime.prefill.result_collector import InvocationResult, process_output_tokens
 from tt_transformers.llm_runtime.prefill.runtime import PrefillRuntime
@@ -3109,3 +3114,24 @@ def test_prefill_package_has_no_compatibility_barrel():
     assert not hasattr(prefill_package, "PrefillRuntime")
     assert not hasattr(prefill_package, "PrefillRequest")
     assert not hasattr(prefill_package, "__all__")
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(("chunk_cap", "max_seq_len"), [(2048, 4096), (4096, 4096), (6144, 16384), (2048, 1500)])
+def test_prefill_bucket_ladder_covers_every_invocation_a_served_prompt_reaches(chunk_cap, max_seq_len):
+    ladder = prefill_bucket_ladder(chunk_cap, max_seq_len)
+    assert ladder == tuple(sorted(set(ladder)))
+    for length in range(1, max_seq_len + 1, 37):
+        padded = _padded_prefill_length(length)
+        if padded > max_seq_len:
+            continue
+        invocation = _max_prefill_chunk_size(padded, chunk_cap) if padded > chunk_cap else padded
+        assert invocation in ladder, (length, padded, invocation)
+
+
+@pytest.mark.host
+def test_prefill_bucket_ladder_stops_at_the_chunk_cap_and_max_seq_len():
+    assert prefill_bucket_ladder(2048, 4096) == (128, 1024, 2048)
+    assert prefill_bucket_ladder(4096, 8192) == (128, 1024, 2048, 4096)
+    assert prefill_bucket_ladder(2048, 1024) == (128, 1024)
+    assert prefill_bucket_ladder(2048, 64) == (64,)

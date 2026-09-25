@@ -32,7 +32,11 @@ from tt_transformers.llm_runtime.prefill.runtime import PrefillRuntime
 from tt_transformers.llm_runtime.program_compiler import ProgramCompiler
 from tt_transformers.llm_runtime.tensor_resources import attach_cleanup_failures
 from tt_transformers.llm_runtime.trace_compiler import TraceCompiler
-from tt_transformers.llm_runtime.warmup import WarmupCoordinator, WarmupCoordinatorConfig
+from tt_transformers.llm_runtime.warmup import (
+    WarmupCoordinator,
+    WarmupCoordinatorConfig,
+    resolve_prefill_warmup_seq_lens,
+)
 from tt_transformers.models.mistral_7b import weight_utils
 from tt_transformers.models.mistral_7b.model import (
     MISTRAL_ACCURACY,
@@ -77,10 +81,6 @@ class Mistral7BRuntimeConfig:
     max_context_len: int
     max_seq_len: int
     trace_prefill_supported_seq_lens: tuple[int, ...]
-    # Warmup (eager pre-compile) lengths, a superset of the traced buckets that also
-    # covers the uncovered buckets up to the prefill chunk cap so an uncovered-bucket
-    # prefill can degrade to a pre-compiled eager program instead of raising.
-    trace_prefill_warmup_seq_lens: tuple[int, ...] = ()
     supports_batched_prefill: bool = True
     max_prefill_batch_size: int = 32
     disable_batched_prefill: bool = False
@@ -200,29 +200,6 @@ def load_tokenizer(hf_model: str, hf_revision: str | None = None):
 def _trace_seq_lens(num_devices: int, max_prefill_chunk_size: int, max_seq_len: int) -> tuple[int, ...]:
     allowed = {1: (128,), 2: (128, 1024), 8: (128, 1024)}.get(num_devices, (128,))
     return tuple(length for length in allowed if length <= min(max_prefill_chunk_size, max_seq_len))
-
-
-def _trace_warmup_seq_lens(max_prefill_chunk_size: int, max_seq_len: int) -> tuple[int, ...]:
-    """Warmup (eager pre-compile) lengths: every prefill bucket up to the chunk cap.
-
-    Warmup eager-compiles a program for each length here and captures a trace only for
-    the subset that ``can_enable_trace`` accepts, so a prefill whose padded bucket is not
-    traced can degrade to a pre-compiled eager program instead of raising. That is only
-    safe if every servable bucket has an eager program, so this mirrors the runtime's own
-    bucket ladder (``prefill/plan.py::_padded_prefill_length``: 128, 1024, then the next
-    power of two) up to and including the chunk cap — a superset of the traced buckets.
-    Guarding uncovered buckets with an eager pre-compile is the shape upstream used for the
-    qwen2.5-coder eval-32 leg in tt-metal #55343.
-    """
-    ceiling = min(max_prefill_chunk_size, max_seq_len)
-    lengths = [length for length in (128, 1024) if length <= ceiling]
-    power = 2048
-    while power <= ceiling:
-        lengths.append(power)
-        power *= 2
-    if not lengths:  # max_seq_len below 128: fall back to the smallest bucket
-        lengths = [ceiling]
-    return tuple(dict.fromkeys(lengths))
 
 
 def _cache_path(
@@ -422,7 +399,6 @@ def _load_model(
             max_context_len=int(hf_config.max_position_embeddings),
             max_seq_len=max_seq_len,
             trace_prefill_supported_seq_lens=_trace_seq_lens(num_devices, max_prefill_chunk_size, max_seq_len),
-            trace_prefill_warmup_seq_lens=_trace_warmup_seq_lens(max_prefill_chunk_size, max_seq_len),
             max_prefill_batch_size=8 if num_devices == 1 else 32,
             disable_batched_prefill=environment_flag("DISABLE_BATCHED_PREFILL"),
             batched_prefill_batched_extract=not environment_flag("DISABLE_BATCHED_EXTRACT"),
@@ -570,12 +546,7 @@ class Mistral7BExecutor:
         self._prefill_execution = self.traced_prefill_execution or self.eager_executor
         self._decode_execution = self.traced_decode_execution or self.eager_executor
 
-        # Warm every bucket up to the chunk cap (a superset of the traced buckets) so an
-        # uncovered-bucket prefill has a pre-compiled eager program to degrade onto. Falls
-        # back to the traced buckets when no warmup ladder is declared.
-        prefill_sequence_lengths = getattr(runtime_config, "trace_prefill_warmup_seq_lens", ())
-        if not prefill_sequence_lengths:
-            prefill_sequence_lengths = getattr(runtime_config, "trace_prefill_supported_seq_lens", (128,))
+        prefill_sequence_lengths = resolve_prefill_warmup_seq_lens(runtime_config, config.trace)
         self.warmup = WarmupCoordinator(
             config=WarmupCoordinatorConfig.resolve(
                 warmup=config.warmup,
@@ -935,7 +906,9 @@ class Mistral7BExecutor:
             top_k=torch.full((1,), 32, dtype=torch.int32),
             top_p=torch.full((1,), 0.08),
         )
-        execution = self.traced_executor if enable_trace else self.eager_executor
+        # Without a Q128 trace family the trace pass primes these programs eagerly.
+        traced = enable_trace and 128 in self.warmup.config.prefill_trace_sequence_lengths
+        execution = self.traced_executor if traced else self.eager_executor
         for sequence_length in (32, 64, 96):
             page_table_width = (
                 sequence_length + self.page_table_layout.block_size - 1

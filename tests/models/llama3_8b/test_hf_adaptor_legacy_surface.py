@@ -155,6 +155,7 @@ def test_llama3_8b_runtime_trace_gate_uses_supported_lengths():
         model_cache_path="model_cache",
         max_prefill_chunk_size=64 * 1024,
         max_context_len=128 * 1024,
+        max_seq_len=128 * 1024,
         trace_prefill_supported_seq_lens=(128, 1024, 2048, 4096, 8192),
     )
 

@@ -27,7 +27,11 @@ from tt_transformers.llm_runtime.prefill.runtime import PrefillRuntime
 from tt_transformers.llm_runtime.program_compiler import ProgramCompiler
 from tt_transformers.llm_runtime.tensor_resources import attach_cleanup_failures
 from tt_transformers.llm_runtime.trace_compiler import TraceCompiler
-from tt_transformers.llm_runtime.warmup import WarmupCoordinator, WarmupCoordinatorConfig
+from tt_transformers.llm_runtime.warmup import (
+    WarmupCoordinator,
+    WarmupCoordinatorConfig,
+    resolve_prefill_warmup_seq_lens,
+)
 from tt_transformers.modules.sampling.sampling_1d import Sampling1D
 
 
@@ -131,7 +135,7 @@ class ModelExecutor:
         resolved_prefill_sequence_lengths = (
             tuple(prefill_sequence_lengths)
             if prefill_sequence_lengths is not None
-            else tuple(getattr(runtime_config, "trace_prefill_supported_seq_lens", ()) or (128,))
+            else resolve_prefill_warmup_seq_lens(runtime_config, config.trace)
         )
         resolved_trace_prime_lengths = tuple(trace_capture_prime_sequence_lengths)
         resolved_disable_batched_prefill = (
@@ -341,7 +345,11 @@ class ModelExecutor:
             output_tokens=output_tokens,
             slot_remap=slot_remap,
         )
-        return (execution or self._prefill_execution).compile_prefill(
+        if execution is None:
+            execution = ModelExecutor._resolve_prefill_execution(
+                self, tokens=tokens, prompt_lens=prompt_lens, start_pos=start_pos, empty_slots=empty_slots
+            )
+        return execution.compile_prefill(
             tokens=tokens,
             page_table=page_table,
             prompt_lens=prompt_lens,
@@ -411,7 +419,11 @@ class ModelExecutor:
             output_tokens=output_tokens,
             slot_remap=slot_remap,
         )
-        return (execution or self._prefill_execution).prefill_forward(
+        if execution is None:
+            execution = ModelExecutor._resolve_prefill_execution(
+                self, tokens=tokens, prompt_lens=prompt_lens, start_pos=start_pos, empty_slots=empty_slots
+            )
+        return execution.prefill_forward(
             tokens=tokens,
             page_table=page_table,
             prompt_lens=prompt_lens,
@@ -474,6 +486,28 @@ class ModelExecutor:
             prompt_lens=prompt_lens,
             start_pos=start_pos,
         )
+
+    def _resolve_prefill_execution(self, *, tokens, prompt_lens, start_pos, empty_slots):
+        """Choose the prefill executor for one request (guarded eager degrade).
+
+        A request whose padded bucket has no trace family carries no required
+        trace, so it runs eager against a program compiled at warmup instead of
+        raising. A trace-eligible request still selects the traced executor,
+        which hard-fails if its captured artifact is missing, so a required trace
+        miss never becomes eager KV writes.
+        """
+
+        traced = getattr(self, "traced_prefill_execution", None)
+        eager = getattr(self, "eager_executor", None)
+        if traced is None or eager is None:
+            # No traced prefill target, or a partially constructed executor
+            # (host contract tests bind only _prefill_execution).
+            return self._prefill_execution
+        if ModelExecutor.can_trace_prefill(
+            self, tokens=tokens, prompt_lens=prompt_lens, start_pos=start_pos, empty_slots=empty_slots
+        ):
+            return traced
+        return eager
 
     def read_decode_output(self, tt_out: Any, *, async_read: bool = False) -> Any:
         self._ensure_active()

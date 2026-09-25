@@ -38,8 +38,10 @@ class TraceConfig:
 class WarmupConfig:
     """Select graph coverage while retaining model-derived defaults.
 
-    ``prefill_seq_lens=None`` asks the executor to use the model runtime's
-    supported trace lengths, falling back to 128. Logits coverage is always
+    ``prefill_seq_lens=None`` asks the executor for the model's default: every
+    prefill bucket up to the chunk cap when any trace is configured, otherwise
+    the runtime's supported trace lengths, falling back to 128 (see
+    `resolve_prefill_warmup_seq_lens`). Logits coverage is always
     required. Forced-top-k prefill and greedy decode coverage are added when
     dynamic warmup enables device sampling. Additional top-k decode coverage is
     explicitly opt in.

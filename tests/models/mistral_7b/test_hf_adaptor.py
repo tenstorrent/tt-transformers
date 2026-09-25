@@ -7,6 +7,8 @@ import pytest
 import torch
 from transformers import MistralConfig, MistralForCausalLM
 
+from tt_transformers.llm_runtime.config import TraceConfig
+from tt_transformers.llm_runtime.warmup import resolve_prefill_warmup_seq_lens
 from tt_transformers.models.mistral_7b import hf_generator as hf_adaptor
 from tt_transformers.models.mistral_7b import model as mistral_model
 from tt_transformers.models.mistral_7b import weight_utils
@@ -15,7 +17,6 @@ from tt_transformers.models.mistral_7b.hf_generator import (
     Mistral7BForCausalLM,
     Mistral7BRuntimeConfig,
     _trace_seq_lens,
-    _trace_warmup_seq_lens,
     convert_hf_model_weights,
 )
 
@@ -43,21 +44,27 @@ def test_runtime_config_preserves_per_sku_trace_and_batched_prefill_policy():
 
 @pytest.mark.host
 @pytest.mark.model
-def test_trace_warmup_seq_lens_cover_every_bucket_up_to_the_chunk_cap():
-    # The guarded eager-degrade path needs a pre-compiled program for every bucket a
-    # prompt can pad to up to the chunk cap, so the warmup ladder must mirror the runtime's
-    # bucket ladder (128, 1024, then next power of two) up to max_prefill_chunk_size and be
-    # a superset of the traced buckets.
-    warmup = _trace_warmup_seq_lens(2048, 4096)
-    assert warmup == (128, 1024, 2048)
-    # Covers the chunk cap, which is exactly the bucket that a 1025..2048-token prompt pads
-    # to and which the N300 traced set (128, 1024) does not capture.
-    assert 2048 in warmup
-    for supported in (_trace_seq_lens(1, 2048, 4096), _trace_seq_lens(2, 2048, 4096)):
-        assert set(supported) <= set(warmup)
+def test_prefill_warmup_lengths_cover_every_bucket_up_to_the_chunk_cap():
+    # The guarded eager degrade needs a pre-compiled program for every bucket a prompt can
+    # pad to, so with trace configured the lane warms the whole bucket ladder up to the
+    # chunk cap, a superset of the traced buckets.
+    def runtime(max_seq_len, supported):
+        return Mistral7BRuntimeConfig(
+            model_name="Mistral-7B-Instruct-v0.3",
+            model_cache_path=None,
+            max_prefill_chunk_size=2048,
+            max_context_len=32768,
+            max_seq_len=max_seq_len,
+            trace_prefill_supported_seq_lens=supported,
+        )
+
+    n300 = runtime(4096, _trace_seq_lens(2, 2048, 4096))
+    assert resolve_prefill_warmup_seq_lens(n300, TraceConfig(mode="all")) == (128, 1024, 2048)
+    assert resolve_prefill_warmup_seq_lens(n300, TraceConfig(mode="decode_only")) == (128, 1024, 2048)
+    # Without trace nothing forbids a later compile, so only the traced buckets warm.
+    assert resolve_prefill_warmup_seq_lens(n300, TraceConfig(mode="none")) == (128, 1024)
     # max_seq_len clamps the ladder.
-    assert _trace_warmup_seq_lens(2048, 1024) == (128, 1024)
-    assert _trace_warmup_seq_lens(4096, 8192) == (128, 1024, 2048, 4096)
+    assert resolve_prefill_warmup_seq_lens(runtime(1024, (128, 1024)), TraceConfig(mode="all")) == (128, 1024)
 
 
 def _executor_with_split_prefill_targets(*, traceable):

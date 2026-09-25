@@ -4,6 +4,8 @@
 """Focused contracts for the family-neutral model composition root."""
 
 import ast
+import dataclasses
+import importlib
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -12,6 +14,7 @@ import pytest
 import ttnn
 
 from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
+from tt_transformers.llm_runtime.warmup import resolve_prefill_warmup_seq_lens
 from tt_transformers.models import executor as executor_module
 from tt_transformers.models.executor import ModelExecutor, ModelExecutorConfig
 
@@ -196,6 +199,77 @@ def test_request_state_and_execution_target_are_forwarded_by_identity() -> None:
         assert forwarded[name] is value
 
 
+def _split_prefill_target(*, traceable: bool) -> ModelExecutor:
+    target = object.__new__(ModelExecutor)
+    target._terminal = False
+    target.prefill_runtime = SimpleNamespace(transient_orphan_count=0, can_trace=MagicMock(return_value=traceable))
+    target.decode_runtime = SimpleNamespace(transient_orphan_count=0)
+    target._validate_bound_cache = MagicMock()
+    target._ensure_sampling_for = MagicMock()
+    target._request_state_fields = ()
+    target.config = SimpleNamespace(trace=TraceConfig(mode="all"))
+    target.traced_executor = MagicMock(name="traced")
+    target.traced_prefill_execution = target.traced_executor
+    target.eager_executor = MagicMock(name="eager")
+    target._prefill_execution = target.traced_prefill_execution
+    return target
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("traceable", [True, False])
+@pytest.mark.parametrize("method", ["compile_prefill", "prefill_forward"])
+def test_prefill_without_an_execution_selects_by_trace_eligibility(method, traceable) -> None:
+    # Serving compiles and runs a prefill with no explicit target. An uncovered bucket
+    # must reach the eager executor rather than the traced compiler, and an eligible one
+    # must still take the trace.
+    target = _split_prefill_target(traceable=traceable)
+
+    getattr(target, method)(tokens=object(), page_table=object())
+
+    selected = target.traced_prefill_execution if traceable else target.eager_executor
+    other = target.eager_executor if traceable else target.traced_prefill_execution
+    getattr(selected, method).assert_called_once()
+    getattr(other, method).assert_not_called()
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("method", ["compile_prefill", "prefill_forward"])
+def test_prefill_explicit_execution_wins_over_selection(method) -> None:
+    target = _split_prefill_target(traceable=False)
+    explicit = MagicMock(name="explicit")
+
+    getattr(target, method)(tokens=object(), page_table=object(), execution=explicit)
+
+    getattr(explicit, method).assert_called_once()
+    target.prefill_runtime.can_trace.assert_not_called()
+
+
+def _runtime(**overrides):
+    fields = dict(max_prefill_chunk_size=4096, max_seq_len=8192, trace_prefill_supported_seq_lens=(128, 1024))
+    return SimpleNamespace(**{**fields, **overrides})
+
+
+@pytest.mark.host
+def test_prefill_warmup_lengths_cover_the_bucket_ladder_whenever_trace_is_configured() -> None:
+    resolve = resolve_prefill_warmup_seq_lens
+    # Trace activation forbids a later compile under both trace modes, so the full ladder
+    # up to the chunk cap warms; the traced buckets are a subset of it.
+    for mode in ("all", "decode_only"):
+        assert resolve(_runtime(), TraceConfig(mode=mode)) == (128, 1024, 2048, 4096)
+    # Without trace a later compile is allowed, so the traced buckets are enough.
+    assert resolve(_runtime(), TraceConfig(mode="none")) == (128, 1024)
+    assert resolve(_runtime(trace_prefill_supported_seq_lens=()), TraceConfig(mode="none")) == (128,)
+    # An empty traced set still warms every bucket eagerly.
+    assert resolve(_runtime(trace_prefill_supported_seq_lens=()), TraceConfig(mode="all")) == (
+        128,
+        1024,
+        2048,
+        4096,
+    )
+    # A model's declared list is authoritative.
+    assert resolve(_runtime(prefill_warmup_seq_lens=(128, 8192)), TraceConfig(mode="all")) == (128, 8192)
+
+
 @pytest.mark.host
 def test_layout_refresh_preserves_owner_and_sampling_state_identity(monkeypatch) -> None:
     state = object()
@@ -303,3 +377,23 @@ def test_cleanup_is_ordered_retryable_idempotent_and_terminal(expect_error) -> N
     target.cleanup()
     assert events == expected * 2
     assert target._cleaned_up
+
+
+_MODEL_IDS = tuple(sorted(path.parent.name for path in _MODELS_ROOT.glob("*/hf_generator.py")))
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("model_id", _MODEL_IDS)
+def test_every_runtime_config_declares_what_the_warmup_ladder_reads(model_id) -> None:
+    # The default warmup ladder is bounded by the chunk cap and max_seq_len; a runtime
+    # config without either cannot resolve its warmup lengths.
+    module = importlib.import_module(f"tt_transformers.models.{model_id}.hf_generator")
+    runtime_configs = [
+        value
+        for name, value in vars(module).items()
+        if name.endswith("RuntimeConfig") and dataclasses.is_dataclass(value) and value.__module__ == module.__name__
+    ]
+    assert runtime_configs, f"{model_id} defines no runtime config dataclass"
+    for runtime_config in runtime_configs:
+        fields = {field.name for field in dataclasses.fields(runtime_config)}
+        assert {"max_prefill_chunk_size", "max_seq_len", "trace_prefill_supported_seq_lens"} <= fields

@@ -16,7 +16,11 @@ from loguru import logger
 from tt_transformers.llm_runtime.config import PageTableLayout, TraceConfig, WarmupConfig
 from tt_transformers.llm_runtime.decode import DecodeRuntimeConfig
 from tt_transformers.llm_runtime.prefill.config import PrefillRuntimeConfig
-from tt_transformers.llm_runtime.prefill.plan import _max_prefill_chunk_size, _padded_prefill_length
+from tt_transformers.llm_runtime.prefill.plan import (
+    _max_prefill_chunk_size,
+    _padded_prefill_length,
+    prefill_bucket_ladder,
+)
 from tt_transformers.llm_runtime.program_compiler import CompiledProgram
 from tt_transformers.sampling.sampling_params import SamplingParams
 
@@ -673,6 +677,29 @@ def _resolve_coverage_manifest(
         trace_signatures=tuple(trace_signatures_by_key.values()),
         aliases=tuple(aliases),
     )
+
+
+def resolve_prefill_warmup_seq_lens(runtime_config: Any, trace: TraceConfig) -> tuple[int, ...]:
+    """Return the prefill lengths one lane prepares at warmup.
+
+    A model may declare ``prefill_warmup_seq_lens``. Otherwise, whenever any
+    trace is configured, the lane warms every prefill bucket up to the chunk
+    cap: trace activation forbids compiling a new program, so each bucket the
+    lane can serve eagerly (an untraced bucket under ``trace_mode="all"``, or any
+    bucket under ``"decode_only"``) needs its program compiled here. The warmup
+    coordinator captures a trace only for the lengths the model can trace and
+    compiles the rest eagerly. With no trace configured nothing forbids a later
+    compile, so the traced bucket list is enough.
+    """
+
+    declared = tuple(getattr(runtime_config, "prefill_warmup_seq_lens", ()) or ())
+    if declared:
+        return declared
+    traced = tuple(getattr(runtime_config, "trace_prefill_supported_seq_lens", ()) or ())
+    if trace.mode == "none":
+        return traced or (128,)
+    ladder = prefill_bucket_ladder(runtime_config.max_prefill_chunk_size, runtime_config.max_seq_len)
+    return tuple(sorted({*traced, *ladder}))
 
 
 def _prefill_invocation_can_trace(prefill: PrefillRuntimeConfig, sequence_length: int) -> bool:

@@ -582,7 +582,9 @@ def _warmup_q128_topk_tile_ends(
         top_k=torch.full((1,), 32, dtype=torch.int32),
         top_p=torch.full((1,), 0.08),
     )
-    execution = executor.traced_executor if enable_trace else executor.eager_executor
+    # Without a Q128 trace family the trace pass primes these programs eagerly.
+    traced = enable_trace and 128 in executor.warmup.config.prefill_trace_sequence_lengths
+    execution = executor.traced_executor if traced else executor.eager_executor
     for sequence_length in (32, 64, 96):
         page_table_width = (
             sequence_length + executor.page_table_layout.block_size - 1

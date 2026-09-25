@@ -36,7 +36,7 @@ def _runtime_config():
         max_context_len=131072,
         max_seq_len=4096,
         trace_prefill_supported_seq_lens=(128, 2048),
-        trace_prefill_warmup_seq_lens=(128, 2048, 4096),
+        prefill_warmup_seq_lens=(128, 1024, 2048, 4096),
     )
 
 
@@ -62,12 +62,12 @@ def test_trace_policy_supports_t3k_and_p150x4_and_includes_fixed_chunk_invocatio
     assert t3k_supported == (128, 2048)
     assert p150x4_supported == (128,)
     assert hf_adaptor._trace_seq_lens(4, 2048, 64) == ()
-    assert hf_adaptor._trace_warmup_seq_lens(2048, 4096, t3k_supported) == (128, 2048, 4096)
-    assert hf_adaptor._trace_warmup_seq_lens(2048, 4096, p150x4_supported) == (128,)
-    assert all(
-        min(length, 2048) in p150x4_supported
-        for length in hf_adaptor._trace_warmup_seq_lens(2048, 4096, p150x4_supported)
-    )
+    # Every bucket up to the chunk cap warms, so the untraced 1024 bucket (and on P150x4
+    # also 2048) has an eager program to degrade onto; twice the cap stays as the traced
+    # multi-chunk representative only where the cap itself traces.
+    assert hf_adaptor._prefill_warmup_seq_lens(2048, 4096, t3k_supported) == (128, 1024, 2048, 4096)
+    assert hf_adaptor._prefill_warmup_seq_lens(2048, 4096, p150x4_supported) == (128, 1024, 2048)
+    assert hf_adaptor._prefill_warmup_seq_lens(2048, 2048, t3k_supported) == (128, 1024, 2048)
     for devices in (1, 2, 32):
         with expect_error(ValueError, "T3K.*P150x4"):
             hf_adaptor._trace_seq_lens(devices, 2048, 4096)

@@ -272,6 +272,7 @@ class Llama3RuntimeConfig:
     model_cache_path: Path
     max_prefill_chunk_size: int
     max_context_len: int
+    max_seq_len: int
     trace_prefill_supported_seq_lens: tuple[int, ...] = (128, 1024)
     supports_batched_prefill: bool = True
     max_prefill_batch_size: int = 32
@@ -590,6 +591,7 @@ def _load_model(
         model_cache_path=model_cache_path,
         max_prefill_chunk_size=max_prefill_chunk_size,
         max_context_len=text_config["max_position_embeddings"],
+        max_seq_len=max_seq_len,
         trace_prefill_supported_seq_lens=trace_prefill_supported_seq_lens,
         # TTTv1 disables batched prefill for Llama-3.1-8B on every supported
         # BlackHole SKU because BH prefill reductions are batch-variant. The

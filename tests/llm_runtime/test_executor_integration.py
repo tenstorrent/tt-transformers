@@ -372,6 +372,7 @@ def _make_llama32_runtime_config():
     return SimpleNamespace(
         model_cache_path="cache",
         max_prefill_chunk_size=2048,
+        max_seq_len=4096,
         trace_prefill_supported_seq_lens=(128,),
         can_enable_trace=lambda length, num_cached_tokens=0: length == 128,
         supports_batched_prefill=True,
@@ -870,6 +871,7 @@ def test_llama32_1b_warms_every_q128_topk_tile_start_once_per_execution_mode():
     executor.warmup = SimpleNamespace(
         config=SimpleNamespace(
             prefill_sequence_lengths=(128,),
+            prefill_trace_sequence_lengths=(128,),
             prime_q128_tile_ends=False,
         )
     )
@@ -894,6 +896,33 @@ def test_llama32_1b_warms_every_q128_topk_tile_start_once_per_execution_mode():
 
 
 @pytest.mark.host
+def test_q128_tile_warmup_primes_eagerly_when_q128_has_no_trace_family():
+    # A lane whose traced bucket set is empty (Llama-3.2-3B on N150) must not reach the
+    # traced compiler for Q128: that raises for a request with no trace family. The trace
+    # pass primes the same programs on the eager target instead.
+    executor = object.__new__(llama3_family_executor.Llama32_3BExecutor)
+    executor._q128_topk_tile_ends_warmed = set()
+    executor.eager_executor = object()
+    executor.traced_executor = object()
+    executor.page_table_layout = SimpleNamespace(block_size=32)
+    executor.prefill_runtime = SimpleNamespace(config=SimpleNamespace(static_q128_topk_supported=True))
+    executor.warmup = SimpleNamespace(
+        config=SimpleNamespace(
+            prefill_sequence_lengths=(128, 1024, 2048),
+            prefill_trace_sequence_lengths=(),
+            prime_q128_tile_ends=False,
+        )
+    )
+    executor.compile_prefill = MagicMock()
+
+    executor._warmup_q128_topk_tile_ends(kv_cache=object(), can_sample_on_device=True, enable_trace=True)
+
+    calls = executor.compile_prefill.call_args_list
+    assert len(calls) == 3
+    assert all(call.kwargs["execution"] is executor.eager_executor for call in calls)
+
+
+@pytest.mark.host
 @pytest.mark.parametrize(
     ("enable_trace", "expected_order"),
     [
@@ -912,6 +941,7 @@ def test_qwen3_lane4_warms_every_runtime_q128_topk_signature_before_activation(e
         warmup=SimpleNamespace(
             config=SimpleNamespace(
                 prefill_sequence_lengths=(128, 1024),
+                prefill_trace_sequence_lengths=(128, 1024),
                 prime_q128_tile_ends=False,
             )
         ),
@@ -1217,29 +1247,23 @@ class _RecordingTarget:
 
 
 @pytest.mark.host
-def test_generator_preserves_required_trace_intent_for_ineligible_prefill(binding):
+def test_generator_degrades_an_ineligible_prefill_to_eager(binding):
+    # Guarded eager degrade (tt-metal #55343's shape): a request that was never
+    # trace-eligible has no required trace, so the facade probes can_trace_prefill and
+    # routes it to eager, against a program pre-compiled at warmup.
     target = binding.make_recording_target(traceable=False)
     target.config = binding.make_executor_config("all")
     generator = binding.generator_class(target, binding.generator_module._build_vllm_adapter(target))
     tokens = __import__("torch").tensor([[1]])
     page_table = __import__("torch").tensor([[0]], dtype=__import__("torch").int32)
-    if binding.generator_module is mistral_generator:
-        # Mistral-7B runs the guarded eager degrade (tt-metal #55343's shape): a request
-        # that was never trace-eligible has no required trace, so the facade probes
-        # can_trace_prefill and routes it to eager, against a program pre-compiled at
-        # warmup. The eligible half of the invariant is the test directly below.
-        assert generator.prefill_forward(tokens, page_table, enable_trace=True) is target.eager_execution
-        assert [name for name, _ in target.calls] == ["can_trace_prefill", "prefill_forward"]
-        return
-    assert generator.prefill_forward(tokens, page_table, enable_trace=True) is target.traced_prefill_execution
-    assert [name for name, _ in target.calls] == ["prefill_forward"]
+    assert generator.prefill_forward(tokens, page_table, enable_trace=True) is target.eager_execution
+    assert [name for name, _ in target.calls] == ["can_trace_prefill", "prefill_forward"]
 
 
 @pytest.mark.host
-def test_mistral_guarded_degrade_still_traces_an_eligible_prefill():
+def test_generator_degrade_still_traces_an_eligible_prefill(binding):
     # The degrade must not swallow the eligible path: if every request fell back to eager
     # the serve would still succeed and all prefill trace performance would be lost.
-    binding = EXECUTOR_BINDINGS["mistral_7b"]
     target = binding.make_recording_target(traceable=True)
     target.config = binding.make_executor_config("all")
     generator = binding.generator_class(target, binding.generator_module._build_vllm_adapter(target))

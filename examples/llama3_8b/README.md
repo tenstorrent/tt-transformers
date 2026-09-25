@@ -462,8 +462,9 @@ vLLM
        -> require explicit Boolean enable_trace
        -> normalize torch dtypes
   -> Llama3Generator._select_prefill_execution(...)
-       -> enable_trace false -> target.eager_execution
-       -> enable_trace true  -> target.traced_prefill_execution
+       -> enable_trace false                          -> target.eager_execution
+       -> enable_trace true, target.can_trace_prefill -> target.traced_prefill_execution
+       -> enable_trace true, no trace family          -> target.eager_execution
   -> target.prefill_forward(execution=selected, ...)
        -> Llama3Executor, or LaneGroupExecutor -> each Llama3Executor
   -> selected EagerExecutor or TracedExecutor
@@ -471,17 +472,19 @@ vLLM
   -> Llama3Transformer1D
 ```
 
-For Llama-3.1-8B the static trace intent is authoritative: when trace is
-requested the traced executor is always selected, and a request whose padded
-prefill bucket was never captured **raises** rather than degrading to eager.
-The facade never turns a required trace miss into eager KV writes, and
-`TracedExecutor` never silently invokes eager execution.
+When trace is requested, the facade probes `can_trace_prefill` first. A
+request whose padded prefill bucket has a trace family selects the traced
+executor, which still raises if that trace was not captured: a required trace
+miss never becomes eager KV writes, and `TracedExecutor` never silently invokes
+eager execution. A request whose bucket has no trace family carries no
+required trace, so it runs eager.
 
-A guarded per-request eager degrade — probing `can_trace_prefill` so that a
-request whose bucket was never captured runs eager against a program
-pre-compiled at warmup, while a trace-eligible request still traces-or-raises —
-is implemented for **`mistral_7b` only**, as a reference. It is not general to
-every model, and Llama-3.1-8B does not use it.
+That degrade needs an eager program for every bucket a request can reach,
+because trace activation forbids compiling a new one. With any trace mode
+configured, warmup therefore compiles every prefill bucket up to the chunk cap
+(128, 1024, then each power of two). It captures traces only for the buckets
+`can_enable_trace` accepts and compiles the rest eagerly. On a device with a
+large chunk cap this makes warmup longer; `max_seq_len` bounds the ladder.
 
 ### 5. Decode dispatch
 
