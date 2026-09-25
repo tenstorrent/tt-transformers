@@ -48,6 +48,7 @@ def test_qwen2_family_warms_every_q128_topk_tile_end_once_per_execution_mode(exe
     executor.warmup = SimpleNamespace(
         config=SimpleNamespace(
             prefill_sequence_lengths=(128,),
+            prefill_trace_sequence_lengths=(128,),
             prime_q128_tile_ends=False,
         )
     )

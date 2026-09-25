@@ -9,6 +9,11 @@ from pathlib import Path
 import pytest
 import torch
 
+from tt_transformers.models.capability_schema import (
+    CAPABILITY_SCHEMA,
+    KNOWN_CAPABILITY_KEYS,
+    REQUIRED_CAPABILITY_KEYS,
+)
 from tt_transformers.modules.sampling.params import (
     PreparedSamplingParams,
     place_prepared_sampling_params,
@@ -286,6 +291,65 @@ def test_prefill_request_rows_are_placed_into_lane_local_slots_with_history():
     )
 
 
+def _literal_capabilities(dict_node):
+    """Read a ``model_capabilities`` dict literal from AST without importing ttnn.
+
+    Values that are not Python literals — e.g. ``fabric_config``, whose value is a
+    ``ttnn.FabricConfig`` enum member — cannot be ``literal_eval``-ed on host, so
+    they are represented by their source text instead of being evaluated. The
+    literal-valued keys this test asserts on are unaffected."""
+    capabilities = {}
+    for key_node, value_node in zip(dict_node.keys, dict_node.values):
+        key = ast.literal_eval(key_node)
+        try:
+            capabilities[key] = ast.literal_eval(value_node)
+        except (ValueError, SyntaxError):
+            capabilities[key] = ast.unparse(value_node)
+    return capabilities
+
+
+_REPOSITORY_ROOT = Path(__file__).parents[3]
+
+
+def _capabilities_from_source(relative_path, class_name):
+    """Read one generator's class-level ``model_capabilities`` dict from source.
+
+    Reads it through the AST rather than importing the generator, so the host
+    suite never needs ttnn — a generator's ``fabric_config`` value is a
+    ``ttnn.FabricConfig`` enum member. Non-literal values are kept as their source
+    text (see ``_literal_capabilities``)."""
+    source = (_REPOSITORY_ROOT / relative_path).read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=relative_path)
+    class_node = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == class_name)
+    assignment = next(
+        node
+        for node in class_node.body
+        if isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == "model_capabilities" for target in node.targets)
+    )
+    return _literal_capabilities(assignment.value)
+
+
+# Every serving generator and the class that carries its model_capabilities dict.
+_TARGET_GENERATORS = [
+    ("src/tt_transformers/models/llama3_8b/vllm_generator.py", "Llama3Generator"),
+    ("src/tt_transformers/models/llama32_1b/vllm_generator.py", "Llama32_1BGenerator"),
+    ("src/tt_transformers/models/llama32_3b/vllm_generator.py", "Llama32_3BGenerator"),
+    ("src/tt_transformers/models/llama33_70b/vllm_generator.py", "Llama33_70BGenerator"),
+    ("src/tt_transformers/models/mistral_7b/vllm_generator.py", "Mistral7BGenerator"),
+    ("src/tt_transformers/models/phi4/vllm_generator.py", "Phi4Generator"),
+    ("src/tt_transformers/models/qwen2_7b/vllm_generator.py", "Qwen2Generator"),
+    ("src/tt_transformers/models/qwen25_7b/vllm_generator.py", "Qwen25Generator"),
+    ("src/tt_transformers/models/qwen25_72b/vllm_generator.py", "Qwen25_72BGenerator"),
+    ("src/tt_transformers/models/qwen25_coder_32b/vllm_generator.py", "Qwen25Coder32BGenerator"),
+    ("src/tt_transformers/models/qwen3_32b/vllm_generator.py", "Qwen3_32BGenerator"),
+    (
+        "src/tt_transformers/models/deepseek_r1_distill_qwen_14b/vllm_generator.py",
+        "DeepSeekR1Qwen14BGenerator",
+    ),
+]
+
+
 @pytest.mark.host
 @pytest.mark.parametrize(
     ("relative_path", "class_name"),
@@ -296,20 +360,65 @@ def test_prefill_request_rows_are_placed_into_lane_local_slots_with_history():
     ],
 )
 def test_target_generator_capabilities_advertise_exact_device_top_k(relative_path, class_name):
-    repository_root = Path(__file__).parents[3]
-    source = (repository_root / relative_path).read_text(encoding="utf-8")
-    tree = ast.parse(source, filename=relative_path)
-    class_node = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == class_name)
-    assignment = next(
-        node
-        for node in class_node.body
-        if isinstance(node, ast.Assign)
-        and any(isinstance(target, ast.Name) and target.id == "model_capabilities" for target in node.targets)
-    )
-    capabilities = ast.literal_eval(assignment.value)
+    capabilities = _capabilities_from_source(relative_path, class_name)
 
     assert capabilities["supports_sample_on_device"] is True
     assert capabilities["max_device_top_k"] == 32
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(("relative_path", "class_name"), _TARGET_GENERATORS)
+def test_model_capabilities_only_declare_known_schema_keys(relative_path, class_name):
+    """Every key a generator declares is one the capability schema knows about.
+
+    This is the drift check the schema exists for: an upstream-added capability key
+    that slips into a generator without a matching schema entry fails here, instead
+    of being silently declined because an absent key means "not supported"."""
+    capabilities = _capabilities_from_source(relative_path, class_name)
+    unknown = set(capabilities) - KNOWN_CAPABILITY_KEYS
+    assert not unknown, f"{class_name} declares capability keys absent from the schema: {sorted(unknown)}"
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(("relative_path", "class_name"), _TARGET_GENERATORS)
+def test_model_capabilities_declare_every_required_schema_key(relative_path, class_name):
+    """Every generator declares every required capability key."""
+    capabilities = _capabilities_from_source(relative_path, class_name)
+    missing = REQUIRED_CAPABILITY_KEYS - set(capabilities)
+    assert not missing, f"{class_name} is missing required capability keys: {sorted(missing)}"
+
+
+@pytest.mark.host
+def test_capability_schema_parametrization_covers_every_serving_generator():
+    """The schema test is exhaustive: adding a model forces adding it here.
+
+    Guards against a new ``models/<m>/vllm_generator.py`` carrying a
+    ``model_capabilities`` dict that no schema test ever reads."""
+    parametrized = {path for path, _ in _TARGET_GENERATORS}
+    discovered = {
+        str(path.relative_to(_REPOSITORY_ROOT))
+        for path in sorted((_REPOSITORY_ROOT / "src/tt_transformers/models").glob("*/vllm_generator.py"))
+        if "model_capabilities" in path.read_text(encoding="utf-8")
+    }
+    assert parametrized == discovered
+
+
+@pytest.mark.host
+def test_capability_schema_records_the_non_uniform_reader_defaults():
+    """The schema records a per-key reader default, not one blanket rule.
+
+    ``supports_device_penalties`` defaults to True when absent (the plugin reads
+    it that way); every other key follows the contract's "absent means not
+    supported"."""
+    assert CAPABILITY_SCHEMA["supports_device_penalties"].reader_default is True
+    assert all(
+        key.reader_default is False
+        for name, key in CAPABILITY_SCHEMA.items()
+        if key.value_type == "bool" and name != "supports_device_penalties"
+    )
+    # max_device_top_k is a TTTv2-only key, not part of the tt-metal contract.
+    assert "max_device_top_k" in KNOWN_CAPABILITY_KEYS
+    assert CAPABILITY_SCHEMA["max_device_top_k"].reader_default is None
 
 
 @pytest.mark.host

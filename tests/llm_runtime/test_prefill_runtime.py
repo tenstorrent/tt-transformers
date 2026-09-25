@@ -25,7 +25,12 @@ from tt_transformers.llm_runtime.config import PageTableLayout
 from tt_transformers.llm_runtime.output_reader import OutputReader
 from tt_transformers.llm_runtime.prefill.config import PrefillRuntimeConfig
 from tt_transformers.llm_runtime.prefill.inputs import PrefillDeviceInputs, PrefillHostInputs, PrefillPositionInputs
-from tt_transformers.llm_runtime.prefill.plan import _plan_prefill_requests
+from tt_transformers.llm_runtime.prefill.plan import (
+    _max_prefill_chunk_size,
+    _padded_prefill_length,
+    _plan_prefill_requests,
+    prefill_bucket_ladder,
+)
 from tt_transformers.llm_runtime.prefill.postprocess import fit_prefill_sampling_logits
 from tt_transformers.llm_runtime.prefill.result_collector import InvocationResult, process_output_tokens
 from tt_transformers.llm_runtime.prefill.runtime import PrefillRuntime
@@ -421,7 +426,9 @@ def test_trace_refresh_skips_unchanged_position_and_sampling_inputs(monkeypatch)
 
 
 @pytest.mark.host
-def test_trace_refresh_skips_dynamic_position_inputs_for_static_single_logits(monkeypatch):
+def test_trace_refresh_updates_runtime_position_inputs_for_single_logits(monkeypatch):
+    # Host-sampling single requests pick their last token on device from runtime bounds (no
+    # offset-keyed programs), so a replay at a new prompt offset must refresh the position inputs.
     runtime = _runtime()
     request = _plan(prompt_length=80)[0]
     prepared = SimpleNamespace(request=request, sampling_params=None, sampling_path="logits")
@@ -445,14 +452,31 @@ def test_trace_refresh_skips_dynamic_position_inputs_for_static_single_logits(mo
         "copy_host_to_device_tensor",
         lambda host, device: copied.append((host, device)),
     )
-    monkeypatch.setattr(
-        runtime.inputs,
-        "prepare_position_inputs_host",
-        lambda *args: pytest.fail("position refreshed"),
-    )
+    refreshed = []
+
+    def prepare_position_inputs_host(relative_last, sequence_length):
+        refreshed.append((relative_last, sequence_length))
+        return PrefillPositionInputs("host-start", "host-end", "host-row")
+
+    monkeypatch.setattr(runtime.inputs, "prepare_position_inputs_host", prepare_position_inputs_host)
 
     runtime.refresh_trace(prepared, persistent, workspace)
 
+    assert refreshed == [(79, request.padded_sequence_length)]
+    assert copied == [
+        ("host-tokens", "tokens"),
+        ("host-page", "page"),
+        ("host-start", "start"),
+        ("host-end", "end"),
+        ("host-row", "row"),
+    ]
+    assert workspace.position_signature == 79
+
+    refreshed.clear()
+    copied.clear()
+    runtime.refresh_trace(prepared, persistent, workspace)
+
+    assert refreshed == []
     assert copied == [("host-tokens", "tokens"), ("host-page", "page")]
 
 
@@ -1499,7 +1523,7 @@ def test_finish_trace_reports_nested_persistent_logprob_and_intermediate_ownersh
 
 
 @pytest.mark.host
-def test_cached_chunk_trace_logits_preserve_tile_for_logical_last_token_assembly(monkeypatch):
+def test_cached_chunk_trace_logits_row_pick_the_logical_last_token_for_assembly(monkeypatch):
     runtime = _runtime(trace_lengths=(128, 1024, 2048))
     tokens, page_table, prompt_lens, start_pos = _inputs(prompt_length=160, cached_tokens=32)
     prepared = runtime.prepare(
@@ -1516,8 +1540,10 @@ def test_cached_chunk_trace_logits_preserve_tile_for_logical_last_token_assembly
 
     def postprocess(hidden, last_token, *, last_token_slice, last_token_index):
         seen.append((hidden, last_token, last_token_slice, last_token_index))
-        rows = 1 if last_token_index is not None else 32
-        return torch.arange(rows, dtype=torch.float32).reshape(1, 1, rows, 1).expand(-1, -1, -1, 8)
+        if last_token_index is not None:
+            # Device-side row pick: the single output row carries the logical last token (127).
+            return torch.full((1, 1, 1, 8), float(last_token))
+        return torch.arange(32, dtype=torch.float32).reshape(1, 1, 32, 1).expand(-1, -1, -1, 8)
 
     runtime.config.model.post_process_prefill_output = postprocess
     monkeypatch.setattr(postprocess_module.ttnn, "untilize", lambda logits, **kwargs: logits)
@@ -1530,8 +1556,8 @@ def test_cached_chunk_trace_logits_preserve_tile_for_logical_last_token_assembly
     result = runtime.finish_trace(prepared, "hidden", workspace)
     output = runtime.assemble([(prepared, result)], batch_size=1)
 
-    assert seen == [("hidden", 127, ("slice-start", "slice-end"), None)]
-    assert torch.equal(output[0, 0], torch.full((runtime.config.model.vocab_size,), 31.0))
+    assert seen == [("hidden", 127, ("slice-start", "slice-end"), "row-index")]
+    assert torch.equal(output[0, 0], torch.full((runtime.config.model.vocab_size,), 127.0))
 
 
 @pytest.mark.host
@@ -2827,7 +2853,7 @@ def test_assemble_restores_source_rows_and_releases_each_owned_result(monkeypatc
 
 
 @pytest.mark.host
-def test_single_logits_prefill_uses_static_tile_then_selects_exact_row_before_readback(monkeypatch):
+def test_single_logits_prefill_uses_runtime_row_pick_and_skips_host_row_slice(monkeypatch):
     runtime = _runtime()
     request = _plan(prompt_length=80)[0]
     prepared = SimpleNamespace(request=request, sampling_params=None, sampling_path="logits")
@@ -2840,7 +2866,8 @@ def test_single_logits_prefill_uses_static_tile_then_selects_exact_row_before_re
         last_token_index=None,
     ):
         seen.append((hidden_states, last_token_idx, last_token_slice, last_token_index))
-        return torch.ones(1, 1, 32, runtime.config.model.vocab_size)
+        assert last_token_index is not None
+        return torch.ones(1, 1, 1, runtime.config.model.vocab_size)
 
     runtime.config.model.post_process_prefill_output = post_process_prefill_output
     monkeypatch.setattr(postprocess_module.ttnn, "untilize", lambda logits, **kwargs: logits)
@@ -2854,8 +2881,8 @@ def test_single_logits_prefill_uses_static_tile_then_selects_exact_row_before_re
     positions = PrefillPositionInputs("slice-start", "slice-end", "row-index")
     logits = runtime.postprocessor.finish_regular_prefill(prepared, "hidden", None, positions)
 
-    assert seen == [("hidden", 79, None, None)]
-    assert sliced == [((0, 0, 15, 0), (1, 1, 16, runtime.config.model.vocab_size))]
+    assert seen == [("hidden", 79, ("slice-start", "slice-end"), "row-index")]
+    assert sliced == []
     output = runtime.assemble([(prepared, InvocationResult(logits, "owned"))], batch_size=1)
     assert torch.equal(output, logits[:, 0])
 
@@ -3087,3 +3114,24 @@ def test_prefill_package_has_no_compatibility_barrel():
     assert not hasattr(prefill_package, "PrefillRuntime")
     assert not hasattr(prefill_package, "PrefillRequest")
     assert not hasattr(prefill_package, "__all__")
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(("chunk_cap", "max_seq_len"), [(2048, 4096), (4096, 4096), (6144, 16384), (2048, 1500)])
+def test_prefill_bucket_ladder_covers_every_invocation_a_served_prompt_reaches(chunk_cap, max_seq_len):
+    ladder = prefill_bucket_ladder(chunk_cap, max_seq_len)
+    assert ladder == tuple(sorted(set(ladder)))
+    for length in range(1, max_seq_len + 1, 37):
+        padded = _padded_prefill_length(length)
+        if padded > max_seq_len:
+            continue
+        invocation = _max_prefill_chunk_size(padded, chunk_cap) if padded > chunk_cap else padded
+        assert invocation in ladder, (length, padded, invocation)
+
+
+@pytest.mark.host
+def test_prefill_bucket_ladder_stops_at_the_chunk_cap_and_max_seq_len():
+    assert prefill_bucket_ladder(2048, 4096) == (128, 1024, 2048)
+    assert prefill_bucket_ladder(4096, 8192) == (128, 1024, 2048, 4096)
+    assert prefill_bucket_ladder(2048, 1024) == (128, 1024)
+    assert prefill_bucket_ladder(2048, 64) == (64,)

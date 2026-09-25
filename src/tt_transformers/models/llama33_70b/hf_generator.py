@@ -21,6 +21,7 @@ from tt_transformers.cache_environment import (
 )
 from tt_transformers.device_utils import cleanup_object_graph
 from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
+from tt_transformers.llm_runtime.prefill.plan import prefill_bucket_ladder
 from tt_transformers.llm_runtime.tensor_resources import attach_cleanup_failures
 from tt_transformers.models.llama3_executor import Llama33_70BExecutor, Llama33_70BExecutorConfig
 from tt_transformers.models.llama33_70b import weight_utils
@@ -67,7 +68,10 @@ class Llama33_70BRuntimeConfig:
     max_context_len: int
     max_seq_len: int
     trace_prefill_supported_seq_lens: tuple[int, ...]
-    trace_prefill_warmup_seq_lens: tuple[int, ...] = ()
+    # Prefill lengths prepared at warmup. Warmup captures a trace for each length
+    # whose first invocation can trace and compiles the rest eagerly, so an
+    # untraced bucket can degrade to eager instead of raising.
+    prefill_warmup_seq_lens: tuple[int, ...] = ()
     supports_batched_prefill: bool = True
     max_prefill_batch_size: int = 32
     disable_batched_prefill: bool = False
@@ -190,21 +194,23 @@ def _trace_seq_lens(num_devices: int, max_prefill_chunk_size: int, max_seq_len: 
     return tuple(length for length in (128, max_prefill_chunk_size) if length <= max_seq_len)
 
 
-def _trace_warmup_seq_lens(
+def _prefill_warmup_seq_lens(
     max_prefill_chunk_size: int,
     max_seq_len: int,
     supported_seq_lens: tuple[int, ...],
 ) -> tuple[int, ...]:
-    """Return logical representatives whose first invocation has a trace family."""
+    """Return every prefill bucket up to the chunk cap plus the traced multi-chunk representative.
 
-    candidates = (128, max_prefill_chunk_size, 2 * max_prefill_chunk_size)
-    return tuple(
-        dict.fromkeys(
-            length
-            for length in candidates
-            if length <= max_seq_len and min(length, max_prefill_chunk_size) in supported_seq_lens
-        )
-    )
+    The bucket ladder gives each servable invocation a warmup-compiled program.
+    Twice the chunk cap is kept when its first chunk traces, so warmup also covers
+    a traced prefill that continues past one chunk.
+    """
+
+    lengths = set(prefill_bucket_ladder(max_prefill_chunk_size, max_seq_len))
+    multi_chunk = 2 * max_prefill_chunk_size
+    if multi_chunk <= max_seq_len and max_prefill_chunk_size in supported_seq_lens:
+        lengths.add(multi_chunk)
+    return tuple(sorted(lengths))
 
 
 def _resolve_supported_sku(*, arch, cluster_type, num_devices: int) -> str:
@@ -396,7 +402,7 @@ def _load_model(
         max_context_len=int(hf_config.max_position_embeddings),
         max_seq_len=max_seq_len,
         trace_prefill_supported_seq_lens=trace_prefill_supported_seq_lens,
-        trace_prefill_warmup_seq_lens=_trace_warmup_seq_lens(
+        prefill_warmup_seq_lens=_prefill_warmup_seq_lens(
             2048,
             max_seq_len,
             trace_prefill_supported_seq_lens,

@@ -18,12 +18,19 @@ _DEMO_SOURCE = "\n".join(
 )
 _DEMO_TREE = ast.parse(_DEMO_SOURCE, filename=f"{_DEMO_PATH}+{_HARDWARE_DEMO_PATH}")
 _COMMON_CONFTEST_SOURCE = Path("tests/conftest.py").read_text(encoding="utf-8")
+_RUN_HELPERS_PATH = "examples/common/run_helpers.py"
+_RUN_HELPERS_TREE = ast.parse(Path(_RUN_HELPERS_PATH).read_text(encoding="utf-8"), filename=_RUN_HELPERS_PATH)
 
 
 def _function(name):
     if name == "_ttnn_mesh_device_param_from_env":
         name = "ttnn_mesh_device_param_from_env"
     return next(node for node in _DEMO_TREE.body if isinstance(node, ast.FunctionDef) and node.name == name)
+
+
+def _shared_function(name):
+    """Look a helper up in ``examples/common``, for contracts the demo no longer defines itself."""
+    return next(node for node in _RUN_HELPERS_TREE.body if isinstance(node, ast.FunctionDef) and node.name == name)
 
 
 def _calls(function_name, called_name):
@@ -338,7 +345,7 @@ def test_demo_resolves_qwen3_trace_region_and_matches_ring_fabric():
     assert 'resolve_trace_region_size("qwen3-32b", env)' in _DEMO_SOURCE
     assert '"trace_region_size": 50_000_000' not in _DEMO_SOURCE
     assert "ttnn.FabricConfig.FABRIC_1D_RING" in _DEMO_SOURCE
-    assert resolve_trace_region_size("qwen3-32b", "T3K") == 90_000_000
+    assert resolve_trace_region_size("qwen3-32b", "T3K") == 120_000_000
     assert resolve_trace_region_size("qwen3-32b", "P150x4") == 100_000_000
 
 
@@ -426,7 +433,7 @@ def test_perf_and_eval_use_traced_model_owned_wrapper():
 def test_perf_warms_executor_before_shared_perf_runner_replay():
     function = _function("_run_perf_benchmark")
     tokenize_call = _calls("_run_perf_benchmark", "tokenize_prompts")[0]
-    warmup_call = _calls("_run_perf_benchmark", "_warmup_demo_executor")[0]
+    warmup_call = _calls("_run_perf_benchmark", "warmup_demo_executor")[0]
     runner_call = _calls("_run_perf_benchmark", "run_perf_benchmark")[0]
     profiler_start = next(
         node
@@ -550,7 +557,7 @@ def test_eval_repeat_defaults_to_tttv1_slot_stable_page_table_with_diagnostic_ov
 @pytest.mark.host
 @pytest.mark.model
 def test_eval_repeat_warms_executor_before_shared_perf_runner_replay():
-    warmup_call = _calls("_run_eval_repeat_batch32", "_warmup_demo_executor")[0]
+    warmup_call = _calls("_run_eval_repeat_batch32", "warmup_demo_executor")[0]
     runner_call = _calls("_run_eval_repeat_batch32", "run_eval_repeat_batch32")[0]
     keywords = {keyword.arg: ast.unparse(keyword.value) for keyword in warmup_call.keywords}
 
@@ -559,7 +566,7 @@ def test_eval_repeat_warms_executor_before_shared_perf_runner_replay():
     assert keywords["prefill_compile_execution"] == ("executor.traced_prefill_execution if perf_report else None")
     assert warmup_call.lineno < runner_call.lineno
 
-    helper_source = ast.unparse(_function("_warmup_demo_executor"))
+    helper_source = ast.unparse(_shared_function("warmup_demo_executor"))
     assert helper_source.index("executor.compile_prefill") < helper_source.index(
         "executor.warmup_model_prefill(enable_trace=True"
     )

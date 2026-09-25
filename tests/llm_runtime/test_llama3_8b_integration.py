@@ -74,6 +74,7 @@ def _runtime_config():
     return SimpleNamespace(
         model_cache_path="cache",
         max_prefill_chunk_size=2048,
+        max_seq_len=4096,
         trace_prefill_supported_seq_lens=(128, 1024),
         supports_batched_prefill=True,
         disable_batched_prefill=False,
@@ -981,24 +982,27 @@ def test_generator_delegates_without_concrete_type_checks():
     assert generator.decode_forward(tokens, start_pos, page_table, enable_trace=True) == "decode_forward"
     assert generator.cleanup() == "cleanup"
     assert [name for name, _, _ in target.calls] == [
+        "can_trace_prefill",
         "prefill_forward",
         "decode_forward",
         "cleanup",
     ]
-    assert target.calls[0][2]["execution"] is target.traced_prefill_execution
-    assert target.calls[1][2]["execution"] is target.traced_decode_execution
+    assert target.calls[1][2]["execution"] is target.traced_prefill_execution
+    assert target.calls[2][2]["execution"] is target.traced_decode_execution
 
 
 @pytest.mark.host
-def test_generator_preserves_required_trace_intent_for_ineligible_prefill():
+def test_generator_degrades_an_ineligible_prefill_to_eager():
+    # A request with no trace family has no required trace, so it runs eager against a
+    # program compiled at warmup instead of raising in the traced executor.
     target = _RecordingTarget(traceable_prefill=False)
     generator = _recording_generator(target)
     tokens = torch.tensor([[1]], dtype=torch.long)
     page_table = torch.tensor([[0]], dtype=torch.int32)
 
     assert generator.prefill_forward(tokens, page_table, enable_trace=True) == "prefill_forward"
-    assert [name for name, _, _ in target.calls] == ["prefill_forward"]
-    assert target.calls[0][2]["execution"] is target.traced_prefill_execution
+    assert [name for name, _, _ in target.calls] == ["can_trace_prefill", "prefill_forward"]
+    assert target.calls[1][2]["execution"] is target.eager_execution
 
 
 @pytest.mark.host

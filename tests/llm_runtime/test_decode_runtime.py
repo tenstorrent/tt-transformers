@@ -13,6 +13,7 @@ import torch
 import ttnn
 
 import tt_transformers.llm_runtime.decode as decode_module
+import tt_transformers.llm_runtime.trace_compiler as trace_compiler_module
 from tt_transformers.llm_runtime.config import PageTableLayout
 from tt_transformers.llm_runtime.decode import (
     DecodeDeviceInputs,
@@ -24,6 +25,8 @@ from tt_transformers.llm_runtime.decode import (
     InvocationResult,
 )
 from tt_transformers.llm_runtime.output_reader import OutputReader, PendingRead
+from tt_transformers.llm_runtime.program_compiler import ProgramCompiler
+from tt_transformers.llm_runtime.trace_compiler import TraceCapturePlan, TraceCompiler, TraceKey
 from tt_transformers.modules.sampling.params import PreparedSamplingParams
 from tt_transformers.sampling.sampling_params import SamplingParams
 
@@ -1345,3 +1348,78 @@ def test_failed_transient_release_blocks_use_and_cleanup_retries(monkeypatch, ex
     assert attempts == [tensor, tensor]
     assert runtime.transient_orphan_count == 0
     assert prepare(runtime).sampling_path == "logits"
+
+
+def _stub_trace_backend(monkeypatch):
+    trace_ids = iter(range(100, 200))
+    monkeypatch.setattr(ttnn, "synchronize_device", lambda mesh: None)
+    monkeypatch.setattr(ttnn, "begin_trace_capture", lambda mesh, cq_id: next(trace_ids))
+    monkeypatch.setattr(ttnn, "end_trace_capture", lambda mesh, trace_id, cq_id: None)
+    monkeypatch.setattr(ttnn, "execute_trace", lambda mesh, trace_id, cq_id, blocking: None)
+    monkeypatch.setattr(ttnn, "release_trace", lambda mesh, trace_id: None)
+    monkeypatch.setattr(trace_compiler_module, "_trim_host_allocator", lambda: None)
+
+
+def _decode_capture_plan(program_key, trace_signature):
+    return TraceCapturePlan(
+        program_key=program_key,
+        trace_signature=trace_signature,
+        operation="decode",
+        prepare_inputs=lambda: (),
+        capture=lambda persistent: torch.zeros(1),
+    )
+
+
+@pytest.mark.host
+def test_host_to_device_sampling_switch_forces_a_full_trace_refresh(monkeypatch):
+    """Switching between host and device sampling refreshes the decode trace fully.
+
+    TTTv2 encodes the guarantee as ``full_on_graph_switch`` in the trace compiler,
+    which fires whenever the replayed trace key changes. The two decode modes carry
+    genuinely different trace identities -- ``sampling_params=None`` classifies as the
+    ``"logits"`` (host) path, a device-sampled request as ``"topk"`` -- so the switch
+    from one to the other is a real graph switch and forces a full refresh, while a
+    replay that stays in the same mode does not.
+    """
+    runtime = make_runtime(sampling=True)
+    host_signature = runtime.trace_signature(prepare(runtime, sampling_params=None))
+    device_signature = runtime.trace_signature(
+        prepare(runtime, sampling_params=SamplingParams(temperature=1.0, top_k=32, top_p=0.08))
+    )
+    # The switch is a real change of trace identity, not a synthetic one.
+    assert host_signature.sampling_path == "logits"
+    assert device_signature.sampling_path != host_signature.sampling_path
+    assert TraceKey.from_signature(host_signature) != TraceKey.from_signature(device_signature)
+
+    _stub_trace_backend(monkeypatch)
+    compiler = ProgramCompiler("mesh", lambda: object())
+    programs = [
+        compiler.compile(signature, lambda context: torch.zeros(1)) for signature in (host_signature, device_signature)
+    ]
+    trace = TraceCompiler(compiler)
+    trace.register_capture_plan(_decode_capture_plan(programs[0].key, host_signature))
+    trace.register_capture_plan(_decode_capture_plan(programs[1].key, device_signature))
+    trace.capture_all()
+
+    decisions = []
+
+    def replay(program_key):
+        # Isolate full_on_graph_switch: no batch reset, and device feedback present and
+        # compatible, so a graph switch is the only thing that can force a full refresh.
+        trace.replay(
+            program_key,
+            lambda artifact, decision: decisions.append(decision),
+            reset_batch=False,
+            device_feedback_enabled=True,
+            feedback_compatible=True,
+        )
+
+    replay(programs[0].key)  # host: first replay
+    replay(programs[1].key)  # device: the replay after the host->device switch
+    replay(programs[1].key)  # device again: same mode
+
+    # The replay after the switch refreshes fully.
+    assert decisions[1].full is True
+    # A replay that stays in the same mode does not. This second assertion is what gives
+    # the test teeth: a policy that always refreshed fully would still pass without it.
+    assert decisions[2].full is False

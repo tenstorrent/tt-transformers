@@ -417,6 +417,27 @@ def _padded_prefill_length(sequence_length: int) -> int:
     return 1 << (sequence_length - 1).bit_length()
 
 
+def prefill_bucket_ladder(max_prefill_chunk_size: int, max_seq_len: int) -> tuple[int, ...]:
+    """Return every padded prefill bucket a request can invoke, up to the chunk cap.
+
+    This follows `_padded_prefill_length` (128, 1024, then each power of two)
+    up to ``min(max_prefill_chunk_size, max_seq_len)``. A prefill that pads past
+    the cap runs as power-of-two chunks no larger than the cap
+    (`_max_prefill_chunk_size`), so the ladder covers every invocation geometry
+    a served request can reach.
+    """
+
+    ceiling = min(int(max_prefill_chunk_size), int(max_seq_len))
+    lengths = [length for length in (128, 1024) if length <= ceiling]
+    power = 2048
+    while power <= ceiling:
+        lengths.append(power)
+        power *= 2
+    if not lengths:  # max_seq_len below 128: fall back to the smallest bucket
+        lengths = [ceiling]
+    return tuple(lengths)
+
+
 def _batched_prefill_size(
     batch_size,
     sequence_length,

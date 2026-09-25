@@ -462,9 +462,9 @@ vLLM
        -> require explicit Boolean enable_trace
        -> normalize torch dtypes
   -> Llama3Generator._select_prefill_execution(...)
-       -> if trace requested, target.can_trace_prefill(...)
-       -> cached/chunked/unsupported requests select eager
-       -> eligible requests select traced
+       -> enable_trace false                          -> target.eager_execution
+       -> enable_trace true, target.can_trace_prefill -> target.traced_prefill_execution
+       -> enable_trace true, no trace family          -> target.eager_execution
   -> target.prefill_forward(execution=selected, ...)
        -> Llama3Executor, or LaneGroupExecutor -> each Llama3Executor
   -> selected EagerExecutor or TracedExecutor
@@ -472,8 +472,19 @@ vLLM
   -> Llama3Transformer1D
 ```
 
-The fallback belongs here, at the vLLM/model boundary. `TracedExecutor` never
-silently invokes eager execution.
+When trace is requested, the facade probes `can_trace_prefill` first. A
+request whose padded prefill bucket has a trace family selects the traced
+executor, which still raises if that trace was not captured: a required trace
+miss never becomes eager KV writes, and `TracedExecutor` never silently invokes
+eager execution. A request whose bucket has no trace family carries no
+required trace, so it runs eager.
+
+That degrade needs an eager program for every bucket a request can reach,
+because trace activation forbids compiling a new one. With any trace mode
+configured, warmup therefore compiles every prefill bucket up to the chunk cap
+(128, 1024, then each power of two). It captures traces only for the buckets
+`can_enable_trace` accepts and compiles the rest eagerly. On a device with a
+large chunk cap this makes warmup longer; `max_seq_len` bounds the ladder.
 
 ### 5. Decode dispatch
 

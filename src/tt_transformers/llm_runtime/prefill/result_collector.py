@@ -115,7 +115,11 @@ class PrefillResultAssembler:
                             output_logits[source_row] = combined[0, 0, local_row, :vocab_size].float()
                 else:
                     relative_last = (request.last_token_indices[0] - request.cached_tokens[0]) % _TILE_SIZE
-                    if request.kind == "single" and not request.uses_chunked_prefill:
+                    # A chunked single request that came back as one row was also row-selected on
+                    # device, so its token is in row 0 too. Ported from tenstorrent/tt-metal#55343.
+                    if request.kind == "single" and (
+                        not request.uses_chunked_prefill or int(host_primary.shape[2]) == 1
+                    ):
                         relative_last = 0
                     output_logits[request.source_rows[0]] = process_output_prefill(
                         host_primary,
