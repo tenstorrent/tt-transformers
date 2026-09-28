@@ -4,7 +4,10 @@
 from pathlib import Path
 
 import pytest
+import tomllib
 import ttnn
+from packaging.specifiers import SpecifierSet
+from packaging.version import Version
 
 from tt_transformers.ops.qwen38 import _legacy
 from tt_transformers.ops.qwen38._kernels import KERNEL_ROOT, kernel_path
@@ -145,14 +148,23 @@ def test_legacy_source_caches_only_normalized_source_shape(monkeypatch):
     assert _legacy._legacy_source_cached.cache_info().hits == 1
 
 
-def test_stock_api_cannot_express_required_kernel_build_levels():
-    # This is the release-significant stock-0.79 limitation.  Removing this
-    # assertion requires replacing the source-pragmas with the real enum and
-    # re-running the native parity/performance matrix.
-    import ttnn
-
+def test_build_level_binding_is_scoped_to_kernel_descriptors():
     assert not hasattr(ttnn, "KernelBuildOptLevel")
     assert not hasattr(ttnn._ttnn, "KernelBuildOptLevel")
+    assert hasattr(ttnn.KernelDescriptor, "BuildOptLevel")
+
+
+def test_package_requires_the_qualified_079_binding_backport():
+    pyproject = Path(__file__).resolve().parents[3] / "pyproject.toml"
+    dependencies = tomllib.loads(pyproject.read_text())["project"]["dependencies"]
+    assert "ttnn>=0.79.1rc1,<0.80" in dependencies
+    assert "ttnn==0.79.0" not in dependencies
+
+    qualified = SpecifierSet(">=0.79.1rc1,<0.80")
+    assert Version("0.79.1rc1") in qualified
+    assert Version("0.79.1") in qualified
+    assert Version("0.79.0") not in qualified
+    assert Version("0.80.0") not in qualified
 
 
 @pytest.mark.parametrize("bad", [0, -1, float("nan"), float("inf")])
