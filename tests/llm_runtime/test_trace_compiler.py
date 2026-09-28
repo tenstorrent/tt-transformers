@@ -1,8 +1,10 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 # SPDX-License-Identifier: Apache-2.0
 
+import contextlib
 from dataclasses import dataclass
 from itertools import permutations
+from types import SimpleNamespace
 
 import pytest
 import torch
@@ -51,6 +53,28 @@ def _patch_backend(monkeypatch, events):
     )
     monkeypatch.setattr(ttnn, "release_trace", lambda mesh, trace_id: events.append(("release", trace_id)))
     monkeypatch.setattr(trace_compiler_module, "_trim_host_allocator", lambda: events.append(("trim",)))
+
+
+def _patch_allocation_scope(monkeypatch, events, compiler=None):
+    @contextlib.contextmanager
+    def corruptible_allocation_scope(mesh_device):
+        gate = None if compiler is None else compiler.trace_capture_in_progress
+        events.append(("scope_enter", mesh_device, gate))
+        try:
+            yield
+        finally:
+            events.append(("scope_exit",))
+
+    monkeypatch.setattr(
+        trace_compiler_module,
+        "trace_allocation_tracker",
+        SimpleNamespace(corruptible_allocation_scope=corruptible_allocation_scope),
+    )
+
+
+def _scoped_events(events):
+    kinds = {"scope_enter", "scope_exit", "begin", "capture", "end", "release"}
+    return [event for event in events if event[0] in kinds]
 
 
 def _compiled_program(program_compiler, monkeypatch, variant):
@@ -386,6 +410,103 @@ def test_capture_failure_rolls_back_traces_and_uncaptured_inputs(monkeypatch, ex
         trace_key = trace.trace_key_for_program(program.key)
         assert trace_key is not None
         assert trace.get(trace_key).artifact is None
+
+
+@pytest.mark.host
+def test_capture_runs_inside_the_corruptible_allocation_scope(monkeypatch):
+    events = []
+    _patch_backend(monkeypatch, events)
+    compiler = ProgramCompiler("mesh", lambda: object())
+    _patch_allocation_scope(monkeypatch, events, compiler)
+    program = compiler.compile(_Signature("program", 1), lambda context: torch.zeros(1))
+    trace = TraceCompiler(compiler)
+    trace.register_capture_plan(_plan(program, 1, events))
+
+    trace.capture_all()
+
+    assert _scoped_events(events) == [
+        ("scope_enter", "mesh", True),
+        ("begin", "mesh", 0),
+        ("capture", 1),
+        ("end", 100, 0),
+        ("scope_exit",),
+    ]
+    assert trace.trace_active
+    assert not compiler.trace_capture_in_progress
+
+
+@pytest.mark.host
+def test_each_planned_trace_enters_and_exits_its_own_allocation_scope(monkeypatch):
+    events = []
+    _patch_backend(monkeypatch, events)
+    compiler = ProgramCompiler("mesh", lambda: object())
+    _patch_allocation_scope(monkeypatch, events, compiler)
+    programs = [
+        compiler.compile(_Signature("program", variant), lambda context: torch.zeros(1)) for variant in (1, 2, 3)
+    ]
+    trace = TraceCompiler(compiler)
+    for variant, program in enumerate(programs, 1):
+        trace.register_capture_plan(_plan(program, variant, events))
+
+    trace.capture_all()
+
+    scoped = _scoped_events(events)
+    assert [event[0] for event in scoped].count("scope_enter") == 3
+    assert [event[0] for event in scoped].count("scope_exit") == 3
+    assert scoped == [
+        event
+        for trace_id, variant in zip((100, 101, 102), (1, 2, 3))
+        for event in (
+            ("scope_enter", "mesh", True),
+            ("begin", "mesh", 0),
+            ("capture", variant),
+            ("end", trace_id, 0),
+            ("scope_exit",),
+        )
+    ]
+
+
+@pytest.mark.host
+def test_failed_capture_cleans_up_inside_the_allocation_scope(monkeypatch, expect_error):
+    events = []
+    _patch_backend(monkeypatch, events)
+    compiler = ProgramCompiler("mesh", lambda: object())
+    _patch_allocation_scope(monkeypatch, events, compiler)
+    end_failure = RuntimeError("end capture failed")
+
+    def end_trace_capture(mesh, trace_id, cq_id):
+        events.append(("end", trace_id, cq_id))
+        raise end_failure
+
+    monkeypatch.setattr(ttnn, "end_trace_capture", end_trace_capture)
+    program = compiler.compile(_Signature("program", 1), lambda context: torch.zeros(1))
+    trace = TraceCompiler(compiler)
+    primary = RuntimeError("capture body failed")
+    trace.register_capture_plan(
+        TraceCapturePlan(
+            program.key,
+            _Signature("trace", 1),
+            "decode",
+            lambda: (),
+            lambda persistent: events.append(("capture", 1)) or (_ for _ in ()).throw(primary),
+        )
+    )
+
+    with expect_error(RuntimeError, "capture body failed") as caught:
+        trace.capture_all()
+
+    assert caught.value is primary
+    assert primary.cleanup_failures == (end_failure,)
+    assert _scoped_events(events) == [
+        ("scope_enter", "mesh", True),
+        ("begin", "mesh", 0),
+        ("capture", 1),
+        ("end", 100, 0),
+        ("release", 100),
+        ("scope_exit",),
+    ]
+    assert not trace.trace_active and not compiler.trace_active
+    assert trace.get(trace.trace_key_for_program(program.key)).artifact is None
 
 
 @pytest.mark.host
