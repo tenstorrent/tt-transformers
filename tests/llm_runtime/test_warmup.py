@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib
 import inspect
 from collections.abc import Sequence
 from dataclasses import replace
@@ -11,6 +12,7 @@ from typing import Any
 
 import pytest
 import torch
+from loguru import logger
 
 from tt_transformers.llm_runtime.config import PageTableLayout, TraceConfig, WarmupConfig
 from tt_transformers.llm_runtime.decode import DecodeRuntimeConfig
@@ -22,7 +24,11 @@ from tt_transformers.llm_runtime.warmup import (
     WarmupCoordinator,
     WarmupCoordinatorConfig,
     _resolve_coverage_manifest,
+    resolve_prefill_warmup_seq_lens,
 )
+
+# Every bucket up to the fixtures' 2048 chunk cap: under trace, warmup must prepare each one.
+LADDER = (128, 1024, 2048)
 
 
 class RecordingExecution:
@@ -181,7 +187,7 @@ def make_coordinator(
     trace_mode="all",
     sampling=True,
     warmup_config=None,
-    sequence_lengths=(128, 1024),
+    sequence_lengths=(128, 1024, 2048),
     lane_capacity=4,
     execution=None,
     trace_compiler=None,
@@ -338,8 +344,9 @@ def test_warmup_contract_rejects_unregistered_plugin_keywords(
 @pytest.mark.host
 def test_configured_prefill_lengths_override_model_supported_defaults():
     coordinator, execution, *_ = make_coordinator(
+        trace_mode="none",
         warmup_config=WarmupConfig(prefill_seq_lens=(1024,), prefill_batch_sizes=(1,)),
-        sequence_lengths=(128,),
+        sequence_lengths=(128, 1024),
         sampling=False,
     )
 
@@ -393,7 +400,7 @@ def test_sampler_argmax_capability_is_resolved_once():
 @pytest.mark.host
 def test_page_table_layout_can_be_reconfigured_only_before_use(expect_error):
     coordinator, execution, *_ = make_coordinator(
-        warmup_config=WarmupConfig(prefill_seq_lens=(128,), prefill_batch_sizes=(1,)),
+        warmup_config=WarmupConfig(prefill_seq_lens=LADDER, prefill_batch_sizes=(1,)),
         sampling=False,
     )
     final_layout = PageTableLayout(
@@ -439,7 +446,7 @@ def test_page_table_layout_reconfiguration_requires_immutable_layout(expect_erro
 @pytest.mark.host
 def test_resolved_config_is_frozen_and_owns_both_coverage_plans(expect_error):
     coordinator, *_ = make_coordinator(
-        warmup_config=WarmupConfig(prefill_seq_lens=(128,), prefill_batch_sizes=(1,)),
+        warmup_config=WarmupConfig(prefill_seq_lens=LADDER, prefill_batch_sizes=(1,)),
         lane_capacity=2,
     )
 
@@ -567,7 +574,7 @@ def test_runtime_does_not_copy_static_config_fields():
 @pytest.mark.host
 def test_layout_replacement_is_immutable_bounded_and_rebuilds_coverage(expect_error):
     coordinator, *_ = make_coordinator(
-        warmup_config=WarmupConfig(prefill_seq_lens=(128,), prefill_batch_sizes=(1,)),
+        warmup_config=WarmupConfig(prefill_seq_lens=LADDER, prefill_batch_sizes=(1,)),
         page_table_layout=PageTableLayout(32, 128, 192, 128),
     )
     original = coordinator.config
@@ -610,8 +617,8 @@ def test_q128_batches_are_capped_by_lane_and_non128_is_batch_one():
 
 @pytest.mark.host
 def test_sampling_paths_include_forced_prefill_topk_and_opt_in_true_topk_decode():
-    config = WarmupConfig(prefill_seq_lens=(128,), prefill_batch_sizes=(1,), include_decode_top_k=True)
-    coordinator, execution, *_ = make_coordinator(warmup_config=config, sequence_lengths=(128,), lane_capacity=2)
+    config = WarmupConfig(prefill_seq_lens=LADDER, prefill_batch_sizes=(1,), include_decode_top_k=True)
+    coordinator, execution, *_ = make_coordinator(warmup_config=config, sequence_lengths=LADDER, lane_capacity=2)
 
     coordinator.warmup_prefill(kv_cache="cache", enable_trace=False, can_sample_on_device=True)
     coordinator.warmup_decode(
@@ -635,6 +642,7 @@ def test_sampling_paths_include_forced_prefill_topk_and_opt_in_true_topk_decode(
 def test_q128_single_topk_primes_all_tile_ends():
     config = WarmupConfig(prefill_seq_lens=(128,), prefill_batch_sizes=(1,))
     coordinator, execution, *_ = make_coordinator(
+        trace_mode="none",
         warmup_config=config,
         sequence_lengths=(128,),
         lane_capacity=32,
@@ -663,7 +671,7 @@ def test_q128_single_topk_primes_all_tile_ends():
 @pytest.mark.host
 def test_decode_warmup_uses_topk_as_the_platform_greedy_path_when_argmax_is_disabled():
     coordinator, execution, *_ = make_coordinator(
-        sequence_lengths=(128,),
+        sequence_lengths=LADDER,
         lane_capacity=2,
         allow_force_argmax=False,
     )
@@ -682,9 +690,9 @@ def test_decode_warmup_uses_topk_as_the_platform_greedy_path_when_argmax_is_disa
 
 @pytest.mark.host
 def test_eager_and_trace_coverage_are_separately_idempotent():
-    config = WarmupConfig(prefill_seq_lens=(128,), prefill_batch_sizes=(1,))
+    config = WarmupConfig(prefill_seq_lens=LADDER, prefill_batch_sizes=(1,))
     coordinator, execution, trace_compiler, *_ = make_coordinator(
-        warmup_config=config, sequence_lengths=(128,), lane_capacity=1
+        warmup_config=config, sequence_lengths=LADDER, lane_capacity=1
     )
 
     coordinator.warmup_prefill(kv_cache="cache", enable_trace=False, can_sample_on_device=False)
@@ -702,8 +710,8 @@ def test_eager_and_trace_coverage_are_separately_idempotent():
 @pytest.mark.host
 def test_trace_warmup_routes_cached_prefill_through_traced_execution_target():
     coordinator, eager, *_ = make_coordinator(
-        warmup_config=WarmupConfig(prefill_seq_lens=(128,), prefill_batch_sizes=(1,)),
-        sequence_lengths=(128,),
+        warmup_config=WarmupConfig(prefill_seq_lens=LADDER, prefill_batch_sizes=(1,)),
+        sequence_lengths=LADDER,
         lane_capacity=1,
         sampling=False,
     )
@@ -768,6 +776,9 @@ def test_activation_validates_every_program_returned_by_trace_warmup(expect_erro
         sequence_lengths=(128,),
         lane_capacity=1,
         sampling=False,
+        # A 160-token servable length keeps the bucket ladder at 128 and still fits the
+        # cached 128 case, so trace warmup returns exactly two prefill programs.
+        page_table_layout=PageTableLayout(block_size=32, raw_capacity_width=5, prefill_width=72, decode_width=8),
     )
     programs = tuple(
         CompiledProgram(ProgramKey(str(index) * 64), f"program-{index}", OutputSpec((1,), torch.float32))
@@ -800,9 +811,9 @@ def test_activation_validates_every_program_returned_by_trace_warmup(expect_erro
 @pytest.mark.host
 @pytest.mark.parametrize("order", [("prefill", "decode"), ("decode", "prefill")])
 def test_prefill_decode_order_is_independent_and_capture_waits_for_both(order):
-    config = WarmupConfig(prefill_seq_lens=(128,), prefill_batch_sizes=(1,))
+    config = WarmupConfig(prefill_seq_lens=LADDER, prefill_batch_sizes=(1,))
     coordinator, execution, trace_compiler, *_ = make_coordinator(
-        warmup_config=config, sequence_lengths=(128,), lane_capacity=1
+        warmup_config=config, sequence_lengths=LADDER, lane_capacity=1
     )
 
     def run(operation):
@@ -829,11 +840,11 @@ def test_prefill_decode_order_is_independent_and_capture_waits_for_both(order):
 @pytest.mark.host
 @pytest.mark.parametrize("order", [("prefill", "decode"), ("decode", "prefill")])
 def test_capture_uses_phase_specific_sampling_decisions(order):
-    config = WarmupConfig(prefill_seq_lens=(128,), prefill_batch_sizes=(1,))
+    config = WarmupConfig(prefill_seq_lens=LADDER, prefill_batch_sizes=(1,))
     coordinator, execution, trace_compiler, *_ = make_coordinator(
         trace_mode="all",
         warmup_config=config,
-        sequence_lengths=(128,),
+        sequence_lengths=LADDER,
         lane_capacity=1,
     )
 
@@ -874,8 +885,8 @@ def test_capture_uses_phase_specific_sampling_decisions(order):
 @pytest.mark.host
 def test_capture_deferral_stages_complete_registration_until_explicit_activation():
     coordinator, _, trace_compiler, *_ = make_coordinator(
-        warmup_config=WarmupConfig(prefill_seq_lens=(128,), prefill_batch_sizes=(1,)),
-        sequence_lengths=(128,),
+        warmup_config=WarmupConfig(prefill_seq_lens=LADDER, prefill_batch_sizes=(1,)),
+        sequence_lengths=LADDER,
         lane_capacity=1,
         sampling=False,
     )
@@ -902,8 +913,8 @@ def test_capture_deferral_stages_complete_registration_until_explicit_activation
 @pytest.mark.host
 def test_capture_deferral_exception_discards_pending_activation(expect_error):
     coordinator, _, trace_compiler, *_ = make_coordinator(
-        warmup_config=WarmupConfig(prefill_seq_lens=(128,), prefill_batch_sizes=(1,)),
-        sequence_lengths=(128,),
+        warmup_config=WarmupConfig(prefill_seq_lens=LADDER, prefill_batch_sizes=(1,)),
+        sequence_lengths=LADDER,
         lane_capacity=1,
         sampling=False,
     )
@@ -928,11 +939,11 @@ def test_capture_deferral_exception_discards_pending_activation(expect_error):
 
 @pytest.mark.host
 def test_static_all_can_capture_decode_only_runtime_trace():
-    config = WarmupConfig(prefill_seq_lens=(128,), prefill_batch_sizes=(1,))
+    config = WarmupConfig(prefill_seq_lens=LADDER, prefill_batch_sizes=(1,))
     coordinator, execution, trace_compiler, *_ = make_coordinator(
         trace_mode="all",
         warmup_config=config,
-        sequence_lengths=(128,),
+        sequence_lengths=LADDER,
         lane_capacity=1,
     )
 
@@ -954,11 +965,11 @@ def test_static_all_can_capture_decode_only_runtime_trace():
 
 @pytest.mark.host
 def test_two_phase_static_all_waits_for_phase_two_decode_before_capture():
-    config = WarmupConfig(prefill_seq_lens=(128,), prefill_batch_sizes=(1,))
+    config = WarmupConfig(prefill_seq_lens=LADDER, prefill_batch_sizes=(1,))
     coordinator, _, trace_compiler, *_ = make_coordinator(
         trace_mode="all",
         warmup_config=config,
-        sequence_lengths=(128,),
+        sequence_lengths=LADDER,
         lane_capacity=1,
     )
 
@@ -987,10 +998,10 @@ def test_two_phase_static_all_waits_for_phase_two_decode_before_capture():
 @pytest.mark.host
 def test_sampling_buffers_are_materialized_before_first_compile_and_capture():
     events = []
-    config = WarmupConfig(prefill_seq_lens=(128,), prefill_batch_sizes=(1,))
+    config = WarmupConfig(prefill_seq_lens=LADDER, prefill_batch_sizes=(1,))
     coordinator, _, _, _, _, events = make_coordinator(
         warmup_config=config,
-        sequence_lengths=(128,),
+        sequence_lengths=LADDER,
         lane_capacity=1,
         events=events,
     )
@@ -1150,12 +1161,12 @@ def test_trace_capture_fires_when_the_ladder_exceeds_the_trace_eligible_set():
 @pytest.mark.host
 def test_ladder_length_above_the_chunk_cap_is_classified_by_its_invocation_length():
     coordinator, traced, eager, trace_compiler, predicate_calls = make_split_coordinator(
-        sequence_lengths=(128, 2048, 4096),
-        eligible_lengths={128, 2048},
+        sequence_lengths=(128, 1024, 2048, 4096),
+        eligible_lengths={128, 1024, 2048},
         max_prefill_chunk_size=2048,
     )
 
-    assert coordinator.config.prefill_trace_sequence_lengths == (128, 2048, 4096)
+    assert coordinator.config.prefill_trace_sequence_lengths == (128, 1024, 2048, 4096)
     assert (4096, 0) not in predicate_calls
     coordinator.warmup_prefill(enable_trace=True, **PREFILL_KWARGS)
     coordinator.warmup_decode(enable_trace=True, **DECODE_KWARGS)
@@ -1163,3 +1174,166 @@ def test_ladder_length_above_the_chunk_cap_is_classified_by_its_invocation_lengt
     assert 4096 in _uncached_prefill_lengths(traced)
     assert eager.prefill_calls == []
     assert trace_compiler.calls == 1
+
+
+@pytest.fixture
+def log_messages():
+    messages = []
+    handler = logger.add(lambda message: messages.append(message.record["message"]), level="INFO")
+    try:
+        yield messages
+    finally:
+        logger.remove(handler)
+
+
+def _resolve_lengths(lengths, *, trace_mode, max_prefill_chunk_size=2048, can_enable_trace=None):
+    # Servable length 4096 (128 blocks of 32), so the ladder up to a 2048 cap is 128, 1024, 2048.
+    prefill_config, decode_config = make_runtime_configs(
+        sampling=False,
+        lane_capacity=1,
+        max_prefill_chunk_size=max_prefill_chunk_size,
+        can_enable_trace=can_enable_trace,
+    )
+    return WarmupCoordinatorConfig.resolve(
+        warmup=WarmupConfig(prefill_seq_lens=lengths, prefill_batch_sizes=(1,)),
+        trace=TraceConfig(trace_mode),
+        prefill=prefill_config,
+        decode=decode_config,
+        prefill_sequence_lengths=(128,),
+    )
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("trace_mode", ["all", "decode_only"])
+def test_explicit_lengths_missing_a_servable_bucket_are_refused_at_load(trace_mode, expect_error):
+    # Trace activation forbids a later compile under both modes, so a 1025-2048-token
+    # prompt would have no program: refuse the configuration instead of the request.
+    with expect_error(ValueError, "buckets 2048 without a compiled program") as raised:
+        _resolve_lengths((128, 1024), trace_mode=trace_mode)
+    message = str(raised.value)
+    assert f"trace_mode={trace_mode!r}" in message
+    assert "Add 2048 to the warmup prefill lengths" in message
+    assert "trace_mode='none'" in message
+
+
+@pytest.mark.host
+def test_explicit_lengths_are_not_checked_without_trace():
+    # Without trace a later compile is allowed, so any list serves.
+    assert _resolve_lengths((128, 1024), trace_mode="none").prefill_sequence_lengths == (128, 1024)
+
+
+@pytest.mark.host
+def test_lengths_above_the_ladder_pass_the_coverage_check():
+    # Llama-3.3-70B's shape: the ladder plus twice the cap, which runs as cap-sized chunks.
+    config = _resolve_lengths((128, 1024, 2048, 4096), trace_mode="all")
+    assert config.prefill_sequence_lengths == (128, 1024, 2048, 4096)
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("trace_mode", ["all", "decode_only"])
+def test_the_default_ladder_passes_the_coverage_check(trace_mode):
+    runtime = SimpleNamespace(max_prefill_chunk_size=2048, max_seq_len=4096, trace_prefill_supported_seq_lens=(128,))
+    lengths = resolve_prefill_warmup_seq_lens(runtime, TraceConfig(trace_mode))
+    assert _resolve_lengths(lengths, trace_mode=trace_mode).prefill_sequence_lengths == (128, 1024, 2048)
+
+
+def _complete_trace_warmup(coordinator, *, trace_prefill):
+    coordinator.warmup_prefill(enable_trace=trace_prefill, **PREFILL_KWARGS)
+    coordinator.warmup_decode(enable_trace=True, **DECODE_KWARGS)
+
+
+@pytest.mark.host
+def test_capture_logs_the_traced_and_eager_only_prefill_buckets_once(log_messages):
+    coordinator, _, _, trace_compiler, _ = make_split_coordinator(
+        sequence_lengths=(128, 1024, 2048),
+        eligible_lengths={128, 1024},
+    )
+
+    _complete_trace_warmup(coordinator, trace_prefill=True)
+    coordinator.warmup_prefill(enable_trace=True, **PREFILL_KWARGS)
+
+    assert trace_compiler.calls == 1
+    summaries = [message for message in log_messages if message.startswith("Prefill")]
+    assert summaries == ["Prefill buckets traced: 128, 1024; eager-only: 2048"]
+
+
+@pytest.mark.host
+def test_capture_under_decode_only_logs_that_every_prefill_runs_eager(log_messages):
+    coordinator, *_ = make_split_coordinator(
+        sequence_lengths=(128, 1024, 2048),
+        eligible_lengths={128, 1024},
+        trace_mode="decode_only",
+    )
+
+    _complete_trace_warmup(coordinator, trace_prefill=False)
+
+    summaries = [message for message in log_messages if message.startswith("Prefill")]
+    assert summaries == ["Prefill trace is off, so every prefill runs eager; warmed buckets: 128, 1024, 2048"]
+
+
+@pytest.mark.host
+def test_warmup_without_trace_logs_no_prefill_bucket_summary(log_messages):
+    coordinator, *_ = make_coordinator(
+        trace_mode="none",
+        sampling=False,
+        warmup_config=WarmupConfig(prefill_batch_sizes=(1,)),
+        sequence_lengths=(128, 1024),
+        lane_capacity=1,
+    )
+
+    coordinator.warmup_prefill(enable_trace=False, **PREFILL_KWARGS)
+    coordinator.warmup_decode(enable_trace=False, **DECODE_KWARGS)
+
+    assert not [message for message in log_messages if message.startswith("Prefill")]
+
+
+def _qwen_compat_runtime(model_id):
+    if model_id == "qwen3_32b":
+        from tt_transformers.models.qwen3_32b import model
+
+        return model.Qwen3_32BExecutorRuntimeConfig(
+            n_layers=64, n_kv_heads=8, head_dim=128, max_batch_size=32, max_seq_len=4096, cluster_shape=[1, 4]
+        )
+    from tt_transformers.models.qwen25_coder_32b import model
+
+    return model.Qwen25Coder32BExecutorRuntimeConfig(
+        n_layers=64, n_kv_heads=8, head_dim=128, max_batch_size=32, max_seq_len=4096, cluster_shape=[1, 8]
+    )
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("model_id", ["qwen3_32b", "qwen25_coder_32b"])
+@pytest.mark.parametrize("trace_mode", ["all", "decode_only"])
+def test_traced_qwen_compat_executor_config_passes_the_coverage_check(model_id, trace_mode):
+    # The demo compatibility executors used to pin the traced buckets as warmup lengths, so a
+    # 1500-token prompt reached an uncompiled 2048 program at serving time.
+    hf_generator = importlib.import_module(f"tt_transformers.models.{model_id}.hf_generator")
+    runtime = _qwen_compat_runtime(model_id)
+    model = SimpleNamespace(model_args=runtime, config=SimpleNamespace(max_seq_len=4096, max_batch_size=32))
+    compat = hf_generator._compat_executor_config(model, trace_mode=trace_mode, device_sampling_enabled=False)
+    assert compat.warmup.prefill_seq_lens is None
+
+    prefill_config, decode_config = make_runtime_configs(
+        sampling=False,
+        lane_capacity=1,
+        max_prefill_chunk_size=runtime.max_prefill_chunk_size,
+        can_enable_trace=runtime.can_enable_trace,
+    )
+    resolved = WarmupCoordinatorConfig.resolve(
+        warmup=compat.warmup,
+        trace=compat.trace,
+        prefill=prefill_config,
+        decode=decode_config,
+        prefill_sequence_lengths=resolve_prefill_warmup_seq_lens(runtime, compat.trace),
+    )
+    assert {1024, 2048} <= set(resolved.prefill_sequence_lengths)
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("model_id", ["qwen3_32b", "qwen25_coder_32b"])
+def test_eager_qwen_compat_executor_config_keeps_its_warmup_lengths(model_id):
+    hf_generator = importlib.import_module(f"tt_transformers.models.{model_id}.hf_generator")
+    runtime = _qwen_compat_runtime(model_id)
+    model = SimpleNamespace(model_args=runtime, config=SimpleNamespace(max_seq_len=4096, max_batch_size=32))
+    compat = hf_generator._compat_executor_config(model, trace_mode="none", device_sampling_enabled=False)
+    assert compat.warmup.prefill_seq_lens == tuple(getattr(runtime, "trace_prefill_supported_seq_lens", (128, 1024)))

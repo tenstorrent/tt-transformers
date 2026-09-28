@@ -460,7 +460,13 @@ def _compat_executor_config(model, *, trace_mode: str, device_sampling_enabled: 
     return Qwen25Coder32BExecutorConfig(
         trace=TraceConfig(mode=trace_mode),
         warmup=WarmupConfig(
-            prefill_seq_lens=tuple(getattr(runtime_config, "trace_prefill_supported_seq_lens", (128, 1024))),
+            # Under trace the shared default warms every bucket up to the chunk
+            # cap, so an untraced prompt has an eager program to degrade to.
+            prefill_seq_lens=(
+                None
+                if trace_mode != "none"
+                else tuple(getattr(runtime_config, "trace_prefill_supported_seq_lens", (128, 1024)))
+            ),
             prefill_batch_sizes=(1,),
             include_decode_top_k=device_sampling_enabled,
         ),

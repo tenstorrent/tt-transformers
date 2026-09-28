@@ -358,6 +358,12 @@ class Llama32_3BGenerator:
             empty_slots=normalized.get("empty_slots"),
         ):
             return self._select_execution("prefill", True)
+        self.target.note_eager_prefill_degrade(
+            tokens=normalized["tokens"],
+            prompt_lens=normalized.get("prompt_lens"),
+            start_pos=normalized.get("start_pos"),
+            empty_slots=normalized.get("empty_slots"),
+        )
         return self.target.eager_execution
 
     def _select_execution(self, operation: str, enable_trace: bool):

@@ -436,6 +436,7 @@ class _ExecutorFacadeSurface:
     prefill_forward = _delegate_to_model_executor("prefill_forward")
     decode_forward = _delegate_to_model_executor("decode_forward")
     can_trace_prefill = _delegate_to_model_executor("can_trace_prefill")
+    note_eager_prefill_degrade = _delegate_to_model_executor("note_eager_prefill_degrade")
     read_decode_output = _delegate_to_model_executor("read_decode_output")
     process_decode_output_host = _delegate_to_model_executor("process_decode_output_host")
     warmup_model_prefill = _delegate_to_model_executor("warmup_model_prefill")
@@ -469,6 +470,7 @@ _FACADE_SURFACE = (
     "prefill_forward",
     "decode_forward",
     "can_trace_prefill",
+    "note_eager_prefill_degrade",
     "read_decode_output",
     "process_decode_output_host",
     "warmup_model_prefill",
@@ -625,7 +627,13 @@ def _compat_executor_config(model, *, trace_mode: str, device_sampling_enabled: 
     return Qwen3_32BExecutorConfig(
         trace=TraceConfig(mode=trace_mode),
         warmup=WarmupConfig(
-            prefill_seq_lens=tuple(getattr(runtime_config, "trace_prefill_supported_seq_lens", (128, 1024))),
+            # Under trace the shared default warms every bucket up to the chunk
+            # cap, so an untraced prompt has an eager program to degrade to.
+            prefill_seq_lens=(
+                None
+                if trace_mode != "none"
+                else tuple(getattr(runtime_config, "trace_prefill_supported_seq_lens", (128, 1024)))
+            ),
             prefill_batch_sizes=(1,),
             include_decode_top_k=device_sampling_enabled,
         ),

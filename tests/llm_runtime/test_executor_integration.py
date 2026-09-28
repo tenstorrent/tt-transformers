@@ -382,6 +382,15 @@ def _make_llama32_runtime_config():
     )
 
 
+# Every prefill bucket up to the fake runtimes' 2048 chunk cap.
+_LADDER = (128, 1024, 2048)
+
+
+def _ladder_for(module):
+    # The Qwen2.5-Coder-32B and Qwen3-32B fake runtimes cap chunks at 4096.
+    return _LADDER + (4096,) if module in (qwen25_coder_32b_executor, qwen3_32b_executor) else _LADDER
+
+
 def _make_llama32_executor_config(mode="none", *, module=llama32_executor):
     config_class = next(
         getattr(module, name)
@@ -394,7 +403,8 @@ def _make_llama32_executor_config(mode="none", *, module=llama32_executor):
     )
     return config_class(
         trace=TraceConfig(mode),
-        warmup=WarmupConfig(prefill_seq_lens=(128,), prefill_batch_sizes=(1,)),
+        # Under trace every bucket up to the 2048 cap needs a warmup program.
+        warmup=WarmupConfig(prefill_seq_lens=(128,) if mode == "none" else _LADDER, prefill_batch_sizes=(1,)),
         paged_kv_cache=PagedKVCacheConfig(block_size=32, max_num_blocks=132, dtype=ttnn.bfloat8_b),
         device_sampling_enabled=False,
     )
@@ -438,7 +448,9 @@ def _make_qwen2_executor_config(mode="none", *, module=qwen2_executor):
     )
     return config_class(
         trace=TraceConfig(mode),
-        warmup=WarmupConfig(prefill_seq_lens=(128, 1024), prefill_batch_sizes=(1,)),
+        warmup=WarmupConfig(
+            prefill_seq_lens=(128, 1024) if mode == "none" else _ladder_for(module), prefill_batch_sizes=(1,)
+        ),
         paged_kv_cache=PagedKVCacheConfig(block_size=32, max_num_blocks=132, dtype=ttnn.bfloat8_b),
         device_sampling_enabled=False,
     )
@@ -1132,6 +1144,7 @@ def test_qwen3_generator_sampling_policy_controls_decode_topk_warmup(monkeypatch
         ("read_decode_output", ["self", "tt_out"], ["async_read"]),
         ("process_decode_output_host", ["self", "tt_out"], ["is_tokens"]),
         ("can_trace_prefill", ["self"], ["tokens", "prompt_lens", "start_pos", "empty_slots"]),
+        ("note_eager_prefill_degrade", ["self"], ["tokens", "prompt_lens", "start_pos", "empty_slots"]),
         ("warmup_model_prefill", ["self"], ["kv_cache", "can_sample_on_device", "enable_trace"]),
         (
             "warmup_model_decode",
@@ -1153,6 +1166,7 @@ def test_executor_call_contract(binding, method, positional, keyword_only):
         "read_decode_output": {"tt_out"},
         "process_decode_output_host": {"tt_out"},
         "can_trace_prefill": {"tokens"},
+        "note_eager_prefill_degrade": {"tokens"},
         "warmup_model_prefill": {"kv_cache", "can_sample_on_device", "enable_trace"},
         "warmup_model_decode": {
             "kv_cache",
@@ -1234,6 +1248,9 @@ class _RecordingTarget:
         self.calls.append(("can_trace_prefill", kwargs))
         return self.traceable
 
+    def note_eager_prefill_degrade(self, **kwargs):
+        self.calls.append(("note_eager_prefill_degrade", kwargs))
+
     def prefill_forward(self, **kwargs):
         self.calls.append(("prefill_forward", kwargs))
         return kwargs["execution"]
@@ -1257,7 +1274,9 @@ def test_generator_degrades_an_ineligible_prefill_to_eager(binding):
     tokens = __import__("torch").tensor([[1]])
     page_table = __import__("torch").tensor([[0]], dtype=__import__("torch").int32)
     assert generator.prefill_forward(tokens, page_table, enable_trace=True) is target.eager_execution
-    assert [name for name, _ in target.calls] == ["can_trace_prefill", "prefill_forward"]
+    # The degrade is reported to the target once per request, so an operator can see it.
+    assert [name for name, _ in target.calls] == ["can_trace_prefill", "note_eager_prefill_degrade", "prefill_forward"]
+    assert target.calls[1][1]["tokens"] is target.calls[0][1]["tokens"]
 
 
 @pytest.mark.host

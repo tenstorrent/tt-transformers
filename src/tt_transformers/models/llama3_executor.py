@@ -119,6 +119,7 @@ class _ExecutorFacadeSurface:
     prefill_forward = _delegate_to_model_executor("prefill_forward")
     decode_forward = _delegate_to_model_executor("decode_forward")
     can_trace_prefill = _delegate_to_model_executor("can_trace_prefill")
+    note_eager_prefill_degrade = _delegate_to_model_executor("note_eager_prefill_degrade")
     read_decode_output = _delegate_to_model_executor("read_decode_output")
     process_decode_output_host = _delegate_to_model_executor("process_decode_output_host")
     warmup_model_prefill = _delegate_to_model_executor("warmup_model_prefill")
@@ -152,6 +153,7 @@ _FACADE_SURFACE = (
     "prefill_forward",
     "decode_forward",
     "can_trace_prefill",
+    "note_eager_prefill_degrade",
     "read_decode_output",
     "process_decode_output_host",
     "warmup_model_prefill",

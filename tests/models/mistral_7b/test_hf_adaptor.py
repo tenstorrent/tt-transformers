@@ -76,6 +76,7 @@ def _executor_with_split_prefill_targets(*, traceable):
     executor._validate_bound_cache = lambda _cache: None
     executor._ensure_sampling_for = lambda _params: None
     executor.can_trace_prefill = MagicMock(return_value=traceable)
+    executor.prefill_runtime = SimpleNamespace(note_eager_degrade=MagicMock())
     return executor
 
 
@@ -97,6 +98,7 @@ def test_compile_prefill_without_an_execution_selects_the_prefill_forward_target
     chosen.compile_prefill.assert_called_once()
     other.compile_prefill.assert_not_called()
     executor.can_trace_prefill.assert_called_once()
+    assert executor.prefill_runtime.note_eager_degrade.call_count == (0 if traceable else 1)
 
 
 @pytest.mark.host

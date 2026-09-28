@@ -177,6 +177,8 @@ class WarmupCoordinatorConfig:
         if source_lengths is None:
             source_lengths = prefill_sequence_lengths
         _validate_prefill_sequence_lengths(source_lengths)
+        if trace.mode != "none":
+            _require_bucket_coverage(prefill, trace, source_lengths)
         prefill_trace_sequence_lengths = (
             tuple(length for length in source_lengths if _prefill_invocation_can_trace(prefill, length))
             if trace.prefill_enabled
@@ -568,7 +570,17 @@ class WarmupCoordinator:
         self.trace_compiler.capture_all()
         self._captured = True
         self._coverage_manifest = manifest
+        self._log_prefill_coverage()
         self._prime_prefill_trace_postprocess()
+
+    def _log_prefill_coverage(self) -> None:
+        lengths = tuple(sorted(self.config.prefill_sequence_lengths))
+        if not self.config.prefill_trace_enabled or self._trace_decisions.get("prefill") is False:
+            logger.info(f"Prefill trace is off, so every prefill runs eager; warmed buckets: {_joined(lengths)}")
+            return
+        traced = tuple(length for length in lengths if length in self.config.prefill_trace_sequence_lengths)
+        eager_only = tuple(length for length in lengths if length not in traced)
+        logger.info(f"Prefill buckets traced: {_joined(traced)}; eager-only: {_joined(eager_only)}")
 
     def _record_required_programs(self, programs: Any, *, traced: bool) -> None:
         if programs is None:
@@ -702,6 +714,27 @@ def resolve_prefill_warmup_seq_lens(runtime_config: Any, trace: TraceConfig) -> 
     return tuple(sorted({*traced, *ladder}))
 
 
+def _require_bucket_coverage(prefill: PrefillRuntimeConfig, trace: TraceConfig, lengths: tuple[int, ...]) -> None:
+    # Trace activation forbids compiling a program warmup did not, so an eager
+    # prefill can only run at a bucket warmup prepared. Refuse at load a list
+    # that leaves a servable bucket without one, rather than failing a request.
+    ceiling = prefill.page_table_layout_ceiling
+    servable_length = ceiling.raw_capacity_width * ceiling.block_size
+    missing = tuple(
+        bucket
+        for bucket in prefill_bucket_ladder(prefill.max_prefill_chunk_size, servable_length)
+        if bucket not in lengths
+    )
+    if missing:
+        buckets = ", ".join(str(bucket) for bucket in missing)
+        raise ValueError(
+            f"The prefill warmup lengths {lengths} leave prefill buckets {buckets} without a compiled program. "
+            f"With trace_mode={trace.mode!r} nothing can be compiled after warmup, so a prompt that pads to "
+            f"one of them would fail when served. Add {buckets} to the warmup prefill lengths, or use "
+            "trace_mode='none'."
+        )
+
+
 def _prefill_invocation_can_trace(prefill: PrefillRuntimeConfig, sequence_length: int) -> bool:
     # Mirror PrefillRuntime.can_trace: trace capability belongs to the first
     # invocation's geometry, the padded length clamped to the chunk cap. Cached
@@ -786,3 +819,7 @@ def _topk_sampling_params(batch_size: int) -> SamplingParams:
 
 def _ceil_div(value: int, divisor: int) -> int:
     return (value + divisor - 1) // divisor
+
+
+def _joined(lengths: tuple[int, ...]) -> str:
+    return ", ".join(str(length) for length in lengths) or "none"

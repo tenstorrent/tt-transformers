@@ -747,6 +747,7 @@ class DeepSeekR1Qwen14BExecutor:
             return self._prefill_execution
         if self.can_trace_prefill(tokens=tokens, prompt_lens=prompt_lens, start_pos=start_pos, empty_slots=empty_slots):
             return traced
+        self.prefill_runtime.note_eager_degrade(tokens=tokens, prompt_lens=prompt_lens, start_pos=start_pos)
         return eager
 
     def decode_forward(
@@ -792,6 +793,18 @@ class DeepSeekR1Qwen14BExecutor:
             prompt_lens=prompt_lens,
             start_pos=start_pos,
         )
+
+    def note_eager_prefill_degrade(
+        self,
+        *,
+        tokens: torch.Tensor,  # ↓ Core request
+        prompt_lens: torch.Tensor | None = None,  # ↓ Sequence metadata
+        start_pos: torch.Tensor | None = None,
+        empty_slots: Sequence[int] | None = None,  # ↓ Lane routing
+    ) -> None:
+        """Record that a prefill which requested trace is served by the eager executor."""
+
+        self.prefill_runtime.note_eager_degrade(tokens=tokens, prompt_lens=prompt_lens, start_pos=start_pos)
 
     def read_decode_output(self, tt_out: Any, *, async_read: bool = False) -> Any:
         self._ensure_active()

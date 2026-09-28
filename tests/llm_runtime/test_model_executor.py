@@ -6,6 +6,8 @@
 import ast
 import dataclasses
 import importlib
+import inspect
+import re
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -13,7 +15,8 @@ from unittest.mock import MagicMock
 import pytest
 import ttnn
 
-from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
+from tt_transformers.llm_runtime.config import PagedKVCacheConfig, PageTableLayout, TraceConfig, WarmupConfig
+from tt_transformers.llm_runtime.prefill.plan import prefill_bucket_ladder
 from tt_transformers.llm_runtime.warmup import resolve_prefill_warmup_seq_lens
 from tt_transformers.models import executor as executor_module
 from tt_transformers.models.executor import ModelExecutor, ModelExecutorConfig
@@ -202,7 +205,11 @@ def test_request_state_and_execution_target_are_forwarded_by_identity() -> None:
 def _split_prefill_target(*, traceable: bool) -> ModelExecutor:
     target = object.__new__(ModelExecutor)
     target._terminal = False
-    target.prefill_runtime = SimpleNamespace(transient_orphan_count=0, can_trace=MagicMock(return_value=traceable))
+    target.prefill_runtime = SimpleNamespace(
+        transient_orphan_count=0,
+        can_trace=MagicMock(return_value=traceable),
+        note_eager_degrade=MagicMock(),
+    )
     target.decode_runtime = SimpleNamespace(transient_orphan_count=0)
     target._validate_bound_cache = MagicMock()
     target._ensure_sampling_for = MagicMock()
@@ -230,6 +237,8 @@ def test_prefill_without_an_execution_selects_by_trace_eligibility(method, trace
     other = target.eager_executor if traceable else target.traced_prefill_execution
     getattr(selected, method).assert_called_once()
     getattr(other, method).assert_not_called()
+    # Only a degrade is reported; a covered request takes its trace silently.
+    assert target.prefill_runtime.note_eager_degrade.call_count == (0 if traceable else 1)
 
 
 @pytest.mark.host
@@ -397,3 +406,40 @@ def test_every_runtime_config_declares_what_the_warmup_ladder_reads(model_id) ->
     for runtime_config in runtime_configs:
         fields = {field.name for field in dataclasses.fields(runtime_config)}
         assert {"max_prefill_chunk_size", "max_seq_len", "trace_prefill_supported_seq_lens"} <= fields
+
+
+# Every chunk cap a model in this tree resolves to (2K/4K caps, and Llama-3.1-8B's 64K/128K).
+_CHUNK_CAPS = (2048, 4096, 65536, 131072)
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("model_id", _MODEL_IDS)
+def test_servable_length_bound_gives_the_default_warmup_ladder(model_id) -> None:
+    # The load-time coverage check bounds its bucket ladder by the page table's servable
+    # length; the default warmup lengths are bounded by max_seq_len. Under each model's
+    # default paged-KV geometry the two must agree, or the check would refuse a default.
+    module = importlib.import_module(f"tt_transformers.models.{model_id}.hf_generator")
+    source = inspect.getsource(module)
+    block_size = 32
+    assert re.search(r"block_size = 32\b|else 32\b", source), f"{model_id} default block size moved"
+    default = inspect.signature(module.from_pretrained).parameters["max_seq_len"].default
+    # Llama-3.1-8B takes max_seq_len without a default; cover the lengths its caps reach.
+    max_seq_lens = (default,) if default is not inspect.Parameter.empty else (4096, 16384, 65536, 131072)
+    for max_seq_len in max_seq_lens:
+        model_width = -(-max_seq_len // block_size)
+        # hf_generator sizes the cache per lane and user; the vLLM facades add one block per user.
+        for physical_num_blocks in (model_width, model_width * 32, model_width + 32):
+            for chunk_cap in _CHUNK_CAPS:
+                layout = PageTableLayout.resolve(
+                    block_size=block_size,
+                    model_max_sequence_length=max_seq_len,
+                    physical_num_blocks=physical_num_blocks,
+                    max_prefill_chunk_size=min(chunk_cap, max_seq_len),
+                )
+                servable_length = layout.raw_capacity_width * layout.block_size
+                runtime_config = SimpleNamespace(
+                    max_prefill_chunk_size=chunk_cap, max_seq_len=max_seq_len, trace_prefill_supported_seq_lens=()
+                )
+                assert prefill_bucket_ladder(chunk_cap, servable_length) == resolve_prefill_warmup_seq_lens(
+                    runtime_config, TraceConfig(mode="all")
+                ), (model_id, max_seq_len, physical_num_blocks, chunk_cap)

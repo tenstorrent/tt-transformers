@@ -487,6 +487,18 @@ class ModelExecutor:
             start_pos=start_pos,
         )
 
+    def note_eager_prefill_degrade(
+        self,
+        *,
+        tokens: torch.Tensor,
+        prompt_lens: torch.Tensor | None = None,
+        start_pos: torch.Tensor | None = None,
+        empty_slots: Sequence[int] | None = None,
+    ) -> None:
+        """Record that a prefill which requested trace is served by the eager executor."""
+
+        self.prefill_runtime.note_eager_degrade(tokens=tokens, prompt_lens=prompt_lens, start_pos=start_pos)
+
     def _resolve_prefill_execution(self, *, tokens, prompt_lens, start_pos, empty_slots):
         """Choose the prefill executor for one request (guarded eager degrade).
 
@@ -507,6 +519,7 @@ class ModelExecutor:
             self, tokens=tokens, prompt_lens=prompt_lens, start_pos=start_pos, empty_slots=empty_slots
         ):
             return traced
+        self.prefill_runtime.note_eager_degrade(tokens=tokens, prompt_lens=prompt_lens, start_pos=start_pos)
         return eager
 
     def read_decode_output(self, tt_out: Any, *, async_read: bool = False) -> Any:

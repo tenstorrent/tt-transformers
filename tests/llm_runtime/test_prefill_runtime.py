@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 import ttnn
+from loguru import logger
 
 import tt_transformers.llm_runtime.prefill.inputs as prefill_inputs_module
 import tt_transformers.llm_runtime.prefill.postprocess as postprocess_module
@@ -3135,3 +3136,45 @@ def test_prefill_bucket_ladder_stops_at_the_chunk_cap_and_max_seq_len():
     assert prefill_bucket_ladder(4096, 8192) == (128, 1024, 2048, 4096)
     assert prefill_bucket_ladder(2048, 1024) == (128, 1024)
     assert prefill_bucket_ladder(2048, 64) == (64,)
+
+
+@pytest.fixture
+def warnings_logged():
+    messages = []
+    handler = logger.add(lambda message: messages.append(message.record["message"]), level="WARNING")
+    try:
+        yield messages
+    finally:
+        logger.remove(handler)
+
+
+@pytest.mark.host
+def test_eager_degrade_warns_once_per_bucket(warnings_logged):
+    runtime = _runtime(trace_lengths=(128, 1024))
+    tokens, _, prompt_lens, start_pos = _inputs(prompt_length=1500)
+
+    runtime.note_eager_degrade(tokens=tokens, prompt_lens=prompt_lens, start_pos=start_pos)
+    assert len(warnings_logged) == 1
+    assert warnings_logged[0].startswith("Prefill bucket 2048 is served eager although trace was requested")
+
+    # A second request at the same bucket, even a different length, adds nothing.
+    tokens, _, prompt_lens, start_pos = _inputs(prompt_length=1900)
+    runtime.note_eager_degrade(tokens=tokens, prompt_lens=prompt_lens, start_pos=start_pos)
+    assert len(warnings_logged) == 1
+
+    # A resumed prompt degrades at the bucket of its uncached suffix, clamped to the chunk cap.
+    tokens, _, prompt_lens, start_pos = _inputs(prompt_length=5000, cached_tokens=32)
+    runtime.note_eager_degrade(tokens=tokens, prompt_lens=prompt_lens, start_pos=start_pos)
+    assert len(warnings_logged) == 1
+
+    # The dedupe is per runtime, so each lane reports its own first degrade.
+    tokens, _, prompt_lens, start_pos = _inputs(prompt_length=1500)
+    _runtime(trace_lengths=(128, 1024)).note_eager_degrade(tokens=tokens, prompt_lens=prompt_lens, start_pos=start_pos)
+    assert len(warnings_logged) == 2
+
+
+@pytest.mark.host
+def test_eager_degrade_ignores_malformed_request_metadata(warnings_logged):
+    runtime = _runtime()
+    runtime.note_eager_degrade(tokens=torch.zeros(4, dtype=torch.long))
+    assert warnings_logged == []
