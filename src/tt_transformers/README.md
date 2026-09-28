@@ -45,7 +45,7 @@ cleanup must be ordered, retryable, and safe after partial initialization.
 
 Every tt-transformers release uses a publicly available TTNN package, with an
 exact version pinned in that release's [`pyproject.toml`](../../pyproject.toml).
-The current checkout pins `ttnn==0.77.0`. Installing the released package
+The current checkout pins `ttnn==0.79.0`. Installing the released package
 resolves this dependency through the normal Python package installation flow;
 a tt-metal source checkout or a private TTNN build is not required.
 

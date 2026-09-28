@@ -23,7 +23,7 @@ TARGETS = {
     "build-dev-py312": ("3.12.13", "build-dev", "build-dev-py312.txt"),
 }
 ALLOWED_HOSTS = {"files.pythonhosted.org", "download.pytorch.org", "download-r2.pytorch.org"}
-BASE_REQUESTS = ["ttnn==0.77.0", "torch==2.11.0+cpu", "loguru==0.6.0", "transformers==5.12.1"]
+BASE_REQUESTS = ["ttnn==0.79.0", "torch==2.11.0+cpu", "loguru==0.6.0", "transformers==5.12.1"]
 HOST_REQUESTS = [
     *BASE_REQUESTS,
     "tqdm==4.66.3",

@@ -97,8 +97,8 @@ tqdm==4.66.3 \
     --hash=sha256:4f41d54107ff9a223dca80b53efe4fb654c67efaba7f47bada3ee9d50e05bd53
 transformers==5.12.1 \
     --hash=sha256:2a5e109d2021265df7098ffbb738295acaf5ad256f12cbc586db2ea4dcbb1a8a
-ttnn==0.77.0 \
-    --hash=sha256:b087f09dd08f64e8c48daecaf9427fa4b8030c0644c94fc1d8c11a96b97070de
+ttnn==0.79.0 \
+    --hash=sha256:7178b02f76e8c5ed052ab541e88fd2c2f53f17268ec85fd32db82a987d17c73a
 typer==0.27.2 \
     --hash=sha256:b3a5fc4342d5fc8fda8fc3010b1cf117e9249aab7fae800c2eff62fd3842d97d
 typing-extensions==4.16.0 \

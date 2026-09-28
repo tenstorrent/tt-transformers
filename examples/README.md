@@ -105,7 +105,7 @@ Before using `--dry-run` or `--execute`:
 1. Reserve the physical host and ensure no other TT process is using it.
 2. Use a clean checkout at the exact commit to be tested. Verify its branch,
    full SHA, upstream, and `0 0` upstream divergence.
-3. Install this checkout into an environment containing `ttnn==0.77.0` and
+3. Install this checkout into an environment containing `ttnn==0.79.0` and
    the test dependencies.
 4. Run `tt-smi -s` and save a physical-inventory JSON document outside the
    repository. It must include at least:

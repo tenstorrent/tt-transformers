@@ -43,7 +43,7 @@ Run the concrete 72B Qwen2.5 model on its full T3K TP8 lane for accuracy, perfor
 This is the declared qualification candidate, not a passing verdict:
 
 - `tt-transformers==2.0.0.dev0`
-- `ttnn==0.77.0`
+- `ttnn==0.79.0`
 - Python `3.10, 3.12`
 - `torch==2.11.0`
 - `transformers==5.12.1`

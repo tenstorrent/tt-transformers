@@ -81,7 +81,7 @@ def validate() -> list[str]:
         software = manifest.get("software", {})
         if software.get("tt_transformers") != "2.0.0.dev0":
             errors.append(f"{path}: wrong tt-transformers version")
-        if software.get("ttnn") != "0.77.0":
+        if software.get("ttnn") != "0.79.0":
             errors.append(f"{path}: wrong TTNN target")
         revision = manifest.get("model", {}).get("hf_revision", "")
         if re.fullmatch(r"[0-9a-f]{40}", revision) is None:
