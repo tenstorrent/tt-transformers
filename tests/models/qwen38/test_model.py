@@ -56,6 +56,8 @@ from tt_transformers.models.qwen38.vision.vision_model_config import VisionModel
     ids=["300dpi", "240dpi"],
 )
 @pytest.mark.parametrize("device_params", [{"fabric_config": ttnn.FabricConfig.FABRIC_1D}], indirect=True)
+@pytest.mark.device
+@pytest.mark.model
 def test_vision_model_inference(
     mesh_device,
     reset_seeds,
@@ -173,9 +175,9 @@ def test_vision_model_inference(
     # public wrapper's output contract.
     merge = model_args.hf_config.vision_config.spatial_merge_size
     real_merged_rows = ref_seq_len // (merge**2)
-    tt_output_torch = tt_out[
-        :, 0:1, :real_merged_rows, : model_args.hf_config.vision_config.out_hidden_size
-    ].squeeze(0).squeeze(0)
+    tt_output_torch = (
+        tt_out[:, 0:1, :real_merged_rows, : model_args.hf_config.vision_config.out_hidden_size].squeeze(0).squeeze(0)
+    )
 
     # Compare outputs
     passing, pcc_message = comp_pcc(reference_output, tt_output_torch, pcc)

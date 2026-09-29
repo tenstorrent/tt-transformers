@@ -38,6 +38,8 @@ from tt_transformers.models.qwen38.vision.vision_model_config import VisionModel
     (1,),
 )
 @pytest.mark.parametrize("device_params", [{"fabric_config": ttnn.FabricConfig.FABRIC_1D}], indirect=True)
+@pytest.mark.device
+@pytest.mark.model
 def test_mlp_inference(rows, batch_size, mesh_device, reset_seeds, ensure_gc):
     dtype = ttnn.bfloat8_b
     mode = "prefill"  # Vision processing is prefill only (generating token embeddings)

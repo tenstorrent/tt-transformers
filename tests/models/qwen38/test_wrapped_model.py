@@ -35,6 +35,8 @@ from tt_transformers.models.qwen38.vision.vision_model_config import VisionModel
     ids=["all_layers", "single_layer", "two_layers"],
 )
 @pytest.mark.parametrize("device_params", [{"fabric_config": ttnn.FabricConfig.FABRIC_1D}], indirect=True)
+@pytest.mark.device
+@pytest.mark.model
 def test_wrapped_vision_model_inference(
     mesh_device,
     reset_seeds,
