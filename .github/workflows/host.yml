@@ -20,6 +20,7 @@ jobs:
     env:
       PIP_INDEX_URL: https://pypi.org/simple
       PIP_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
+      TT_TRANSFORMERS_HOST_ONLY: "1"
       TT_TRANSFORMERS_OFFLINE: "1"
       HF_HUB_OFFLINE: "1"
       TRANSFORMERS_OFFLINE: "1"

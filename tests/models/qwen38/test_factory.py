@@ -212,6 +212,11 @@ def _resolve_mesh_shape(max_tp=8):
     shape = {"P150": (1, 1), "P150x4": (1, 4), "P150x8": (1, 8)}.get(os.environ.get("MESH_DEVICE"))
     if shape is not None:
         return shape
+    # Host-only CI must be able to collect device tests before pytest applies
+    # its marker selection. Avoid opening a device merely to construct a test
+    # node that will be deselected moments later.
+    if os.environ.get("TT_TRANSFORMERS_HOST_ONLY") == "1":
+        return (1, 1)
     return (1, min(len(ttnn.get_device_ids()), max_tp))
 
 
