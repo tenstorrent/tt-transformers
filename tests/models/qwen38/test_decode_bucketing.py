@@ -31,6 +31,8 @@ CTX = int(os.environ.get("QWEN36_BUCKET_TEST_CTX", "8192"))
 BPU = CTX // BLOCK  # blocks per user
 _HAS_UNIFIED_RUNTIME = importlib.util.find_spec("tt_transformers.models.qwen38.qwen_runtime") is not None
 _RUNTIME_REQUIRED = pytest.mark.skipif(not _HAS_UNIFIED_RUNTIME, reason="requires the unified runtime PR")
+_HAS_VLLM_ADAPTER = _HAS_UNIFIED_RUNTIME and importlib.util.find_spec("vllm") is not None
+_VLLM_REQUIRED = pytest.mark.skipif(not _HAS_VLLM_ADAPTER, reason="requires the bundle-owned vLLM integration")
 
 
 def _pick_bucket(tokens, start_pos, width):
@@ -73,7 +75,7 @@ def test_bucket_selection():
 
 @pytest.mark.host
 @pytest.mark.model
-@_RUNTIME_REQUIRED
+@_VLLM_REQUIRED
 def test_identity_slot_remap_does_not_disable_bucketing():
     from tt_transformers.models.qwen38.qwen36_vllm import _is_identity_slot_remap
 
@@ -85,7 +87,7 @@ def test_identity_slot_remap_does_not_disable_bucketing():
 
 @pytest.mark.host
 @pytest.mark.model
-@_RUNTIME_REQUIRED
+@_VLLM_REQUIRED
 def test_unsupported_device_sampling_fails_at_startup(expect_error):
     from tt_transformers.models.qwen38.qwen36_vllm import Qwen36ForCausalLM
 

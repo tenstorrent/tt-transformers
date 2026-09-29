@@ -10,7 +10,10 @@ for CPython 3.10 and 3.12 on x86-64 Linux.
 
 The locks use PyPI as the primary index and the PyTorch CPU index as a
 supplemental index. Base and host locks select `ttnn==0.77.0`,
-`torch==2.11.0+cpu`, `loguru==0.6.0`, and `transformers==5.12.1`.
+`torch==2.11.0+cpu`, `loguru==0.6.0`, and `transformers==5.17.0`, plus the
+declared Qwen foundation dependencies. The stock TTNN CI wheel exercises the
+portable host surface; the Qwen op contract separately requires the tested
+0.79.1 release-line build-level backport.
 
 They are maintainer/CI environments, not constraints imposed on downstream
 applications. Normal users install the package metadata declared in
