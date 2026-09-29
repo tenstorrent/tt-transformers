@@ -72,12 +72,32 @@ def test_model_layer_has_only_the_approved_family_modules_and_readmes() -> None:
     model_directories = sorted(
         path for path in _MODELS_ROOT.iterdir() if path.is_dir() and (path / "model.py").is_file()
     )
-    assert len(model_directories) == 12
-    for path in model_directories:
+    assert {path.name for path in model_directories} == {
+        "deepseek_r1_distill_qwen_14b",
+        "llama32_1b",
+        "llama32_3b",
+        "llama33_70b",
+        "llama3_8b",
+        "mistral_7b",
+        "phi4",
+        "qwen25_72b",
+        "qwen25_7b",
+        "qwen25_coder_32b",
+        "qwen2_7b",
+        "qwen3_32b",
+        "qwen38",
+    }
+
+    qwen38 = _MODELS_ROOT / "qwen38"
+    assert (qwen38 / "model_capabilities.py").is_file()
+    assert not any((qwen38 / name).exists() for name in ("hf_generator.py", "vllm_generator.py"))
+
+    legacy_model_directories = [path for path in model_directories if path != qwen38]
+    for path in legacy_model_directories:
         assert (path / "hf_generator.py").is_file()
         assert (path / "vllm_generator.py").is_file()
         assert not any((path / name).exists() for name in ("hf_adaptor.py", "executor.py", "generator.py"))
-    assert all((_REPOSITORY_ROOT / "examples" / path.name / "README.md").is_file() for path in model_directories)
+    assert all((_REPOSITORY_ROOT / "examples" / path.name / "README.md").is_file() for path in legacy_model_directories)
 
 
 @pytest.mark.host

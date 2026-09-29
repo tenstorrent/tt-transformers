@@ -72,7 +72,14 @@ EXPECTED_BASE_REQUIRES = {
     "ttnn<0.80,>=0.79.1rc1",
     "torch==2.11.0",
     "loguru==0.6.0",
-    "transformers==5.12.1",
+    "transformers==5.17.0",
+    "huggingface-hub<2,>=1.3",
+    "numpy<3,>=1.26",
+    "Pillow<13,>=11",
+    "pydantic<3,>=2",
+    "PyYAML<7,>=6.0",
+    "safetensors<1,>=0.4",
+    "typing-extensions<5,>=4.12",
 }
 
 

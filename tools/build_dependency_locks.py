@@ -26,16 +26,26 @@ TARGETS = {
     "build-dev-py312": ("3.12.13", "build-dev", "build-dev-py312.txt"),
 }
 ALLOWED_HOSTS = {"files.pythonhosted.org", "download.pytorch.org", "download-r2.pytorch.org"}
-BASE_REQUESTS = ["ttnn==0.77.0", "torch==2.11.0+cpu", "loguru==0.6.0", "transformers==5.12.1"]
+BASE_REQUESTS = [
+    "ttnn==0.77.0",
+    "torch==2.11.0+cpu",
+    "loguru==0.6.0",
+    "transformers==5.17.0",
+    "huggingface-hub>=1.3,<2",
+    "numpy>=1.26,<3",
+    "Pillow>=11,<13",
+    "pydantic>=2,<3",
+    "PyYAML>=6.0,<7",
+    "safetensors>=0.4,<1",
+    "typing-extensions>=4.12,<5",
+]
 HOST_REQUESTS = [
     *BASE_REQUESTS,
     "tqdm==4.66.3",
     "pytest==9.0.3",
     "pytest-cov==7.0.0",
     "pytest-timeout==2.4.0",
-    "huggingface-hub>=0.30",
     "jsonschema>=4.23,<5",
-    "PyYAML>=6.0,<7",
     "pytz>=2024.1",
 ]
 QUALIFICATION_REQUESTS = ["openai>=1,<3", "requests>=2.31"]

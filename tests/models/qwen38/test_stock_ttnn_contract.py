@@ -1,0 +1,49 @@
+# SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
+# SPDX-License-Identifier: Apache-2.0
+
+import pytest
+import ttnn
+
+from tt_transformers.models.qwen38 import model_config
+from tt_transformers.models.qwen38.gdn.tp import _resolve_v6_kda_tile_input
+
+
+@pytest.mark.host
+@pytest.mark.model
+@pytest.mark.skipif(
+    not hasattr(ttnn, "QkvCausalConv1dSiluProgramConfig"),
+    reason="requires the declared TTNN 0.79.1 release-line QKV-convolution surface",
+)
+def test_native_kda_program_config_uses_the_public_ttnn_surface():
+    config = ttnn.QkvCausalConv1dSiluProgramConfig(channel_chunk_size=256)
+    assert config.channel_chunk_size == 256
+
+
+@pytest.mark.host
+@pytest.mark.model
+def test_v6_defaults_kda_prefill_to_wheel_owned_tile_program():
+    assert model_config._QWEN36_SERVING_OPT_DEFAULTS["QWEN36_KDA_TILE_IN"] == "1"
+
+
+@pytest.mark.host
+@pytest.mark.model
+def test_v6_accepts_wheel_owned_tile_input(monkeypatch):
+    monkeypatch.setenv("QWEN36_KDA_TILE_IN", "1")
+    assert _resolve_v6_kda_tile_input() is True
+
+
+@pytest.mark.host
+@pytest.mark.model
+def test_stock_ttnn_accepts_row_major_input(monkeypatch):
+    monkeypatch.setenv("QWEN36_KDA_TILE_IN", "0")
+    assert _resolve_v6_kda_tile_input() is False
+
+
+@pytest.mark.host
+@pytest.mark.model
+def test_stock_ttnn_rejects_unknown_layout_selector(monkeypatch):
+    import pytest
+
+    monkeypatch.setenv("QWEN36_KDA_TILE_IN", "maybe")
+    with pytest.raises(ValueError, match="must be 0 or 1"):
+        _resolve_v6_kda_tile_input()
