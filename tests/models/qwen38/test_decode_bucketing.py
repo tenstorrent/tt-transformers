@@ -18,7 +18,7 @@ import torch
 import ttnn
 from loguru import logger
 
-from tests.models.qwen38.test_factory import parametrize_mesh_tp
+from tests.models.qwen38.test_factory import _resolve_mesh_shape, parametrize_mesh_tp
 from tt_transformers.models.qwen38.model import Qwen36Model
 from tt_transformers.models.qwen38.v1.utility import comp_pcc
 
@@ -71,6 +71,20 @@ def test_bucket_selection():
     tokens, positions = _padded_decode_batch(1, 8)
     assert _pick_bucket(tokens, positions, 8) == 1
     logger.info("PASSED: bucket selection picks smallest pow2 >= num_active and never drops active rows")
+
+
+@pytest.mark.host
+@pytest.mark.model
+def test_host_only_collection_does_not_open_a_device(monkeypatch):
+    monkeypatch.delenv("MESH_DEVICE", raising=False)
+    monkeypatch.setenv("TT_TRANSFORMERS_HOST_ONLY", "1")
+    monkeypatch.setattr(ttnn, "get_device_ids", lambda: pytest.fail("host collection opened a device"))
+
+    assert _resolve_mesh_shape() == (1, 1)
+
+    # An explicitly selected hardware mesh remains authoritative.
+    monkeypatch.setenv("MESH_DEVICE", "P150x4")
+    assert _resolve_mesh_shape() == (1, 4)
 
 
 @pytest.mark.host
