@@ -116,6 +116,10 @@ def test_legacy_source_has_one_entry_and_explicit_bindings(
 
 
 @pytest.mark.host
+@pytest.mark.skipif(
+    not hasattr(ttnn.KernelDescriptor, "BuildOptLevel"),
+    reason="requires the declared TTNN 0.79.1 release-line binding",
+)
 def test_required_build_levels_are_exposed_by_ttnn():
     levels = ttnn.KernelDescriptor.BuildOptLevel
     assert levels.O2.name == "O2"
@@ -155,6 +159,10 @@ def test_legacy_source_caches_only_normalized_source_shape(monkeypatch):
 
 
 @pytest.mark.host
+@pytest.mark.skipif(
+    not hasattr(ttnn.KernelDescriptor, "BuildOptLevel"),
+    reason="requires the declared TTNN 0.79.1 release-line binding",
+)
 def test_build_level_binding_is_scoped_to_kernel_descriptors():
     assert not hasattr(ttnn, "KernelBuildOptLevel")
     assert not hasattr(ttnn._ttnn, "KernelBuildOptLevel")
