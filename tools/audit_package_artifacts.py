@@ -68,7 +68,12 @@ SDIST_REQUIRED_DIRECTORIES = {
 # Home-directory shapes only. A bare "/tmp/" prefix is not a workspace identity and
 # would reject the product's own TT_CACHE_FALLBACK_PATH default.
 ABSOLUTE_TEXT_PATTERNS = (b"/home/", b"/Users/", b"C:\\")
-EXPECTED_BASE_REQUIRES = {"ttnn==0.77.0", "torch==2.11.0", "loguru==0.6.0", "transformers==5.12.1"}
+EXPECTED_BASE_REQUIRES = {
+    "ttnn<0.80,>=0.79.1rc1",
+    "torch==2.11.0",
+    "loguru==0.6.0",
+    "transformers==5.12.1",
+}
 
 
 def sha256(data: bytes) -> str:
