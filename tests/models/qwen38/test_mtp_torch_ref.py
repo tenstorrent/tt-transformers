@@ -59,6 +59,8 @@ def _head(chain_postnorm=True):
 
 
 @torch.no_grad()
+@pytest.mark.host
+@pytest.mark.model
 def test_dims_derived_from_state_dict():
     """Shapes alone must pin dim / head_dim / head counts (the oracle takes no config for these)."""
     head = _head()
@@ -69,6 +71,8 @@ def test_dims_derived_from_state_dict():
 
 @torch.no_grad()
 @pytest.mark.parametrize("chain_postnorm", (False, True))
+@pytest.mark.host
+@pytest.mark.model
 def test_incremental_matches_sequence(chain_postnorm):
     """Stepping slot-by-slot with a growing K/V cache == one causal pass over all slots.
 
@@ -92,6 +96,8 @@ def test_incremental_matches_sequence(chain_postnorm):
 
 @torch.no_grad()
 @pytest.mark.parametrize("chain_postnorm", (False, True))
+@pytest.mark.host
+@pytest.mark.model
 def test_step_from_warm_prefix_matches_sequence(chain_postnorm):
     """The oracle's chain pattern: take a warmed prefix cache from forward_sequence, then step.
 
@@ -114,6 +120,8 @@ def test_step_from_warm_prefix_matches_sequence(chain_postnorm):
 
 
 @torch.no_grad()
+@pytest.mark.host
+@pytest.mark.model
 def test_causal_mask_is_strictly_causal():
     """Slot i must not see slot i+1: perturbing a later token cannot change an earlier row."""
     head = _head()
@@ -134,6 +142,8 @@ def test_causal_mask_is_strictly_causal():
 
 
 @torch.no_grad()
+@pytest.mark.host
+@pytest.mark.model
 def test_rope_only_sees_relative_position():
     """RoPE rotates q and k alike, so only the OFFSET between a slot and its cache matters.
 

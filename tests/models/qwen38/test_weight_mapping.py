@@ -78,14 +78,20 @@ def remapped(raw_state_dict):
 
 
 class TestPrefixStripping:
+    @pytest.mark.host
+    @pytest.mark.model
     def test_no_model_language_model_prefix(self, remapped):
         for key in remapped:
             assert not key.startswith("model.language_model."), f"Prefix not stripped: {key}"
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_no_visual_keys(self, remapped):
         for key in remapped:
             assert "visual" not in key, f"Vision key not filtered: {key}"
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_mtp_keys_present(self, remapped, geom):
         """MTP (spec-decode drafter) weights are KEPT verbatim through remap."""
         expected = {
@@ -113,12 +119,18 @@ class TestPrefixStripping:
 
 
 class TestTopLevelWeights:
+    @pytest.mark.host
+    @pytest.mark.model
     def test_embed_tokens(self, remapped, geom):
         assert remapped["tok_embeddings.weight"].shape == (geom["vocab"], geom["hidden"])
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_lm_head(self, remapped, geom):
         assert remapped["output.weight"].shape == (geom["vocab"], geom["hidden"])
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_final_norm(self, remapped, geom):
         assert remapped["norm.weight"].shape == (geom["hidden"],)
 
@@ -130,6 +142,8 @@ class TestDeltaNetLayerWeights:
     def L(self, geom):
         return geom["linear_layers"][0]
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_qkv_combined_only(self, remapped, geom, L):
         qkv = remapped[f"layers.{L}.linear_attn.qkv_proj.weight"]
         assert qkv.shape == (geom["lin_k"] + geom["lin_k"] + geom["lin_v"], geom["hidden"])
@@ -137,34 +151,50 @@ class TestDeltaNetLayerWeights:
         for n in ("q_proj", "k_proj", "v_proj"):
             assert f"layers.{L}.linear_attn.{n}.weight" not in remapped
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_conv1d_split(self, remapped, geom, L):
         assert remapped[f"layers.{L}.linear_attn.q_conv.weight"].shape == (geom["lin_k"], 1, geom["conv_k"])
         assert remapped[f"layers.{L}.linear_attn.k_conv.weight"].shape == (geom["lin_k"], 1, geom["conv_k"])
         assert remapped[f"layers.{L}.linear_attn.v_conv.weight"].shape == (geom["lin_v"], 1, geom["conv_k"])
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_decay_projections(self, remapped, geom, L):
         assert remapped[f"layers.{L}.linear_attn.in_proj_a.weight"].shape == (geom["lin_v_heads"], geom["hidden"])
         assert remapped[f"layers.{L}.linear_attn.in_proj_b.weight"].shape == (geom["lin_v_heads"], geom["hidden"])
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_gate_projection(self, remapped, geom, L):
         assert remapped[f"layers.{L}.linear_attn.in_proj_z.weight"].shape == (geom["lin_v"], geom["hidden"])
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_output_proj(self, remapped, geom, L):
         assert remapped[f"layers.{L}.linear_attn.out_proj.weight"].shape == (geom["hidden"], geom["lin_v"])
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_a_log_and_dt_bias(self, remapped, geom, L):
         assert remapped[f"layers.{L}.linear_attn.A_log"].shape == (geom["lin_v_heads"],)
         assert remapped[f"layers.{L}.linear_attn.dt_bias"].shape == (geom["lin_v_heads"],)
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_norm(self, remapped, geom, L):
         assert remapped[f"layers.{L}.linear_attn.norm.weight"].shape == (geom["lin_v_head_dim"],)
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_mlp(self, remapped, geom, L):
         I, h = geom["intermediate"], geom["hidden"]
         assert remapped[f"layers.{L}.mlp.gate_proj.weight"].shape == (I, h)
         assert remapped[f"layers.{L}.mlp.up_proj.weight"].shape == (I, h)
         assert remapped[f"layers.{L}.mlp.down_proj.weight"].shape == (h, I)
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_layernorms(self, remapped, geom, L):
         assert remapped[f"layers.{L}.input_layernorm.weight"].shape == (geom["hidden"],)
         assert remapped[f"layers.{L}.post_attention_layernorm.weight"].shape == (geom["hidden"],)
@@ -177,37 +207,55 @@ class TestGatedAttentionLayerWeights:
     def L(self, geom):
         return geom["full_attn_layers"][0]
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_q_proj(self, remapped, geom, L):
         assert remapped[f"layers.{L}.self_attn.q_proj.weight"].shape == (geom["q_dim"], geom["hidden"])
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_kv_proj(self, remapped, geom, L):
         assert remapped[f"layers.{L}.self_attn.k_proj.weight"].shape == (geom["kv_dim"], geom["hidden"])
         assert remapped[f"layers.{L}.self_attn.v_proj.weight"].shape == (geom["kv_dim"], geom["hidden"])
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_o_proj(self, remapped, geom, L):
         assert remapped[f"layers.{L}.self_attn.o_proj.weight"].shape == (geom["hidden"], geom["o_in"])
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_qk_norm(self, remapped, geom, L):
         assert remapped[f"layers.{L}.self_attn.q_norm.weight"].shape == (geom["head_dim"],)
         assert remapped[f"layers.{L}.self_attn.k_norm.weight"].shape == (geom["head_dim"],)
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_mlp(self, remapped, geom, L):
         assert remapped[f"layers.{L}.mlp.gate_proj.weight"].shape == (geom["intermediate"], geom["hidden"])
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_layernorms(self, remapped, geom, L):
         assert remapped[f"layers.{L}.input_layernorm.weight"].shape == (geom["hidden"],)
         assert remapped[f"layers.{L}.post_attention_layernorm.weight"].shape == (geom["hidden"],)
 
 
 class TestAllLayersPresent:
+    @pytest.mark.host
+    @pytest.mark.model
     def test_all_layers_have_mlp(self, remapped, geom):
         for i in range(geom["n_layers"]):
             assert f"layers.{i}.mlp.gate_proj.weight" in remapped, f"Missing MLP for layer {i}"
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_deltanet_layers(self, remapped, geom):
         got = [i for i in range(geom["n_layers"]) if f"layers.{i}.linear_attn.qkv_proj.weight" in remapped]
         assert got == geom["linear_layers"]
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_full_attn_layers(self, remapped, geom):
         got = [i for i in range(geom["n_layers"]) if f"layers.{i}.self_attn.q_proj.weight" in remapped]
         assert got == geom["full_attn_layers"]
@@ -237,21 +285,29 @@ class TestReplicateKVWeight:
         return [int(replicated[d * rows : (d + 1) * rows].unique().item()) for d in range(tp)]
 
     @pytest.mark.parametrize("tp", [1, 2, 4])
+    @pytest.mark.host
+    @pytest.mark.model
     def test_noop_when_tp_fits_kv_heads(self, tp):
         """tp <= n_kv_heads needs no replication — must return the very same object, so
         TP<=4 weight prep stays bit-identical."""
         w = self._kv_weight()
         assert replicate_kv_weight(w, self.N_KV_HEADS, tp, self.HEAD_DIM) is w
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_tp8_shape(self):
         out = replicate_kv_weight(self._kv_weight(), self.N_KV_HEADS, 8, self.HEAD_DIM)
         assert out.shape == (8 * self.HEAD_DIM, self.IN_DIM)
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_tp8_pairs_devices_on_one_head(self):
         out = replicate_kv_weight(self._kv_weight(), self.N_KV_HEADS, 8, self.HEAD_DIM)
         assert self._heads_per_device(out, 8) == [0, 0, 1, 1, 2, 2, 3, 3]
 
     @pytest.mark.parametrize("tp", [4, 8])
+    @pytest.mark.host
+    @pytest.mark.model
     def test_matches_gqa_query_grouping(self, tp):
         """The head each device gets must be the one its local query heads map to under
         GQA — otherwise attention silently reads the wrong K/V."""
@@ -261,6 +317,8 @@ class TestReplicateKVWeight:
         expected = [(d * q_per_device) // heads_per_kv for d in range(tp)]
         assert self._heads_per_device(out, tp) == expected
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_every_head_still_reachable(self):
         """Replication must not drop a head: all n_kv_heads appear across the mesh."""
         out = replicate_kv_weight(self._kv_weight(), self.N_KV_HEADS, 8, self.HEAD_DIM)

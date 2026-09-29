@@ -1066,56 +1066,6 @@ def is_slow_dispatch():
     return os.environ.get("TT_METAL_SLOW_DISPATCH_MODE") == "1"
 
 
-def ti_skip(condition, reason="Invalid test parameters"):
-    import pytest
-
-    return pytest.mark.skipif(condition, reason="Skipping unsupported case: " + reason)
-
-
-def skip_for_blackhole(reason_str="not a blackhole test"):
-    return ti_skip(is_blackhole(), reason=reason_str)
-
-
-def skip_for_wormhole_b0(reason_str="not a wormhole test"):
-    return ti_skip(is_wormhole_b0(), reason=reason_str)
-
-
-def skip_with_watcher(reason_str="Test is not passing with watcher enabled"):
-    return ti_skip(is_watcher_enabled(), reason=reason_str)
-
-
-def skip_with_llk_assert(reason_str="Test is not passing with LLK asserts enabled"):
-    return ti_skip(is_llk_assert_enabled(), reason=reason_str)
-
-
-def run_for_blackhole(reason_str="only runs for Blackhole"):
-    return ti_skip(not is_blackhole(), reason=reason_str)
-
-
-def run_for_wormhole_b0(reason_str="only runs for Wormhole B0"):
-    return ti_skip(not is_wormhole_b0(), reason=reason_str)
-
-
-def run_for_wormhole_b0_or_blackhole(reason_str="only runs for Wormhole B0 or Blackhole"):
-    return ti_skip(not (is_wormhole_b0() or is_blackhole()), reason=reason_str)
-
-
-def run_for_n_dev(n, reason_str="Test is not meant for this number of devices"):
-    return ti_skip(ttnn.get_num_devices() != n, reason=reason_str)
-
-
-def skip_for_n_dev(n, reason_str="Test is not meant for this number of devices"):
-    return ti_skip(ttnn.get_num_devices() == n, reason=reason_str)
-
-
-def skip_for_n_or_less_dev(n, reason_str="Test is not meant for this number of devices"):
-    return ti_skip(ttnn.get_num_devices() <= n, reason=reason_str)
-
-
-def skip_for_slow_dispatch(reason_str="not working for slow dispatch"):
-    return ti_skip(is_slow_dispatch(), reason=reason_str)
-
-
 def ttl_complex_2_torch_complex(tt_tensor):
     torch_tensor = tt2torch_tensor(tt_tensor)
 

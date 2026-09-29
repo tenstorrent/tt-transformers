@@ -22,9 +22,8 @@ import torch
 import ttnn
 from loguru import logger
 
-from tests.models.qwen38.test_factory import compute_pcc
+from tests.models.qwen38.test_factory import compute_pcc, run_for_blackhole
 from tt_transformers.models.qwen38.rms_norm import rms_norm_ttnn
-from tt_transformers.models.qwen38.v1.utility import run_for_blackhole
 
 pytestmark = run_for_blackhole()
 EPS = 1e-6
@@ -63,6 +62,8 @@ class TestRMSNorm:
         ],
         ids=["hidden_1tok", "hidden_4tok", "qnorm_16x256", "knorm_32x128"],
     )
+    @pytest.mark.device
+    @pytest.mark.model
     def test_pcc_vs_torch(self, device, shape):
         """RMSNorm matches the torch reference across hidden- and head-dim shapes."""
         torch.manual_seed(0)
@@ -79,6 +80,8 @@ class TestRMSNorm:
         logger.info(f"RMSNorm {shape}: PCC={pcc:.6f}")
         assert pcc > PCC_THRESHOLD, f"RMSNorm PCC too low for {shape}: {pcc}"
 
+    @pytest.mark.device
+    @pytest.mark.model
     def test_zero_centered_plus_one_semantics(self, device):
         """The stored weight carries the +1 offset; confirm scaling uses (1 + raw)
         and that dropping the +1 would give a materially different result."""
@@ -99,6 +102,8 @@ class TestRMSNorm:
         # The raw-only (missing +1) reference must NOT match — the offset is real.
         assert pcc_wrong < pcc_correct - 0.05, "raw-only weight matched too well; +1 offset not exercised"
 
+    @pytest.mark.device
+    @pytest.mark.model
     def test_identity_weight_normalizes(self, device):
         """With a stored weight of all-ones, output rows should have ~unit RMS."""
         torch.manual_seed(2)

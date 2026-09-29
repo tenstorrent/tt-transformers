@@ -89,6 +89,8 @@ def _time_op(fn, iters=100, warmup=10):
 @torch.no_grad()
 @pytest.mark.parametrize("mesh_device", [(1, 1)], indirect=True)
 @pytest.mark.parametrize("seed", [0, 1, 2])
+@pytest.mark.device
+@pytest.mark.model
 def test_composite_decode_matches_fla_naive(mesh_device, seed):
     """Existing composite decode (recurrent_gated_delta_rule_decode_ttnn, fp32) vs FLA naive.
     This is the oracle: it confirms our device contract (in-kernel L2-norm + q-scale + exp(g) decay)
@@ -118,6 +120,8 @@ def test_composite_decode_matches_fla_naive(mesh_device, seed):
 
 @torch.no_grad()
 @pytest.mark.parametrize("mesh_device", [(1, 1)], indirect=True)
+@pytest.mark.device
+@pytest.mark.model
 def test_composite_decode_baseline_perf(mesh_device):
     """Baseline per-step latency of the composite decode op (the number the fused op must beat)."""
     _time_op.mesh = mesh_device
@@ -144,6 +148,8 @@ def test_composite_decode_baseline_perf(mesh_device):
 @torch.no_grad()
 @pytest.mark.parametrize("mesh_device", [(1, 1)], indirect=True)
 @pytest.mark.parametrize("seed", [0, 1, 2])
+@pytest.mark.device
+@pytest.mark.model
 def test_fused_decode_matches_fla_naive(mesh_device, seed):
     """Kernel 1: fused device op, T=1, vs FLA naive."""
     q, k, v, beta, g = make_gdn_inputs(T=1, H=H, Dk=DK, Dv=DV, seed=seed)
@@ -165,6 +171,8 @@ def test_fused_decode_matches_fla_naive(mesh_device, seed):
 @torch.no_grad()
 @pytest.mark.parametrize("mesh_device", [(1, 1)], indirect=True)
 @pytest.mark.parametrize("seed", [0, 1, 2])
+@pytest.mark.device
+@pytest.mark.model
 def test_fused_decode_no_initial_state(mesh_device, seed):
     """Kernel 1 with NO initial_state: the host composite must materialize a real zeros state buffer.
 
@@ -190,6 +198,8 @@ def test_fused_decode_no_initial_state(mesh_device, seed):
 @_needs_op
 @torch.no_grad()
 @pytest.mark.parametrize("mesh_device", [(1, 1)], indirect=True)
+@pytest.mark.device
+@pytest.mark.model
 def test_fused_decode_perf(mesh_device):
     """Kernel 1 latency: fused op vs the composite baseline, same inputs/dtype. Reports both."""
     _time_op.mesh = mesh_device
@@ -246,6 +256,8 @@ def _seq_composite_decode(mesh_device, q, k, v, beta, g, s0):
 @pytest.mark.parametrize("mesh_device", [(1, 1)], indirect=True)
 @pytest.mark.parametrize("K", [3, 4])
 @pytest.mark.parametrize("seed", [0, 1])
+@pytest.mark.device
+@pytest.mark.model
 def test_fused_verify_matches_fla_naive(mesh_device, K, seed):
     """Kernel 2: fused op over T=K+1 tokens with per-token state fan-out, vs FLA naive.
     Checks per-token output AND the state AFTER every token (the spec-decode acceptance slots)."""
@@ -289,6 +301,8 @@ def test_fused_verify_matches_fla_naive(mesh_device, K, seed):
 @torch.no_grad()
 @pytest.mark.parametrize("mesh_device", [(1, 1)], indirect=True)
 @pytest.mark.parametrize("K", [3, 4])
+@pytest.mark.device
+@pytest.mark.model
 def test_fused_verify_matches_sequential_decode(mesh_device, K):
     """Kernel 2 vs the CURRENT baseline (sequential composite decode threading state): the fused
     per-token output/state must match the token-by-token recurrence it replaces."""
@@ -325,6 +339,8 @@ def test_fused_verify_matches_sequential_decode(mesh_device, K):
 @torch.no_grad()
 @pytest.mark.parametrize("mesh_device", [(1, 1)], indirect=True)
 @pytest.mark.parametrize("K", [3, 4])
+@pytest.mark.device
+@pytest.mark.model
 def test_fused_verify_perf(mesh_device, K):
     """Kernel 2 latency: fused per-token op (1 dispatch over T) vs the sequential baseline
     (T composite decode calls threading state) — the drafting/verify recurrence path."""
@@ -410,6 +426,8 @@ def _to_dev_rm_u32(mesh_device, t):
     [(2, 32, 4), (3, 32, 4), (2, 32, 8), (8, 8, 4)],
     ids=["b2h32t4", "b3h32t4", "b2h32t8", "b8h8t4"],
 )
+@pytest.mark.device
+@pytest.mark.model
 def test_fused_verify_batched_matches_fla_naive(mesh_device, B, HV, T):
     """Kernel 2 at B>1 (multi-user verify), non-ring path: per-token o and states vs FLA naive.
 
@@ -455,6 +473,8 @@ def test_fused_verify_batched_matches_fla_naive(mesh_device, B, HV, T):
     [(1, 32, 4), (2, 32, 4), (8, 8, 4)],
     ids=["b1h32t4", "b2h32t4", "b8h8t4"],
 )
+@pytest.mark.device
+@pytest.mark.model
 def test_fused_verify_ring_select(mesh_device, B, HV, T):
     """Ring mode: head h starts from ring block idx[h] and writes its per-token states back into
     the SAME buffer.

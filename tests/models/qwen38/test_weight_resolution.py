@@ -3,9 +3,13 @@
 
 from pathlib import Path
 
+import pytest
+
 from tt_transformers.models.qwen38.weights import resolve_hf_weights
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_resolve_hf_weights_threads_explicit_revision(monkeypatch):
     calls = []
 
@@ -18,6 +22,8 @@ def test_resolve_hf_weights_threads_explicit_revision(monkeypatch):
     assert calls == [("org/model", {"revision": "deadbeef", "local_files_only": False})]
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_resolve_hf_weights_accepts_embedded_revision(monkeypatch):
     calls = []
     monkeypatch.setattr(
@@ -29,5 +35,7 @@ def test_resolve_hf_weights_accepts_embedded_revision(monkeypatch):
     assert calls[0][1]["revision"] == "cafe"
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_resolve_hf_weights_preserves_local_directory(tmp_path):
     assert resolve_hf_weights(str(tmp_path), "ignored") == str(Path(tmp_path).resolve())

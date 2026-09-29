@@ -41,6 +41,11 @@ def model_path():
     return os.path.expanduser(os.environ.get("HF_MODEL", _DEFAULT_HF_MODEL))
 
 
+def run_for_blackhole(reason_str="only runs for Blackhole"):
+    """Skip a Qwen device test unless the active TTNN architecture is Blackhole."""
+    return pytest.mark.skipif("blackhole" not in ttnn.get_arch_name(), reason=reason_str)
+
+
 # --------------------------------------------------------------------------- #
 # Checkpoint weight loaders (FP8-block dequant)
 # --------------------------------------------------------------------------- #

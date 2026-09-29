@@ -23,6 +23,7 @@ Run:
 
 import os
 
+import pytest
 import torch
 import ttnn
 from loguru import logger
@@ -73,6 +74,8 @@ def _rope_params(mesh_device, B):
 
 @torch.no_grad()
 @parametrize_mesh_tp()
+@pytest.mark.device
+@pytest.mark.model
 def test_partial_rope_prefill(mesh_device, reset_seeds, ensure_gc, request):
     """Prefill partial-RoPE: TTNN apply_partial_rope_prefill vs HF apply_rotary_pos_emb."""
     from transformers.models.qwen3_5.modeling_qwen3_5 import apply_rotary_pos_emb
@@ -103,6 +106,8 @@ def test_partial_rope_prefill(mesh_device, reset_seeds, ensure_gc, request):
 
 @torch.no_grad()
 @parametrize_mesh_tp()
+@pytest.mark.device
+@pytest.mark.model
 def test_partial_rope_decode(mesh_device, reset_seeds, ensure_gc, request):
     """Decode partial-RoPE: per-user positions. TTNN apply_partial_rope_decode vs HF reference."""
     from transformers.models.qwen3_5.modeling_qwen3_5 import apply_rotary_pos_emb

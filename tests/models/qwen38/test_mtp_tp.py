@@ -26,6 +26,7 @@ Run:
 
 import os
 
+import pytest
 import torch
 import ttnn
 from loguru import logger
@@ -47,6 +48,8 @@ from .test_factory import parametrize_mesh_tp
 
 @torch.no_grad()
 @parametrize_mesh_tp()
+@pytest.mark.device
+@pytest.mark.model
 def test_mtp_head_tp_pcc(mesh_device, reset_seeds, request):
     """Full MTP head (prefill path, internal attention cache) vs the composed torch reference."""
     os.environ.setdefault("HF_MODEL", model_path())
@@ -118,6 +121,8 @@ def test_mtp_head_tp_pcc(mesh_device, reset_seeds, request):
 
 @torch.no_grad()
 @parametrize_mesh_tp()
+@pytest.mark.device
+@pytest.mark.model
 def test_mtp_head_on_real_features(mesh_device, reset_seeds, request):
     """Device MTP head vs the torch reference on REAL base hiddens (Gemma4's
     test_assistant_first_step_vs_hf_realistic rung).

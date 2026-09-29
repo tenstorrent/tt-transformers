@@ -11,14 +11,15 @@ import torch.nn.functional as F
 import ttnn
 from loguru import logger
 
-from tests.models.qwen38.test_factory import compute_pcc, get_pcc_threshold
-from tt_transformers.models.qwen38.v1.utility import run_for_blackhole
+from tests.models.qwen38.test_factory import compute_pcc, get_pcc_threshold, run_for_blackhole
 
 from .conftest import DEVICE_PARAMS
 
 pytestmark = [run_for_blackhole(), pytest.mark.parametrize("device_params", DEVICE_PARAMS, indirect=True)]
 
 
+@pytest.mark.device
+@pytest.mark.model
 def test_lm_head_precision(device, setup, request):
     """LM head logits match the torch reference; also reports bf8/bf16 top-10 overlap."""
     args, sd, raw = setup
