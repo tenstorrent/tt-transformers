@@ -44,6 +44,8 @@ import torch
 import ttnn
 from loguru import logger
 
+from tests.models.qwen38.test_factory import run_for_blackhole
+
 # The B=1 losslessness contract lives in test_spec_lossless.py; import its reference builder, its
 # gate and its constants instead of restating them, so the two tests can never drift apart.
 from tests.models.qwen38.test_spec_lossless import (
@@ -63,7 +65,6 @@ from tests.models.qwen38.test_support import (
     _get_prompt,
 )
 from tt_transformers.models.qwen38.model import Qwen36Model
-from tt_transformers.models.qwen38.v1.utility import run_for_blackhole
 
 # Auto-K by batch: the demo's _SPEC_BATCH_K_CAP for the batches this file covers. Duplicated (not
 # imported) so a demo-policy change cannot silently retune these correctness runs.
@@ -218,6 +219,8 @@ def _reference_model(device):
 @pytest.mark.parametrize("batch", [2, 4, 8])
 @pytest.mark.parametrize("mesh_device", [_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", DEVICE_PARAMS, indirect=True)
+@pytest.mark.device
+@pytest.mark.model
 def test_spec_batched_lossless(mesh_device, batch):
     """Every user's batched spec output is that user's own plain greedy story, token for token."""
     if not _MULTI:
@@ -274,6 +277,8 @@ def test_spec_batched_lossless(mesh_device, batch):
 @pytest.mark.parametrize("batch", [2, 8])
 @pytest.mark.parametrize("mesh_device", [_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", DEVICE_PARAMS, indirect=True)
+@pytest.mark.device
+@pytest.mark.model
 def test_spec_batched_determinism(mesh_device, batch):
     """Same prompts, same model, same tokens for every user, every run.
 
@@ -327,6 +332,8 @@ def test_spec_batched_determinism(mesh_device, batch):
 @pytest.mark.timeout(3600)  # two full model loads (B=4 users, then the B=1 reference)
 @pytest.mark.parametrize("mesh_device", [_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", DEVICE_PARAMS, indirect=True)
+@pytest.mark.device
+@pytest.mark.model
 def test_spec_batched_replicated_matches_single(mesh_device):
     """Four users, ONE prompt: the rows must be identical to each other and lossless.
 
@@ -389,6 +396,8 @@ def test_spec_batched_replicated_matches_single(mesh_device):
 @pytest.mark.timeout(1800)
 @pytest.mark.parametrize("mesh_device", [_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", DEVICE_PARAMS, indirect=True)
+@pytest.mark.device
+@pytest.mark.model
 def test_spec_batched_sampling_topk1_equals_greedy(mesh_device):
     """Batched spec SAMPLING at top_k=1 must reproduce the batched greedy output, row for row.
 
@@ -444,6 +453,8 @@ def test_spec_batched_sampling_topk1_equals_greedy(mesh_device):
 @pytest.mark.timeout(1800)
 @pytest.mark.parametrize("mesh_device", [_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", DEVICE_PARAMS, indirect=True)
+@pytest.mark.device
+@pytest.mark.model
 def test_spec_batched_freeze_stop_token(mesh_device):
     """A user that hits a stop token FREEZES, and freezing must be invisible to everyone else.
 

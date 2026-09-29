@@ -30,7 +30,7 @@ DECLARED_BASE_THIRD_PARTY_ROOTS = frozenset(
         "yaml",
     }
 )
-DECLARED_OPTIONAL_THIRD_PARTY_ROOTS = frozenset({"tqdm"})
+DECLARED_OPTIONAL_THIRD_PARTY_ROOTS = frozenset({"tqdm", "vllm"})
 # Installation requirements do not relax the import-layer or lazy-import policy.
 RESTRICTED_ROOT_LAYERS = {
     "tqdm": frozenset({"models"}),

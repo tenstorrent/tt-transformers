@@ -24,6 +24,7 @@ import torch
 import ttnn
 from loguru import logger
 
+from tests.models.qwen38.test_factory import run_for_blackhole
 from tests.models.qwen38.test_spec_batched import (
     _assert_lossless,
     _batch_prompts,
@@ -34,7 +35,6 @@ from tests.models.qwen38.test_spec_batched import (
 from tests.models.qwen38.test_spec_lossless import MAX_NEW, NUM_BLOCKS, _reference_greedy
 from tests.models.qwen38.test_support import _MESH_SHAPE, _MULTI, BLOCK_SIZE, DEVICE_PARAMS
 from tt_transformers.models.qwen38.model import Qwen36Model
-from tt_transformers.models.qwen38.v1.utility import run_for_blackhole
 
 B = 2
 K = 7
@@ -68,6 +68,8 @@ def _prefill(model, dec, u, prompt_ids, page_tables):
 @pytest.mark.timeout(3600)
 @pytest.mark.parametrize("mesh_device", [_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", DEVICE_PARAMS, indirect=True)
+@pytest.mark.device
+@pytest.mark.model
 def test_dflash2_serving_slots_are_lossless(mesh_device):
     if not _MULTI:
         pytest.skip("spec decode is the TP path; run with MESH_DEVICE=P150x4")

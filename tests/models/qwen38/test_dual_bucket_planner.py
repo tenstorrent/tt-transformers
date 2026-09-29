@@ -120,6 +120,8 @@ requires_vd = pytest.mark.skipif(vd is None, reason=f"qwen36_vllm_dflash not imp
 
 
 @requires_vd
+@pytest.mark.host
+@pytest.mark.model
 def test_prefill_routes_plain_rows_away_from_speculative_state():
     """A mixed prefill must create DFlash state only for its pinned rows.
 
@@ -212,6 +214,8 @@ def test_prefill_routes_plain_rows_away_from_speculative_state():
 
 
 @requires_vd
+@pytest.mark.host
+@pytest.mark.model
 def test_failed_spec_prefill_clears_physical_vision_ownership():
     calls = []
 
@@ -262,6 +266,8 @@ def _drive(planner, ns, start_step=0):
     return switches
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_planner_forces_up_the_moment_the_bucket_is_too_small(expect_error):
     p = BucketPlanner(CAPS, start="4x8", down_steps=8, cooldown=16)
     assert p.decide(4, 0) == (None, None), "4 live fit 4x8: nothing to do"
@@ -273,6 +279,8 @@ def test_planner_forces_up_the_moment_the_bucket_is_too_small(expect_error):
         p.decide(9, 2)  # more than the largest bucket seats: a planner-level impossibility
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_planner_down_needs_consecutive_fits_and_the_cooldown():
     p = BucketPlanner(CAPS, start="8x4", down_steps=8, cooldown=16)
     # 7 fitting calls, then a 5th user: the run resets.
@@ -291,6 +299,8 @@ def test_planner_down_needs_consecutive_fits_and_the_cooldown():
     assert sw[0][0] - 16 == 32, f"down-switch after {sw[0][0] - 16} steps, cooldown was 32"
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_planner_never_switches_twice_per_call_and_lands_in_the_required_bucket():
     rng = random.Random(7)
     p = BucketPlanner(CAPS, start="8x4", down_steps=3, cooldown=4)
@@ -306,6 +316,8 @@ def test_planner_never_switches_twice_per_call_and_lands_in_the_required_bucket(
     assert p.n_up > 10 and p.n_down > 10
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_planner_backoff_bounds_adversarial_churn_then_decays():
     p = BucketPlanner(CAPS, start="8x4", down_steps=8, cooldown=16, cooldown_cap=64, decay_steps=64)
     # Adversarial 4 <-> 5: the moment we sit in 4x8 a 5th user arrives; once in 8x4 it leaves again.
@@ -341,6 +353,8 @@ def test_planner_backoff_bounds_adversarial_churn_then_decays():
     assert p.cooldown == 32
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_planner_env_defaults_and_stats():
     p = BucketPlanner(CAPS, start="8x4")
     assert p.down_steps == int(os.environ.get("QWEN36_DFLASH_BUCKET_DOWN_STEPS", 8))
@@ -362,6 +376,8 @@ def _bucket(B, T, rows=None):
     )
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_assign_rows_is_stable_lowest_free_and_refuses_a_full_bucket(expect_error):
     big, small = _bucket(8, 4), _bucket(4, 8)
     assert assign_rows(big, {5, 2, 7}, S) == list(range(S)), "the identity bucket seats every slot on its own row"
@@ -380,6 +396,8 @@ def test_assign_rows_is_stable_lowest_free_and_refuses_a_full_bucket(expect_erro
         assign_rows(small, {0, 1, 2, 3, 4}, S)
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_build_moves_both_directions_cover_live_slots_once_and_expose_the_ring_alias(expect_error):
     active = [False] * S
     for u in (0, 5, 2):
@@ -416,6 +434,8 @@ def test_build_moves_both_directions_cover_live_slots_once_and_expose_the_ring_a
 
 
 @pytest.mark.parametrize("src,dst", [((4, 8), (8, 4)), ((8, 4), (4, 8))])
+@pytest.mark.host
+@pytest.mark.model
 def test_switch_realizations_cover_every_row_and_mi(src, dst):
     sb, db = _bucket(*src), _bucket(*dst)
     reals = switch_realizations(sb, db)
@@ -431,6 +451,8 @@ def test_switch_realizations_cover_every_row_and_mi(src, dst):
     assert any(all(m is None for m in moves.values()) for moves in reals), "the all-empty move is warmed too"
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_bucket_ids_and_default():
     assert bucket_id(8, 4) == "8x4" and bucket_id(4, 8) == "4x8"
     assert DEFAULT_BUCKET == "default"
@@ -439,6 +461,8 @@ def test_bucket_ids_and_default():
 
 
 @requires_vd
+@pytest.mark.host
+@pytest.mark.model
 def test_unified_warmup_covers_every_plain_fallback_sampling_contract(monkeypatch):
     monkeypatch.delenv("TT_LEAN_DECODE_WARMUP", raising=False)
     generator = object.__new__(vd.Qwen36DFlashForCausalLM)
@@ -469,6 +493,8 @@ def test_unified_warmup_covers_every_plain_fallback_sampling_contract(monkeypatc
 
 # ------------------------------------------------------------------------------------------------ 3. env parsing / checks
 @requires_vd
+@pytest.mark.host
+@pytest.mark.model
 def test_parse_buckets_and_agreement_with_the_decoder_parser(expect_error):
     assert vd.parse_buckets("8x4,4x8") == ((8, 4), (4, 8))
     assert vd.parse_buckets(" 8X4 ; 4x8 ,") == ((8, 4), (4, 8))
@@ -480,6 +506,8 @@ def test_parse_buckets_and_agreement_with_the_decoder_parser(expect_error):
 
 
 @requires_vd
+@pytest.mark.host
+@pytest.mark.model
 def test_check_buckets_accepts_the_profile_and_the_single_bucket_defaults():
     assert vd.check_buckets(((8, 4), (4, 8)), 8, 7, True) == ((8, 4), (4, 8))
     assert vd.check_buckets(((1, 8), (4, 8), (8, 4)), 8, 7, True) == ((1, 8), (4, 8), (8, 4))
@@ -504,6 +532,8 @@ def test_check_buckets_accepts_the_profile_and_the_single_bucket_defaults():
         (((1, 17),), 1, 16, True, "lookahead bound"),
     ],
 )
+@pytest.mark.host
+@pytest.mark.model
 def test_check_buckets_rejects(buckets, max_num_seqs, k_default, ragged, match, expect_error):
     with expect_error(RuntimeError, match):
         vd.check_buckets(buckets, max_num_seqs, k_default, ragged)
@@ -571,6 +601,8 @@ def _vllm_obj(dec, S, eos=151645, vocab=248320):
 
 
 @requires_vd
+@pytest.mark.host
+@pytest.mark.model
 def test_decode_forward_plans_before_any_begin_set_table_or_step():
     cfg = vd.DFlashRuntimeConfig.from_env()
     assert cfg.output_width > 1 and cfg.ragged, "this test drives the ragged multi-bucket profile's contract"
@@ -609,6 +641,8 @@ def test_decode_forward_plans_before_any_begin_set_table_or_step():
 
 
 @requires_vd
+@pytest.mark.host
+@pytest.mark.model
 def test_decode_forward_live_after_is_composed_through_slot_remap(expect_error):
     S4 = 4
     dec = _RecordingDec(S4, cur_id="4x8")
@@ -635,6 +669,8 @@ def test_decode_forward_live_after_is_composed_through_slot_remap(expect_error):
 
 
 @requires_vd
+@pytest.mark.host
+@pytest.mark.model
 def test_plain_decode_composes_spec_indirection_before_base_remap(monkeypatch):
     obj = _vllm_obj(_RecordingDec(4, cur_id="4x8"), 4)
     obj._pending[3] = (99, torch.zeros(8, dtype=torch.int32), 1)
@@ -661,6 +697,8 @@ def test_plain_decode_composes_spec_indirection_before_base_remap(monkeypatch):
 
 
 @requires_vd
+@pytest.mark.host
+@pytest.mark.model
 def test_plain_decode_skips_identity_remap_bookkeeping(monkeypatch):
     obj = _vllm_obj(_RecordingDec(4, cur_id="4x8"), 4)
     obj._pending[3] = (99, torch.zeros(8, dtype=torch.int32), 1)
@@ -686,6 +724,8 @@ def test_plain_decode_skips_identity_remap_bookkeeping(monkeypatch):
 
 
 @requires_vd
+@pytest.mark.host
+@pytest.mark.model
 def test_decode_forward_without_a_planner_is_todays_path():
     """A decoder without plan() (no bucket policy) is driven exactly as before: begins / steps, no plan call."""
 
@@ -777,6 +817,8 @@ class _SimDec(_RecordingDec):
 
 
 @requires_vd
+@pytest.mark.host
+@pytest.mark.model
 def test_token_accounting_is_exact_across_bucket_switches_joins_and_leaves():
     rng = random.Random(2026)
     dec = _SimDec(S, small_B=4, rng=rng)
@@ -834,6 +876,8 @@ def test_token_accounting_is_exact_across_bucket_switches_joins_and_leaves():
 
 # ------------------------------------------------------------------------------------------------ 6. ring contract
 @pytest.mark.parametrize("B,T", [(1, 8), (4, 8), (8, 4)])
+@pytest.mark.host
+@pytest.mark.model
 def test_ring_contract_holds_for_both_bucket_geometries(B, T):
     """Every bucket addresses the ONE [32*Nv] ring: every (row, head) lane stays in its own lane and inside the ring,
     the switch's source block formula (mi*B + row)*Nv is spec_state_blk_idx's, HOLD rows carry the sentinel."""
@@ -852,6 +896,8 @@ def test_ring_contract_holds_for_both_bucket_geometries(B, T):
     assert bool((held[held_row * NV : (held_row + 1) * NV] == -1).all())
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_compact_bucket_rope_deltas_follow_physical_sessions_and_clear_on_release():
     decoder = object.__new__(serving.DFlash2DualBucketDecoder)
     decoder.vision_context = [None] * S
@@ -875,6 +921,8 @@ def test_compact_bucket_rope_deltas_follow_physical_sessions_and_clear_on_releas
     assert decoder.vision_context[5] is None
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_ctrl_pages_are_per_cfg():
     assert spec_ctrl_words(4, NV) == 64 and spec_ctrl_words(8, NV) == 112  # 1 + B + B*Nv rounded up to 16 words
     for B, T in ((4, 8), (8, 4)):
@@ -970,6 +1018,8 @@ def _plans_precede_begins(calls):
 
 
 @requires_vd
+@pytest.mark.host
+@pytest.mark.model
 def test_spec_capture_sequences_both_buckets_and_guards():
     """Phase 2 on the dual profile: capture -> every slot joins in 8x4 (plan before each begin) -> 4 steps -> 4 slots
     leave, explicit switch to 4x8 -> 4 steps -> the 4 re-join with ONE plan() that forces 8x4 before their begins ->
@@ -1007,6 +1057,8 @@ def test_spec_capture_sequences_both_buckets_and_guards():
 
 
 @requires_vd
+@pytest.mark.host
+@pytest.mark.model
 def test_spec_capture_guard_fails_startup_on_a_post_capture_compile_and_a_full_trace_region(expect_error):
     obj, dec, dev = _capture_harness(pytest.MonkeyPatch(), ((8, 4), (4, 8)))
     dev.compile_on_sweep = True
@@ -1018,6 +1070,8 @@ def test_spec_capture_guard_fails_startup_on_a_post_capture_compile_and_a_full_t
 
 
 @requires_vd
+@pytest.mark.host
+@pytest.mark.model
 def test_spec_capture_single_bucket_is_todays_dummy_session_plus_a_warning_only_guard():
     obj, dec, dev = _capture_harness(pytest.MonkeyPatch(), ((8, 4),))
     dev.compile_on_sweep = True  # single-bucket profiles: the guard warns, never fails startup

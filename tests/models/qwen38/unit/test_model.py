@@ -27,10 +27,10 @@ import pytest
 import torch
 import ttnn
 
+from tests.models.qwen38.test_factory import run_for_blackhole
 from tt_transformers.models.qwen38.generator_interface import pack_rope_host, prime_decode_trace, unpack_rope
 from tt_transformers.models.qwen38.model import Qwen36Model
 from tt_transformers.models.qwen38.qwen_runtime import Generator
-from tt_transformers.models.qwen38.v1.utility import run_for_blackhole
 
 # Single-device test: default to the 9B checkpoint (the 27B needs a multi-device mesh for TP).
 os.environ.setdefault("HF_MODEL", "Qwen/Qwen3.5-9B")
@@ -77,6 +77,8 @@ def _reference_decode(model, page_table, pf):
 
 @run_for_blackhole()
 @pytest.mark.parametrize("device_params", DEVICE_PARAMS, indirect=True)
+@pytest.mark.device
+@pytest.mark.model
 def test_rope_pack_roundtrip(device):
     # Mirrors the decode flow: pack on host, copy to device, unpack on device.
     cos = torch.randn(1, 1, 64)
@@ -91,6 +93,8 @@ def test_rope_pack_roundtrip(device):
 
 @run_for_blackhole()
 @pytest.mark.parametrize("device_params", DEVICE_PARAMS, indirect=True)
+@pytest.mark.device
+@pytest.mark.model
 def test_generator_decode_matches_reference(device):
     """Generator-driven (untraced) decode must match the model-owned decode_paged reference."""
     device.enable_program_cache()
@@ -119,6 +123,8 @@ def test_generator_decode_matches_reference(device):
 
 @run_for_blackhole()
 @pytest.mark.parametrize("device_params", DEVICE_PARAMS, indirect=True)
+@pytest.mark.device
+@pytest.mark.model
 def test_generator_decode_traced_matches_reference(device):
     """Generator-driven TRACED decode must match the model-owned decode_paged reference
     token-for-token. Guards against GDN recurrent-state corruption during Generator's trace
@@ -153,6 +159,8 @@ def test_generator_decode_traced_matches_reference(device):
 
 @run_for_blackhole()
 @pytest.mark.parametrize("device_params", DEVICE_PARAMS, indirect=True)
+@pytest.mark.device
+@pytest.mark.model
 def test_chunk_seq_flag_selects_chunk_outer(device):
     """The demo's chunk-outer trace selection must be driven by the GDN weights'
     use_chunk_seq_prefill (always True now that chunk-seq is the only prefill path). Guards the

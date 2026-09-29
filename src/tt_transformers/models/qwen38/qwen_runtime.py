@@ -31,12 +31,12 @@ from tt_transformers.models.qwen38.v1.common import (
 )
 from tt_transformers.models.qwen38.warmup_runtime import WarmupForwardMixin
 from tt_transformers.sampling import (
-    SamplingParams,
     broadcast_sampling_params,
     chunk_sampling_params,
     format_sampling_params,
     scatter_sampling_params_to_slots,
 )
+from tt_transformers.sampling.sampling_params import SamplingParams
 from tt_transformers.sampling.tt_log_probs import LogProbsResult, reformat_logprobs
 
 # Maximum total tokens (batch_size * seq_len) allowed for a batched prefill pass.

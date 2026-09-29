@@ -84,6 +84,8 @@ def _tv(counts, probs):
     [(1000, p) for p in _DIST_GRID] + [(248320, (1.0, 20, 0.95)), (248320, (1.0, 0, 0.95))],
     ids=lambda v: str(v),
 )
+@pytest.mark.host
+@pytest.mark.model
 def test_dist_matches_reference(vocab, params):
     temperature, top_k, top_p = params
     logits = torch.randn(vocab, generator=torch.Generator().manual_seed(vocab)) * 3
@@ -106,6 +108,8 @@ def test_dist_matches_reference(vocab, params):
         assert sampler.prob_of((idx, probs), token) == pytest.approx(float(got[token]), abs=1e-7)
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_dist_top_p_prefix_fast_path():
     """A peaked 248k row: top-p is exact from the 2048-prefix, no full sort.
 
@@ -126,6 +130,8 @@ def test_dist_top_p_prefix_fast_path():
     assert sampler._topp_full_sorts == 0, "peaked row must not need the full-sort fallback"
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_dist_top_p_full_sort_fallback():
     """A near-uniform row: the top-p support runs past 2048, so the slow path must fire."""
     vocab = 5000
@@ -139,6 +145,8 @@ def test_dist_top_p_full_sort_fallback():
 
 
 @pytest.mark.parametrize("params", [(1.0, 0, 1.0), (1.0, 8, 0.9), (0.7, 20, 1.0)], ids=lambda v: str(v))
+@pytest.mark.host
+@pytest.mark.model
 def test_accept_lossless_single_position(params):
     """One draft: the emitted token must be distributed exactly as dist(logits[0])."""
     vocab, num_samples = 64, 60000
@@ -161,6 +169,8 @@ def test_accept_lossless_single_position(params):
         assert _tv(counts, target) < 0.015
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_accept_lossless_chain():
     """K=3 chained argmax drafts: every position stays exact, conditioned on reaching it.
 
@@ -191,6 +201,8 @@ def test_accept_lossless_chain():
 
 @pytest.mark.parametrize("temperature", [0.5, 1.0])
 @pytest.mark.parametrize("top_p", [1.0, 0.95])
+@pytest.mark.host
+@pytest.mark.model
 def test_top_k1_is_greedy(temperature, top_p):
     """top_k == 1 collapses rejection sampling onto the greedy accept/argmax path."""
     vocab, num_drafts, num_cases = 300, 5, 200
@@ -224,6 +236,8 @@ def _run_cases(sampler, cases):
     return [sampler.accept(logits, drafts) for logits, drafts in cases]
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_seed_determinism():
     vocab, num_cases = 64, 50
     gen = torch.Generator().manual_seed(11)
@@ -249,6 +263,8 @@ def test_seed_determinism():
     assert drawn == _run_cases(sampler_with(unseeded.seed), cases)
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_params_validation():
     SpecSamplingParams(1.0)  # the permissive default must stay legal
     for bad in (
@@ -283,6 +299,8 @@ def _pp_chain_logits(vocab):
 
 
 @pytest.mark.parametrize("presence", [0.5, 1.5])
+@pytest.mark.host
+@pytest.mark.model
 def test_presence_penalty_dist_matches_reference(presence):
     """``dist(logits, penalize)`` is the plain distribution of ``logits - pp * onehot(penalize)``."""
     vocab, num_penalized = 300, 12
@@ -312,6 +330,8 @@ def test_presence_penalty_dist_matches_reference(presence):
 
 
 @pytest.mark.parametrize("draft_penalized", [False, True], ids=["draft_not_in_set", "draft_in_set"])
+@pytest.mark.host
+@pytest.mark.model
 def test_presence_penalty_accept_lossless(draft_penalized):
     """The emitted token is distributed exactly as the PENALIZED target row.
 
@@ -344,6 +364,8 @@ def test_presence_penalty_accept_lossless(draft_penalized):
     assert tv < 0.015, f"draft_penalized={draft_penalized}: TV={tv:.4f}"
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_presence_penalty_accept_chain_penalizes_drafts():
     """Verify row 1 is penalized on ``penalize_base ∪ drafts[:1]``, not just on ``penalize_base``.
 
@@ -374,6 +396,8 @@ def test_presence_penalty_accept_chain_penalizes_drafts():
     assert tv < 0.02, f"position 1: TV={tv:.4f} over {reached}/{num_samples} surviving chains"
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_presence_penalty_zero_is_noop():
     """``presence_penalty == 0`` ignores ``penalize_base``: same tokens, same RNG stream."""
     vocab, num_drafts, num_cases = 300, 4, 100

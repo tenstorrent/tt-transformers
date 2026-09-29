@@ -40,9 +40,9 @@ import torch
 import ttnn
 from loguru import logger
 
+from tests.models.qwen38.test_factory import run_for_blackhole
 from tests.models.qwen38.test_support import _MESH_SHAPE, _MULTI, BLOCK_SIZE, DEVICE_PARAMS, _get_prompt
 from tt_transformers.models.qwen38.model import Qwen36Model
-from tt_transformers.models.qwen38.v1.utility import run_for_blackhole
 
 # 130 is not a multiple of BLOCK_SIZE (64) nor of the 32-row tile (see docstring).
 PROMPT_LEN = 130
@@ -115,6 +115,8 @@ def _reference_greedy(model, prompt_ids, page_table, kv_shape, force_tokens):
 @pytest.mark.parametrize("sampling_mode", ["greedy", "topk1"])
 @pytest.mark.parametrize("mesh_device", [_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", DEVICE_PARAMS, indirect=True)
+@pytest.mark.device
+@pytest.mark.model
 def test_spec_decode_matches_plain_greedy_up_to_near_ties(mesh_device, sampling_mode):
     if not _MULTI:
         pytest.skip("spec decode is the TP path; run with MESH_DEVICE=P150x4")

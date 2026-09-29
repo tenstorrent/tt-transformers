@@ -17,6 +17,7 @@ import torch
 import ttnn
 from loguru import logger
 
+from tests.models.qwen38.test_factory import run_for_blackhole
 from tests.models.qwen38.test_spec_lossless import (
     MAX_NEW,
     NEAR_TIE_GAP,
@@ -26,7 +27,6 @@ from tests.models.qwen38.test_spec_lossless import (
 )
 from tests.models.qwen38.test_support import _MESH_SHAPE, _MULTI, BLOCK_SIZE, DEVICE_PARAMS, _get_prompt
 from tt_transformers.models.qwen38.model import Qwen36Model
-from tt_transformers.models.qwen38.v1.utility import run_for_blackhole
 
 
 def check_lossless(spec, ref, gaps, tokenizer, tag, near_tie_gap=None):
@@ -63,6 +63,8 @@ def check_lossless(spec, ref, gaps, tokenizer, tag, near_tie_gap=None):
 @run_for_blackhole()
 @pytest.mark.parametrize("mesh_device", [_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", DEVICE_PARAMS, indirect=True)
+@pytest.mark.device
+@pytest.mark.model
 def test_dflash2_decode_is_lossless(mesh_device):
     if not _MULTI:
         pytest.skip("spec decode is the TP path; run with MESH_DEVICE=P150x4")

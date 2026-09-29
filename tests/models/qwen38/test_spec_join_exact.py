@@ -25,11 +25,11 @@ import torch
 import ttnn
 from loguru import logger
 
+from tests.models.qwen38.test_factory import run_for_blackhole
 from tests.models.qwen38.test_spec_batched import _batch_prompts, _blocks_per_user, _release
 from tests.models.qwen38.test_spec_lossless import MAX_NEW, NUM_BLOCKS
 from tests.models.qwen38.test_support import _MESH_SHAPE, _MULTI, BLOCK_SIZE, DEVICE_PARAMS
 from tt_transformers.models.qwen38.model import Qwen36Model
-from tt_transformers.models.qwen38.v1.utility import run_for_blackhole
 
 B = 4  # the served slot count
 K_DRAFT = 7  # DFlash2 block 8 -> K = 7 draft tokens, T = K + 1 verify rows
@@ -91,6 +91,8 @@ def _run_joins(model, prompts, page_tables, device_copy):
 @pytest.mark.timeout(1800)
 @pytest.mark.parametrize("mesh_device", [_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", DEVICE_PARAMS, indirect=True)
+@pytest.mark.device
+@pytest.mark.model
 def test_spec_join_device_copy_is_bit_exact(mesh_device):
     if not _MULTI:
         pytest.skip("prefill_for_spec is the TP path; run with MESH_DEVICE=P150x4")

@@ -26,9 +26,9 @@ import torch
 import ttnn
 from loguru import logger
 
+from tests.models.qwen38.test_factory import run_for_blackhole
 from tests.models.qwen38.test_support import _MESH_SHAPE, _MULTI, BLOCK_SIZE, DEVICE_PARAMS, _get_prompt
 from tt_transformers.models.qwen38.model import Qwen36Model
-from tt_transformers.models.qwen38.v1.utility import run_for_blackhole
 
 RUNS = 3
 MAX_NEW = 48
@@ -57,6 +57,8 @@ def _prompt_of_len(target, tokenizer):
 @pytest.mark.parametrize("prompt_len", [128, 130])
 @pytest.mark.parametrize("mesh_device", [_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", DEVICE_PARAMS, indirect=True)
+@pytest.mark.device
+@pytest.mark.model
 def test_spec_decode_is_deterministic(mesh_device, prompt_len):
     if not _MULTI:
         pytest.skip("spec decode is the TP path; run with MESH_DEVICE=P150x4")
@@ -107,6 +109,8 @@ def test_spec_decode_is_deterministic(mesh_device, prompt_len):
 @run_for_blackhole()
 @pytest.mark.parametrize("mesh_device", [_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", DEVICE_PARAMS, indirect=True)
+@pytest.mark.device
+@pytest.mark.model
 def test_spec_sampling_is_deterministic(mesh_device):
     """Spec sampling must reproduce from its seed and actually depend on it. The accept path (tt/spec_sampling.py) draws every uniform from one seeded CPU torch.Generator (K per iteration), so same prompt + params + seed must yield the same tokens AND the same accept rate.
     Equal tokens with a different accept rate would mean rejection landed at a different depth and recovery merely agreed (leaked global RNG, or sampler/device state surviving between decoders); reproducing at a different seed would mean the sampler ignored its seed or degenerated to greedy — so run C requires the trajectory to move.

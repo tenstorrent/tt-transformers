@@ -18,6 +18,8 @@ def _rope_setup():
     )
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_multi_image_context_maps_each_item_and_prepares_mrope():
     image_id = 99
     # Grids produce 4 and 2 packed tokens after 2x2 spatial merge.
@@ -38,6 +40,8 @@ def test_multi_image_context_maps_each_item_and_prepares_mrope():
     assert isinstance(context.rope_delta, int)
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_context_rejects_placeholder_or_embedding_count_mismatches():
     setup = _rope_setup()
     grid = torch.tensor([[1, 4, 4]])  # four merged tokens
@@ -51,6 +55,8 @@ def test_context_rejects_placeholder_or_embedding_count_mismatches():
         )
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_preparing_another_request_cannot_mutate_the_first_context():
     setup = _rope_setup()
     first = VisionContext.for_images(torch.zeros(1, 8), [[1, 2, 2]], image_token_id=99)
@@ -66,6 +72,8 @@ def test_preparing_another_request_cannot_mutate_the_first_context():
     assert first.placeholder_mapping is not second.placeholder_mapping
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_decode_rope_accepts_one_explicit_delta_per_spec_candidate_row():
     from tt_transformers.models.qwen38 import model as model_module
 
@@ -87,6 +95,8 @@ def test_decode_rope_accepts_one_explicit_delta_per_spec_candidate_row():
     assert torch.equal(sin, expected.sin().reshape(1, 4, 1, 6).to(torch.bfloat16))
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_vllm_gather_packs_four_images_in_declared_order():
     from tt_transformers.models.qwen38.qwen36_vllm import Qwen36ForCausalLM
 
@@ -103,6 +113,8 @@ def test_vllm_gather_packs_four_images_in_declared_order():
     assert torch.equal(packed_grids, torch.stack(grids).to(torch.int32))
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_vllm_gather_selects_visual_row_from_mixed_batch():
     from tt_transformers.models.qwen38.qwen36_vllm import Qwen36ForCausalLM
 
@@ -122,6 +134,8 @@ def test_vllm_gather_selects_visual_row_from_mixed_batch():
     assert Qwen36ForCausalLM._has_visual(kwargs, "pixel_values")
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_qwen_vision_warmup_uses_packed_patch_contract_once(monkeypatch):
     from tt_transformers.models.qwen38 import qwen36_vllm as vllm_module
 
@@ -169,6 +183,8 @@ def test_qwen_vision_warmup_uses_packed_patch_contract_once(monkeypatch):
         (torch.zeros(3, 8), torch.tensor([[1, 2, 2]]), "requires 4"),
     ],
 )
+@pytest.mark.host
+@pytest.mark.model
 def test_vision_wrapper_rejects_malformed_packed_inputs_before_device(pixels, grid, error):
     from tt_transformers.models.qwen38.vision.model import DropInVisionTransformer
 
@@ -177,6 +193,8 @@ def test_vision_wrapper_rejects_malformed_packed_inputs_before_device(pixels, gr
         DropInVisionTransformer.forward(fake, pixels, grid)
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_vision_wrapper_rejects_unwarmed_patch_bucket_before_device(monkeypatch):
     from tt_transformers.models.qwen38.vision.model import DropInVisionTransformer
 
@@ -186,6 +204,8 @@ def test_vision_wrapper_rejects_unwarmed_patch_bucket_before_device(monkeypatch)
         DropInVisionTransformer.forward(fake, torch.zeros(16, 8), torch.tensor([[1, 4, 4]]))
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_spec_short_prefill_threads_request_context_and_physical_slot(monkeypatch):
     from tt_transformers.models.qwen38 import model as model_module
 
@@ -219,6 +239,8 @@ def test_spec_short_prefill_threads_request_context_and_physical_slot(monkeypatc
     assert seen == [("hidden", 0, 17)]
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_spec_long_prefill_splices_vision_in_full_chunk_and_tail(monkeypatch):
     from tt_transformers.models.qwen38 import model as model_module
 
