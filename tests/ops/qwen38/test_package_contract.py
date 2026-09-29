@@ -16,6 +16,7 @@ from tt_transformers.ops.qwen38.gdn_spec_step import _SPEC
 from tt_transformers.ops.qwen38.qkv_causal_conv1d_silu_tile import _DFBS
 
 
+@pytest.mark.host
 def test_all_required_kernel_sources_are_wheel_owned():
     expected = {
         "gdn_decode_step/dataflow/reader_gdn_decode_step.cpp",
@@ -42,11 +43,13 @@ def test_all_required_kernel_sources_are_wheel_owned():
     ("table", "expected_count"),
     [(_PLAIN, 29), (_FUSED, 42), (_SPEC, 52)],
 )
+@pytest.mark.host
 def test_dfb_slots_are_dense_and_stable(table, expected_count):
     slots = sorted(slot for slot, _, _ in table.values())
     assert slots == list(range(expected_count))
 
 
+@pytest.mark.host
 def test_tile_kda_dfb_slots_match_the_v1_generated_program():
     assert _DFBS == {
         "act_tile": 0,
@@ -86,6 +89,7 @@ def test_tile_kda_dfb_slots_match_the_v1_generated_program():
         ),
     ],
 )
+@pytest.mark.host
 def test_legacy_source_has_one_entry_and_explicit_bindings(
     operation, role, filename, template_count, entry, runtime_arity, pragma
 ):
@@ -111,12 +115,14 @@ def test_legacy_source_has_one_entry_and_explicit_bindings(
     assert "#pragma GCC optimize" not in source
 
 
+@pytest.mark.host
 def test_required_build_levels_are_exposed_by_ttnn():
     levels = ttnn.KernelDescriptor.BuildOptLevel
     assert levels.O2.name == "O2"
     assert levels.Os.name == "Os"
 
 
+@pytest.mark.host
 def test_legacy_source_caches_only_normalized_source_shape(monkeypatch):
     _legacy._legacy_source_cached.cache_clear()
     reads = 0
@@ -148,12 +154,14 @@ def test_legacy_source_caches_only_normalized_source_shape(monkeypatch):
     assert _legacy._legacy_source_cached.cache_info().hits == 1
 
 
+@pytest.mark.host
 def test_build_level_binding_is_scoped_to_kernel_descriptors():
     assert not hasattr(ttnn, "KernelBuildOptLevel")
     assert not hasattr(ttnn._ttnn, "KernelBuildOptLevel")
     assert hasattr(ttnn.KernelDescriptor, "BuildOptLevel")
 
 
+@pytest.mark.host
 def test_package_requires_the_qualified_079_binding_backport():
     pyproject = Path(__file__).resolve().parents[3] / "pyproject.toml"
     dependencies = tomllib.loads(pyproject.read_text())["project"]["dependencies"]
@@ -168,6 +176,7 @@ def test_package_requires_the_qualified_079_binding_backport():
 
 
 @pytest.mark.parametrize("bad", [0, -1, float("nan"), float("inf")])
+@pytest.mark.host
 def test_scalar_validation_rejects_invalid_epsilon(bad):
     with pytest.raises(ValueError):
         _legacy.validate_scalars(None, 128, bad, 1e-6)
