@@ -56,6 +56,24 @@ def _upper_power_of_2(n: int) -> int:
 # Widest input ttnn.topk accepts in one call; vocabs beyond it must be chunked.
 TOPK_MAX_WIDTH = 64 * 1024
 
+# ---------------------------------------------------------------------------
+# Greedy tie-break (port of TTTv1 TTSampling._adjust_values_for_tiebreak,
+# tt-metal #50687 / #52177). ttnn.sampling breaks exact value ties by candidate
+# position, and the position a tied logit lands at after the unstable top-k and
+# the all-gather is not stable, so a greedy (k == 1) user can flip between two
+# tied tokens across slots and runs. Boosting the lowest-global-index tied
+# maximum makes the greedy pick equal torch.argmax's.
+# ---------------------------------------------------------------------------
+
+# bfloat16 spacing at magnitude |x| is between |x| * 2^-8 and |x| * 2^-7, so a 2^-6
+# relative boost is at least 2 ULP at every magnitude; a power of two keeps it exact.
+TIEBREAK_DELTA_SCALE = 2**-6
+# Keeps the boost strictly positive when the tied maximum is exactly 0.0.
+TIEBREAK_DELTA_FLOOR = 1e-30
+# Added to the global index of every non-maximum so the row min over indices lands on
+# a tied maximum. A power of two (exact in bfloat16), above any padded vocabulary.
+TIEBREAK_INDEX_SENTINEL = 2**24
+
 
 def _num_single_device_vocab_splits(padded_vocab_size: int) -> int | None:
     """Fewest power-of-two same-device chunks whose width fits ttnn.topk.
@@ -101,6 +119,89 @@ def _untilize_chunk_width(width: int, num_chunks: int) -> int:
     (the last one shorter when the row does not divide evenly)."""
     per_chunk = (width + num_chunks - 1) // num_chunks  # ceil(width / num_chunks)
     return (per_chunk + ttnn.TILE_SIZE - 1) // ttnn.TILE_SIZE * ttnn.TILE_SIZE  # round up to a tile
+
+
+def _greedy_column(k, rows: int, sub_core_grids=None):
+    """[1, 1, rows, 1] bfloat16 TILE mask, 1.0 where the per-user ``k`` is 1 (greedy).
+
+    Derived on device from the ``k`` tensor ttnn.sampling consumes, so it can never
+    disagree with it and needs no extra host-to-device write before a trace replay.
+    ``k`` is the [B] ROW_MAJOR uint32 per-user tensor; B >= rows.
+    """
+    batch = int(k.shape[-1])
+    k_row = ttnn.reshape(k, (1, 1, 1, batch))
+    k_tile = ttnn.to_layout(k_row, ttnn.TILE_LAYOUT)
+    k_bf16 = ttnn.typecast(k_tile, ttnn.bfloat16, sub_core_grids=sub_core_grids)  # k <= max_top_k: exact
+    ttnn.deallocate(k_tile)
+    is_greedy_row = ttnn.eq(k_bf16, 1.0, sub_core_grids=sub_core_grids)
+    ttnn.deallocate(k_bf16)
+    greedy_col = ttnn.transpose(is_greedy_row, -2, -1)  # [1, 1, batch, 1]
+    ttnn.deallocate(is_greedy_row)
+    if rows == batch:
+        return greedy_col
+    sliced = ttnn.slice(greedy_col, [0, 0, 0, 0], [1, 1, rows, 1])
+    ttnn.deallocate(greedy_col)
+    return sliced
+
+
+def _adjust_values_for_tiebreak(values, global_indices, greedy_col, sub_core_grids=None):
+    """Boost, for greedy rows only, the lowest-global-index candidate among the tied maxima.
+
+    ``values`` is the [1, 1, B, W] bfloat16 TILE candidate set ttnn.sampling reads and
+    ``global_indices`` the matching int32 TILE global vocab ids. The boost is >= 2 bf16 ULP of
+    the row maximum, so ttnn.sampling's pick for a k == 1 row is the lowest tied id whatever
+    position the candidates arrived in. Rows with ``greedy_col == 0`` get a zero boost, so
+    their values, and therefore their sampling, are bit-identical.
+
+    The value half runs in bfloat16, where the max and the comparisons against it are exact.
+    The index half must run in int32: min/max over a float tensor go to the FPU, which
+    truncates to a 10-bit mantissa, so every index above 2**11 would round to a value equal to
+    no real index and the boost would silently become a no-op.
+
+    Known limitation (as in TTTv1): the pick is the lowest id among the gathered candidates.
+    If one device shard holds more than ``max_top_k`` maxima tied at the same value, its local
+    top-k drops some of them before the gather.
+    """
+    scg = sub_core_grids
+    maxv = ttnn.max(values, dim=3, keepdim=True, sub_core_grids=scg)  # [1, 1, B, 1]
+    is_max = ttnn.eq(values, maxv, sub_core_grids=scg)
+    not_max = ttnn.lt(values, maxv, sub_core_grids=scg)
+
+    abs_max = ttnn.abs(maxv, sub_core_grids=scg)
+    ttnn.deallocate(maxv)
+    delta_scaled = ttnn.multiply(abs_max, TIEBREAK_DELTA_SCALE, sub_core_grids=scg)
+    ttnn.deallocate(abs_max)
+    delta = ttnn.add(delta_scaled, TIEBREAK_DELTA_FLOOR, sub_core_grids=scg)  # [1, 1, B, 1]
+    ttnn.deallocate(delta_scaled)
+
+    idx = ttnn.typecast(global_indices, ttnn.int32, sub_core_grids=scg)
+    offset = ttnn.multiply(not_max, TIEBREAK_INDEX_SENTINEL, sub_core_grids=scg)  # bf16, exact
+    ttnn.deallocate(not_max)
+    offset_i32 = ttnn.typecast(offset, ttnn.int32, sub_core_grids=scg)
+    ttnn.deallocate(offset)
+    masked_idx = ttnn.add(idx, offset_i32, sub_core_grids=scg)
+    ttnn.deallocate(offset_i32)
+    lowest_idx = ttnn.min(masked_idx, dim=3, keepdim=True, sub_core_grids=scg)  # [1, 1, B, 1] int32
+    ttnn.deallocate(masked_idx)
+
+    is_lowidx_i32 = ttnn.eq(idx, lowest_idx, sub_core_grids=scg)
+    ttnn.deallocate(idx)
+    ttnn.deallocate(lowest_idx)
+    is_lowidx = ttnn.typecast(is_lowidx_i32, ttnn.bfloat16, sub_core_grids=scg)
+    ttnn.deallocate(is_lowidx_i32)
+    is_winner = ttnn.multiply(is_max, is_lowidx, sub_core_grids=scg)  # 1.0 at exactly one candidate
+    ttnn.deallocate(is_max)
+    ttnn.deallocate(is_lowidx)
+
+    winner_gated = ttnn.multiply(is_winner, greedy_col, sub_core_grids=scg)
+    ttnn.deallocate(is_winner)
+    boost = ttnn.multiply(winner_gated, delta, sub_core_grids=scg)
+    ttnn.deallocate(winner_gated)
+    ttnn.deallocate(delta)
+
+    adjusted = ttnn.add(values, boost, sub_core_grids=scg)
+    ttnn.deallocate(boost)
+    return adjusted
 
 
 # ---------------------------------------------------------------------------
@@ -520,6 +621,17 @@ class Sampling1D(LightweightModule):
 
         # Use distinct names so we can free the interleaved intermediate after untilize
         topk_global_indices_interleaved = ttnn.to_memory_config(topk_global_indices, ttnn.DRAM_MEMORY_CONFIG)
+
+        # Greedy tie-break on the TILE-domain candidates, before seeding: its int32 reduce
+        # runs on the SFPU, and SFPU work between manual_seed and the draw can perturb it.
+        greedy_col = _greedy_column(k, int(topk_values.shape[2]), sub_core_grids=cfg.sub_core_grids)
+        tiebroken_values = _adjust_values_for_tiebreak(
+            topk_values, topk_global_indices_interleaved, greedy_col, sub_core_grids=cfg.sub_core_grids
+        )
+        ttnn.deallocate(greedy_col)
+        ttnn.deallocate(topk_values)
+        topk_values = tiebroken_values
+
         topk_global_indices = ttnn.untilize(
             topk_global_indices_interleaved, use_multicore=True, sub_core_grids=cfg.sub_core_grids
         )
