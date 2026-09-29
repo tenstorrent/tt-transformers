@@ -28,6 +28,8 @@ from tt_transformers.models.qwen38.vision.vision_model_config import VisionModel
     indirect=True,
 )
 @pytest.mark.parametrize("device_params", [{"fabric_config": ttnn.FabricConfig.FABRIC_1D}], indirect=True)
+@pytest.mark.device
+@pytest.mark.model
 def test_vision_block_inference(
     mesh_device,
     reset_seeds,
