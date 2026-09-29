@@ -66,7 +66,7 @@ def generation_model(request):
     if traced:
         executor_config = Llama3ExecutorConfig(
             trace=TraceConfig(mode="all"),
-            warmup=WarmupConfig(prefill_seq_lens=(128,), prefill_batch_sizes=(1,)),
+            warmup=WarmupConfig(prefill_seq_lens=(128, 1024), prefill_batch_sizes=(1,)),
             paged_kv_cache=PagedKVCacheConfig(
                 block_size=32,
                 max_num_blocks=_MAX_SEQ_LEN // 32,
