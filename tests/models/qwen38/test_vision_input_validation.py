@@ -188,3 +188,14 @@ def test_tt_processor_rejects_precomputed_image_embeds():
     with pytest.raises(VLLMValidationError, match="image_embeds") as exc_info:
         processor._get_mm_fields_config({"image_embeds": torch.zeros(1, 8)}, {})
     assert exc_info.value.parameter == "image"
+
+
+@pytest.mark.host
+@pytest.mark.model
+def test_dflash_adapter_registers_tt_geometry_validator():
+    from tt_transformers.models.qwen38.qwen36_vllm import TTQwen3VLMultiModalProcessor
+    from tt_transformers.models.qwen38.qwen36_vllm_dflash import (
+        TTQwen3VLMultiModalProcessor as DFlashMultiModalProcessor,
+    )
+
+    assert DFlashMultiModalProcessor is TTQwen3VLMultiModalProcessor
