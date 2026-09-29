@@ -31,6 +31,10 @@ DECLARED_BASE_THIRD_PARTY_ROOTS = frozenset(
     }
 )
 DECLARED_OPTIONAL_THIRD_PARTY_ROOTS = frozenset({"tqdm"})
+# Serving integrations supply and pin vLLM alongside the accelerator plugin.
+# Keeping that product boundary out of this wheel avoids resolving a second,
+# potentially incompatible vLLM installation from the public package index.
+INTEGRATION_OWNED_THIRD_PARTY_ROOTS = frozenset({"vllm"})
 # Installation requirements do not relax the import-layer or lazy-import policy.
 RESTRICTED_ROOT_LAYERS = {
     "tqdm": frozenset({"models"}),
@@ -76,7 +80,11 @@ def _dependency_reason(imported: str, layer: str) -> str | None:
         return None
     if root in RESTRICTED_ROOT_LAYERS and layer not in RESTRICTED_ROOT_LAYERS[root]:
         return f"dependency {root} is not allowed in the {layer} layer"
-    if root in DECLARED_BASE_THIRD_PARTY_ROOTS or root in DECLARED_OPTIONAL_THIRD_PARTY_ROOTS:
+    if (
+        root in DECLARED_BASE_THIRD_PARTY_ROOTS
+        or root in DECLARED_OPTIONAL_THIRD_PARTY_ROOTS
+        or root in INTEGRATION_OWNED_THIRD_PARTY_ROOTS
+    ):
         return None
     return "third-party import root is not declared for the runtime/model product"
 
