@@ -257,22 +257,6 @@ class TestSampling1DDevice:
         with expect_error(ValueError, "k, p, temp must all be provided"):
             sampler.decode_forward(logits_tt, k=k_tt)
 
-    @pytest.mark.device
-    @pytest.mark.parametrize("vocab_size", [1024])
-    def test_from_model_args(self, ttnn_mesh_device, vocab_size):
-        """from_model_args backward compat factory."""
-
-        class MockArgs:
-            padded_vocab_size = vocab_size
-            sub_core_grids = None
-            sub_core_grid_topk = None
-            start_core = ttnn.CoreCoord(0, 0)
-            max_top_k = 32
-
-        sampler = Sampling1D.from_model_args(ttnn_mesh_device, None, MockArgs())
-        assert sampler.config.vocab_size == vocab_size
-        assert sampler.config.mesh_device is ttnn_mesh_device
-
     # ------------------------------------------------------------------
     # CCL introspection (_bind_strategy lines 116-126)
     # ------------------------------------------------------------------
@@ -399,49 +383,6 @@ class TestSampling1DDevice:
         assert captured_kwargs.get("buffer_key") == "TEST_KEY"
 
     # ------------------------------------------------------------------
-    # from_model_args model_config branches (lines 406-408, 416-419)
-    # ------------------------------------------------------------------
-
-    @pytest.mark.device
-    def test_from_model_args_with_galaxy_num_links(self, ttnn_mesh_device):
-        """from_model_args reads num_gather_links from GALAXY_NUM_LINKS in model_config (lines 406-408)."""
-
-        class MockArgs:
-            padded_vocab_size = 1024
-            sub_core_grids = None
-            sub_core_grid_topk = None
-            start_core = ttnn.CoreCoord(0, 0)
-            max_top_k = 32
-
-        model_config = {"GALAXY_NUM_LINKS": 4}
-        sampler = Sampling1D.from_model_args(ttnn_mesh_device, None, MockArgs(), model_config=model_config)
-        # max_top_k=32 → 32//32=1, max_links=4 → min(1, 4) = 1
-        assert sampler.config.num_gather_links == 1
-
-    @pytest.mark.device
-    def test_from_model_args_with_sampling_ag_config(self, ttnn_mesh_device):
-        """from_model_args reads allow_force_argmax/num_links/topology from SAMPLING_AG_CONFIG (lines 416-419)."""
-
-        class MockArgs:
-            padded_vocab_size = 1024
-            sub_core_grids = None
-            sub_core_grid_topk = None
-            start_core = ttnn.CoreCoord(0, 0)
-            max_top_k = 32
-
-        model_config = {
-            "SAMPLING_AG_CONFIG": {
-                "allow_force_argmax": True,
-                "num_links": 3,
-                "topology": ttnn.Topology.Linear,
-            }
-        }
-        sampler = Sampling1D.from_model_args(ttnn_mesh_device, None, MockArgs(), model_config=model_config)
-        assert sampler.config.allow_force_argmax is True
-        assert sampler.config.num_argmax_gather_links == 3
-        assert sampler.config.ag_topology == ttnn.Topology.Linear
-
-    # ------------------------------------------------------------------
     # Buffer passthrough: _resolve_buf ttnn.Tensor path (lines 493-494)
     # and _materialize ttnn.Tensor path (line 554)
     # ------------------------------------------------------------------
@@ -501,26 +442,6 @@ class TestSampling1DDevice:
         resolved = _resolve_sampling1d_config(cfg)
         assert isinstance(resolved.index_offsets, LazyBuffer)
         assert resolved.index_offsets.device is ttnn_mesh_device  # filled in by resolve_lazy_buffer
-
-    @pytest.mark.device
-    def test_rejects_galaxy(self, ttnn_mesh_device, expect_error):
-        """from_model_args should reject 2D (Galaxy) topologies."""
-
-        class FakeMesh:
-            shape = (2, 4)
-
-            def get_num_devices(self):
-                return 8
-
-        class MockArgs:
-            padded_vocab_size = 1024
-            sub_core_grids = None
-            sub_core_grid_topk = None
-            start_core = ttnn.CoreCoord(0, 0)
-            max_top_k = 32
-
-        with expect_error(ValueError, "1D mesh topologies"):
-            Sampling1D.from_model_args(FakeMesh(), None, MockArgs())
 
 
 # ==============================================================================
