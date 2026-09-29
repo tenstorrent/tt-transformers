@@ -106,6 +106,7 @@ def _runtime(
     max_prefill_batch_size=8,
     batched_prefill_batched_extract=True,
     trace_capture_prime_sequence_lengths=(),
+    page_table_layout=None,
 ):
     mesh_device = SimpleNamespace(shape=(1, 1))
     config = PrefillRuntimeConfig.resolve(
@@ -115,7 +116,8 @@ def _runtime(
             allow_force_argmax=allow_force_argmax,
         ),
         output_reader=FakeReader(mesh_device),
-        page_table_layout=PageTableLayout(
+        page_table_layout=page_table_layout
+        or PageTableLayout(
             block_size=32,
             raw_capacity_width=256,
             prefill_width=264,
@@ -3118,16 +3120,41 @@ def test_prefill_package_has_no_compatibility_barrel():
 
 
 @pytest.mark.host
-@pytest.mark.parametrize(("chunk_cap", "max_seq_len"), [(2048, 4096), (4096, 4096), (6144, 16384), (2048, 1500)])
+@pytest.mark.parametrize(
+    ("chunk_cap", "max_seq_len"), [(2048, 4096), (4096, 4096), (6144, 16384), (2048, 1500), (4096, 3000)]
+)
 def test_prefill_bucket_ladder_covers_every_invocation_a_served_prompt_reaches(chunk_cap, max_seq_len):
     ladder = prefill_bucket_ladder(chunk_cap, max_seq_len)
     assert ladder == tuple(sorted(set(ladder)))
-    for length in range(1, max_seq_len + 1, 37):
+    for length in (*range(1, max_seq_len + 1, 37), max_seq_len):
         padded = _padded_prefill_length(length)
-        if padded > max_seq_len:
-            continue
         invocation = _max_prefill_chunk_size(padded, chunk_cap) if padded > chunk_cap else padded
         assert invocation in ladder, (length, padded, invocation)
+
+
+@pytest.mark.host
+def test_a_prompt_below_an_unaligned_max_seq_len_is_served_at_the_bucket_above_it():
+    # 1500 is not a bucket, so a 1300-token prompt pads past it to 2048. The
+    # paged-KV capacity checks still admit it: prepare() raises if they do not.
+    layout = PageTableLayout.resolve(
+        block_size=32, model_max_sequence_length=1500, physical_num_blocks=47, max_prefill_chunk_size=2048
+    )
+    runtime = _runtime(page_table_layout=layout)
+    tokens, page_table, prompt_lens, start_pos = _inputs(prompt_length=1300, page_width=layout.raw_capacity_width)
+
+    (prepared,) = runtime.prepare(tokens=tokens, page_table=page_table, prompt_lens=prompt_lens, start_pos=start_pos)
+
+    assert prepared.request.padded_sequence_length == 2048
+    assert [chunk.chunk_size for chunk in prepared.request.chunks] == [2048]
+    assert prepared.program_signatures[0].invocation_sequence_length == 2048
+
+    # Warmup builds this bucket's prompt at the servable length (47 blocks of 32).
+    # It pads to the same bucket, so it compiles the program the 1300 prompt runs.
+    servable_length = layout.raw_capacity_width * layout.block_size
+    tokens, page_table, prompt_lens, start_pos = _inputs(prompt_length=servable_length, page_width=47)
+    (warmup,) = runtime.prepare(tokens=tokens, page_table=page_table, prompt_lens=prompt_lens, start_pos=start_pos)
+    assert servable_length == 1504
+    assert warmup.program_signatures == prepared.program_signatures
 
 
 @pytest.mark.host

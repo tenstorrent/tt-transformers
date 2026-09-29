@@ -410,6 +410,7 @@ def test_every_runtime_config_declares_what_the_warmup_ladder_reads(model_id) ->
 
 # Every chunk cap a model in this tree resolves to (2K/4K caps, and Llama-3.1-8B's 64K/128K).
 _CHUNK_CAPS = (2048, 4096, 65536, 131072)
+_BUCKETS = (128, 1024, *(1 << power for power in range(11, 18)))
 
 
 @pytest.mark.host
@@ -440,6 +441,15 @@ def test_servable_length_bound_gives_the_default_warmup_ladder(model_id) -> None
                 runtime_config = SimpleNamespace(
                     max_prefill_chunk_size=chunk_cap, max_seq_len=max_seq_len, trace_prefill_supported_seq_lens=()
                 )
-                assert prefill_bucket_ladder(chunk_cap, servable_length) == resolve_prefill_warmup_seq_lens(
-                    runtime_config, TraceConfig(mode="all")
-                ), (model_id, max_seq_len, physical_num_blocks, chunk_cap)
+                default_ladder = resolve_prefill_warmup_seq_lens(runtime_config, TraceConfig(mode="all"))
+                assert prefill_bucket_ladder(chunk_cap, servable_length) == default_ladder, (
+                    model_id,
+                    max_seq_len,
+                    physical_num_blocks,
+                    chunk_cap,
+                )
+                # Every default max_seq_len is a bucket, so bounding the ladder by the padded
+                # max_seq_len warms exactly what bounding it by max_seq_len itself did.
+                assert default_ladder == tuple(
+                    bucket for bucket in _BUCKETS if bucket <= min(chunk_cap, max_seq_len)
+                ), (model_id, max_seq_len, chunk_cap)

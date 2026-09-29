@@ -776,17 +776,16 @@ def test_activation_validates_every_program_returned_by_trace_warmup(expect_erro
         sequence_lengths=(128,),
         lane_capacity=1,
         sampling=False,
-        # A 160-token servable length keeps the bucket ladder at 128 and still fits the
-        # cached 128 case, so trace warmup returns exactly two prefill programs.
-        page_table_layout=PageTableLayout(block_size=32, raw_capacity_width=5, prefill_width=72, decode_width=8),
+        # A 128-token servable length keeps the bucket ladder at 128 and leaves no room
+        # for a cached case, so the one prefill warmup call returns both programs.
+        page_table_layout=PageTableLayout(block_size=32, raw_capacity_width=4, prefill_width=72, decode_width=8),
     )
     programs = tuple(
         CompiledProgram(ProgramKey(str(index) * 64), f"program-{index}", OutputSpec((1,), torch.float32))
         for index in range(1, 4)
     )
     execution.program_compiler = SimpleNamespace(compiled_programs=programs)
-    prefill_programs = iter(programs[:2])
-    execution.compile_prefill = lambda **_kwargs: (next(prefill_programs),)
+    execution.compile_prefill = lambda **_kwargs: programs[:2]
     execution.compile_decode = lambda **_kwargs: programs[2]
     trace_keys = {
         programs[0].key: ProgramKey("a" * 64),
@@ -1186,11 +1185,14 @@ def log_messages():
         logger.remove(handler)
 
 
-def _resolve_lengths(lengths, *, trace_mode, max_prefill_chunk_size=2048, can_enable_trace=None):
+def _resolve_lengths(
+    lengths, *, trace_mode, max_prefill_chunk_size=2048, can_enable_trace=None, page_table_layout=None
+):
     # Servable length 4096 (128 blocks of 32), so the ladder up to a 2048 cap is 128, 1024, 2048.
     prefill_config, decode_config = make_runtime_configs(
         sampling=False,
         lane_capacity=1,
+        page_table_layout=page_table_layout,
         max_prefill_chunk_size=max_prefill_chunk_size,
         can_enable_trace=can_enable_trace,
     )
@@ -1235,6 +1237,68 @@ def test_the_default_ladder_passes_the_coverage_check(trace_mode):
     runtime = SimpleNamespace(max_prefill_chunk_size=2048, max_seq_len=4096, trace_prefill_supported_seq_lens=(128,))
     lengths = resolve_prefill_warmup_seq_lens(runtime, TraceConfig(trace_mode))
     assert _resolve_lengths(lengths, trace_mode=trace_mode).prefill_sequence_lengths == (128, 1024, 2048)
+
+
+# max_seq_len=3000 is not a bucket: a 2500-token prompt pads to 4096. The page
+# table admits 94 blocks of 32, so the longest servable prompt is 3008 tokens.
+_UNALIGNED_LAYOUT = PageTableLayout.resolve(
+    block_size=32, model_max_sequence_length=3000, physical_num_blocks=94, max_prefill_chunk_size=4096
+)
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("trace_mode", ["all", "decode_only"])
+def test_the_default_ladder_includes_the_bucket_an_unaligned_max_seq_len_pads_to(trace_mode):
+    runtime = SimpleNamespace(
+        max_prefill_chunk_size=4096, max_seq_len=3000, trace_prefill_supported_seq_lens=(128, 1024)
+    )
+    lengths = resolve_prefill_warmup_seq_lens(runtime, TraceConfig(trace_mode))
+    assert lengths == (128, 1024, 2048, 4096)
+    config = _resolve_lengths(
+        lengths, trace_mode=trace_mode, max_prefill_chunk_size=4096, page_table_layout=_UNALIGNED_LAYOUT
+    )
+    assert config.prefill_sequence_lengths == (128, 1024, 2048, 4096)
+    # Without trace the ladder is not used, so nothing changes.
+    assert resolve_prefill_warmup_seq_lens(runtime, TraceConfig("none")) == (128, 1024)
+
+
+@pytest.mark.host
+def test_lengths_missing_the_bucket_an_unaligned_max_seq_len_pads_to_are_refused(expect_error):
+    with expect_error(ValueError, "buckets 4096 without a compiled program"):
+        _resolve_lengths(
+            (128, 1024, 2048), trace_mode="all", max_prefill_chunk_size=4096, page_table_layout=_UNALIGNED_LAYOUT
+        )
+
+
+@pytest.mark.host
+def test_the_bucket_above_an_unaligned_max_seq_len_warms_with_the_longest_servable_prompt():
+    traced = RecordingExecution()
+    eager = RecordingExecution()
+    coordinator, *_ = make_coordinator(
+        trace_mode="all",
+        sampling=False,
+        warmup_config=WarmupConfig(prefill_batch_sizes=(1,)),
+        sequence_lengths=(128, 1024, 2048, 4096),
+        lane_capacity=1,
+        execution=traced,
+        eager_execution=eager,
+        page_table_layout=_UNALIGNED_LAYOUT,
+        max_prefill_chunk_size=4096,
+        can_enable_trace=lambda sequence_length, _cached: sequence_length in (128, 1024),
+    )
+    # The bucket stays the case's identity, so it is not newly trace-eligible.
+    assert coordinator.config.prefill_trace_sequence_lengths == (128, 1024)
+
+    coordinator.warmup_prefill(enable_trace=True, **PREFILL_KWARGS)
+
+    top = [call for call in eager.prefill_calls if call["start_pos"] is None and call["tokens"].shape[-1] > 2048]
+    assert len(top) == 1
+    assert tuple(top[0]["tokens"].shape) == (1, 3008)
+    assert int(top[0]["prompt_lens"][0]) == 3008
+    assert int(top[0]["page_table"].shape[-1]) == _UNALIGNED_LAYOUT.raw_capacity_width
+    # Every smaller bucket still warms at its own length, and no 4096 prefix-cached case fits.
+    assert sorted(_uncached_prefill_lengths(eager)) == [2048, 2048, 3008]
+    assert set(_uncached_prefill_lengths(traced)) == {128, 1024}
 
 
 def _complete_trace_warmup(coordinator, *, trace_prefill):

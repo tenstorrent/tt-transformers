@@ -417,6 +417,11 @@ class WarmupCoordinator:
             self._ensure_sampling_buffers()
         plan = self._plan(can_sample_on_device=can_sample_on_device)
         cases = plan.prefill
+        # A bucket above the servable length (4096 when max_seq_len is 3000)
+        # is warmed with the longest prompt the page table admits. It pads to
+        # the same bucket, so it compiles the program a served prompt runs.
+        ceiling = self.config.page_table_layout_ceiling
+        servable_length = ceiling.raw_capacity_width * ceiling.block_size
         if enable_trace and can_sample_on_device:
             # The hidden-body trace is sampling-independent, but its retained
             # post-trace inputs must support both aliases. Register the forced
@@ -434,7 +439,7 @@ class WarmupCoordinator:
                 sampling = _greedy_sampling_params(case.batch_size)
             elif case.sampling_path == "topk":
                 sampling = _topk_sampling_params(case.batch_size)
-            actual_uncached_lengths = (int(case.sequence_length),)
+            actual_uncached_lengths = (min(int(case.sequence_length), servable_length),)
             if (
                 case.batch_size == 1
                 and case.sequence_length == 128

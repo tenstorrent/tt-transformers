@@ -421,13 +421,18 @@ def prefill_bucket_ladder(max_prefill_chunk_size: int, max_seq_len: int) -> tupl
     """Return every padded prefill bucket a request can invoke, up to the chunk cap.
 
     This follows `_padded_prefill_length` (128, 1024, then each power of two)
-    up to ``min(max_prefill_chunk_size, max_seq_len)``. A prefill that pads past
-    the cap runs as power-of-two chunks no larger than the cap
-    (`_max_prefill_chunk_size`), so the ladder covers every invocation geometry
-    a served request can reach.
+    up to ``min(max_prefill_chunk_size, padded max_seq_len)``. A prompt at or
+    below ``max_seq_len`` pads up, so when ``max_seq_len`` is not itself a
+    bucket (3000, say) the ladder includes the bucket it pads to (4096). A
+    prefill that pads past the cap runs as power-of-two chunks no larger than
+    the cap (`_max_prefill_chunk_size`), so the ladder covers every invocation
+    geometry a served request can reach.
     """
 
-    ceiling = min(int(max_prefill_chunk_size), int(max_seq_len))
+    max_seq_len = int(max_seq_len)
+    if max_seq_len >= 128:
+        max_seq_len = _padded_prefill_length(max_seq_len)
+    ceiling = min(int(max_prefill_chunk_size), max_seq_len)
     lengths = [length for length in (128, 1024) if length <= ceiling]
     power = 2048
     while power <= ceiling:
