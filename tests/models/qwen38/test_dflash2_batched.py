@@ -24,6 +24,7 @@ import gc
 import pytest
 from loguru import logger
 
+from tests.models.qwen38.test_factory import run_for_blackhole
 from tests.models.qwen38.test_spec_batched import (
     _assert_lossless,
     _batch_prompts,
@@ -35,7 +36,6 @@ from tests.models.qwen38.test_spec_batched import (
 )
 from tests.models.qwen38.test_spec_lossless import MAX_NEW, _reference_greedy
 from tests.models.qwen38.test_support import _MESH_SHAPE, _MULTI, DEVICE_PARAMS
-from tt_transformers.models.qwen38.v1.utility import run_for_blackhole
 
 DFLASH_K = {2: 7, 4: 7, 8: 3}
 
@@ -45,6 +45,8 @@ DFLASH_K = {2: 7, 4: 7, 8: 3}
 @pytest.mark.parametrize("batch", [2, 4, 8])
 @pytest.mark.parametrize("mesh_device", [_MESH_SHAPE], indirect=True)
 @pytest.mark.parametrize("device_params", DEVICE_PARAMS, indirect=True)
+@pytest.mark.device
+@pytest.mark.model
 def test_dflash2_batched_lossless(mesh_device, batch):
     """Every user's batched DFlash2 output is that user's own plain greedy story, token for token."""
     if not _MULTI:

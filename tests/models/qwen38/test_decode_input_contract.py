@@ -4,11 +4,15 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
+
 from tt_transformers.models.qwen38.vllm_generator import TTQwen38ForCausalLM
 from tt_transformers.models.qwen38.vllm_generator_dflash import TTQwen38DFlashForCausalLM
 from tt_transformers.models.qwen38.qwen_runtime import Generator
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_qwen_advertises_explicit_decode_input_contract_without_async():
     assert TTQwen38ForCausalLM.decode_input_update_contract == 1
     assert TTQwen38DFlashForCausalLM.decode_input_update_contract == 1
@@ -16,6 +20,8 @@ def test_qwen_advertises_explicit_decode_input_contract_without_async():
     assert TTQwen38DFlashForCausalLM.model_capabilities["supports_async_decode"] is False
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_contract_sampling_reset_maps_to_legacy_generator_seed_reset():
     captured = {}
 

@@ -19,7 +19,7 @@ DECLARED_BASE_THIRD_PARTY_ROOTS = frozenset({"loguru", "torch", "ttnn", "transfo
 # Not declared in pyproject.toml: transformers installs and pins these, and model
 # weight loaders import them directly.
 TRANSFORMERS_PROVIDED_THIRD_PARTY_ROOTS = frozenset({"huggingface_hub", "safetensors"})
-DECLARED_OPTIONAL_THIRD_PARTY_ROOTS = frozenset({"tqdm", "yaml"})
+DECLARED_OPTIONAL_THIRD_PARTY_ROOTS = frozenset({"tqdm", "vllm", "yaml"})
 # Installation requirements do not relax the import-layer or lazy-import policy.
 RESTRICTED_ROOT_LAYERS = {
     "tqdm": frozenset({"models"}),

@@ -13,6 +13,8 @@ def _adapter_with_pending_moves(moves):
     return adapter
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_slot_move_settlement_retires_consumed_decode_remap():
     adapter = _adapter_with_pending_moves({3: 0, 0: 3})
 
@@ -21,6 +23,8 @@ def test_slot_move_settlement_retires_consumed_decode_remap():
     assert adapter._pending_state_slot_moves is None
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_slot_move_settlement_rejects_a_different_permutation():
     adapter = _adapter_with_pending_moves({3: 0, 0: 3})
 
@@ -28,6 +32,8 @@ def test_slot_move_settlement_rejects_a_different_permutation():
         adapter.note_state_slots_moved({2: 0, 0: 2})
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_empty_slot_move_notification_is_a_noop():
     adapter = _adapter_with_pending_moves(None)
 

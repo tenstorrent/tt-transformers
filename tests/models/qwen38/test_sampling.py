@@ -57,6 +57,8 @@ def _extract_user_zero_token(tt_tokens):
 
 @torch.no_grad()
 @parametrize_mesh_tp()
+@pytest.mark.device
+@pytest.mark.model
 def test_decode_only_unseeded_sampling_initializes_rng(mesh_device, reset_seeds, ensure_gc):
     """Host prefill followed by device decode must not reuse seed zero.
 
