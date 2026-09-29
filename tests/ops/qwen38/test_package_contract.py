@@ -4,10 +4,14 @@
 from pathlib import Path
 
 import pytest
-import tomllib
 import ttnn
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 CI
+    import tomli as tomllib
 
 from tt_transformers.ops.qwen38 import _legacy
 from tt_transformers.ops.qwen38._kernels import KERNEL_ROOT, kernel_path
