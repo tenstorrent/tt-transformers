@@ -6,6 +6,8 @@ from unittest.mock import patch
 
 import pytest
 
+pytest.importorskip("vllm", reason="vLLM is supplied by the schema-6 serving integration")
+
 from tt_transformers.models.qwen38.qwen36_vllm import Qwen36ForCausalLM
 from tt_transformers.models.qwen38.qwen36_vllm_dflash import Qwen36DFlashForCausalLM
 from tt_transformers.models.qwen38.qwen_runtime import Generator
