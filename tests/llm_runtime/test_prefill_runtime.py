@@ -3137,7 +3137,7 @@ def test_a_prompt_below_an_unaligned_max_seq_len_is_served_at_the_bucket_above_i
     # 1500 is not a bucket, so a 1300-token prompt pads past it to 2048. The
     # paged-KV capacity checks still admit it: prepare() raises if they do not.
     layout = PageTableLayout.resolve(
-        block_size=32, model_max_sequence_length=1500, physical_num_blocks=47, max_prefill_chunk_size=2048
+        block_size=32, model_max_sequence_length=1500, physical_num_blocks=48, max_prefill_chunk_size=2048
     )
     runtime = _runtime(page_table_layout=layout)
     tokens, page_table, prompt_lens, start_pos = _inputs(prompt_length=1300, page_width=layout.raw_capacity_width)

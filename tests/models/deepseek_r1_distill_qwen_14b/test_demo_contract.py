@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from tt_transformers.llm_runtime.config import TraceConfig
+from tt_transformers.llm_runtime.config import TraceConfig, fit_paged_kv_num_blocks
 from tt_transformers.llm_runtime.prefill.plan import _plan_prefill_requests
 
 _DEMO_PATH = "examples/deepseek_r1_distill_qwen_14b/benchmark.py"
@@ -263,6 +263,7 @@ def test_create_executor_uses_model_owned_executor_and_resolved_cache():
         "DeepSeekR1Qwen14BExecutorConfig": executor_config,
         "PagedKVCacheConfig": lambda **kwargs: SimpleNamespace(**kwargs),
         "TraceConfig": TraceConfig,
+        "fit_paged_kv_num_blocks": fit_paged_kv_num_blocks,
         "WarmupConfig": lambda: object(),
     }
     create_executor = _demo_function("create_executor", namespace)

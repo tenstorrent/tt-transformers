@@ -91,7 +91,8 @@ def test_public_factory_attaches_one_executor_with_full_capacity_and_checkpoint_
     assert config.trace.mode == "none"
     assert not config.device_sampling_enabled
     assert config.paged_kv_cache.block_size == 32
-    assert config.paged_kv_cache.num_blocks == 6  # Two rows, each requiring three pages.
+    # Two rows of three pages, raised to the 8-block decode page table.
+    assert config.paged_kv_cache.num_blocks == 8
     assert config.paged_kv_cache.dtype is ttnn.bfloat8_b
     assert factory.loader.call_args.kwargs.get("hf_revision") == factory.revision_kwargs.get("hf_revision")
     assert factory.metadata_loader.call_args.args == ("local/model",)

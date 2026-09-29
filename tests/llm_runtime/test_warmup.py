@@ -1240,9 +1240,9 @@ def test_the_default_ladder_passes_the_coverage_check(trace_mode):
 
 
 # max_seq_len=3000 is not a bucket: a 2500-token prompt pads to 4096. The page
-# table admits 94 blocks of 32, so the longest servable prompt is 3008 tokens.
+# table admits 94 blocks of 32 (of a 96-block cache), so the longest servable prompt is 3008 tokens.
 _UNALIGNED_LAYOUT = PageTableLayout.resolve(
-    block_size=32, model_max_sequence_length=3000, physical_num_blocks=94, max_prefill_chunk_size=4096
+    block_size=32, model_max_sequence_length=3000, physical_num_blocks=96, max_prefill_chunk_size=4096
 )
 
 

@@ -146,10 +146,63 @@ def test_page_table_layout_is_resolved_without_warmup_policy():
     layout = PageTableLayout.resolve(
         block_size=32,
         model_max_sequence_length=4096,
-        physical_num_blocks=100,
+        physical_num_blocks=104,
         max_prefill_chunk_size=2048,
     )
 
-    assert layout.raw_capacity_width == 100
+    assert layout.raw_capacity_width == 104
     assert layout.decode_width == 104
     assert layout.prefill_width == 168
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(
+    ("max_seq_len", "physical_num_blocks", "decode_width"),
+    [
+        (1500, 47, 48),  # one sequence's blocks, with max_seq_len not a multiple of 256
+        (4096, 100, 104),  # a cache smaller than one sequence, not a multiple of 8
+    ],
+)
+def test_page_table_layout_refuses_a_cache_narrower_than_the_decode_page_table(
+    max_seq_len, physical_num_blocks, decode_width, expect_error
+):
+    # The paged-cache update refuses a page table wider than the cache, so every
+    # decode step would fail on device. Refuse the geometry at load instead.
+    with expect_error(ValueError, f"has {physical_num_blocks} blocks, fewer than the {decode_width}-block") as raised:
+        PageTableLayout.resolve(
+            block_size=32,
+            model_max_sequence_length=max_seq_len,
+            physical_num_blocks=physical_num_blocks,
+            max_prefill_chunk_size=2048,
+        )
+    assert f"Allocate at least {decode_width} blocks" in str(raised.value)
+
+    layout = PageTableLayout.resolve(
+        block_size=32,
+        model_max_sequence_length=max_seq_len,
+        physical_num_blocks=decode_width,
+        max_prefill_chunk_size=2048,
+    )
+    assert layout.decode_width == decode_width
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(
+    ("num_blocks", "max_seq_len", "expected"),
+    [
+        (47, 1500, 48),  # batch 1, max_seq_len not a multiple of 256: raised to the decode width
+        (94, 1500, 94),  # batch 2 already fits
+        (48, 1500, 48),
+        (128, 4096, 128),  # every default max_seq_len is a multiple of 256
+        (129, 4096, 129),  # vLLM's one-block-per-user headroom is left alone
+        (4, 128, 8),
+    ],
+)
+def test_fit_paged_kv_num_blocks_only_raises_counts_the_decode_page_table_would_overflow(
+    num_blocks, max_seq_len, expected
+):
+    fitted = runtime_config.fit_paged_kv_num_blocks(num_blocks, max_seq_len=max_seq_len, block_size=32)
+    assert fitted == expected
+    PageTableLayout.resolve(
+        block_size=32, model_max_sequence_length=max_seq_len, physical_num_blocks=fitted, max_prefill_chunk_size=2048
+    )

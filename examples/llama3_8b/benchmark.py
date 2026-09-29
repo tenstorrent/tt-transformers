@@ -53,7 +53,7 @@ from examples.llama3_8b.demo_utils import (
     preprocess_llama3_8b_chat_prompts,
 )
 from tt_transformers.device_utils import cleanup_model_case, get_device_name
-from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
+from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig, fit_paged_kv_num_blocks
 from tt_transformers.llm_runtime.lane_group import LaneGroupExecutor
 from tt_transformers.mesh_utils import create_submeshes
 from tt_transformers.models.llama3_8b.hf_generator import (
@@ -341,7 +341,9 @@ def create_llama3_for_causal_lm(
     n_layers = int(os.environ.get("LLAMA3_8B_TTTV2_NUM_LAYERS", "32"))
 
     block_size = 32
-    max_num_blocks = max_batch_size * math.ceil(max_seq_len / block_size)
+    max_num_blocks = fit_paged_kv_num_blocks(
+        max_batch_size * math.ceil(max_seq_len / block_size), max_seq_len=max_seq_len, block_size=block_size
+    )
     paged_attention_config = Llama31_8BPagedAttentionConfig(block_size=block_size, max_num_blocks=max_num_blocks)
 
     return _load_model(

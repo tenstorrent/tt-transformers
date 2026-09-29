@@ -54,7 +54,7 @@ def test_compatibility_constructor_selects_matching_kv_ownership(monkeypatch, ex
     assert captured["mesh_device"] is mesh_device
     paged = captured["paged_attention_config"]
     if executor_mode:
-        assert paged == qwen_model.Qwen25Coder32BPagedAttentionConfig(block_size=32, max_num_blocks=6)
+        assert paged == qwen_model.Qwen25Coder32BPagedAttentionConfig(block_size=32, max_num_blocks=8)
     else:
         assert paged is hf_adaptor._INTERNAL_KV_CACHE_CONFIG
         assert (

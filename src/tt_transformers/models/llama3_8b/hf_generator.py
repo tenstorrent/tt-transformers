@@ -24,7 +24,7 @@ from tt_transformers.cache_environment import (
     resolve_model_cache,
 )
 from tt_transformers.device_utils import cleanup_object_graph, get_device_name
-from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
+from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig, fit_paged_kv_num_blocks
 from tt_transformers.llm_runtime.tensor_resources import attach_cleanup_failures
 from tt_transformers.models.llama3_8b.model import Llama31_8BPagedAttentionConfig
 from tt_transformers.models.llama3_executor import Llama3Executor, Llama3ExecutorConfig
@@ -655,7 +655,11 @@ def from_pretrained(
         max_num_blocks = (
             executor_config.paged_kv_cache.max_num_blocks
             if executor_config is not None
-            else ((max_seq_len + block_size - 1) // block_size) * max_batch_size
+            else fit_paged_kv_num_blocks(
+                ((max_seq_len + block_size - 1) // block_size) * max_batch_size,
+                max_seq_len=max_seq_len,
+                block_size=block_size,
+            )
         )
         paged_attention_config = Llama31_8BPagedAttentionConfig(block_size=block_size, max_num_blocks=max_num_blocks)
     if executor_config is not None:

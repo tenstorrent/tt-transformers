@@ -71,7 +71,7 @@ from examples.common.runtime import UnsupportedConfiguration, open_mesh_device
 from examples.common.trace_region_sizes import resolve_trace_region_size
 from tt_transformers.cache_environment import resolve_model_cache_path
 from tt_transformers.device_utils import cleanup_model_case, get_device_name
-from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
+from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig, fit_paged_kv_num_blocks
 from tt_transformers.models.llama33_70b.hf_generator import DEFAULT_HF_REVISION as DEMO_HF_REVISION
 from tt_transformers.models.llama33_70b.hf_generator import (
     Llama33_70BExecutor,
@@ -512,7 +512,11 @@ def create_executor(
     trace_mode: str | None = None,
 ) -> Llama33_70BExecutor:
     block_size = 32
-    max_num_blocks = math.ceil(model.config.max_seq_len / block_size) * model.config.max_batch_size
+    max_num_blocks = fit_paged_kv_num_blocks(
+        math.ceil(model.config.max_seq_len / block_size) * model.config.max_batch_size,
+        max_seq_len=model.config.max_seq_len,
+        block_size=block_size,
+    )
     attention_config = model.config.block_configs[0].attention_config
     if trace_mode is None:
         trace_mode = "all" if traced else "none"

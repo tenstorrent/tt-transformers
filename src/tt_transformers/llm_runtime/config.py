@@ -128,6 +128,14 @@ class PageTableLayout:
         model_width = _ceil_div(model_max_sequence_length, block_size)
         raw_width = min(model_width, physical_num_blocks)
         decode_width = _round_up(raw_width, _PAGE_TABLE_WIDTH_ALIGNMENT)
+        if decode_width > physical_num_blocks:
+            # The paged-cache update refuses a page table wider than the cache,
+            # so every decode step would fail. Refuse the geometry at load.
+            raise ValueError(
+                f"The paged KV cache has {physical_num_blocks} blocks, fewer than the {decode_width}-block decode "
+                f"page table ({raw_width} blocks of {block_size} tokens, padded to a multiple of "
+                f"{_PAGE_TABLE_WIDTH_ALIGNMENT}). Allocate at least {decode_width} blocks."
+            )
         padding_blocks = _ceil_div(max_prefill_chunk_size - 1, block_size)
         prefill_width = _round_up(raw_width + padding_blocks, _PAGE_TABLE_WIDTH_ALIGNMENT)
         return cls(
@@ -144,6 +152,18 @@ class PageTableLayout:
             raise ValueError("canonical page-table widths cannot be smaller than raw capacity")
         if self.prefill_width % _PAGE_TABLE_WIDTH_ALIGNMENT or self.decode_width % _PAGE_TABLE_WIDTH_ALIGNMENT:
             raise ValueError("canonical page-table widths must satisfy alignment")
+
+
+def fit_paged_kv_num_blocks(num_blocks: int, *, max_seq_len: int, block_size: int) -> int:
+    """Return ``num_blocks`` raised, if needed, to hold one sequence's decode page table.
+
+    The decode page table is ``ceil(max_seq_len / block_size)`` blocks padded to
+    a multiple of 8, and the cache must have at least that many blocks. One
+    sequence's worth of blocks falls short of it whenever ``max_seq_len`` is not
+    a multiple of ``8 * block_size``. Any count that already fits is unchanged.
+    """
+
+    return max(int(num_blocks), _round_up(_ceil_div(int(max_seq_len), int(block_size)), _PAGE_TABLE_WIDTH_ALIGNMENT))
 
 
 def _ceil_div(value: int, divisor: int) -> int:

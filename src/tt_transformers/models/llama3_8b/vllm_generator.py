@@ -12,7 +12,13 @@ from typing import Any
 import torch
 import ttnn
 
-from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, TraceMode, WarmupConfig
+from tt_transformers.llm_runtime.config import (
+    PagedKVCacheConfig,
+    TraceConfig,
+    TraceMode,
+    WarmupConfig,
+    fit_paged_kv_num_blocks,
+)
 from tt_transformers.llm_runtime.lane_group import LaneGroupExecutor
 from tt_transformers.llm_runtime.vllm_adapter import NormalizedPrefillKwargs, VLLMAdapter, VLLMAdapterConfig
 from tt_transformers.models.llama3_8b.hf_generator import Llama3ExecutorConfig, _load_model, build_llama3_executor
@@ -384,9 +390,11 @@ def build_llama3_generator(config: Llama3GeneratorConfig) -> Llama3Generator:
     if len(submeshes) != config.tt_data_parallel:
         raise ValueError(f"Expected {config.tt_data_parallel} submeshes, got {len(submeshes)}")
 
-    max_num_blocks = (
-        config.max_seq_len + _PROVISIONAL_BLOCK_SIZE - 1
-    ) // _PROVISIONAL_BLOCK_SIZE + per_lane_max_batch_size
+    max_num_blocks = fit_paged_kv_num_blocks(
+        (config.max_seq_len + _PROVISIONAL_BLOCK_SIZE - 1) // _PROVISIONAL_BLOCK_SIZE + per_lane_max_batch_size,
+        max_seq_len=config.max_seq_len,
+        block_size=_PROVISIONAL_BLOCK_SIZE,
+    )
     lanes = []
     try:
         for submesh in submeshes:

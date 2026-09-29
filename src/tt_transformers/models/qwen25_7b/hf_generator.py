@@ -20,7 +20,7 @@ from tt_transformers.cache_environment import (
     resolve_model_cache,
 )
 from tt_transformers.device_utils import cleanup_object_graph
-from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
+from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig, fit_paged_kv_num_blocks
 from tt_transformers.llm_runtime.tensor_resources import attach_cleanup_failures
 from tt_transformers.models.qwen2_executor import Qwen25Executor, Qwen25ExecutorConfig
 from tt_transformers.models.qwen2_executor import build_qwen25_7b_executor as _build_qwen25_7b_executor
@@ -314,7 +314,11 @@ def _load_model(
         block_size = 32
         paged_attention_config = Qwen25PagedAttentionConfig(
             block_size=block_size,
-            max_num_blocks=((max_seq_len + block_size - 1) // block_size) * max_batch_size,
+            max_num_blocks=fit_paged_kv_num_blocks(
+                ((max_seq_len + block_size - 1) // block_size) * max_batch_size,
+                max_seq_len=max_seq_len,
+                block_size=block_size,
+            ),
         )
     head_dim = hf_config.hidden_size // hf_config.num_attention_heads
     params = Qwen25_7BModelParameters(
@@ -416,7 +420,11 @@ def from_pretrained(
         max_num_blocks = (
             executor_config.paged_kv_cache.max_num_blocks
             if executor_config is not None
-            else ((max_seq_len + block_size - 1) // block_size) * max_batch_size
+            else fit_paged_kv_num_blocks(
+                ((max_seq_len + block_size - 1) // block_size) * max_batch_size,
+                max_seq_len=max_seq_len,
+                block_size=block_size,
+            )
         )
         paged_attention_config = Qwen25PagedAttentionConfig(block_size=block_size, max_num_blocks=max_num_blocks)
     if executor_config is not None:

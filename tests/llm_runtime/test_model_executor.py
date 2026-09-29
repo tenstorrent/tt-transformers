@@ -15,7 +15,13 @@ from unittest.mock import MagicMock
 import pytest
 import ttnn
 
-from tt_transformers.llm_runtime.config import PagedKVCacheConfig, PageTableLayout, TraceConfig, WarmupConfig
+from tt_transformers.llm_runtime.config import (
+    PagedKVCacheConfig,
+    PageTableLayout,
+    TraceConfig,
+    WarmupConfig,
+    fit_paged_kv_num_blocks,
+)
 from tt_transformers.llm_runtime.prefill.plan import prefill_bucket_ladder
 from tt_transformers.llm_runtime.warmup import resolve_prefill_warmup_seq_lens
 from tt_transformers.models import executor as executor_module
@@ -406,6 +412,36 @@ def test_every_runtime_config_declares_what_the_warmup_ladder_reads(model_id) ->
     for runtime_config in runtime_configs:
         fields = {field.name for field in dataclasses.fields(runtime_config)}
         assert {"max_prefill_chunk_size", "max_seq_len", "trace_prefill_supported_seq_lens"} <= fields
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("model_id", _MODEL_IDS)
+def test_default_kv_sizing_leaves_room_for_the_decode_page_table(model_id) -> None:
+    # The decode page table is padded to a multiple of 8 blocks and the cache must be
+    # at least that wide. Both default sizings go through the helper that ensures it.
+    for generator in ("hf_generator", "vllm_generator"):
+        path = _MODELS_ROOT / model_id / f"{generator}.py"
+        assert "fit_paged_kv_num_blocks(" in path.read_text(), (model_id, generator)
+    default = (
+        inspect.signature(importlib.import_module(f"tt_transformers.models.{model_id}.hf_generator").from_pretrained)
+        .parameters["max_seq_len"]
+        .default
+    )
+    max_seq_lens = (default,) if default is not inspect.Parameter.empty else (4096, 16384, 65536, 131072)
+    for max_seq_len in max_seq_lens:
+        model_width = -(-max_seq_len // 32)
+        for num_blocks in (model_width, model_width * 32, model_width + 1, model_width + 32):
+            # Every default max_seq_len is a multiple of 256, so no default count moves.
+            assert fit_paged_kv_num_blocks(num_blocks, max_seq_len=max_seq_len, block_size=32) == num_blocks
+    # A max_seq_len that isn't: at batch 1 the count is raised to one that resolves.
+    for max_seq_len in (1500, 3000, 4000, 8200):
+        num_blocks = fit_paged_kv_num_blocks(-(-max_seq_len // 32), max_seq_len=max_seq_len, block_size=32)
+        PageTableLayout.resolve(
+            block_size=32,
+            model_max_sequence_length=max_seq_len,
+            physical_num_blocks=num_blocks,
+            max_prefill_chunk_size=2048,
+        )
 
 
 # Every chunk cap a model in this tree resolves to (2K/4K caps, and Llama-3.1-8B's 64K/128K).
