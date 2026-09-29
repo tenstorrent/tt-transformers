@@ -12,6 +12,7 @@ checkpoint on disk (HF_MODEL); no device. Tensors are loaded as shape-only meta 
 import glob
 import json
 import os
+from pathlib import Path
 
 import pytest
 import torch
@@ -38,6 +39,9 @@ def _load_raw_state_dict(checkpoint_dir):
 
 @pytest.fixture(scope="module")
 def args():
+    checkpoint = os.environ.get("HF_MODEL")
+    if not checkpoint or not Path(checkpoint).expanduser().is_dir():
+        pytest.skip("requires a local Qwen3.8 checkpoint selected through HF_MODEL")
     return Qwen36ModelArgs(mesh_device=None)
 
 
