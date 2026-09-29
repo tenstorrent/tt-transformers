@@ -27,7 +27,6 @@ def test_gated_attention_pcc(device, setup, request):
     from models.experimental.gated_attention_gated_deltanet.torch_functional.gated_attention import (
         gated_attention_forward,
     )
-
     from tt_transformers.models.qwen38.rope import Qwen36RoPESetup, compute_rope_freqs
 
     layer_num = 3

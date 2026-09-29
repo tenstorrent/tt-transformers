@@ -25,7 +25,6 @@ def test_deltanet_pcc(device, setup, request):
     from models.experimental.gated_attention_gated_deltanet.torch_functional.gated_deltanet import (
         gated_deltanet_forward,
     )
-
     from tt_transformers.models.qwen38.gdn import GDNConfig, Qwen36GatedDeltaNet
     from tt_transformers.models.qwen38.substate import substate
 
