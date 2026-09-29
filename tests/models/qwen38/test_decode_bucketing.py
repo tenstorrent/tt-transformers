@@ -7,6 +7,7 @@
 3. ``test_decode_width_scaling_traced`` (device): traced step time vs decode width.
 """
 
+import importlib.util
 import os
 import statistics
 import time
@@ -28,6 +29,8 @@ BLOCK = 64
 # different ISL (the benchmark sweep was trimmed to 4096).
 CTX = int(os.environ.get("QWEN36_BUCKET_TEST_CTX", "8192"))
 BPU = CTX // BLOCK  # blocks per user
+_HAS_UNIFIED_RUNTIME = importlib.util.find_spec("tt_transformers.models.qwen38.qwen_runtime") is not None
+_RUNTIME_REQUIRED = pytest.mark.skipif(not _HAS_UNIFIED_RUNTIME, reason="requires the unified runtime PR")
 
 
 def _pick_bucket(tokens, start_pos, width):
@@ -70,6 +73,7 @@ def test_bucket_selection():
 
 @pytest.mark.host
 @pytest.mark.model
+@_RUNTIME_REQUIRED
 def test_identity_slot_remap_does_not_disable_bucketing():
     from tt_transformers.models.qwen38.qwen36_vllm import _is_identity_slot_remap
 
@@ -81,6 +85,7 @@ def test_identity_slot_remap_does_not_disable_bucketing():
 
 @pytest.mark.host
 @pytest.mark.model
+@_RUNTIME_REQUIRED
 def test_unsupported_device_sampling_fails_at_startup(expect_error):
     from tt_transformers.models.qwen38.qwen36_vllm import Qwen36ForCausalLM
 
@@ -99,6 +104,7 @@ def test_unsupported_device_sampling_fails_at_startup(expect_error):
 
 @pytest.mark.host
 @pytest.mark.model
+@_RUNTIME_REQUIRED
 def test_trace_buffer_reuse_is_opt_in(monkeypatch):
     from tt_transformers.models.qwen38.qwen_runtime import _mark_trace_buffers_corruptible
 
@@ -114,6 +120,7 @@ def test_trace_buffer_reuse_is_opt_in(monkeypatch):
 
 @pytest.mark.host
 @pytest.mark.model
+@_RUNTIME_REQUIRED
 def test_bucket_warmup_compiles_all_widths_before_capture(monkeypatch):
     from tt_transformers.models.qwen38.generator_interface import warmup_decode_buckets
 
@@ -165,6 +172,7 @@ def test_bucket_warmup_compiles_all_widths_before_capture(monkeypatch):
 
 @pytest.mark.host
 @pytest.mark.model
+@_RUNTIME_REQUIRED
 def test_bucket_trace_teardown_releases_all_stores(monkeypatch):
     from tt_transformers.models.qwen38.qwen_runtime import Generator
 
@@ -215,6 +223,7 @@ def test_bucketed_host_logits_are_padded_to_serving_width(monkeypatch, width):
 
 @pytest.mark.host
 @pytest.mark.model
+@_RUNTIME_REQUIRED
 def test_tp8_device_logprobs_complete_full_decode_warmup(monkeypatch):
     """TP8 returns old-path sampled-token log-probs that Qwen must read from one replica."""
     from tt_transformers.models.qwen38.qwen_runtime import Generator
