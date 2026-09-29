@@ -82,9 +82,18 @@ def test_host_only_collection_does_not_open_a_device(monkeypatch):
 
     assert _resolve_mesh_shape() == (1, 1)
 
-    # An explicitly selected hardware mesh remains authoritative.
-    monkeypatch.setenv("MESH_DEVICE", "P150x4")
-    assert _resolve_mesh_shape() == (1, 4)
+    # Every explicitly selected hardware topology remains authoritative.
+    for name, shape in {
+        "N150": (1, 1),
+        "N300": (1, 2),
+        "P150": (1, 1),
+        "P150x4": (1, 4),
+        "P150x8": (1, 8),
+        "T3K": (1, 8),
+        "TG": (8, 4),
+    }.items():
+        monkeypatch.setenv("MESH_DEVICE", name)
+        assert _resolve_mesh_shape() == shape
 
 
 @pytest.mark.host
