@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+# SPDX-License-Identifier: Apache-2.0
+
 """Narrow fixture policy helpers internalized from tt-metal tests."""
 
 from examples.common.trace_region_sizes import resolve_trace_region_size

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/tenstorrent/tt_transformers/qualification/schemas/support-manifest.schema.json",
+  "$id": "https://github.com/tenstorrent/tt-transformers/qualification/schemas/support-manifest.schema.json",
   "title": "TT Transformers model support manifest",
   "type": "object",
   "additionalProperties": false,

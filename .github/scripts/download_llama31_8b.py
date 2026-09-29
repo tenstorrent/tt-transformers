@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+# SPDX-License-Identifier: Apache-2.0
+
 """Populate the pinned Llama checkpoint from CIv2's Large File Cache."""
 
 from __future__ import annotations

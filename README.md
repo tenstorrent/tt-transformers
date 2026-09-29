@@ -6,7 +6,7 @@ Tenstorrent hardware.
 
 > [!IMPORTANT]
 > The package is currently a developer preview. Every model remains
-> `experimental`; consult the [support matrix](https://github.com/tenstorrent/tt_transformers/blob/main/SUPPORT.md)
+> `experimental`; consult the [support matrix](https://github.com/tenstorrent/tt-transformers/blob/main/SUPPORT.md)
 > before relying on a model, topology, or workload.
 
 ## Requirements
@@ -29,8 +29,8 @@ for the release policy and the separate custom-runtime development workflow.
 Install the library from a checkout:
 
 ```bash
-git clone https://github.com/tenstorrent/tt_transformers.git
-cd tt_transformers
+git clone https://github.com/tenstorrent/tt-transformers.git
+cd tt-transformers
 python -m pip install .
 ```
 
@@ -49,7 +49,7 @@ python -m pytest -m host
 ```
 
 For fully reproducible maintainer environments, use the hash-locked files in
-[`constraints/locks`](https://github.com/tenstorrent/tt_transformers/tree/main/constraints/locks).
+[`constraints/locks`](https://github.com/tenstorrent/tt-transformers/tree/main/constraints/locks).
 
 ## Verify the installation
 
@@ -115,23 +115,23 @@ for other models. Accuracy and performance workloads use each model's separate
 - [Software architecture](docs/architecture.md)
 - [Package guide](src/tt_transformers/README.md)
 - [Models and deprecation policy](src/tt_transformers/models/README.md)
-- [Reusable modules](https://github.com/tenstorrent/tt_transformers/blob/main/src/tt_transformers/modules/README.md)
-- [LLM runtime](https://github.com/tenstorrent/tt_transformers/blob/main/src/tt_transformers/llm_runtime/README.md)
-- [Sampling](https://github.com/tenstorrent/tt_transformers/blob/main/src/tt_transformers/sampling/README.md)
-- [Repository examples](https://github.com/tenstorrent/tt_transformers/blob/main/examples/README.md)
-- [Validation summary](https://github.com/tenstorrent/tt_transformers/blob/main/docs/validation.md)
+- [Reusable modules](https://github.com/tenstorrent/tt-transformers/blob/main/src/tt_transformers/modules/README.md)
+- [LLM runtime](https://github.com/tenstorrent/tt-transformers/blob/main/src/tt_transformers/llm_runtime/README.md)
+- [Sampling](https://github.com/tenstorrent/tt-transformers/blob/main/src/tt_transformers/sampling/README.md)
+- [Repository examples](https://github.com/tenstorrent/tt-transformers/blob/main/examples/README.md)
+- [Validation summary](https://github.com/tenstorrent/tt-transformers/blob/main/docs/validation.md)
 
 ## Development
 
-See [CONTRIBUTING.md](https://github.com/tenstorrent/tt_transformers/blob/main/CONTRIBUTING.md),
-the [test guide](https://github.com/tenstorrent/tt_transformers/blob/main/tests/README.md),
-and the [tool guide](https://github.com/tenstorrent/tt_transformers/blob/main/tools/README.md).
+See [CONTRIBUTING.md](https://github.com/tenstorrent/tt-transformers/blob/main/CONTRIBUTING.md),
+the [test guide](https://github.com/tenstorrent/tt-transformers/blob/main/tests/README.md),
+and the [tool guide](https://github.com/tenstorrent/tt-transformers/blob/main/tools/README.md).
 
 To develop against a selected tt-metal commit or edit TTNN alongside
 tt_transformers, see the [TTNN development guide](docs/ttnn-development.md).
 
 Report security issues through the process in
-[SECURITY.md](https://github.com/tenstorrent/tt_transformers/blob/main/SECURITY.md).
+[SECURITY.md](https://github.com/tenstorrent/tt-transformers/blob/main/SECURITY.md).
 
 ## Provenance
 
@@ -140,18 +140,18 @@ The initial standalone source was extracted from `tt-metal` commit
 
 ## Contributing
 
-Bugs are reported via [GitHub Issues](https://github.com/tenstorrent/tt_transformers/issues),
+Bugs are reported via [GitHub Issues](https://github.com/tenstorrent/tt-transformers/issues),
 and bug fixes and new functionality are submitted via Pull Requests, which are
 reviewed on a weekly cadence. See
-[CONTRIBUTING.md](https://github.com/tenstorrent/tt_transformers/blob/main/CONTRIBUTING.md)
+[CONTRIBUTING.md](https://github.com/tenstorrent/tt-transformers/blob/main/CONTRIBUTING.md)
 for how to set up a development environment and our
-[Code of Conduct](https://github.com/tenstorrent/tt_transformers/blob/main/CODE_OF_CONDUCT.md)
+[Code of Conduct](https://github.com/tenstorrent/tt-transformers/blob/main/CODE_OF_CONDUCT.md)
 for community expectations.
 
 ## License
 
 This project is licensed under the terms of the
-[Apache License 2.0](https://github.com/tenstorrent/tt_transformers/blob/main/LICENSE),
+[Apache License 2.0](https://github.com/tenstorrent/tt-transformers/blob/main/LICENSE),
 except where specified. See
-[LICENSE_understanding.txt](https://github.com/tenstorrent/tt_transformers/blob/main/LICENSE_understanding.txt)
+[LICENSE_understanding.txt](https://github.com/tenstorrent/tt-transformers/blob/main/LICENSE_understanding.txt)
 for a plain-language summary of how the license applies to this project.

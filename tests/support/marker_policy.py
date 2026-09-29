@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+# SPDX-License-Identifier: Apache-2.0
+
 """Collection-safe topology marks derived only from explicit MESH_DEVICE."""
 
 from __future__ import annotations

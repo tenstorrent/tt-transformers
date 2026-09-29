@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+# SPDX-License-Identifier: Apache-2.0
+
 """Typed environment, cache-location, identity, and preflight policy.
 
 The compatibility cache layout is intentionally separate from CacheIdentity:
