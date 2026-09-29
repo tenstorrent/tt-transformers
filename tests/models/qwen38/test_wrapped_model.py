@@ -116,12 +116,30 @@ def test_wrapped_vision_model_inference(
     "grid,num_layers",
     [
         ((1, 32, 32), 2),
+        ((1, 2, 1022), 2),
+        ((1, 32, 64), 2),
         ((1, 58, 62), 2),
+        ((1, 62, 66), 2),
         ((1, 64, 64), 2),
+        ((1, 10, 614), 2),
+        ((1, 64, 96), 2),
         ((1, 76, 96), 2),
+        ((1, 46, 178), 2),
         ((1, 76, 96), None),
     ],
-    ids=["2k", "4k", "6k", "8k", "8k-all-layers"],
+    ids=[
+        "2k-representative",
+        "2k-upper-tail-2044",
+        "4k-lower-bound-2048",
+        "4k-representative",
+        "4k-upper-tail-4092",
+        "6k-lower-bound-4096",
+        "6k-upper-tail-6140",
+        "8k-lower-bound-6144",
+        "8k-representative",
+        "8k-upper-tail-8188",
+        "8k-all-layers",
+    ],
 )
 @pytest.mark.parametrize("device_params", [{"fabric_config": ttnn.FabricConfig.FABRIC_1D}], indirect=True)
 @pytest.mark.device
@@ -134,7 +152,7 @@ def test_wrapped_vision_model_high_detail_buckets(
     num_layers,
     monkeypatch,
 ):
-    """Cover every finite high-detail bucket, including the full 8K tower."""
+    """Cover every finite high-detail bucket, each transition, and the full 8K tower."""
 
     monkeypatch.setenv("QWEN36_VISION_HIGH_DETAIL", "1")
     dtype = ttnn.bfloat8_b
