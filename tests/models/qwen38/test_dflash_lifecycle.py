@@ -3,6 +3,8 @@
 
 import pytest
 
+pytest.importorskip("vllm", reason="vLLM is supplied by the schema-6 serving integration")
+
 from tt_transformers.models.qwen38.vllm_generator_dflash import TTQwen38DFlashForCausalLM
 
 
