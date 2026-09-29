@@ -13,8 +13,8 @@ import torch
 import ttnn
 from loguru import logger
 
+from tests.models.qwen38.test_factory import run_for_blackhole
 from tt_transformers.models.qwen38.layer import Qwen36DecoderLayer
-from tt_transformers.models.qwen38.v1.utility import run_for_blackhole
 
 from .conftest import DEVICE_PARAMS
 
@@ -25,6 +25,8 @@ pytestmark = [run_for_blackhole(), pytest.mark.parametrize("device_params", DEVI
 GDN_PREFILL_CHUNK = 128
 
 
+@pytest.mark.device
+@pytest.mark.model
 def test_layer0_deltanet_prefill_block(device, setup):
     """Layer 0 (DeltaNet) full decoder block, chunk-seq prefill — runs and is non-constant.
 
@@ -50,6 +52,8 @@ def test_layer0_deltanet_prefill_block(device, setup):
     assert out.float().std() > 0.01, "Output is near-constant"
 
 
+@pytest.mark.device
+@pytest.mark.model
 def test_layer0_deltanet_decode(device, setup):
     """Layer 0 (DeltaNet) recurrent decode — single token, continuing from a real prefill.
 
@@ -77,6 +81,8 @@ def test_layer0_deltanet_decode(device, setup):
     assert not torch.isnan(out).any(), "Output contains NaN"
 
 
+@pytest.mark.device
+@pytest.mark.model
 def test_layer3_gated_attention_prefill(device, setup):
     """Layer 3 (first full-attention layer) prefill — runs without NaN/Inf."""
     args, sd, raw = setup

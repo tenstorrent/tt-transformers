@@ -40,6 +40,8 @@ def _mi_cases(B, T):
 # --------------------------------------------------------------------------- #
 @pytest.mark.parametrize("B,T", SHAPES)
 @pytest.mark.parametrize("nv", [1, 8, 12])
+@pytest.mark.host
+@pytest.mark.model
 def test_state_blk_idx_matches_naive(B, T, nv):
     """Naive: walk the ring the way the kernel lays it out and find each (user, head)'s block."""
     for mi in _mi_cases(B, T):
@@ -64,6 +66,8 @@ def test_state_blk_idx_matches_naive(B, T, nv):
 
 @pytest.mark.parametrize("B,T", SHAPES)
 @pytest.mark.parametrize("nv", [1, 8])
+@pytest.mark.host
+@pytest.mark.model
 def test_state_blk_idx_kernel_contract(B, T, nv):
     """The fused op requires idx[h] % (B*nv) == h (head h may only re-target its OWN lane)."""
     bh = B * nv
@@ -76,6 +80,8 @@ def test_state_blk_idx_kernel_contract(B, T, nv):
         assert len(set(idx.tolist())) == bh
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_state_blk_idx_rejects_bad_mi_length(expect_error):
     with expect_error(AssertionError, "need one mi per user"):
         spec_state_blk_idx([0, 1], 4, 8)
@@ -86,6 +92,8 @@ def test_state_blk_idx_rejects_bad_mi_length(expect_error):
 # --------------------------------------------------------------------------- #
 @pytest.mark.parametrize("B,T", SHAPES)
 @pytest.mark.parametrize("kc", [2, KC, 5])
+@pytest.mark.host
+@pytest.mark.model
 def test_conv_sel_matches_naive(B, T, kc):
     """Naive: place one 1.0 per output row at the concat column the design names."""
     rows, cols = kc - 1 + T, kc - 1 + 2 * T
@@ -104,6 +112,8 @@ def test_conv_sel_matches_naive(B, T, kc):
 
 @pytest.mark.parametrize("B,T", SHAPES)
 @pytest.mark.parametrize("kc", [2, KC, 5])
+@pytest.mark.host
+@pytest.mark.model
 def test_conv_sel_is_one_hot_and_in_bounds(B, T, kc):
     rows, cols = kc - 1 + T, kc - 1 + 2 * T
     for mi in _mi_cases(B, T):
@@ -118,6 +128,8 @@ def test_conv_sel_is_one_hot_and_in_bounds(B, T, kc):
 
 @pytest.mark.parametrize("B,T", SHAPES)
 @pytest.mark.parametrize("kc", [2, KC])
+@pytest.mark.host
+@pytest.mark.model
 def test_conv_sel_matmul_rebuilds_the_window(B, T, kc):
     """The load-bearing property: conv_sel @ concat == [E_prev[u, mi+1 : mi+kc] ; qkv_new[u]].
 
@@ -141,6 +153,8 @@ def test_conv_sel_matmul_rebuilds_the_window(B, T, kc):
 
 
 @pytest.mark.parametrize("B,T", [(2, 8), (4, 4)])
+@pytest.mark.host
+@pytest.mark.model
 def test_conv_sel_chained_over_iterations(B, T):
     """Two iterations in a row: feeding E_new back as E_prev keeps every user's register exact.
 
@@ -173,6 +187,8 @@ def test_conv_sel_chained_over_iterations(B, T):
 
 
 @pytest.mark.parametrize("kc", [2, KC])
+@pytest.mark.host
+@pytest.mark.model
 def test_conv_sel_rejects_out_of_range_mi(kc, expect_error):
     with expect_error(AssertionError, "out of range"):
         spec_conv_sel([4], 1, 4, kc)
@@ -182,6 +198,8 @@ def test_conv_sel_rejects_out_of_range_mi(kc, expect_error):
         spec_conv_sel([0, 0], 1, 4, kc)
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_helpers_agree_on_the_same_mi():
     """Both selectors must describe the SAME commit: same mi, same user ordering (user-major)."""
     B, T, nv, kc = 4, 4, 8, KC
@@ -196,6 +214,8 @@ def test_helpers_agree_on_the_same_mi():
 
 
 @pytest.mark.parametrize("B,T", list(itertools.product([1, 2, 4], [2, 4]))[:6])
+@pytest.mark.host
+@pytest.mark.model
 def test_full_acceptance_is_the_identity_tail(B, T):
     """mi = T-1 (every candidate accepted) must take the LAST kc-1 new rows as the next taps."""
     kc, C = KC, 3

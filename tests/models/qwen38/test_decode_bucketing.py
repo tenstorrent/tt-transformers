@@ -51,6 +51,8 @@ def _padded_decode_batch(num_active, width):
     return tokens, positions
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_bucket_selection():
     """The runner pads to max_num_seqs and marks pad rows with position -1."""
     for width in (8, 32):
@@ -66,6 +68,8 @@ def test_bucket_selection():
     logger.info("PASSED: bucket selection picks smallest pow2 >= num_active and never drops active rows")
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_identity_slot_remap_does_not_disable_bucketing():
     from tt_transformers.models.qwen38.qwen36_vllm import _is_identity_slot_remap
 
@@ -75,6 +79,8 @@ def test_identity_slot_remap_does_not_disable_bucketing():
     assert not _is_identity_slot_remap(None, 8)
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_unsupported_device_sampling_fails_at_startup(expect_error):
     from tt_transformers.models.qwen38.qwen36_vllm import Qwen36ForCausalLM
 
@@ -91,6 +97,8 @@ def test_unsupported_device_sampling_fails_at_startup(expect_error):
         Qwen36ForCausalLM._validate_device_sampling_request(wrapper, True)
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_trace_buffer_reuse_is_opt_in(monkeypatch):
     from tt_transformers.models.qwen38.qwen_runtime import _mark_trace_buffers_corruptible
 
@@ -104,6 +112,8 @@ def test_trace_buffer_reuse_is_opt_in(monkeypatch):
     assert marked == ["input", "output"]
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_bucket_warmup_compiles_all_widths_before_capture(monkeypatch):
     from tt_transformers.models.qwen38.generator_interface import warmup_decode_buckets
 
@@ -153,6 +163,8 @@ def test_bucket_warmup_compiles_all_widths_before_capture(monkeypatch):
     ]
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_bucket_trace_teardown_releases_all_stores(monkeypatch):
     from tt_transformers.models.qwen38.qwen_runtime import Generator
 
@@ -183,6 +195,8 @@ def test_bucket_trace_teardown_releases_all_stores(monkeypatch):
 
 
 @pytest.mark.parametrize("width", [1, 2, 4, 8])
+@pytest.mark.host
+@pytest.mark.model
 def test_bucketed_host_logits_are_padded_to_serving_width(monkeypatch, width):
     """Host sampling must keep one complete vocabulary vector per active row."""
     serving_width, vocab = 8, 16
@@ -199,6 +213,8 @@ def test_bucketed_host_logits_are_padded_to_serving_width(monkeypatch, width):
     assert torch.count_nonzero(got[width:]) == 0
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_tp8_device_logprobs_complete_full_decode_warmup(monkeypatch):
     """TP8 returns old-path sampled-token log-probs that Qwen must read from one replica."""
     from tt_transformers.models.qwen38.qwen_runtime import Generator
@@ -285,6 +301,8 @@ def _decode_once(model, tokens, positions, page_table):
 
 @torch.no_grad()
 @parametrize_mesh_tp()
+@pytest.mark.device
+@pytest.mark.model
 def test_bucketed_decode_matches_full_width(mesh_device, reset_seeds, ensure_gc):
     """Each bucket must equal the same rows of a width-8 decode.
 
@@ -354,6 +372,8 @@ def _mark_trace_buffers_corruptible(value):
 
 @torch.no_grad()
 @_parametrize_traced()
+@pytest.mark.device
+@pytest.mark.model
 def test_gdn_prefix_write_trace(mesh_device, reset_seeds, ensure_gc):
     """Prove a trace-safe prefix update for the fixed-capacity GDN state.
 
@@ -466,6 +486,8 @@ def test_gdn_prefix_write_trace(mesh_device, reset_seeds, ensure_gc):
 @torch.no_grad()
 @_parametrize_traced()
 @pytest.mark.parametrize("n_layers", [None], ids=["all64"])
+@pytest.mark.device
+@pytest.mark.model
 def test_decode_width_scaling_traced(mesh_device, n_layers, reset_seeds, ensure_gc):
     """DEVICE time vs decode width on the traced path. Full layer count for served tok/s compare."""
     from tt_transformers.models.qwen38.v1.common import copy_host_to_device
@@ -528,6 +550,8 @@ def test_decode_width_scaling_traced(mesh_device, n_layers, reset_seeds, ensure_
 
 @torch.no_grad()
 @_parametrize_traced()
+@pytest.mark.device
+@pytest.mark.model
 def test_decode_capacity_width1_traced(mesh_device, reset_seeds, ensure_gc):
     """Capacity-only device cost at live width 1 (true Bmax=1 vs Bmax=8).
 
@@ -670,6 +694,8 @@ def test_decode_capacity_width1_traced(mesh_device, reset_seeds, ensure_gc):
 
 @torch.no_grad()
 @_parametrize_traced()
+@pytest.mark.device
+@pytest.mark.model
 def test_decode_step_host_overhead(mesh_device, reset_seeds, ensure_gc):
     """Time per-step host preparation and H2D copy against device replay."""
     from tt_transformers.models.qwen38.v1.common import copy_host_to_device
@@ -726,6 +752,8 @@ def test_decode_step_host_overhead(mesh_device, reset_seeds, ensure_gc):
 
 @torch.no_grad()
 @_parametrize_traced()
+@pytest.mark.device
+@pytest.mark.model
 def test_bucketed_on_device_sampling_traces(mesh_device, reset_seeds, ensure_gc):
     """Bucketing + ON-DEVICE sampling, alternating widths. This is the SERVED config.
 
@@ -831,6 +859,8 @@ def test_bucketed_on_device_sampling_traces(mesh_device, reset_seeds, ensure_gc)
 
 @torch.no_grad()
 @_parametrize_traced(trace_bytes=1073741824)  # exactly the b8 model spec's trace_region_size
+@pytest.mark.device
+@pytest.mark.model
 def test_all_buckets_fit_trace_region(mesh_device, reset_seeds, ensure_gc):
     """Four live decode and sampling traces fit in 1 GB and remain replay-safe."""
     from tt_transformers.models.qwen38.v1.common import copy_host_to_device

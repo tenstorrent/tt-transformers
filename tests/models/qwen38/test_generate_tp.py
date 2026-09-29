@@ -19,11 +19,15 @@ Run:
 
 import os
 
+import pytest
+
 from tests.models.qwen38.test_factory import model_path, parametrize_mesh_tp
 from tt_transformers.models.qwen38.model import Qwen36Model
 
 
 @parametrize_mesh_tp()
+@pytest.mark.device
+@pytest.mark.model
 def test_generate_tp_stateful(mesh_device, ensure_gc):
     from loguru import logger
 

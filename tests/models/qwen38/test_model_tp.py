@@ -34,6 +34,8 @@ from tt_transformers.models.qwen38.v1.utility import comp_pcc
 
 @torch.no_grad()
 @parametrize_mesh_tp()
+@pytest.mark.device
+@pytest.mark.model
 def test_model_tp_contract(mesh_device, reset_seeds, ensure_gc):
     nd = mesh_device.get_num_devices()
     assert nd > 1, "this test exercises the TP (num_devices>1) contract path"
@@ -99,6 +101,8 @@ def test_model_tp_contract(mesh_device, reset_seeds, ensure_gc):
 
 @torch.no_grad()
 @parametrize_mesh_tp()
+@pytest.mark.device
+@pytest.mark.model
 def test_model_tp_long_prefill(mesh_device, reset_seeds, ensure_gc):
     """TP long-prompt (>2048) prefill: the chunk-outer eager path must carry GDN recurrent +
     conv state across the chunk boundary to match the bespoke single-pass prefill. T=2304 =>
@@ -135,6 +139,8 @@ def test_model_tp_long_prefill(mesh_device, reset_seeds, ensure_gc):
 @torch.no_grad()
 @parametrize_mesh_tp()
 @pytest.mark.parametrize("T", [4096, 4352], ids=["exact_2chunks", "2chunks_plus_tail"])
+@pytest.mark.device
+@pytest.mark.model
 def test_model_tp_long_prefill_traced(mesh_device, T, reset_seeds, ensure_gc):
     """TP long-prompt (>2048) prefill via the CAPTURED chunk-outer trace — the path vLLM serves
     at long ISL (and the fix for the eager path's >7872-token crash). Replays the per-chunk trace
@@ -183,6 +189,8 @@ def test_model_tp_long_prefill_traced(mesh_device, T, reset_seeds, ensure_gc):
 
 
 @parametrize_mesh_tp()
+@pytest.mark.device
+@pytest.mark.model
 def test_prefill_warmup_no_recompile(mesh_device, reset_seeds, ensure_gc):
     """After capture_prefill_trace_chunked parks the trace, a request-time masked-bucket prefill
     must reuse warmed programs only -- a post-park compile clobbers the trace (#48536).
@@ -235,6 +243,8 @@ def test_prefill_warmup_no_recompile(mesh_device, reset_seeds, ensure_gc):
 # B32 dropped (#50969 CI budget): width 32 reaches no branch B8 misses, and the oracle runs B
 # independent B=1 chains. Width 32 stays covered by test_model_tp_prefill_chunked_batched.
 @pytest.mark.parametrize("B", [8], ids=["B8"])
+@pytest.mark.device
+@pytest.mark.model
 def test_model_tp_decode_batched(mesh_device, B, reset_seeds, ensure_gc):
     """Batched per-user decode contract (TP): higher-batch serving acceptance test.
 
@@ -318,6 +328,8 @@ def test_model_tp_decode_batched(mesh_device, B, reset_seeds, ensure_gc):
 @torch.no_grad()
 @parametrize_mesh_tp()
 @pytest.mark.parametrize("B", [8], ids=["B8"])
+@pytest.mark.device
+@pytest.mark.model
 def test_model_tp_prefill_paged_slots(mesh_device, B, reset_seeds, ensure_gc):
     """vLLM continuous-batching prefill contract (TP): per-slot prefill acceptance test.
 
@@ -409,6 +421,8 @@ def test_model_tp_prefill_paged_slots(mesh_device, B, reset_seeds, ensure_gc):
 @parametrize_mesh_tp()
 @pytest.mark.parametrize("T", [4096, 4352], ids=["exact_2chunks", "2chunks_plus_tail"])
 @pytest.mark.parametrize("traced", [False, True], ids=["eager", "traced"])
+@pytest.mark.device
+@pytest.mark.model
 def test_model_tp_prefill_paged_slots_long(mesh_device, T, traced, reset_seeds, ensure_gc, request):
     """Online vLLM per-slot prefill (prefill_paged_slots) for LONG prompts (>2048) at B>1.
 
@@ -567,6 +581,8 @@ def test_model_tp_prefill_paged_slots_long(mesh_device, T, traced, reset_seeds, 
 @parametrize_mesh_tp()
 # B32 dropped (#50969 CI budget): same reason as test_model_tp_decode_batched.
 @pytest.mark.parametrize("B", [8], ids=["B8"])
+@pytest.mark.device
+@pytest.mark.model
 def test_model_tp_prefill_traced_bucket(mesh_device, B, reset_seeds, ensure_gc, request):
     """Traced batched short-prompt prefill (TP): traced-bucket-prefill acceptance test.
 
@@ -710,6 +726,8 @@ def test_model_tp_prefill_traced_bucket(mesh_device, B, reset_seeds, ensure_gc, 
 # {128,1024,2048,4096}, so it covers the short-via-masked-bucket + 1-chunk + 2-chunk branches in one
 # batch; isl4096-B32 keeps the uniform-long, max-width capacity case that "mixed" does not reach.
 @pytest.mark.parametrize("seqlen, B", [("mixed", 8), (4096, 32)], ids=["mixed-B8", "isl4096-B32"])
+@pytest.mark.device
+@pytest.mark.model
 def test_model_tp_prefill_chunked_batched(mesh_device, B, seqlen, reset_seeds, ensure_gc, request):
     """Batched per-user long prefill (TP): chunked-batched-prefill acceptance test.
 

@@ -46,6 +46,8 @@ STATE_PCC = 0.99
 # --------------------------------------------------------------------------- #
 # Masked fixed-bucket prefill
 # --------------------------------------------------------------------------- #
+@pytest.mark.host
+@pytest.mark.model
 def test_mask_bucket_rounding():
     """Bucket rounding (no device): every length maps to the smallest fixed bucket >= it."""
     from tt_transformers.models.qwen38.model import Qwen36Model
@@ -100,6 +102,8 @@ def test_mask_bucket_rounding():
         "len2000_b2048",
     ],
 )
+@pytest.mark.device
+@pytest.mark.model
 def test_masked_bucket_matches_reference(device, actual_len, bucket):
     device.enable_program_cache()
 
@@ -162,6 +166,8 @@ def test_masked_bucket_matches_reference(device, actual_len, bucket):
 
 
 @pytest.mark.parametrize("device_params", DEVICE_PARAMS, indirect=True)
+@pytest.mark.device
+@pytest.mark.model
 def test_masked_bucket_after_trace_capture(device):
     """The vLLM scenario: a chunk-prefill trace is parked AND the masked buckets are warmed
     (exactly what capture_prefill_trace_chunked now does), THEN short prompts of varying
@@ -214,6 +220,8 @@ def test_masked_bucket_after_trace_capture(device):
     [2098, 2748, 3548],
     ids=["chunk1_tail50_b128", "chunk1_tail700_b1024", "chunk1_tail1500_b2048"],
 )
+@pytest.mark.device
+@pytest.mark.model
 def test_traced_chunked_tail_matches_reference(device, actual_len):
     """Long-prompt path: prefill_traced_chunked replays the parked chunk trace for the full
     2048-token chunk, then runs the partial FINAL chunk through the masked-bucket path with the
@@ -281,6 +289,8 @@ def test_traced_chunked_tail_matches_reference(device, actual_len):
     [6144, 5000, 73728],
     ids=["full_3chunks", "partial_last_chunk", "nopad_past_64k"],
 )
+@pytest.mark.device
+@pytest.mark.model
 def test_chunked_replay_matches_reference(device, actual_len):
     """Chunk-outer per-chunk-replay prefill == non-traced layer-outer reference (chunk-seq).
 

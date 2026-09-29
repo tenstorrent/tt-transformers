@@ -21,6 +21,7 @@ Run:
 
 import os
 
+import pytest
 import torch
 import ttnn
 from loguru import logger
@@ -61,6 +62,8 @@ def _rope_torch(x, rope_dim, theta):  # x: [S, H, HD]
 @torch.no_grad()
 @parametrize_mesh_tp()
 @parametrize_batch(batches=(8, 32))
+@pytest.mark.device
+@pytest.mark.model
 def test_attention_tp(mesh_device, B, reset_seeds, ensure_gc, request):
     os.environ.setdefault("HF_MODEL", model_path())
     args = Qwen36ModelArgs(mesh_device, max_batch_size=B, max_seq_len=256)
@@ -125,6 +128,8 @@ def test_attention_tp(mesh_device, B, reset_seeds, ensure_gc, request):
 
 @torch.no_grad()
 @parametrize_mesh_tp()
+@pytest.mark.device
+@pytest.mark.model
 def test_attention_tp_prefill(mesh_device, reset_seeds, ensure_gc, request):
     os.environ.setdefault("HF_MODEL", model_path())
     S = 64
@@ -179,6 +184,8 @@ def test_attention_tp_prefill(mesh_device, reset_seeds, ensure_gc, request):
 
 @torch.no_grad()
 @parametrize_mesh_tp()
+@pytest.mark.device
+@pytest.mark.model
 def test_attention_tp_paged(mesh_device, reset_seeds, ensure_gc, request):
     os.environ.setdefault("HF_MODEL", model_path())
     args = Qwen36ModelArgs(mesh_device, max_batch_size=1, max_seq_len=256)
@@ -263,6 +270,8 @@ def test_attention_tp_paged(mesh_device, reset_seeds, ensure_gc, request):
 @torch.no_grad()
 @parametrize_mesh_tp()
 @parametrize_batch(batches=(8, 32))
+@pytest.mark.device
+@pytest.mark.model
 def test_attention_tp_paged_peruser(mesh_device, B, reset_seeds, ensure_gc, request):
     """Per-user batched paged decode (the serving contract).
 
@@ -379,6 +388,8 @@ def test_attention_tp_paged_peruser(mesh_device, B, reset_seeds, ensure_gc, requ
 
 @torch.no_grad()
 @parametrize_mesh_only()
+@pytest.mark.device
+@pytest.mark.model
 def test_attention_tp_qknorm_offset(mesh_device):
     """Regression: load_attention_weights_tp must add +1 to q_norm/k_norm (the 64k-retrieval fix).
 

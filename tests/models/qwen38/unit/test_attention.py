@@ -12,14 +12,15 @@ import torch
 import ttnn
 from loguru import logger
 
-from tests.models.qwen38.test_factory import compute_pcc, get_pcc_threshold
-from tt_transformers.models.qwen38.v1.utility import run_for_blackhole
+from tests.models.qwen38.test_factory import compute_pcc, get_pcc_threshold, run_for_blackhole
 
 from .conftest import DEVICE_PARAMS
 
 pytestmark = [run_for_blackhole(), pytest.mark.parametrize("device_params", DEVICE_PARAMS, indirect=True)]
 
 
+@pytest.mark.device
+@pytest.mark.model
 def test_gated_attention_pcc(device, setup, request):
     """Compare TTNN gated attention against the torch reference for layer 3."""
     args, sd, raw = setup

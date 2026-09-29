@@ -48,6 +48,8 @@ from tt_transformers.models.qwen38.v1.utility import comp_pcc
 @torch.no_grad()
 @parametrize_mesh_tp()
 @parametrize_batch()
+@pytest.mark.device
+@pytest.mark.model
 def test_gdn_tp(mesh_device, B, reset_seeds, ensure_gc, request):
     """Validate TP decode output against a hand-written PyTorch reference at pos0 (batch sweep).
 
@@ -118,6 +120,8 @@ def test_gdn_tp(mesh_device, B, reset_seeds, ensure_gc, request):
 @torch.no_grad()
 @parametrize_mesh_tp()
 @pytest.mark.parametrize("high_precision", [pytest.param(True, id="fp32"), pytest.param(False, id="bf16")])
+@pytest.mark.device
+@pytest.mark.model
 def test_gdn_tp_decode_recurrence_state(mesh_device, high_precision, reset_seeds, ensure_gc, request):
     """Multi-step T=1 decode: output AND recurrent state vs a torch reference each step.
 
@@ -189,6 +193,8 @@ def test_gdn_tp_decode_recurrence_state(mesh_device, high_precision, reset_seeds
 @torch.no_grad()
 @parametrize_mesh_tp()
 @parametrize_batch(batches=(8, 32))
+@pytest.mark.device
+@pytest.mark.model
 def test_gdn_tp_peruser_state(mesh_device, B, reset_seeds, ensure_gc, request):
     """Per-user GDN prefill stitched into the batched decode state.
 
@@ -253,6 +259,8 @@ def test_gdn_tp_peruser_state(mesh_device, B, reset_seeds, ensure_gc, request):
 @torch.no_grad()
 @parametrize_mesh_tp()
 @parametrize_batch(batches=(8,))
+@pytest.mark.device
+@pytest.mark.model
 def test_gdn_tp_write_slot_and_remap(mesh_device, B, reset_seeds, ensure_gc, request):
     """Per-slot GDN state edits for vLLM continuous batching: write_slot + remap_slots.
 
@@ -334,6 +342,8 @@ def test_gdn_tp_write_slot_and_remap(mesh_device, B, reset_seeds, ensure_gc, req
 # clashes/trips the BH <= compute_grid assert). Batched prefill itself is bit-exact (PCC 1.0);
 # serving B=32 would need grouped launches, so the model still prefills per-user.
 @parametrize_batch(batches=(2, 4))
+@pytest.mark.device
+@pytest.mark.model
 def test_gdn_tp_batched_prefill(mesh_device, B, reset_seeds, ensure_gc, request):
     """True batched GDN prefill (one pass over all B users) vs B independent B=1 prefills.
 
@@ -398,6 +408,8 @@ def test_gdn_tp_batched_prefill(mesh_device, B, reset_seeds, ensure_gc, request)
 @torch.no_grad()
 @parametrize_mesh_tp()
 @parametrize_batch(batches=(2,))
+@pytest.mark.device
+@pytest.mark.model
 def test_gdn_tp_batched_prefill_chunked(mesh_device, B, reset_seeds, ensure_gc, request):
     """Chunk-outer BATCHED GDN prefill (forward_prefill_batched carry=True) == single-shot.
 
@@ -448,6 +460,8 @@ def test_gdn_tp_batched_prefill_chunked(mesh_device, B, reset_seeds, ensure_gc, 
 
 @torch.no_grad()
 @parametrize_mesh_tp()
+@pytest.mark.device
+@pytest.mark.model
 def test_gdn_tp_prefill(mesh_device, reset_seeds, ensure_gc, request):
     """Check that chunk-prefill and step-by-step decode agree on the same T=128 tokens.
 
@@ -494,6 +508,8 @@ def test_gdn_tp_prefill(mesh_device, reset_seeds, ensure_gc, request):
 
 @torch.no_grad()
 @parametrize_mesh_tp()
+@pytest.mark.device
+@pytest.mark.model
 def test_gdn_tp_fused_chunk_prefill(mesh_device, monkeypatch, reset_seeds, ensure_gc, request):
     """Isolate main's fused chunk_gated_delta_rule kernel (the DEFAULT prefill path).
 
@@ -592,6 +608,8 @@ def _restore_layer_state(gdn, mesh_device, snap):
 
 @torch.no_grad()
 @parametrize_mesh_tp()
+@pytest.mark.device
+@pytest.mark.model
 def test_gdn_chunk_vs_recurrent_attribution(mesh_device, reset_seeds, ensure_gc, request):
     """Localize the chunk-vs-recurrent divergence that speculative decoding runs into.
 

@@ -14,6 +14,7 @@ Run:
 
 import os
 
+import pytest
 import torch
 import ttnn
 from loguru import logger
@@ -34,6 +35,8 @@ from tt_transformers.models.qwen38.v1.utility import comp_pcc
 
 @torch.no_grad()
 @parametrize_mesh_tp()
+@pytest.mark.device
+@pytest.mark.model
 def test_mlp_tp(mesh_device, reset_seeds, ensure_gc, request):
     os.environ.setdefault("HF_MODEL", model_path())
     args = Qwen36ModelArgs(mesh_device, max_batch_size=1, max_seq_len=256)
@@ -68,6 +71,8 @@ def test_mlp_tp(mesh_device, reset_seeds, ensure_gc, request):
 
 @torch.no_grad()
 @parametrize_mesh_tp()
+@pytest.mark.device
+@pytest.mark.model
 def test_mlp_tp_prefill(mesh_device, reset_seeds, ensure_gc, request):
     """Prefill-path (S>32) TP MLP vs torch SwiGLU. Exercises the 2D prefill matmul for w1/w3
     and the (now default) explicit w2 down-proj progcfg."""

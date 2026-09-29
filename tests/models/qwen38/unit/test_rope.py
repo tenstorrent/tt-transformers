@@ -22,11 +22,8 @@ import torch
 import ttnn
 from loguru import logger
 
-from tests.models.qwen38.test_factory import compute_pcc
+from tests.models.qwen38.test_factory import compute_pcc, run_for_blackhole
 from tt_transformers.models.qwen38.rope import Qwen36RoPESetup, compute_rope_freqs
-from tt_transformers.models.qwen38.v1.utility import run_for_blackhole
-
-pytestmark = run_for_blackhole()
 
 # Qwen3.5-9B partial-rotary constants (see tt/rope.py and tt/model_config.py).
 # A small max_seq_len keeps the precomputed table cheap — the code path that
@@ -59,17 +56,23 @@ def rope_setup(device):
 class TestComputeRopeFreqs:
     """Analytic properties of the host-side cos/sin generator (no device)."""
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_shapes(self):
         cos, sin = compute_rope_freqs(ROPE_HEAD_DIM, MAX_SEQ_LEN, theta=ROPE_THETA)
         assert cos.shape == (MAX_SEQ_LEN, ROPE_HEAD_DIM)
         assert sin.shape == (MAX_SEQ_LEN, ROPE_HEAD_DIM)
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_position_zero_is_identity(self):
         # At position 0 every angle is 0 -> cos == 1, sin == 0 (no rotation).
         cos, sin = compute_rope_freqs(ROPE_HEAD_DIM, MAX_SEQ_LEN, theta=ROPE_THETA)
         assert torch.allclose(cos[0], torch.ones(ROPE_HEAD_DIM))
         assert torch.allclose(sin[0], torch.zeros(ROPE_HEAD_DIM))
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_neox_half_duplication(self):
         # GPT-NeoX layout: table = cat([angles, angles]) so the first and second
         # halves are identical. A regression to interleaved (Meta) layout breaks this.
@@ -78,12 +81,16 @@ class TestComputeRopeFreqs:
         assert torch.allclose(cos[:, :half], cos[:, half:])
         assert torch.allclose(sin[:, :half], sin[:, half:])
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_unit_circle(self):
         # cos^2 + sin^2 == 1 for every position/frequency.
         cos, sin = compute_rope_freqs(ROPE_HEAD_DIM, MAX_SEQ_LEN, theta=ROPE_THETA)
         ones = torch.ones_like(cos)
         assert torch.allclose(cos**2 + sin**2, ones, atol=1e-4)
 
+    @pytest.mark.host
+    @pytest.mark.model
     def test_theta_controls_frequency(self):
         # A larger theta -> lower frequencies -> slower rotation, so at a fixed
         # (late) position the angle is smaller and cos stays closer to 1. The
@@ -97,9 +104,12 @@ class TestComputeRopeFreqs:
         assert cos_hi[late_pos, last_freq] > cos_lo[late_pos, last_freq]
 
 
+@run_for_blackhole()
 class TestRoPEDeviceTable:
     """The precomputed on-device cos/sin table must match the host reference."""
 
+    @pytest.mark.device
+    @pytest.mark.model
     def test_device_table_matches_reference(self, rope_setup):
         setup, args = rope_setup
         cos_ref, sin_ref = compute_rope_freqs(args.rope_head_dim, args.max_seq_len, theta=args.rope_theta)
@@ -119,10 +129,13 @@ class TestRoPEDeviceTable:
         assert cos_err < MAX_ABS_DIFF and sin_err < MAX_ABS_DIFF
 
 
+@run_for_blackhole()
 class TestGetRotMats:
     """The lookup path used by attention: decode (single pos) and prefill (range)."""
 
     @pytest.mark.parametrize("pos", [0, 1, 100, 1000, 4096])
+    @pytest.mark.device
+    @pytest.mark.model
     def test_decode_fast_path(self, rope_setup, pos):
         # T == 1 and B == 1 hits the fast path that slices the device table.
         setup, args = rope_setup
@@ -139,6 +152,8 @@ class TestGetRotMats:
         assert sin_err < MAX_ABS_DIFF, f"sin mismatch at pos {pos}: {sin_err}"
 
     @pytest.mark.parametrize("seq_len", [4, 128])
+    @pytest.mark.device
+    @pytest.mark.model
     def test_prefill_range(self, rope_setup, seq_len):
         # T > 1 hits the general path that builds a fresh tensor from cos_cpu.
         setup, args = rope_setup
@@ -156,6 +171,8 @@ class TestGetRotMats:
         assert sin_pcc > PCC_THRESHOLD, f"sin PCC too low for T={seq_len}: {sin_pcc}"
 
     @pytest.mark.parametrize("pos", [0, 1, 500, 2047])
+    @pytest.mark.device
+    @pytest.mark.model
     def test_get_cos_sin_host(self, rope_setup, pos):
         # The host-DMA helper used to refresh the traced decode buffers must return
         # the same row, on host, shaped [1, 1, head_dim].
