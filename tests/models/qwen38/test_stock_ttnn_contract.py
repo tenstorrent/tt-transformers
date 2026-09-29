@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import pytest
+import ttnn
 
 from tt_transformers.models.qwen38 import model_config
 from tt_transformers.models.qwen38.gdn.tp import _resolve_v6_kda_tile_input
@@ -9,9 +10,11 @@ from tt_transformers.models.qwen38.gdn.tp import _resolve_v6_kda_tile_input
 
 @pytest.mark.host
 @pytest.mark.model
+@pytest.mark.skipif(
+    not hasattr(ttnn, "QkvCausalConv1dSiluProgramConfig"),
+    reason="requires the declared TTNN 0.79.1 release-line QKV-convolution surface",
+)
 def test_native_kda_program_config_uses_the_public_ttnn_surface():
-    import ttnn
-
     config = ttnn.QkvCausalConv1dSiluProgramConfig(channel_chunk_size=256)
     assert config.channel_chunk_size == 256
 

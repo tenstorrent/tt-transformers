@@ -59,13 +59,13 @@ def test_all_production_from_pretrained_calls_forbid_implicit_remote_code():
 
 
 @pytest.mark.host
-def test_transformers_5_12_has_builtin_qwen_loader_registrations():
+def test_transformers_5_17_has_builtin_qwen_loader_registrations():
     import transformers
     from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES
     from transformers.models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
     from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
 
-    assert transformers.__version__ == "5.12.1"
+    assert transformers.__version__ == "5.17.0"
     assert {name: CONFIG_MAPPING_NAMES[name] for name in ("qwen2", "qwen3")} == {
         "qwen2": "Qwen2Config",
         "qwen3": "Qwen3Config",
