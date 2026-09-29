@@ -1,13 +1,12 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC.
 
 # SPDX-License-Identifier: Apache-2.0
-import os
-
 import pytest
 import torch
 import ttnn
 from loguru import logger
 
+from tests.models.qwen38.test_factory import _resolve_mesh_shape
 from tt_transformers.models.qwen38.v1.load_checkpoints import (
     convert_hf_to_meta,
     convert_rope_style_hf_to_meta,
@@ -22,17 +21,7 @@ from tt_transformers.models.qwen38.vision.vision_model_config import VisionModel
 @torch.no_grad()
 @pytest.mark.parametrize(
     "mesh_device",
-    [
-        {
-            "N150": (1, 1),
-            "N300": (1, 2),
-            "T3K": (1, 8),
-            "TG": (8, 4),
-            "P150x4": (1, 4),
-            "P150x8": (1, 8),
-            "P150": (1, 1),
-        }.get(os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids()))
-    ],
+    [_resolve_mesh_shape()],
     indirect=True,
 )
 @pytest.mark.parametrize(
