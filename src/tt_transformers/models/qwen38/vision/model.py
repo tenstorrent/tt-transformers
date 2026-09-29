@@ -2,8 +2,6 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-import os
-
 import torch
 import ttnn
 from loguru import logger
@@ -20,6 +18,12 @@ from tt_transformers.models.qwen38.v1.utility import comp_pcc
 from tt_transformers.models.qwen38.vision.functional import qwen3_5_vision_transformer_preprocess
 from tt_transformers.modules.lightweightmodule import LightweightModule
 
+from .input_validation import (
+    build_qwen36_window_boundaries,
+    get_qwen36_vision_bucket,
+    qwen36_vision_high_detail_enabled,
+    validate_qwen36_packed_images,
+)
 from .patch_merger import PatchMerger
 from .vision_block import VisionBlock
 from .vision_model_config import VisionModelArgs
@@ -137,6 +141,7 @@ class VisionTransformer(LightweightModule):
         x,
         unpadded_seq_len,
         rot_mats,
+        cu_window_seqlens=None,
     ):
         """
         Forward pass through the Vision Transformer blocks.
@@ -156,6 +161,7 @@ class VisionTransformer(LightweightModule):
             x = block(
                 x,
                 rot_mats=rot_mats,
+                cu_window_seqlens=cu_window_seqlens,
             )
 
         # The PatchMerger consumes the block output fractured along dim=3
@@ -235,38 +241,12 @@ class DropInVisionTransformer(torch.nn.Module):
         Returns:
             torch.Tensor: Output tensor with shape [1, B, seq_len, out_hidden_size].
         """
-        if not isinstance(pixel_values, torch.Tensor) or pixel_values.dim() != 2:
-            raise ValueError(
-                "pixel_values must be a packed rank-2 torch tensor "
-                f"[num_patches, patch_dim], got {type(pixel_values).__name__} "
-                f"with shape {getattr(pixel_values, 'shape', None)}"
-            )
-        if not isinstance(grid_thw, torch.Tensor):
-            grid_thw = torch.as_tensor(grid_thw)
-        if grid_thw.dim() == 1:
-            grid_thw = grid_thw.unsqueeze(0)
-        if grid_thw.dim() != 2 or grid_thw.shape[1] != 3:
-            raise ValueError(f"grid_thw must have shape [N, 3], got {tuple(grid_thw.shape)}")
-        if grid_thw.numel() == 0 or bool((grid_thw <= 0).any()):
-            raise ValueError("grid_thw must contain one or more strictly positive (t,h,w) rows")
+        grid_thw = validate_qwen36_packed_images(
+            pixel_values,
+            grid_thw,
+            spatial_merge_size=self.spatial_merge_size,
+        )
         merge = int(self.spatial_merge_size)
-        if bool((grid_thw[:, 1:] % merge != 0).any()):
-            raise ValueError(
-                f"grid height and width must be divisible by spatial_merge_size={merge}: {grid_thw.tolist()}"
-            )
-        expected_patches = sum(int(row.prod().item()) for row in grid_thw)
-        if int(pixel_values.shape[0]) != expected_patches:
-            raise ValueError(
-                f"pixel_values has {int(pixel_values.shape[0])} packed rows, but grid_thw requires {expected_patches}"
-            )
-        max_patches = int(os.environ.get("QWEN36_VISION_MAX_PATCHES", "4095"))
-        oversized = [int(row.prod().item()) for row in grid_thw if int(row.prod().item()) > max_patches]
-        if oversized:
-            raise ValueError(
-                "processed image exceeds the pre-warmed vision limit: "
-                f"patches={oversized}, maximum={max_patches}; configure the Qwen image processor "
-                "with max_pixels <= maximum*patch_size**2"
-            )
 
         # Process each image separately, as V1 does. Returned rows are host
         # owned, so no request-local vision allocation survives into parked
@@ -285,7 +265,7 @@ class DropInVisionTransformer(torch.nn.Module):
             grid_thw = grid_thw.unsqueeze(0)
             unpadded_seq_len = grid_thw.prod(dim=1).sum().item()
             # Calculate padded sequence length (divisible by 2048) required by models/tt_transformers/tt/attention.py::forward_prefill
-            seq_len = ((unpadded_seq_len // 2048) + 1) * 2048
+            seq_len = get_qwen36_vision_bucket(grid_thw)
 
             # 2. Use preprocessing function from reference/functional to get indices and embeddings
             cu_seqlens, position_embeddings = qwen3_5_vision_transformer_preprocess(
@@ -331,6 +311,21 @@ class DropInVisionTransformer(torch.nn.Module):
             )
             rot_mats = [cos, sin]
 
+            # High-detail mode preserves the reference model's variable-length
+            # attention semantics. Real patches use HF's cumulative windows;
+            # the physical bucket tail is isolated in one padding-only window.
+            cu_window_seqlens = None
+            if qwen36_vision_high_detail_enabled():
+                boundaries = build_qwen36_window_boundaries(cu_seqlens, seq_len=seq_len)
+                cu_window_seqlens = ttnn.from_torch(
+                    torch.tensor(boundaries, dtype=torch.int32),
+                    dtype=ttnn.uint32,
+                    layout=ttnn.ROW_MAJOR_LAYOUT,
+                    device=self.model_args.mesh_device,
+                    memory_config=ttnn.DRAM_MEMORY_CONFIG,
+                    mesh_mapper=ttnn.ReplicateTensorToMesh(self.model_args.mesh_device),
+                )
+
             # 5. Prepare input tensor for the TT model using window_index
             tt_input = self.tt_model.prepare_input(patch_input, seq_len)
 
@@ -339,12 +334,15 @@ class DropInVisionTransformer(torch.nn.Module):
                 tt_input,
                 unpadded_seq_len=unpadded_seq_len,
                 rot_mats=rot_mats,  # Use rot_mats generated in this forward pass
+                cu_window_seqlens=cu_window_seqlens,
             )
 
             # deallocate device tensors that are not needed by decode
             ttnn.deallocate(tt_input)
             ttnn.deallocate(cos)
             ttnn.deallocate(sin)
+            if cu_window_seqlens is not None:
+                ttnn.deallocate(cu_window_seqlens)
 
             # --- Postprocessing ---
             # 1. Extract the relevant output part and adjust shape (matching test logic).
@@ -367,7 +365,7 @@ class DropInVisionTransformer(torch.nn.Module):
 
             if self.debug:
                 logger.info("DropInVisionTransformer: Debug enabled, running reference model...")
-                reference_output = self.reference_model.forward(pixel_values, grid_thw)
+                reference_output = self.reference_model.forward(pixel_values, grid_thw).pooler_output
                 _, pcc = comp_pcc(reference_output, final_output_host)
                 logger.info(f"DropInVisionTransformer: PCC to reference model: {pcc}")
 
