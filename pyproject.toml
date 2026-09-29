@@ -50,9 +50,6 @@ test = [
   "huggingface-hub>=0.30.0",
   "tqdm==4.66.3",
 ]
-vllm = [
-  "vllm==0.26.0",
-]
 yaml = [
   "PyYAML>=6.0,<7",
 ]
