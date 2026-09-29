@@ -121,6 +121,16 @@ def test_high_detail_rejects_the_first_unwarmed_bucket(monkeypatch):
 
 @pytest.mark.host
 @pytest.mark.model
+def test_high_detail_accepts_largest_merge_valid_grid_with_four_row_tail(monkeypatch):
+    monkeypatch.setenv("QWEN36_VISION_HIGH_DETAIL", "1")
+    grid = torch.tensor([[1, 46, 178]])
+    validate_qwen36_packed_images(_pixels(8188), grid, spatial_merge_size=2)
+    assert get_qwen36_vision_bucket(grid) == 8192
+    assert build_qwen36_window_boundaries(torch.tensor([0, 8188]), seq_len=8192) == [0, 8188, 8192]
+
+
+@pytest.mark.host
+@pytest.mark.model
 def test_window_boundaries_append_one_padding_only_segment():
     assert build_qwen36_window_boundaries(torch.tensor([0, 7296]), seq_len=8192) == [0, 7296, 8192]
     with pytest.raises(ValueError, match="start at zero"):
