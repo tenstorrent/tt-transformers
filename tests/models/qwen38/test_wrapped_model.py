@@ -104,3 +104,67 @@ def test_wrapped_vision_model_inference(
     else:
         logger.warning(f"{test_desc} Failed!")
     assert passing, f"PCC value is lower than {pcc} for some of the outputs. Check Warnings!"
+
+
+@torch.no_grad()
+@pytest.mark.parametrize(
+    "mesh_device",
+    [_resolve_mesh_shape()],
+    indirect=True,
+)
+@pytest.mark.parametrize(
+    "grid,num_layers",
+    [
+        ((1, 32, 32), 2),
+        ((1, 58, 62), 2),
+        ((1, 64, 64), 2),
+        ((1, 76, 96), 2),
+        ((1, 76, 96), None),
+    ],
+    ids=["2k", "4k", "6k", "8k", "8k-all-layers"],
+)
+@pytest.mark.parametrize("device_params", [{"fabric_config": ttnn.FabricConfig.FABRIC_1D}], indirect=True)
+@pytest.mark.device
+@pytest.mark.model
+def test_wrapped_vision_model_high_detail_buckets(
+    mesh_device,
+    reset_seeds,
+    ensure_gc,
+    grid,
+    num_layers,
+    monkeypatch,
+):
+    """Cover every finite high-detail bucket, including the full 8K tower."""
+
+    monkeypatch.setenv("QWEN36_VISION_HIGH_DETAIL", "1")
+    dtype = ttnn.bfloat8_b
+    image_grid_thw = torch.tensor([grid])
+    ref_seq_len = int(image_grid_thw.prod().item())
+    seq_len = ((ref_seq_len // 2048) + 1) * 2048
+    pt_pixel_values = torch.randn([ref_seq_len, 1536])
+
+    model_args = VisionModelArgs(mesh_device, dummy_weights=True, max_batch_size=1, max_seq_len=seq_len)
+    if num_layers is not None:
+        model_args.hf_config.vision_config.depth = num_layers
+        from transformers import logging as transformers_logging
+
+        transformers_logging.set_verbosity_error()
+    depth = model_args.hf_config.vision_config.depth
+
+    reference_model = model_args.reference_vision_model(depth=depth)
+    torch_model = DropInVisionTransformer(reference_model, model_args, dtype=dtype, tt_ccl=TT_CCL(mesh_device))
+    reference_output = reference_model(pt_pixel_values, image_grid_thw).pooler_output
+    tt_output = torch_model(pt_pixel_values, image_grid_thw)
+    if not isinstance(tt_output, torch.Tensor):
+        tt_output = ttnn.to_torch(
+            tt_output,
+            mesh_composer=ttnn.ConcatMeshToTensor(mesh_device, dim=3),
+        )
+    tt_output = tt_output.squeeze(0).squeeze(0)
+
+    assert seq_len in (2048, 4096, 6144, 8192)
+    assert tt_output.shape == reference_output.shape
+    threshold = 0.99 if depth <= 3 else 0.91
+    passing, pcc_message = comp_pcc(reference_output, tt_output, threshold)
+    logger.info(f"grid={grid}, bucket={seq_len}, depth={depth}, PCC: {pcc_message}")
+    assert passing, f"PCC value is lower than {threshold} for grid={grid}, bucket={seq_len}: {pcc_message}"
