@@ -59,7 +59,7 @@ from dataclasses import dataclass
 import torch
 import ttnn  # noqa: E402
 from loguru import logger
-from vllm.model_executor.models.qwen3_5 import Qwen3VLDummyInputsBuilder, Qwen3VLMultiModalProcessor  # noqa: E402
+from vllm.model_executor.models.qwen3_5 import Qwen3VLDummyInputsBuilder  # noqa: E402
 from vllm.multimodal import MULTIMODAL_REGISTRY  # noqa: E402
 
 from tt_transformers.models.qwen38.dflash2_decode import default_draft_len  # noqa: E402
@@ -71,6 +71,7 @@ from tt_transformers.models.qwen38.dflash2_serving import (  # noqa: E402
 from tt_transformers.models.qwen38.qwen36_vllm import (  # noqa: E402
     Qwen36ForCausalLM,
     TT_Qwen3_5ProcessingInfo,
+    TTQwen3VLMultiModalProcessor,
     _is_identity_slot_remap,
 )
 from tt_transformers.models.qwen38.spec_decode import MAX_SPEC_ROWS  # noqa: E402
@@ -230,7 +231,7 @@ def bucket_id(bucket):
 
 
 @MULTIMODAL_REGISTRY.register_processor(
-    Qwen3VLMultiModalProcessor, info=TT_Qwen3_5ProcessingInfo, dummy_inputs=Qwen3VLDummyInputsBuilder
+    TTQwen3VLMultiModalProcessor, info=TT_Qwen3_5ProcessingInfo, dummy_inputs=Qwen3VLDummyInputsBuilder
 )
 class Qwen36DFlashForCausalLM(Qwen36ForCausalLM):
     """Qwen36ForCausalLM + model-internal multi-user DFlash2 speculation on decode steps (see module doc)."""

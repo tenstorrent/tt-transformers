@@ -17,6 +17,7 @@ from collections.abc import Mapping
 import torch
 import ttnn
 from loguru import logger
+from vllm.exceptions import VLLMValidationError
 from vllm.model_executor.models.interfaces import SupportsMultiModal
 from vllm.model_executor.models.qwen3_5 import (
     Qwen3_5ProcessingInfo,
@@ -28,6 +29,10 @@ from vllm.multimodal import MULTIMODAL_REGISTRY
 from tt_transformers.models.qwen38.common import create_tt_model
 from tt_transformers.models.qwen38.generator_interface import prefill_dispatch, warmup_decode_buckets
 from tt_transformers.models.qwen38.qwen_runtime import Generator
+from tt_transformers.models.qwen38.vision.input_validation import (
+    qwen36_vision_high_detail_enabled,
+    validate_qwen36_packed_images,
+)
 from tt_transformers.models.qwen38.weights import resolve_hf_weights
 
 _PREFILL_WARMUP_CHUNK = 2048
@@ -62,8 +67,39 @@ class TT_Qwen3_5ProcessingInfo(Qwen3_5ProcessingInfo):
         return {"image": int(os.environ.get("QWEN36_MAX_IMAGES", "1"))}
 
 
+class TTQwen3VLMultiModalProcessor(Qwen3VLMultiModalProcessor):
+    """Reject unsupported processed image geometry before EngineCore admission."""
+
+    def _get_mm_fields_config(self, hf_inputs, hf_processor_mm_kwargs):
+        if hf_inputs.get("image_embeds") is not None:
+            raise VLLMValidationError(
+                "precomputed image_embeds are not supported by the TT Qwen vision runner",
+                parameter="image",
+            )
+
+        pixel_values = hf_inputs.get("pixel_values")
+        image_grid_thw = hf_inputs.get("image_grid_thw")
+        if pixel_values is not None or image_grid_thw is not None:
+            if pixel_values is None or image_grid_thw is None:
+                missing = "pixel_values" if pixel_values is None else "image_grid_thw"
+                raise VLLMValidationError(
+                    f"processed image input is missing {missing}",
+                    parameter="image",
+                )
+            try:
+                validate_qwen36_packed_images(
+                    pixel_values,
+                    image_grid_thw,
+                    spatial_merge_size=self.info.get_hf_config().vision_config.spatial_merge_size,
+                )
+            except ValueError as exc:
+                raise VLLMValidationError(str(exc), parameter="image") from exc
+
+        return super()._get_mm_fields_config(hf_inputs, hf_processor_mm_kwargs)
+
+
 @MULTIMODAL_REGISTRY.register_processor(
-    Qwen3VLMultiModalProcessor, info=TT_Qwen3_5ProcessingInfo, dummy_inputs=Qwen3VLDummyInputsBuilder
+    TTQwen3VLMultiModalProcessor, info=TT_Qwen3_5ProcessingInfo, dummy_inputs=Qwen3VLDummyInputsBuilder
 )
 class Qwen36ForCausalLM(Generator, SupportsMultiModal):
     """vLLM-compatible wrapper for Qwen3.5-9B on Blackhole P150."""
@@ -492,11 +528,19 @@ class Qwen36ForCausalLM(Generator, SupportsMultiModal):
         vision_cfg = model.args.hf_config.vision_config
         patch_dim = int(vision_cfg.in_channels) * int(vision_cfg.temporal_patch_size) * int(vision_cfg.patch_size) ** 2
         cache_before = model.mesh_device.num_program_cache_entries()
-        # 32x32 -> U=1024 -> S=2048; 58x62 -> U=3596 -> S=4096.
+        # Standard mode covers U<4096 with the 2K and 4K programs. High-detail
+        # mode additionally covers every admitted U<8192 with 6K and 8K
+        # programs. The tower processes multiple images one at a time, so one
+        # representative per bucket warms the 1/2/4-image serving path.
         grids = (
             torch.tensor([[1, 32, 32]], dtype=torch.int32),
             torch.tensor([[1, 58, 62]], dtype=torch.int32),
         )
+        if qwen36_vision_high_detail_enabled():
+            grids += (
+                torch.tensor([[1, 64, 64]], dtype=torch.int32),
+                torch.tensor([[1, 76, 96]], dtype=torch.int32),
+            )
         logger.info(f"Warming Qwen packed-patch vision encoder buckets (patch_dim={patch_dim})")
         for grid in grids:
             patch_count = int(grid.prod().item())

@@ -174,6 +174,81 @@ def test_qwen_vision_warmup_uses_packed_patch_contract_once(monkeypatch):
     assert wrapper._qwen_vision_warmed is True
 
 
+@pytest.mark.host
+@pytest.mark.model
+def test_qwen_high_detail_warmup_covers_all_four_buckets(monkeypatch):
+    from tt_transformers.models.qwen38 import qwen36_vllm as vllm_module
+
+    calls = []
+    mesh = SimpleNamespace(num_program_cache_entries=lambda: 19)
+    vision_cfg = SimpleNamespace(in_channels=3, temporal_patch_size=2, patch_size=16)
+
+    def get_image_features(pixels, grid):
+        calls.append((pixels.shape, grid.clone()))
+        return SimpleNamespace(embeddings=torch.zeros(1, 8, dtype=torch.bfloat16))
+
+    model = SimpleNamespace(
+        vision_model=SimpleNamespace(dtype=torch.bfloat16),
+        args=SimpleNamespace(hf_config=SimpleNamespace(vision_config=vision_cfg)),
+        mesh_device=mesh,
+        get_image_features=get_image_features,
+    )
+    wrapper = SimpleNamespace(model=[model])
+    synced = []
+    monkeypatch.setenv("QWEN36_ENABLE_VISION", "1")
+    monkeypatch.setenv("QWEN36_VISION_HIGH_DETAIL", "1")
+    monkeypatch.setattr(vllm_module.ttnn, "synchronize_device", lambda device: synced.append(device))
+
+    vllm_module.Qwen36ForCausalLM._warmup_qwen_vision(wrapper)
+
+    assert [shape for shape, _ in calls] == [
+        (1024, 1536),
+        (3596, 1536),
+        (4096, 1536),
+        (7296, 1536),
+    ]
+    assert [grid.tolist() for _, grid in calls] == [
+        [[1, 32, 32]],
+        [[1, 58, 62]],
+        [[1, 64, 64]],
+        [[1, 76, 96]],
+    ]
+    assert synced == [mesh, mesh, mesh, mesh]
+    assert wrapper._qwen_vision_warmed is True
+
+
+@pytest.mark.host
+@pytest.mark.model
+def test_qwen_high_detail_warmup_failure_does_not_latch(monkeypatch):
+    from tt_transformers.models.qwen38 import qwen36_vllm as vllm_module
+
+    mesh = SimpleNamespace(num_program_cache_entries=lambda: 0)
+    vision_cfg = SimpleNamespace(in_channels=3, temporal_patch_size=2, patch_size=16)
+    calls = 0
+
+    def get_image_features(pixels, grid):
+        nonlocal calls
+        calls += 1
+        if calls == 4:
+            raise RuntimeError("injected 8192 warmup failure")
+        return SimpleNamespace(embeddings=torch.zeros(1, 8, dtype=torch.bfloat16))
+
+    model = SimpleNamespace(
+        vision_model=SimpleNamespace(dtype=torch.bfloat16),
+        args=SimpleNamespace(hf_config=SimpleNamespace(vision_config=vision_cfg)),
+        mesh_device=mesh,
+        get_image_features=get_image_features,
+    )
+    wrapper = SimpleNamespace(model=[model])
+    monkeypatch.setenv("QWEN36_ENABLE_VISION", "1")
+    monkeypatch.setenv("QWEN36_VISION_HIGH_DETAIL", "1")
+    monkeypatch.setattr(vllm_module.ttnn, "synchronize_device", lambda device: None)
+
+    with pytest.raises(RuntimeError, match="injected 8192 warmup failure"):
+        vllm_module.Qwen36ForCausalLM._warmup_qwen_vision(wrapper)
+    assert not hasattr(wrapper, "_qwen_vision_warmed")
+
+
 @pytest.mark.parametrize(
     "pixels,grid,error",
     [
