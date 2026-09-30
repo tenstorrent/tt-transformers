@@ -43,7 +43,7 @@ from tt_transformers.modules.mlp.mlp_1d import MLP1D, MLP1DConfig, _dram_shard_c
 from tt_transformers.modules.rmsnorm.rmsnorm_1d import RMSNorm1D, RMSNorm1DConfig, _create_sharded_norm_program_config
 from tt_transformers.modules.rope.rope_1d import Rope1DConfig, RotarySetup1D, prepare_rot_idxs
 from tt_transformers.modules.sampling.sampling_1d import Sampling1D
-from tt_transformers.modules.tt_ccl import get_tt_ccl
+from tt_transformers.modules.tt_ccl import CCL_CHUNKS_PER_SYNC, CCL_NUM_WORKERS_PER_LINK, get_tt_ccl
 from tt_transformers.tensor_utils import TILE_SIZE, get_padded_hidden_dim
 
 # Pinned HF revision SHA for Qwen/Qwen3-32B (resolved 2026-06-03).
@@ -368,8 +368,11 @@ def _all_gather_rmsnorm_tensor(
         topology=_qwen3_ccl_topology(cfg.mesh_device),
         memory_config=memory_config,
         barrier_semaphore=tt_ccl.get_and_cycle_barrier_semaphore_handle(),
-        chunks_per_sync=24,
-        num_workers_per_link=4,
+        # The shared CCL defaults (10 chunks per sync, 2 workers per link). With 4 workers per
+        # link this 40 KB-per-device gather ran ≈8 µs slower on a T3K ring; over the 129 norm
+        # gathers of a decode step that was ≈1 ms (≈2%) of the batch-32 step.
+        chunks_per_sync=CCL_CHUNKS_PER_SYNC,
+        num_workers_per_link=CCL_NUM_WORKERS_PER_LINK,
         num_buffers_per_channel=2,
     )
 
@@ -392,6 +395,11 @@ class _Qwen3_32BSKUOverlay:
     lm_head_max_columns_per_device: int = 8192
     distributed_rmsnorm_min_dim_exclusive: int | None = None
     disable_batched_prefill: bool = False
+    # Decode attention op fusion. One fused Q/K rotary kernel and one fused K/V cache update
+    # replace two ops each per layer, and the width-sharded wo output feeds the reduce-scatter
+    # directly. Measured on Wormhole T3K; Blackhole keeps the separate ops until measured there.
+    attention_use_qk_fused: bool = False
+    attention_decode_rs_sharded_input: bool = False
 
 
 def _resolve_qwen3_32b_sku_overlay(*, arch, cluster_type, num_dev: int, mesh_device) -> _Qwen3_32BSKUOverlay:
@@ -409,6 +417,8 @@ def _resolve_qwen3_32b_sku_overlay(*, arch, cluster_type, num_dev: int, mesh_dev
             prefill_minimal_matmul=minimal,
             attention_prefill_qkv_grid=(8, 8),
             attention_decode_transformation_grid=mesh_device.compute_with_storage_grid_size(),
+            attention_use_qk_fused=True,
+            attention_decode_rs_sharded_input=True,
         )
     elif arch == ttnn.device.Arch.BLACKHOLE and cluster_type in QWEN3_32B_BH_TP4_CLUSTER_TYPES and num_dev == 4:
         overlay = _Qwen3_32BSKUOverlay(
@@ -463,6 +473,8 @@ def _qwen3_attention_config(
         dram_shard_grid_width=sku.dram_shard_grid_width,
         decode_create_qkv_head_grid=sku.attention_decode_create_qkv_head_grid,
         decode_transformation_core_grid=sku.attention_decode_transformation_grid,
+        use_qk_fused=sku.attention_use_qk_fused,
+        decode_rs_sharded_input=sku.attention_decode_rs_sharded_input,
     )
 
 
@@ -974,7 +986,7 @@ class Qwen3_32B(LightweightModule):
                 max_batch_size=max_batch_size,
                 head_dim=head_dim,
                 device=mesh_device,
-                use_qk_fused=False,
+                use_qk_fused=sku.attention_use_qk_fused,
                 core_grid=sku.attention_decode_transformation_grid,
             )
         )

@@ -157,6 +157,10 @@ class Attention1DConfig:
     scale: float | None = None  # Default: head_dim ** -0.5
     sliding_window: int | None = None  # For sliding window attention
     use_qk_fused: bool = False  # Fused Q/K rotary embedding
+    # Feed the width-sharded decode wo output straight to reduce_scatter_minimal_async instead
+    # of unsharding it to L1 interleaved first (one fewer op per layer). Off by default; the
+    # sharded input path is validated per model and mesh.
+    decode_rs_sharded_input: bool = False
 
     # KV cache config
     #
@@ -1232,8 +1236,8 @@ class Attention1D(LightweightModule):
             return output
 
         # For 1D topologies: reduce_scatter across devices on axis 1
-        # Convert sharded to interleaved first if needed
-        if output.is_sharded():
+        # Convert sharded to interleaved first unless the model opted into the sharded input
+        if output.is_sharded() and not cfg.decode_rs_sharded_input:
             output_interleaved = ttnn.sharded_to_interleaved(output, ttnn.L1_MEMORY_CONFIG)
             output.deallocate(True)
         else:

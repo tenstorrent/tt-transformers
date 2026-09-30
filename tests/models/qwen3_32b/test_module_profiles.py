@@ -17,6 +17,7 @@ from tt_transformers.models.qwen3_32b.model import (
     QWEN3_32B_INTERMEDIATE_SIZE,
     QWEN3_32B_PERFORMANCE,
     Qwen3_32B,
+    _all_gather_rmsnorm_tensor,
     _qwen3_attention_config,
     _qwen3_ccl_topology,
     _qwen3_lm_head_config,
@@ -138,6 +139,8 @@ def test_wormhole_t3k_overlay_preserves_baseline(monkeypatch):
     assert overlay.distributed_rmsnorm_min_dim_exclusive is None
     assert overlay.prefill_minimal_matmul is True
     assert overlay.disable_batched_prefill is False
+    assert overlay.attention_use_qk_fused is True
+    assert overlay.attention_decode_rs_sharded_input is True
 
 
 @pytest.mark.host
@@ -169,6 +172,8 @@ def test_blackhole_four_die_overlay_and_lm_splits(cluster_type, monkeypatch):
     assert overlay.distributed_rmsnorm_min_dim_exclusive == 4096
     assert overlay.prefill_minimal_matmul is True
     assert overlay.disable_batched_prefill is True
+    assert overlay.attention_use_qk_fused is False
+    assert overlay.attention_decode_rs_sharded_input is False
     assert weight_utils.lm_head_split_sizes(151936, 4, overlay.lm_head_max_columns_per_device) == [4008] * 9 + [1912]
 
 
@@ -189,6 +194,21 @@ def test_qwen_ccl_recipe_rejects_unadmitted_bh_cluster(monkeypatch, expect_error
     monkeypatch.setattr(ttnn.cluster, "get_cluster_type", lambda: ttnn.cluster.ClusterType.P150_X8)
     with expect_error(ValueError, "P150_X4/P300_X2"):
         _qwen3_ccl_topology(_FakeMesh())
+
+
+@pytest.mark.host
+@pytest.mark.model
+def test_rope_fusion_follows_the_attention_overlay():
+    source = inspect.getsource(Qwen3_32B.from_pretrained)
+    assert "use_qk_fused=sku.attention_use_qk_fused" in source
+
+
+@pytest.mark.host
+@pytest.mark.model
+def test_norm_all_gather_uses_the_shared_ccl_defaults():
+    source = inspect.getsource(_all_gather_rmsnorm_tensor)
+    assert "chunks_per_sync=CCL_CHUNKS_PER_SYNC" in source
+    assert "num_workers_per_link=CCL_NUM_WORKERS_PER_LINK" in source
 
 
 @pytest.mark.host
@@ -303,6 +323,10 @@ def test_model_helpers_write_explicit_recipes_on_common_configs(arch, num_device
     assert mlp.prefill_dram_shard_grid_width == overlay.dram_shard_grid_width
     assert attention.prefill_qkv_grid == overlay.attention_prefill_qkv_grid
     assert attention.dram_shard_grid_width == overlay.dram_shard_grid_width
+    assert common_attention.use_qk_fused is False
+    assert common_attention.decode_rs_sharded_input is False
+    assert attention.use_qk_fused is overlay.attention_use_qk_fused
+    assert attention.decode_rs_sharded_input is overlay.attention_decode_rs_sharded_input
     assert _kernel_semantics(rms.compute_kernel_config) == (
         ttnn.MathFidelity.HiFi2,
         False,
