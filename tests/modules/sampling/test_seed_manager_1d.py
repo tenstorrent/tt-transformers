@@ -43,6 +43,21 @@ class _TrackingSeedBuffer(LazyBuffer):
         self.updates.append(new_source.detach().clone())
 
 
+class _DedupingSeedBuffer(_TrackingSeedBuffer):
+    """Test double whose stable handle reports whether a write was needed."""
+
+    def __init__(self, defaults):
+        super().__init__(defaults)
+        self.conditional_updates = []
+
+    def update_if_changed(self, new_source):
+        changed = not torch.equal(self.source, new_source)
+        self.conditional_updates.append(new_source.detach().clone())
+        if changed:
+            self.update(new_source)
+        return changed
+
+
 def _make_manager(capacity=4):
     defaults = torch.arange(capacity, dtype=torch.int32)
     buffer = _TrackingSeedBuffer(defaults)
@@ -335,3 +350,23 @@ def test_seed_manager_1d_imports_no_legacy_sampling_state_or_generator():
     assert "tt_transformers.sampling.generator" not in imported_modules
     assert "tt_transformers.sampling.tt_sampling" not in imported_modules
     assert "tt_transformers.sampling.tt_penalties" not in imported_modules
+
+
+@pytest.mark.host
+def test_seed_writes_go_through_the_buffer_conditional_update_when_available():
+    defaults = torch.arange(4, dtype=torch.int32)
+    buffer = _DedupingSeedBuffer(defaults)
+    config = SimpleNamespace(max_batch_size=4, seeds=buffer)
+    manager = SeedManager1D(config, entropy_factory=_EntropySequence())
+    state = manager.create_state()
+
+    manager.reset(state)
+    manager.restore_defaults(state)
+    manager.restore_defaults(state)
+
+    # Every write was routed through update_if_changed; only the values that differed
+    # from what the handle already holds reached update().
+    assert len(buffer.conditional_updates) == 3
+    assert all(torch.equal(values, defaults) for values in buffer.conditional_updates)
+    assert buffer.updates == []
+    assert state.buffer_is_default

@@ -84,6 +84,9 @@ class LazyBuffer:
 
     # Cached device tensor handle (allocated once, device data mutated in-place)
     _value: ttnn.Tensor | None = field(default=None, repr=False)
+    # Host copy of what ``get_device_buffer()`` / ``update()`` last wrote to the device buffer.
+    # Only ``update_if_changed()`` reads it; it is dropped on ``release()``.
+    _host_mirror: "torch.Tensor | None" = field(default=None, repr=False)
 
     def _get_mesh_mapper(self):
         """Get mesh mapper for from_torch(). Shared by get_device_buffer() and update()."""
@@ -119,6 +122,7 @@ class LazyBuffer:
             self.source,
             **self._from_torch_args(device=self.device),
         )
+        self._host_mirror = _host_snapshot(self.source)
         return self._value
 
     def update(self, new_source: "torch.Tensor") -> None:
@@ -148,6 +152,24 @@ class LazyBuffer:
                 **self._from_torch_args(device=None),
             )
             ttnn.copy_host_to_device_tensor(host_tt, self._value)
+            self._host_mirror = _host_snapshot(new_source)
+
+    def update_if_changed(self, new_source: "torch.Tensor") -> bool:
+        """
+        Like :meth:`update`, but skip the host->device copy when the materialized buffer
+        already holds ``new_source`` (as last written by ``get_device_buffer()`` or ``update()``).
+
+        Only valid for buffers whose device data is written exclusively through this object.
+        A buffer that device ops overwrite in place (``output_tensor=``) must keep using
+        :meth:`update`, since its host mirror would be stale.
+
+        Returns True when a device write was issued, False when it was skipped. Before
+        materialization this behaves exactly like :meth:`update` (source replaced, no write).
+        """
+        if self._value is not None and _host_equal(self._host_mirror, new_source):
+            return False
+        self.update(new_source)
+        return self._value is not None
 
     def release(self) -> None:
         """Release the materialized device buffer and allow later reload."""
@@ -156,10 +178,33 @@ class LazyBuffer:
         value = self._value
         ttnn.deallocate(value)
         self._value = None
+        self._host_mirror = None
 
     def is_resolved(self) -> bool:
         """Check if all required fields for materialization are set."""
         return self.device is not None and self.dtype is not None and self.layout is not None
+
+
+def _host_snapshot(source: "torch.Tensor") -> "torch.Tensor":
+    """Detached copy of a host tensor for the mirror; duck-typed so this module stays torch-free."""
+    detach = getattr(source, "detach", None)
+    snapshot = detach() if callable(detach) else source
+    clone = getattr(snapshot, "clone", None)
+    return clone() if callable(clone) else snapshot
+
+
+def _host_equal(mirror: "torch.Tensor | None", candidate: "torch.Tensor") -> bool:
+    """True when ``candidate`` matches the recorded mirror in shape, dtype and every element."""
+    if mirror is None:
+        return False
+    if getattr(mirror, "shape", None) != getattr(candidate, "shape", object()):
+        return False
+    if getattr(mirror, "dtype", None) != getattr(candidate, "dtype", object()):
+        return False
+    equal = getattr(mirror, "equal", None)
+    if not callable(equal):
+        return False
+    return bool(equal(candidate))
 
 
 def resolve_lazy_buffer(buf: LazyBuffer, **kwargs) -> LazyBuffer:

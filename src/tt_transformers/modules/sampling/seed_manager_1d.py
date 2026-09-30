@@ -686,7 +686,13 @@ class SeedManager1D:
             device=self._default_source.device,
         ).reshape(self._default_source.shape)
         try:
-            self._seed_buffer.update(source)
+            # Skip the host->device copy when the stable handle already holds these values
+            # (for example the argmax path restoring defaults every step).
+            update_if_changed = getattr(self._seed_buffer, "update_if_changed", None)
+            if callable(update_if_changed):
+                update_if_changed(source)
+            else:
+                self._seed_buffer.update(source)
         finally:
             # Request state must never become the construction source used after
             # Sampling1D.release() and later rematerialization.

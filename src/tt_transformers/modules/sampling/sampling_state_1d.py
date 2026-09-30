@@ -812,7 +812,13 @@ class SamplingState1D:
         specification = getattr(self.penalties.config, name)
         if not isinstance(specification, LazyBuffer) and not callable(getattr(specification, "update", None)):
             raise TypeError(f"Penalties1DConfig.{name} must be a mutable LazyBuffer")
-        specification.update(source)
+        # The penalty constants are written only from the host, so an unchanged value needs
+        # no per-step host->device copy. Buffers device ops mutate in place never come here.
+        update_if_changed = getattr(specification, "update_if_changed", None)
+        if callable(update_if_changed):
+            update_if_changed(source)
+        else:
+            specification.update(source)
 
     def _rebuild_penalty_history(
         self,

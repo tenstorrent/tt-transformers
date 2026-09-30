@@ -83,6 +83,96 @@ class TestLazyBufferUnit:
         assert buf._value is None  # not yet materialized
 
 
+class _FakeTtnnWrites:
+    """Monkeypatch target: counts host->device copies without a device."""
+
+    def __init__(self, monkeypatch):
+        self.copies = 0
+        self.deallocated = 0
+        monkeypatch.setattr(ttnn, "from_torch", lambda source, **kwargs: ("host", source))
+        monkeypatch.setattr(ttnn, "copy_host_to_device_tensor", self._copy)
+        monkeypatch.setattr(ttnn, "deallocate", self._deallocate)
+
+    def _copy(self, host_tt, device_tt):
+        self.copies += 1
+
+    def _deallocate(self, value):
+        self.deallocated += 1
+
+
+def _materialized_buffer(source):
+    return LazyBuffer(source=source, device="fake", dtype=ttnn.float32, layout=ttnn.TILE_LAYOUT, mesh_mapper=object())
+
+
+class TestLazyBufferUpdateIfChanged:
+    @pytest.mark.host
+    def test_before_materialize_only_replaces_source(self):
+        buf = LazyBuffer(source=torch.zeros(4, 1))
+        assert buf.update_if_changed(torch.ones(4, 1)) is False
+        assert torch.equal(buf.source, torch.ones(4, 1))
+        assert buf._value is None
+
+    @pytest.mark.host
+    def test_skips_the_copy_when_the_device_already_holds_the_values(self, monkeypatch):
+        writes = _FakeTtnnWrites(monkeypatch)
+        buf = _materialized_buffer(torch.zeros(4, 1))
+        buf.get_device_buffer()
+        assert buf.update_if_changed(torch.zeros(4, 1)) is False
+        assert writes.copies == 0
+        assert buf.update_if_changed(torch.ones(4, 1)) is True
+        assert writes.copies == 1
+        assert buf.update_if_changed(torch.ones(4, 1)) is False
+        assert writes.copies == 1
+        assert torch.equal(buf.source, torch.ones(4, 1))
+
+    @pytest.mark.host
+    def test_shape_or_dtype_change_counts_as_changed(self, monkeypatch):
+        writes = _FakeTtnnWrites(monkeypatch)
+        buf = _materialized_buffer(torch.zeros(4, 1))
+        buf.get_device_buffer()
+        assert buf.update_if_changed(torch.zeros(4, 1, dtype=torch.int32)) is True
+        assert buf.update_if_changed(torch.zeros(1, 4, dtype=torch.int32)) is True
+        assert writes.copies == 2
+
+    @pytest.mark.host
+    def test_update_always_writes_and_refreshes_the_mirror(self, monkeypatch):
+        writes = _FakeTtnnWrites(monkeypatch)
+        buf = _materialized_buffer(torch.zeros(4, 1))
+        buf.get_device_buffer()
+        buf.update(torch.zeros(4, 1))
+        assert writes.copies == 1
+        buf.update(torch.full((4, 1), 2.0))
+        assert writes.copies == 2
+        assert buf.update_if_changed(torch.full((4, 1), 2.0)) is False
+        assert writes.copies == 2
+
+    @pytest.mark.host
+    def test_release_forgets_the_mirror(self, monkeypatch):
+        writes = _FakeTtnnWrites(monkeypatch)
+        buf = _materialized_buffer(torch.zeros(4, 1))
+        buf.get_device_buffer()
+        buf.update(torch.ones(4, 1))
+        buf.release()
+        assert writes.deallocated == 1
+        assert buf._host_mirror is None
+        # Rematerialization uploads ``source`` (the last update), so equal values need no copy
+        # and different values do.
+        buf.get_device_buffer()
+        assert buf.update_if_changed(torch.ones(4, 1)) is False
+        assert buf.update_if_changed(torch.zeros(4, 1)) is True
+        assert writes.copies == 2
+
+    @pytest.mark.host
+    def test_mirror_is_a_snapshot_not_an_alias(self, monkeypatch):
+        writes = _FakeTtnnWrites(monkeypatch)
+        source = torch.zeros(4, 1)
+        buf = _materialized_buffer(source)
+        buf.get_device_buffer()
+        source.fill_(5.0)  # caller mutates its tensor after the upload
+        assert buf.update_if_changed(torch.full((4, 1), 5.0)) is True
+        assert writes.copies == 1
+
+
 class TestResolveLazyBuffer:
     @pytest.mark.host
     def test_fills_none_fields(self):

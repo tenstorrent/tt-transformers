@@ -1112,3 +1112,35 @@ def test_penalties_release_deallocates_owned_lazy_buffers_and_slice_tensors(monk
     assert penalties._slice_start is None and penalties._slice_end is None
     assert penalties._decode_src is None and penalties._zeros is None
     assert not penalties._device_buffers_loaded
+
+
+class _DedupingFakeBuffer(FakeBuffer):
+    def __init__(self, source):
+        super().__init__(source)
+        self.conditional_updates = []
+
+    def update_if_changed(self, source):
+        changed = not torch.equal(self.source, source)
+        self.conditional_updates.append(source.clone())
+        if changed:
+            self.update(source)
+        return changed
+
+
+@pytest.mark.host
+def test_penalty_constant_writes_use_the_buffer_conditional_update_when_available():
+    controller, _sampling, penalties, _events = _make_controller()
+    buffer = _DedupingFakeBuffer(torch.zeros(4, 1))
+    penalties.config = replace(penalties.config, presence_penalties=buffer)
+
+    controller._update_penalty_buffer("presence_penalties", torch.zeros(4, 1))
+    controller._update_penalty_buffer("presence_penalties", torch.full((4, 1), 0.5))
+    controller._update_penalty_buffer("presence_penalties", torch.full((4, 1), 0.5))
+
+    assert len(buffer.conditional_updates) == 3
+    assert len(buffer.updates) == 1
+    assert torch.equal(buffer.source, torch.full((4, 1), 0.5))
+    # A buffer without the conditional entry point keeps the unconditional update.
+    plain = penalties.config.frequency_penalties
+    controller._update_penalty_buffer("frequency_penalties", torch.zeros(4, 1))
+    assert len(plain.updates) == 1
