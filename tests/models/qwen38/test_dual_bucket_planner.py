@@ -79,7 +79,13 @@ def _shim_vllm():
         def register_processor(self, *a, **k):
             return lambda cls: cls
 
+    class _VLLMValidationError(ValueError):
+        def __init__(self, message, *, parameter=None):
+            super().__init__(message)
+            self.parameter = parameter
+
     mod("vllm")
+    mod("vllm.exceptions", VLLMValidationError=_VLLMValidationError)
     mod("vllm.model_executor")
     mod("vllm.model_executor.models")
     mod("vllm.model_executor.models.interfaces", SupportsMultiModal=type("SupportsMultiModal", (), {}))
@@ -87,7 +93,11 @@ def _shim_vllm():
         "vllm.model_executor.models.qwen3_5",
         Qwen3_5ProcessingInfo=type("Qwen3_5ProcessingInfo", (), {}),
         Qwen3VLDummyInputsBuilder=type("Qwen3VLDummyInputsBuilder", (), {}),
-        Qwen3VLMultiModalProcessor=type("Qwen3VLMultiModalProcessor", (), {}),
+        Qwen3VLMultiModalProcessor=type(
+            "Qwen3VLMultiModalProcessor",
+            (),
+            {"_get_mm_fields_config": lambda self, hf_inputs, hf_processor_mm_kwargs: {}},
+        ),
     )
     mod("vllm.multimodal", MULTIMODAL_REGISTRY=_Registry())
 
