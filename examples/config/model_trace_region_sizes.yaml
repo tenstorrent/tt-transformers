@@ -19,7 +19,7 @@ sizes:
       bh_p300:
         trace_region_size: 52000000
       p300x2:
-        trace_region_size: 52000000
+        trace_region_size: 100000000
   llama3.3-70b:
     aliases:
     - Llama-3.3-70B
