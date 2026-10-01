@@ -34,7 +34,7 @@ DECLARED_OPTIONAL_THIRD_PARTY_ROOTS = frozenset({"tqdm"})
 # Serving integrations supply and pin vLLM alongside the accelerator plugin.
 # Keeping that product boundary out of this wheel avoids resolving a second,
 # potentially incompatible vLLM installation from the public package index.
-INTEGRATION_OWNED_THIRD_PARTY_ROOTS = frozenset({"vllm"})
+INTEGRATION_OWNED_THIRD_PARTY_ROOTS = frozenset({"vllm", "vllm_tt_plugin"})
 # Installation requirements do not relax the import-layer or lazy-import policy.
 RESTRICTED_ROOT_LAYERS = {
     "tqdm": frozenset({"models"}),

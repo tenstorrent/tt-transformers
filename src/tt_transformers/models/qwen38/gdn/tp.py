@@ -1536,12 +1536,21 @@ class TPGatedDeltaNet:
             return
         self.sync_conv_taps()  # read-modify-write of the taps: they must be current first
         self._gather_indices(self.rec_state, idx, dim=0)
-        if self.conv_hist_packed is not None and self._hist_packed_valid:
-            self._gather_indices(self.conv_hist_packed, idx, dim=0)
-        else:
-            self._sync_conv_hist_packed()
+        packed_valid = self.conv_hist_packed is not None and self._hist_packed_valid
+        if packed_valid:
+            # Fused plain decode advances this packed buffer in place; the unpacked taps need not be
+            # current afterward. Translate the current packed representation directly rather than
+            # rebuilding it from a potentially older mirror.
+            self._remap_conv_hist_packed(idx)
         for m in range(self.K):
             self._gather_indices(self.conv_states[m], idx, dim=1)
+
+        if not packed_valid:
+            # The taps are authoritative when the packed mirror is invalid. Rebuild only after
+            # they have moved into destination order; the old implementation rebuilt before this
+            # gather and then incorrectly marked the source-ordered packed view current.
+            self._hist_packed_valid = False
+            self._sync_conv_hist_packed()
         self._conv_win_stale = True
 
     def _gather_indices(self, buf, idx, dim):
@@ -1553,6 +1562,33 @@ class TPGatedDeltaNet:
         ttnn.deallocate(new)
         for r in rows:
             ttnn.deallocate(r)
+
+    def _remap_conv_hist_packed(self, idx):
+        """Remap a current packed history and re-encode its parity rows for destination slots.
+
+        Slot ``b`` stores useful channel chunks on internal tile rows ``2*c + (b & 1)``.
+        Consequently a raw slot gather is only correct when source and destination parity match.
+        This eager transition translates both coordinates, then copies back into the persistent
+        buffer so decode traces retain their baked address.
+        """
+        shards = []
+        for device_hist in ttnn.get_device_tensors(self.conv_hist_packed):
+            old = ttnn.to_torch(device_hist)
+            new = torch.zeros_like(old)
+            for dst, src in enumerate(idx):
+                new[dst, ..., dst & 1 :: 2, :] = old[src, ..., src & 1 :: 2, :]
+            shards.append(new)
+        packed_host = ttnn.from_torch(
+            torch.cat(shards, dim=0),
+            dtype=ttnn.bfloat16,
+            layout=ttnn.TILE_LAYOUT,
+            device=None,
+            mesh_mapper=ttnn.ShardTensorToMesh(self.mesh, dim=0),
+        )
+        # The persistent destination was allocated during warmup and is baked into decode traces.
+        # Updating it from a host mesh tensor avoids a request-time device allocation.
+        ttnn.copy_host_to_device_tensor(packed_host, self.conv_hist_packed)
+        self._hist_packed_valid = True
 
     def forward_prefill_batched(self, x, chunk_size=128, valid_lens=None, carry=False):
         """Batched prefill: all B users in one pass (no per-user Python loop).
