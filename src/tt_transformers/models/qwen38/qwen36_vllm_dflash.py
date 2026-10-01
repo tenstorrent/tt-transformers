@@ -1,27 +1,24 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
-"""Qwen3.x on Blackhole served by vLLM WITH the DFlash2 speculative drafter, for up to B_max concurrent
-requests (one multi-user speculative step per vLLM decode step).
+"""Qwen3.x on Blackhole served by vLLM with the DFlash2 speculative drafter.
 
-vLLM's own speculative_config stays unset (the TT plugin rejects it); speculation is model-internal
-through the plugin's ADAPTIVE BLOCK-OUTPUT contract, extended by ``tt_adaptive_block_batched``:
+The default integration uses the TT plugin's speculative-decoding contract,
+not adaptive block output. The launch supplies vLLM ``speculative_config``
+with the model-owned ``custom_class`` drafter. The plugin owns acceptance,
+committed output, request history, and KV lookahead; this adapter owns exact
+target verification plus the drafter's target/GDN/ring state:
 
-  * prefill emits one host-sampled anchor token per request (width 1), as before;
-  * EVERY decode step runs the multi-user DFlash2 draft/verify loop INSIDE decode_forward until every
-    live request has QWEN36_DFLASH_SERVE_BLOCK committed tokens, and returns them as one host [B, W]
-    block (EOS-filled at a genuine stop; vLLM trims at the first stop token; surplus committed tokens
-    are carried into the next step);
-  * every text prompt speculates (no prompt-length frontier): a long prompt takes the eager chunked
-    spec prefill, so the plain decode / chunk-prefill TRACES never run once the spec traces are
-    parked (a spec replay after them hangs the device -- see DFlash2ServingDecoder);
-  * the scheduler reserves W placeholders + KV lookahead for every request of a decode step.
+  * prefill emits one sampled anchor and records request-local DFlash state;
+  * ``decode_forward(..., spec_mode="argmax_ids")`` verifies one candidate
+    block and returns ``VerifyOutput`` without advancing authoritative state;
+  * after the plugin accepts a prefix, ``propose_draft_tokens`` commits the
+    matching candidate state, extends the drafter, and returns ``DraftOutput``;
+  * greedy-compatible requests run in homogeneous speculative batches, while
+    requests needing sampling, logprobs, constraints, or penalties run in
+    homogeneous ordinary width-one batches through the base Qwen adapter.
 
-RAGGED widths (QWEN36_DFLASH_RAGGED=1, capability ``tt_adaptive_block_ragged``): a decode step runs
-exactly ONE multi-user speculative iteration and returns a rectangular [B, W] int32 block in which row i
-carries n_i = min(len(carry_i), W) >= 1 real ids followed by -1 padding (never EOS fill). The plugin
-keeps reserving W placeholders per step and decrementing by W; it counts a row's tokens as its
-non-negative ids. A row whose carry already holds >= W tokens (or a stop, under QWEN36_DFLASH_STOP_FILL)
-holds this step and emits from its carry. Default off: the fixed-width contract above stays.
+The older block-output methods remain temporarily for compatibility with the
+banked v5.1 artifact, but the v6 launch does not advertise or select that rail.
 
 Greedy: each request's tokens are the target's greedy trajectory from its sampled anchor (lossless,
 tested per request in tests/test_dflash2_serving.py). B_max x (K+1) verify rows must fit one 32-row
@@ -31,10 +28,12 @@ Qwen36ForCausalLM (plain batched decode), so one bundle covers both profiles.
 
 VERIFY BUCKETS (QWEN36_DFLASH_BUCKETS, e.g. '8x4,4x8'; see profiles/dual_bucket_spec.json): one server keeps
 several (B_cfg x T_cfg) verify geometries captured and verifies in the smallest bucket that seats the live
-requests -- K = 7 while <= 4 requests are live, K = 3 at 5..8 -- switching at runtime with NO recapture (the
-decoder moves every live session's GDN state between the buckets bit-exactly; the plugin never sees K).
-decode_forward decides the bucket for a step with ``dec.plan(live_after)`` BEFORE any begin()/set_table()/
-step() of that step. Unset: ONE bucket (max_num_seqs, K+1), which is byte-for-byte today's behaviour.
+requests -- K = 7 while <= 4 requests are live, K = 3 at 5..8 -- switching at runtime with NO recapture.
+The decoder moves every live session's GDN state between buckets bit-exactly. ``spec_plan`` advertises
+the maximum K=7 plus ``k_by_rows=((4, 7), (8, 3))``. The plugin truncates any outstanding proposal
+before a busy-bucket verify, and the adapter pads its exact four-column result to the launch width;
+the accept walk never reads the suffix. ``decode_forward`` plans the bucket before any begin/set-table/
+verify operation. Unset selects one ``max_num_seqs x (K+1)`` bucket.
 
 Slots: the plugin keys a request's device state by a "state slot" and may permute decode rows
 (``slot_remap``: row i reads slot remap[i]); the base class moves its GDN state accordingly. The
@@ -146,17 +145,13 @@ class DFlashRuntimeConfig:
         )
 
     def capabilities(self, base):
-        w = self.output_width
+        if not self.spec_on:
+            return dict(base)
         return {
             **base,
-            "output_tokens_per_step": w,
-            "tt_adaptive_block_output": w > 1,
-            "tt_adaptive_block_batched": w > 1,
-            "tt_adaptive_block_ragged": w > 1 and self.ragged,
-            "tt_block_output_multimodal": w > 1,
-            "tt_plain_fallback": w > 1,
-            "tt_adaptive_block_max_prompt_tokens": 0,
-            "tt_block_kv_extent_tokens": (w + _MAX_DRAFT + 1) if w > 1 else 0,
+            "supports_spec_decode": True,
+            "supports_async_spec_decode": False,
+            "spec_requirements": ["device_propose"],
         }
 
 
@@ -234,15 +229,82 @@ def bucket_id(bucket):
     TTQwen3VLMultiModalProcessor, info=TT_Qwen3_5ProcessingInfo, dummy_inputs=Qwen3VLDummyInputsBuilder
 )
 class Qwen36DFlashForCausalLM(Qwen36ForCausalLM):
-    """Qwen36ForCausalLM + model-internal multi-user DFlash2 speculation on decode steps (see module doc)."""
+    """Qwen36 plus contract-native multi-user DFlash2 speculation."""
 
     # Legacy readers see the safe width-one contract. The TT platform prefers the dynamic method
     # below, which reads launch policy when it builds the engine rather than when Python imports us.
-    model_capabilities = dict(Qwen36ForCausalLM.model_capabilities)
+    model_capabilities = {
+        **Qwen36ForCausalLM.model_capabilities,
+        "supports_spec_decode": True,
+        "supports_async_spec_decode": False,
+        "spec_requirements": ["device_propose"],
+    }
 
     @classmethod
     def get_model_capabilities(cls):
         return DFlashRuntimeConfig.from_env().capabilities(Qwen36ForCausalLM.model_capabilities)
+
+    @classmethod
+    def spec_plan(cls, vllm_config, max_num_seqs, requested_k):
+        """Resolve the plugin-visible maximum K across all exact buckets."""
+        from vllm_tt_plugin.spec_decode import (
+            ACCEPT_MODE_ARGMAX_IDS,
+            DRAFTER_STATE_INTERNAL,
+            SpecPlan,
+            SpecReject,
+        )
+
+        runtime = DFlashRuntimeConfig.from_env()
+        if not runtime.spec_on:
+            return SpecReject("QWEN36_DRAFTER does not select dflash2")
+        max_num_seqs = int(max_num_seqs)
+        requested_k = int(requested_k)
+        try:
+            buckets = parse_buckets(os.environ.get(_BUCKETS_ENV))
+            # Capability planning happens before the model and auxiliary
+            # checkpoint are loaded.  Never call default_draft_len() here:
+            # it reads the drafter config through snapshot_download and made
+            # a host-only vLLM configuration query depend on network/cache
+            # state.  Explicit buckets fully describe the required capacity.
+            # For the legacy single-bucket launch, QWEN36_DFLASH_BLOCK is the
+            # author-supplied checkpoint bound; absent that, the requested K
+            # is the only information available until model construction.
+            k_capacity = (
+                max(t - 1 for _b, t in buckets)
+                if buckets
+                else int(os.environ.get("QWEN36_DFLASH_BLOCK", requested_k + 1)) - 1
+            )
+            buckets = buckets or ((max_num_seqs, k_capacity + 1),)
+            # The standard plugin contract is intrinsically ragged: a verify
+            # returns the exact current bucket width and vLLM commits each row's
+            # accepted prefix. It does not depend on the legacy block-output
+            # RAGGED switch.
+            buckets = check_buckets(buckets, max_num_seqs, k_capacity, True)
+        except (RuntimeError, ValueError) as exc:
+            return SpecReject(str(exc))
+        effective_k = max(t - 1 for _b, t in buckets)
+        if requested_k < effective_k:
+            return SpecReject(
+                f"the configured buckets require K={effective_k}, but the launch requested K={requested_k}",
+                supported_k=(effective_k,),
+            )
+        k_by_rows = []
+        for max_rows, width in sorted(buckets):
+            k = width - 1
+            if k_by_rows and k_by_rows[-1][1] == k:
+                k_by_rows[-1] = (max_rows, k)
+            else:
+                k_by_rows.append((max_rows, k))
+        return SpecPlan(
+            effective_k=effective_k,
+            lanes_per_request=max(t for _b, t in buckets),
+            extra_bytes_per_seq=0,
+            extra_bytes_per_token=0,
+            accept_modes=(ACCEPT_MODE_ARGMAX_IDS,),
+            drafter_state=DRAFTER_STATE_INTERNAL,
+            supports_narrow_decode=True,
+            k_by_rows=tuple(k_by_rows),
+        )
 
     def __init__(self, *args, **kwargs):
         self._dflash = DFlashRuntimeConfig.from_env()
@@ -844,13 +906,19 @@ class Qwen36DFlashForCausalLM(Qwen36ForCausalLM):
         vision_contexts = [
             self._compute_vision_context(model, kwargs, user=u) if has_images else None for u in range(N)
         ]
-        request_lanes = kwargs.pop("request_execution_lanes", None)
+        request_lanes = kwargs.pop("request_spec_decode_lanes", None)
+        legacy_request_lanes = kwargs.pop("request_execution_lanes", None)
         if request_lanes is None:
-            request_lanes = ["dflash"] * N
-        request_lanes = [str(lane) for lane in request_lanes]
+            request_lanes = legacy_request_lanes
+        if request_lanes is None:
+            request_lanes = ["speculative"] * N
+        request_lanes = [
+            "speculative" if str(lane) == "dflash" else "ordinary" if str(lane) == "plain" else str(lane)
+            for lane in request_lanes
+        ]
         if len(request_lanes) != N:
             raise RuntimeError(f"Qwen36DFlash prefill received {len(request_lanes)} lanes for {N} requests")
-        bad_lanes = sorted(set(request_lanes) - {"dflash", "plain"})
+        bad_lanes = sorted(set(request_lanes) - {"speculative", "ordinary"})
         if bad_lanes:
             raise RuntimeError(f"Qwen36DFlash prefill received unknown request lanes {bad_lanes}")
         plens = [int(prompt_lens[u]) for u in range(N)] if prompt_lens is not None else [int(tokens.shape[1])] * N
@@ -858,8 +926,8 @@ class Qwen36DFlashForCausalLM(Qwen36ForCausalLM):
         logical = [int(s) for s in empty_slots] if empty_slots is not None else list(range(N))
         pt = torch.as_tensor(page_table)
         out = [None] * N
-        dflash_users = [u for u, lane in enumerate(request_lanes) if lane == "dflash"]
-        plain_users = [u for u, lane in enumerate(request_lanes) if lane == "plain"]
+        dflash_users = [u for u, lane in enumerate(request_lanes) if lane == "speculative"]
+        plain_users = [u for u, lane in enumerate(request_lanes) if lane == "ordinary"]
         for u in dflash_users:
             state_slot = logical[u]
             phys = self._phys[state_slot]
@@ -927,7 +995,20 @@ class Qwen36DFlashForCausalLM(Qwen36ForCausalLM):
 
     # ------------------------------------------------------------------ decode: one block per step, all live slots
     def decode_forward(self, *args, **kwargs):
-        execution_lane = kwargs.pop("execution_lane", "dflash")
+        execution_lane = kwargs.pop("execution_lane", None)
+        spec_mode = kwargs.get("spec_mode")
+        if execution_lane is None:
+            execution_lane = (
+                "speculative"
+                if spec_mode is not None
+                else "ordinary"
+                if hasattr(self._spec, "verify_contract")
+                else "legacy_dflash"
+            )
+        execution_lane = {
+            "dflash": "legacy_dflash",
+            "plain": "ordinary",
+        }.get(execution_lane, execution_lane)
         if not self._dflash.spec_on or not self._spec_ready():
             return super().decode_forward(*args, **kwargs)
 
@@ -935,7 +1016,7 @@ class Qwen36DFlashForCausalLM(Qwen36ForCausalLM):
         # decode has no speculative state transition to reconcile in that
         # case, so bypass all remap bookkeeping and let the base wrapper pick
         # its compact B=1/2/4 trace immediately.
-        if execution_lane == "plain" and _is_identity_slot_remap(kwargs.get("slot_remap"), self._B):
+        if execution_lane == "ordinary" and _is_identity_slot_remap(kwargs.get("slot_remap"), self._B):
             kwargs["slot_remap"] = None
             return super().decode_forward(*args, **kwargs)
 
@@ -968,7 +1049,7 @@ class Qwen36DFlashForCausalLM(Qwen36ForCausalLM):
                     )
                 self._pending_state_slot_moves = expected_moves
 
-        if execution_lane == "plain":
+        if execution_lane == "ordinary":
             if remap is not None:
                 # The base path below physically gathers target GDN rows as
                 # new[row] <- old[remap[row]].  Pending DFlash requests have
@@ -984,7 +1065,17 @@ class Qwen36DFlashForCausalLM(Qwen36ForCausalLM):
                     T, pt_row, state_slot = pending
                     self._pending[phys] = (T, pt_row, inverse[int(state_slot)])
             return super().decode_forward(*args, **kwargs)
-        if execution_lane != "dflash":
+        if execution_lane == "speculative":
+            if spec_mode != "argmax_ids":
+                raise RuntimeError(f"Qwen36DFlash supports only spec_mode='argmax_ids', got {spec_mode!r}")
+            return self._decode_spec_contract(
+                tokens=_read("tokens", 0),
+                start_pos=_read("start_pos", 1),
+                page_table=_read("page_table", 2),
+                num_valid_drafts=kwargs.get("num_valid_drafts"),
+                accepted_counts=kwargs.get("accepted_counts"),
+            )
+        if execution_lane != "legacy_dflash":
             raise RuntimeError(f"Qwen36DFlash decode received unknown execution lane {execution_lane!r}")
 
         tokens = _read("tokens", 0)
@@ -1117,6 +1208,119 @@ class Qwen36DFlashForCausalLM(Qwen36ForCausalLM):
                 f"{(time.perf_counter() - t0) * 1e3:.1f} ms carry={[len(self._carry[p]) for _, p in live_rows]}"
             )
         return out
+
+    def _decode_spec_contract(
+        self,
+        *,
+        tokens,
+        start_pos,
+        page_table,
+        num_valid_drafts,
+        accepted_counts,
+    ):
+        """Verify one plugin-owned candidate block and return target argmax ids."""
+        from vllm_tt_plugin.spec_decode import VerifyOutput
+
+        if tokens is None or start_pos is None:
+            raise RuntimeError("Qwen36DFlash speculative verify needs tokens and positions")
+        if num_valid_drafts is None or accepted_counts is None:
+            raise RuntimeError("Qwen36DFlash speculative verify needs both side tensors")
+        tokens = torch.as_tensor(tokens)
+        positions = torch.as_tensor(start_pos)
+        valid = torch.as_tensor(num_valid_drafts).reshape(-1)
+        counts = torch.as_tensor(accepted_counts).reshape(-1)
+        if tokens.ndim != 2 or positions.shape != tokens.shape:
+            raise RuntimeError(
+                f"Qwen36DFlash expected matching [B, 1+K] candidates, got "
+                f"{tuple(tokens.shape)} and {tuple(positions.shape)}"
+            )
+        Bp = int(tokens.shape[0])
+        if Bp > self._B or valid.numel() != Bp or counts.numel() != Bp:
+            raise RuntimeError("Qwen36DFlash speculative side tensors have inconsistent rows")
+        pts = torch.as_tensor(page_table) if page_table is not None else None
+        dec = self._spec
+
+        # Validate the previous commit before a bucket switch resets mi to 0.
+        for logical_row in range(Bp):
+            if int(positions[logical_row, 0]) < 0:
+                continue
+            phys = self._phys[logical_row]
+            if dec.active[phys] and self._pending[phys] is None:
+                expected = int(dec.mi[phys]) + 1
+                if int(counts[logical_row]) != expected:
+                    raise RuntimeError(
+                        f"Qwen36DFlash slot {phys} accepted_counts={int(counts[logical_row])}, "
+                        f"but its target state expects {expected}"
+                    )
+
+        live_after = {phys for phys in range(self._B) if dec.active[phys]}
+        for logical_row in range(Bp):
+            if int(positions[logical_row, 0]) >= 0 and self._pending[self._phys[logical_row]] is not None:
+                live_after.add(self._phys[logical_row])
+        plan = getattr(dec, "plan", None)
+        if plan is not None:
+            bucket = plan(live_after)
+            if bucket != self._last_bucket:
+                logger.info(f"Qwen36DFlash: verify bucket {bucket} in force ({len(live_after)} live slot(s))")
+                self._last_bucket = bucket
+
+        phys_by_row = [None] * Bp
+        for logical_row in range(Bp):
+            start = int(positions[logical_row, 0])
+            if start < 0:
+                continue
+            phys = self._phys[logical_row]
+            row = pts[logical_row].reshape(-1) if pts is not None else None
+            if self._pending[phys] is not None:
+                pending = self._pending[phys]
+                if len(pending) == 2:
+                    prompt_len, saved_row = pending
+                    state_slot = phys
+                else:
+                    prompt_len, saved_row, state_slot = pending
+                self._pending[phys] = None
+                if start != int(prompt_len):
+                    raise RuntimeError(
+                        f"Qwen36DFlash slot {phys} first verify starts at {start}, expected prompt length {prompt_len}"
+                    )
+                dec.begin(
+                    phys,
+                    int(tokens[logical_row, 0]),
+                    int(prompt_len),
+                    row if row is not None else saved_row,
+                    seed_slot=state_slot,
+                    contract_seed=True,
+                )
+            elif dec.active[phys]:
+                if row is not None:
+                    dec.set_table(phys, row)
+            else:
+                raise RuntimeError(f"Qwen36DFlash live row {logical_row} (slot {phys}) has no speculative session")
+            phys_by_row[logical_row] = phys
+
+        argmax_ids, hidden = dec.verify_contract(tokens, positions, valid, phys_by_row)
+        return VerifyOutput(spec_mode="argmax_ids", argmax_ids=argmax_ids, hidden=hidden)
+
+    def propose_draft_tokens(
+        self,
+        num_speculative_tokens,
+        committed_tokens,
+        committed_positions,
+        accepted_counts,
+        hidden=None,
+    ):
+        """Commit the preceding exact verify and return the next device drafts."""
+        from vllm_tt_plugin.spec_decode import DraftOutput
+
+        del committed_positions, hidden
+        rows = int(torch.as_tensor(committed_tokens).shape[0])
+        drafts, num_valid = self._spec.commit_and_draft_contract(
+            committed_tokens,
+            accepted_counts,
+            int(num_speculative_tokens),
+            rows,
+        )
+        return DraftOutput(draft_token_ids=drafts, num_valid=num_valid)
 
     def _absorb(self, com):
         """Committed ids of one dec.step() -> the slots' carries (+ stop bookkeeping)."""
