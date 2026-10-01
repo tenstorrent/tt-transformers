@@ -18,6 +18,7 @@ from tt_transformers.llm_runtime.config import PageTableLayout, TraceConfig, War
 from tt_transformers.llm_runtime.decode import DecodeRuntimeConfig
 from tt_transformers.llm_runtime.output_reader import OutputReader
 from tt_transformers.llm_runtime.prefill.config import PrefillRuntimeConfig
+from tt_transformers.llm_runtime.prefill.plan import _padded_prefill_length
 from tt_transformers.llm_runtime.program_compiler import CompiledProgram, OutputSpec, ProgramKey
 from tt_transformers.llm_runtime.warmup import (
     CoverageAlias,
@@ -414,7 +415,12 @@ def test_page_table_layout_can_be_reconfigured_only_before_use(expect_error):
     assert coordinator.config.page_table_layout is final_layout
     coordinator.warmup_prefill(kv_cache="cache", enable_trace=False, can_sample_on_device=False)
 
-    assert all(call["start_pos"] is None for call in execution.prefill_calls)
+    # The 128-token layout fits a cached prompt only at bucket 128: a one-block
+    # prefix plus up to 96 more tokens, which pad to 128. (Warmup clamps the
+    # prompt by the construction-time ceiling, so it is built at 32 + 128 here.)
+    cached = [call for call in execution.prefill_calls if call["start_pos"] is not None]
+    assert [int(call["start_pos"][0]) for call in cached] == [32]
+    assert _padded_prefill_length(int(cached[0]["tokens"].shape[-1]) - 32) == 128
     with expect_error(RuntimeError, "configuration is sealed"):
         coordinator.configure_page_table_layout(final_layout)
 
@@ -585,7 +591,9 @@ def test_layout_replacement_is_immutable_bounded_and_rebuilds_coverage(expect_er
     assert coordinator.config is not original
     assert coordinator.config.page_table_layout_ceiling is original.page_table_layout
     assert original.page_table_layout.raw_capacity_width == 128
-    assert not any(case.cached_tokens for case in coordinator.config.eager_plan.prefill)
+    # The 128-block layout planned a cached case at every bucket; the 4-block one fits only bucket 128.
+    assert {case.sequence_length for case in original.eager_plan.prefill if case.cached_tokens} == set(LADDER)
+    assert {case.sequence_length for case in coordinator.config.eager_plan.prefill if case.cached_tokens} == {128}
     with expect_error(ValueError, "cannot change block_size"):
         original.with_page_table_layout(PageTableLayout(16, 4, 64, 8))
     with expect_error(ValueError, "capacity ceiling"):
@@ -776,8 +784,8 @@ def test_activation_validates_every_program_returned_by_trace_warmup(expect_erro
         sequence_lengths=(128,),
         lane_capacity=1,
         sampling=False,
-        # A 128-token servable length keeps the bucket ladder at 128 and leaves no room
-        # for a cached case, so the one prefill warmup call returns both programs.
+        # A 128-token servable length keeps the bucket ladder at 128, so both prefill
+        # warmup calls (plain and prefix-cached) return the same two programs.
         page_table_layout=PageTableLayout(block_size=32, raw_capacity_width=4, prefill_width=72, decode_width=8),
     )
     programs = tuple(
@@ -1296,9 +1304,52 @@ def test_the_bucket_above_an_unaligned_max_seq_len_warms_with_the_longest_servab
     assert tuple(top[0]["tokens"].shape) == (1, 3008)
     assert int(top[0]["prompt_lens"][0]) == 3008
     assert int(top[0]["page_table"].shape[-1]) == _UNALIGNED_LAYOUT.raw_capacity_width
-    # Every smaller bucket still warms at its own length, and no 4096 prefix-cached case fits.
-    assert sorted(_uncached_prefill_lengths(eager)) == [2048, 2048, 3008]
+    # Every smaller bucket still warms at its own length, and the prefix-cached
+    # 4096 case warms with the longest uncached length beside its one-block prefix.
+    assert sorted(_uncached_prefill_lengths(eager)) == [2048, 2048, 2976, 3008]
     assert set(_uncached_prefill_lengths(traced)) == {128, 1024}
+
+
+# max_seq_len=1500 with a 2048 cap: the page table admits 47 blocks of 32, so the
+# longest servable prompt is 1504 tokens, and the ladder's top bucket is 2048.
+_SHORT_UNALIGNED_LAYOUT = PageTableLayout.resolve(
+    block_size=32, model_max_sequence_length=1500, physical_num_blocks=48, max_prefill_chunk_size=2048
+)
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("trace_mode", ["all", "decode_only"])
+def test_the_top_bucket_warms_a_prefix_cached_prompt_that_fits_beside_its_prefix(trace_mode):
+    # A 1450-token prompt with 32 cached tokens has 1418 uncached tokens, which
+    # pad to 2048 even though 32 + 2048 exceeds the servable length.
+    traced = RecordingExecution()
+    eager = RecordingExecution()
+    coordinator, *_ = make_coordinator(
+        trace_mode=trace_mode,
+        sampling=False,
+        warmup_config=WarmupConfig(prefill_batch_sizes=(1,)),
+        sequence_lengths=LADDER,
+        lane_capacity=1,
+        execution=traced,
+        eager_execution=eager,
+        page_table_layout=_SHORT_UNALIGNED_LAYOUT,
+        can_enable_trace=lambda sequence_length, _cached: sequence_length in (128, 1024),
+    )
+
+    coordinator.warmup_prefill(enable_trace=trace_mode == "all", **PREFILL_KWARGS)
+
+    cached_top = [
+        call
+        for call in eager.prefill_calls
+        if call["start_pos"] is not None and call["tokens"].shape[-1] - int(call["start_pos"][0]) > 1024
+    ]
+    assert len(cached_top) == 1
+    assert int(cached_top[0]["start_pos"][0]) == 32
+    assert tuple(cached_top[0]["tokens"].shape) == (1, 1504)
+    assert int(cached_top[0]["prompt_lens"][0]) == 1504
+    assert int(cached_top[0]["page_table"].shape[-1]) == _SHORT_UNALIGNED_LAYOUT.raw_capacity_width
+    assert _padded_prefill_length(1504 - 32) == 2048
+    assert sorted(length for length in _uncached_prefill_lengths(eager) if length > 1024) == [1472, 1504]
 
 
 def _complete_trace_warmup(coordinator, *, trace_prefill):

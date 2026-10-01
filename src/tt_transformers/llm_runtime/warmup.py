@@ -418,8 +418,9 @@ class WarmupCoordinator:
         plan = self._plan(can_sample_on_device=can_sample_on_device)
         cases = plan.prefill
         # A bucket above the servable length (4096 when max_seq_len is 3000)
-        # is warmed with the longest prompt the page table admits. It pads to
-        # the same bucket, so it compiles the program a served prompt runs.
+        # is warmed with the longest prompt the page table admits, less any
+        # cached prefix. It pads to the same bucket, so it compiles the program
+        # a served prompt runs.
         ceiling = self.config.page_table_layout_ceiling
         servable_length = ceiling.raw_capacity_width * ceiling.block_size
         if enable_trace and can_sample_on_device:
@@ -439,7 +440,7 @@ class WarmupCoordinator:
                 sampling = _greedy_sampling_params(case.batch_size)
             elif case.sampling_path == "topk":
                 sampling = _topk_sampling_params(case.batch_size)
-            actual_uncached_lengths = (min(int(case.sequence_length), servable_length),)
+            actual_uncached_lengths = (min(int(case.sequence_length), servable_length - case.cached_tokens),)
             if (
                 case.batch_size == 1
                 and case.sequence_length == 128
@@ -782,8 +783,13 @@ def _build_plan(
                     WarmupCase("prefill", batch_size, sequence_length, sampling_path)
                     for sampling_path in batch_sampling_paths
                 )
-        cached_prompt_length = layout.block_size + sequence_length
-        if cached_prompt_length <= layout.raw_capacity_width * layout.block_size:
+        # A cached prompt needs this bucket's program if any uncached length
+        # that pads to it still fits beside a one-block prefix: with a 1504-token
+        # servable length, 32 cached tokens and 1418 uncached pad to 2048.
+        longest_cached_uncached_length = layout.raw_capacity_width * layout.block_size - layout.block_size
+        if longest_cached_uncached_length > 0 and sequence_length <= _padded_prefill_length(
+            longest_cached_uncached_length
+        ):
             prefill.extend(
                 WarmupCase(
                     "prefill",
