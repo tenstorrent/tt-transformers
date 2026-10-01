@@ -342,8 +342,7 @@ def test_gdn_tp_write_slot_and_remap(mesh_device, B, reset_seeds, ensure_gc, req
                 expected = torch.zeros_like(dev_before[src])
                 expected[..., dst & 1 :: 2, :] = dev_before[src][..., src & 1 :: 2, :]
                 assert torch.equal(dev_after[dst], expected), (
-                    f"packed history mismatch dst={dst} src={src} "
-                    f"src_parity={src & 1} dst_parity={dst & 1}"
+                    f"packed history mismatch dst={dst} src={src} src_parity={src & 1} dst_parity={dst & 1}"
                 )
 
     # Reverse flips parity for every row at B=8 and isolates the old valid-packed raw-gather bug.
