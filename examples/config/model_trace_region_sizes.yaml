@@ -65,7 +65,7 @@ sizes:
       bh_p300:
         trace_region_size: 90000000
       p300x2:
-        trace_region_size: 100000000
+        trace_region_size: 200000000
       bh_loudbox:
         trace_region_size: 90000000
   qwen2.5-72b:
