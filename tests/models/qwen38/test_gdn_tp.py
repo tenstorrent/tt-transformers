@@ -321,6 +321,7 @@ def test_gdn_tp_write_slot_and_remap(mesh_device, B, reset_seeds, ensure_gc, req
     # ---- remap_slots(reverse): row i must become the exact pre-remap row (B-1-i) ----
     remap = [B - 1 - i for i in range(B)]
     pre = ttnn.to_torch(gb.rec_state, mesh_composer=comp).float()  # [nd*B?, ...] mesh dim 0 = devices
+    packed_pre = [ttnn.to_torch(t).clone() for t in ttnn.get_device_tensors(gb.conv_hist_packed)]
     gb.remap_slots(remap)
     post = ttnn.to_torch(gb.rec_state, mesh_composer=comp).float()
     # rec_state per device is [B, Nv, Dk, Dv]; mesh-concat stacks devices on dim 0 -> [nd*B, ...].
@@ -332,6 +333,47 @@ def test_gdn_tp_write_slot_and_remap(mesh_device, B, reset_seeds, ensure_gc, req
             max_diff = max(max_diff, (post[d * B + i] - pre[d * B + remap[i]]).abs().max().item())
     assert max_diff < 1e-3, f"remap_slots rec mismatch: max_diff={max_diff}"
     logger.info(f"remap_slots (B={B}) exact-permutation max_diff = {max_diff:.2e}")
+
+    def assert_packed_remap(before, slot_remap):
+        """Packed rows must follow the source user and be re-encoded for destination parity."""
+        after = [ttnn.to_torch(t) for t in ttnn.get_device_tensors(gb.conv_hist_packed)]
+        for dev_before, dev_after in zip(before, after, strict=True):
+            for dst, src in enumerate(slot_remap):
+                expected = torch.zeros_like(dev_before[src])
+                expected[..., dst & 1 :: 2, :] = dev_before[src][..., src & 1 :: 2, :]
+                assert torch.equal(dev_after[dst], expected), (
+                    f"packed history mismatch dst={dst} src={src} "
+                    f"src_parity={src & 1} dst_parity={dst & 1}"
+                )
+
+    # Reverse flips parity for every row at B=8 and isolates the old valid-packed raw-gather bug.
+    assert_packed_remap(packed_pre, remap)
+    assert gb._hist_packed_valid
+
+    # Force the invalid-packed branch, then use a parity-preserving rotation. The old code rebuilt
+    # before moving the canonical taps and left the packed mirror stale but marked valid.
+    canonical_rows = [gb._per_device_rows(gb.conv_states, row=src) for src in range(B)]
+    gb._hist_packed_valid = False
+    parity_preserving = list(range(2, B)) + [0, 1]
+    gb.remap_slots(parity_preserving)
+    packed_after = [ttnn.to_torch(t) for t in ttnn.get_device_tensors(gb.conv_hist_packed)]
+    for dev, dev_after in enumerate(packed_after):
+        for dst, src in enumerate(parity_preserving):
+            expected = gb._pack_head_tiles(
+                [canonical_rows[src][tap][dev] for tap in range(gb.K)],
+                parity=dst & 1,
+            )
+            assert torch.equal(dev_after[dst], expected), (
+                f"invalid-history rebuild mismatch device={dev} dst={dst} src={src}"
+            )
+    assert gb._hist_packed_valid
+
+    # Mix parity-changing and parity-preserving moves while HOLD/unused rows remain in place.
+    packed_pre = [ttnn.to_torch(t).clone() for t in ttnn.get_device_tensors(gb.conv_hist_packed)]
+    mixed_with_holds = [1, 2, 0] + list(range(3, B))
+    gb.remap_slots(mixed_with_holds)
+    assert_packed_remap(packed_pre, mixed_with_holds)
+    assert gb._hist_packed_valid
     logger.info(f"PASSED: write_slot + remap_slots (B={B})")
 
 
