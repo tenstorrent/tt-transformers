@@ -327,6 +327,13 @@ class Qwen36DFlashForCausalLM(Qwen36ForCausalLM):
         # plain request from overwriting a DFlash request's not-yet-seeded
         # target state.
         self._pending = [None] * B
+        # Logical target-GDN rows whose state is still authoritative for an
+        # ordinary-lane request.  Active DFlash requests move their recurrent
+        # state into the private verifier on their first speculative step, so
+        # a pure-spec slot permutation need not gather the shared base state.
+        # Keeping the ordinary owners explicit lets that common join avoid a
+        # 48-layer packed-history rebuild while mixed-lane remaps stay exact.
+        self._ordinary_state_slots = set()
         self._carry = [[] for _ in range(B)]  # committed-but-unemitted tokens per physical slot
         self._stopped = [False] * B  # a stop token was committed; the row is EOS-filled from there
         self._prev_tail = [None] * B
@@ -951,6 +958,7 @@ class Qwen36DFlashForCausalLM(Qwen36ForCausalLM):
             )
             out[u] = lt.view(1, 1, -1)
             self._pending[phys] = (T, row, state_slot)
+            self._ordinary_state_slots.discard(state_slot)
 
         if plain_users:
             plain_prompts = []
@@ -984,6 +992,7 @@ class Qwen36DFlashForCausalLM(Qwen36ForCausalLM):
             )
             for u, logits in zip(plain_users, plain_logits, strict=True):
                 out[u] = logits.view(1, 1, -1)
+            self._ordinary_state_slots.update(plain_slots)
 
         if any(logits is None for logits in out):
             raise RuntimeError("Qwen36DFlash prefill failed to produce every request row")
@@ -1050,24 +1059,31 @@ class Qwen36DFlashForCausalLM(Qwen36ForCausalLM):
                 self._pending_state_slot_moves = expected_moves
 
                 # The plugin settles one global state-slot permutation for
-                # every lane. Ordinary decode applies it in the base wrapper;
-                # speculative decode bypasses that wrapper, so apply the same
-                # physical target-GDN gather here before a pending session can
-                # seed from the remapped row.
-                if execution_lane in {"speculative", "legacy_dflash"}:
+                # every lane. Ordinary decode applies it in the base wrapper.
+                # A speculative step only needs the equivalent physical gather
+                # when hidden ordinary requests still own shared target-GDN
+                # rows. In a pure-spec cohort pending sessions seed directly
+                # from their unchanged prefill rows, then become private; a
+                # full gather there only rebuilds packed history in all 48 GDN
+                # layers and has no consumer.
+                ordinary_slots = self._ordinary_state_slots
+                physical_gather = execution_lane == "ordinary" or bool(ordinary_slots)
+                if execution_lane in {"speculative", "legacy_dflash"} and ordinary_slots:
                     self.model[0]._remap_gdn_slots(remap)
 
-                # Every physical gather changes the coordinate of pending
-                # prompt state. Active DFlash sessions are already private and
-                # need only the _phys permutation above.
                 inverse = [0] * self._B
                 for new_slot, old_slot in enumerate(remap):
                     inverse[old_slot] = new_slot
-                for phys, pending in enumerate(self._pending):
-                    if pending is None or len(pending) < 3:
-                        continue
-                    T, pt_row, state_slot = pending
-                    self._pending[phys] = (T, pt_row, inverse[int(state_slot)])
+                if physical_gather:
+                    # A physical gather changes both ordinary ownership and
+                    # the coordinate of not-yet-seeded speculative prompt
+                    # state. Active DFlash sessions are already private.
+                    self._ordinary_state_slots = {inverse[int(slot)] for slot in ordinary_slots}
+                    for phys, pending in enumerate(self._pending):
+                        if pending is None or len(pending) < 3:
+                            continue
+                        T, pt_row, state_slot = pending
+                        self._pending[phys] = (T, pt_row, inverse[int(state_slot)])
 
         if execution_lane == "ordinary":
             return super().decode_forward(*args, **kwargs)
@@ -1428,6 +1444,7 @@ class Qwen36DFlashForCausalLM(Qwen36ForCausalLM):
         self._pending_state_slot_moves = None
 
     def release_request(self, row: int) -> None:
+        self._ordinary_state_slots.discard(int(row))
         if self._spec is None:
             return
         phys = self._phys[int(row)] if 0 <= int(row) < self._B else None

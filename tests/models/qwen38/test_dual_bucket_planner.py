@@ -182,6 +182,7 @@ def test_prefill_routes_plain_rows_away_from_speculative_state():
     generator._phys = list(range(S))
     generator._phys[6], generator._phys[7] = 2, 3
     generator._pending = [None] * S
+    generator._ordinary_state_slots = {6}
     generator._carry = [[] for _ in range(S)]
     generator._stopped = [False] * S
     generator._prev_tail = [None] * S
@@ -221,6 +222,7 @@ def test_prefill_routes_plain_rows_away_from_speculative_state():
     assert generator._pending[2][0] == 2
     assert generator._pending[2][2] == 6
     assert generator._pending[3] is None
+    assert generator._ordinary_state_slots == {7}
 
 
 @requires_vd
@@ -609,6 +611,7 @@ def _vllm_obj(dec, S, eos=151645, vocab=248320):
     obj._B = S
     obj._phys = list(range(S))
     obj._pending = [None] * S
+    obj._ordinary_state_slots = set()
     obj._carry = [[] for _ in range(S)]
     obj._stopped = [False] * S
     obj._prev_tail = [None] * S
@@ -677,7 +680,7 @@ def test_decode_forward_live_after_is_composed_through_slot_remap(expect_error):
         slot_remap=torch.tensor(remap),
     )
     assert obj._phys == remap
-    assert obj.model[0].remaps == [remap]
+    assert obj.model[0].remaps == []
     assert dec.calls[0] == ("plan", frozenset({3, 1})), "live_after names PHYSICAL slots after the remap"
     assert [c[1] for c in dec.calls if c[0] == "begin"] == [1]
     with expect_error(RuntimeError, "not a permutation"):
@@ -692,7 +695,7 @@ def test_decode_forward_live_after_is_composed_through_slot_remap(expect_error):
 @requires_vd
 @pytest.mark.host
 @pytest.mark.model
-def test_spec_decode_physically_remaps_target_and_pending_seed_slot():
+def test_pure_spec_decode_skips_unused_target_remap_and_keeps_pending_seed_slot():
     S4 = 4
     dec = _RecordingDec(S4, cur_id="4x8")
     obj = _vllm_obj(dec, S4)
@@ -707,7 +710,31 @@ def test_spec_decode_physically_remaps_target_and_pending_seed_slot():
     )
 
     assert obj._phys == remap
+    assert obj.model[0].remaps == []
+    assert ("begin", 3, 3) in dec.calls
+
+
+@requires_vd
+@pytest.mark.host
+@pytest.mark.model
+def test_spec_decode_with_ordinary_owner_remaps_target_and_pending_seed_slot():
+    S4 = 4
+    dec = _RecordingDec(S4, cur_id="4x8")
+    obj = _vllm_obj(dec, S4)
+    obj._ordinary_state_slots = {0}
+    obj._pending[3] = (100, torch.zeros(8, dtype=torch.int32), 3)
+    remap = [2, 0, 3, 1]
+
+    obj.decode_forward(
+        tokens=torch.zeros(S4, 1, dtype=torch.int32),
+        start_pos=torch.tensor([-1, -1, 100, -1]),
+        page_table=torch.zeros(S4, 8, dtype=torch.int32),
+        slot_remap=torch.tensor(remap),
+    )
+
+    assert obj._phys == remap
     assert obj.model[0].remaps == [remap]
+    assert obj._ordinary_state_slots == {1}
     assert ("begin", 3, 2) in dec.calls
 
 
@@ -716,6 +743,7 @@ def test_spec_decode_physically_remaps_target_and_pending_seed_slot():
 @pytest.mark.model
 def test_plain_decode_composes_spec_indirection_before_base_remap(monkeypatch):
     obj = _vllm_obj(_RecordingDec(4, cur_id="4x8"), 4)
+    obj._ordinary_state_slots = {0, 2}
     obj._pending[3] = (99, torch.zeros(8, dtype=torch.int32), 1)
     seen = {}
 
@@ -736,7 +764,21 @@ def test_plain_decode_composes_spec_indirection_before_base_remap(monkeypatch):
     assert result == "plain-output"
     assert obj._phys == remap.tolist()
     assert obj._pending[3][2] == 3
+    assert obj._ordinary_state_slots == {0, 1}
+    assert obj.model[0].remaps == [], "the base ordinary path owns the one physical gather"
     assert torch.equal(seen["slot_remap"], remap)
+
+
+@requires_vd
+@pytest.mark.host
+@pytest.mark.model
+def test_release_request_drops_ordinary_state_ownership():
+    obj = _vllm_obj(_RecordingDec(4, cur_id="4x8"), 4)
+    obj._ordinary_state_slots = {1, 3}
+
+    obj.release_request(1)
+
+    assert obj._ordinary_state_slots == {3}
 
 
 @requires_vd
