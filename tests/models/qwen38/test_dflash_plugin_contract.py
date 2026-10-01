@@ -144,6 +144,7 @@ def _adapter(decoder, slots=4):
     obj._B = slots
     obj._phys = list(range(slots))
     obj._pending = [None] * slots
+    obj._ordinary_state_slots = set()
     obj._carry = [[] for _ in range(slots)]
     obj._stopped = [False] * slots
     obj._prev_tail = [None] * slots
