@@ -62,9 +62,10 @@ def test_p150_batch32_uses_dynamic_trace_allocation():
 @pytest.mark.host
 @pytest.mark.model
 def test_n300_trace_region_fits_the_traced_eval32_workload():
-    # The eval-32 perf-report case captures about 41 MB of traces on N300, so 38 MB
-    # failed during trace capture in both optimization profiles.
-    assert resolve_trace_region_size("llama3.1-8b", "N300") == 60_000_000
+    # The eval-32 perf-report case captures about 62 MB of traces on N300: the
+    # three prefix-cached 1024 variants (one per sampling path) joined the ~41 MB
+    # it captured before, so a 60 MB region failed in both optimization profiles.
+    assert resolve_trace_region_size("llama3.1-8b", "N300") == 70_000_000
 
 
 @pytest.mark.host

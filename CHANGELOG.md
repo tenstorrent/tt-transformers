@@ -22,6 +22,11 @@ All notable changes to this project will be documented here.
   uncompiled is refused at load with a `ValueError`.
 - A `max_seq_len` that isn't a prefill bucket boundary now warms the bucket it
   pads to.
+- Warmup compiles the prefix-cached variant of every prefill bucket a cached
+  prompt can reach, including the top one. A configuration whose `max_seq_len`
+  is itself the top bucket gains one such case per sampling path, captured as a
+  trace where that bucket is traced; the Llama-3.1-8B N300 trace region grows
+  to 70 MB for it.
 - Default KV-cache sizing leaves room for the decode page table. A paged KV
   cache narrower than the decode page table is refused at load with a
   `ValueError`, instead of failing on the first decode step.
