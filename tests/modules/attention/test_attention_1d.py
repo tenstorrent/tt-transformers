@@ -2110,6 +2110,13 @@ def _attention_gate_kernel(fidelity, *, approximate, fp32):
     )
 
 
+def _skip_unless_wormhole(mesh_device):
+    # The Wormhole gates leave the decode head grid unset, which only Wormhole resolves to None;
+    # Blackhole fills in its own grid, so the gate's geometry assertions cannot hold there.
+    if mesh_device.arch() != ttnn.device.Arch.WORMHOLE_B0:
+        pytest.skip("Wormhole common-config gate; Blackhole has its own common-config gates")
+
+
 def _build_synthetic_attention_gate(mesh_device, *, paged: bool, is_blackhole: bool):
     """Build a reduced Llama layer with explicit common-config requests."""
     torch.manual_seed(2026)
@@ -2410,6 +2417,7 @@ def test_attention_1d_blackhole_common_config_paged_prefill_decode_transition_ca
 @pytest.mark.parametrize("mode", ["prefill", "decode"])
 def test_attention_1d_wormhole_common_config_correctness_cache_and_timing(request, ttnn_mesh_device, mode):
     """Focused WH correctness/cache gate using all six explicit compute slots."""
+    _skip_unless_wormhole(ttnn_mesh_device)
     ttnn.SetDefaultDevice(ttnn_mesh_device)
     request.addfinalizer(lambda: ttnn.SetDefaultDevice(None))
     model, reference, rotary_emb, _ = _build_synthetic_attention_gate(ttnn_mesh_device, paged=False, is_blackhole=False)
@@ -2450,6 +2458,7 @@ def test_attention_1d_wormhole_common_config_paged_prefill_decode_transition_cac
     request, ttnn_mesh_device
 ):
     """Focused WH paged transition gate with stable program-cache evidence."""
+    _skip_unless_wormhole(ttnn_mesh_device)
     ttnn.SetDefaultDevice(ttnn_mesh_device)
     request.addfinalizer(lambda: ttnn.SetDefaultDevice(None))
     model, reference, rotary_emb, page_config = _build_synthetic_attention_gate(
