@@ -6,6 +6,13 @@ from types import SimpleNamespace
 
 import pytest
 import torch
+
+pytest.importorskip("vllm", reason="vLLM is supplied by the schema-6 serving integration")
+pytest.importorskip(
+    "vllm_tt_plugin.spec_decode",
+    reason="vLLM TT plugin is supplied by the schema-6 serving integration",
+)
+
 from vllm_tt_plugin.spec_decode import DraftOutput, SpecPlan, SpecReject, VerifyOutput
 
 from tt_transformers.models.qwen38 import dflash2_serving as serving
