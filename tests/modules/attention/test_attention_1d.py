@@ -167,7 +167,11 @@ class RotarySetupHelper:
         rotary_emb,  # HuggingFace rotary embedding module
         use_qk_fused: bool = False,
         datatype: ttnn.DataType = ttnn.bfloat16,
+        core_grid: ttnn.CoreCoord | None = None,
     ):
+        """``core_grid`` is the grid decode cos/sin are sharded over, row-wise. Pass the attention's
+        ``decode_transformation_core_grid`` so each user's cos/sin sit on the core that holds its query
+        heads. The default, the device grid, is that grid on Wormhole but not on Blackhole."""
         self.device = device
         self.head_dim = head_dim
         self.use_qk_fused = use_qk_fused
@@ -182,7 +186,7 @@ class RotarySetupHelper:
         else:
             self.batch_size_per_device_group = self.doubled_batch_size
 
-        self.core_grid = device.compute_with_storage_grid_size()
+        self.core_grid = core_grid if core_grid is not None else device.compute_with_storage_grid_size()
         self.batch_grid = ttnn.num_cores_to_corerangeset(self.doubled_batch_size, self.core_grid, row_wise=True)
 
         # Get cos/sin from HuggingFace rotary_emb
@@ -1734,6 +1738,7 @@ def _run_decode_test(
         max_seq_len,
         reference_wrapper.rotary_emb,
         use_qk_fused=False,
+        core_grid=tt_model.config.decode_transformation_core_grid,
     )
 
     # Decode iterations starting from position 0
@@ -2024,7 +2029,13 @@ def test_attention_1d_prefill_decode_transition(ttnn_mesh_device: ttnn.MeshDevic
     # This tests both KV cache integration AND data flow between modes.
     # =========================================================================
     decode_rope_setup = RotarySetupHelper(
-        ttnn_mesh_device, batch_size, head_dim, max_seq_len, rotary_emb, use_qk_fused=False
+        ttnn_mesh_device,
+        batch_size,
+        head_dim,
+        max_seq_len,
+        rotary_emb,
+        use_qk_fused=False,
+        core_grid=tt_model.config.decode_transformation_core_grid,
     )
 
     # First decode input: last position of prefill output (shape: batch, 1, dim)
