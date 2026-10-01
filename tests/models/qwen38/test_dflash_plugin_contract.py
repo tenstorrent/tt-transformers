@@ -12,8 +12,6 @@ from tt_transformers.models.qwen38 import dflash2_serving as serving
 from tt_transformers.models.qwen38 import qwen36_vllm_dflash as adapter
 from tt_transformers.models.qwen38.dflash2_serving import Bucket
 
-pytestmark = [pytest.mark.host, pytest.mark.model]
-
 
 class _Target:
     def __init__(self):
@@ -72,6 +70,8 @@ def _contract_decoder():
     return dec
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_verify_then_commit_and_propose_preserves_the_state_boundary():
     dec = _contract_decoder()
     tokens = torch.tensor([[11, 12, 13, 14]], dtype=torch.int32)
@@ -154,6 +154,8 @@ def _adapter(decoder, slots=4):
     return obj
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_adapter_returns_standard_verify_and_draft_outputs():
     dec = _ContractDecoder(4)
     obj = _adapter(dec)
@@ -193,6 +195,8 @@ def test_adapter_returns_standard_verify_and_draft_outputs():
     assert drafted.num_valid.tolist() == [3, 0, 0, 0]
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_spec_plan_publishes_the_widest_exact_bucket(monkeypatch):
     monkeypatch.setenv("QWEN36_DRAFTER", "dflash2")
     monkeypatch.setenv("QWEN36_DFLASH_SERVE_BLOCK", "32")
