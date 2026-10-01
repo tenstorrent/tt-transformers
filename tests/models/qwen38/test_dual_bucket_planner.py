@@ -596,7 +596,15 @@ def _vllm_obj(dec, S, eos=151645, vocab=248320):
     obj._dflash = vd.DFlashRuntimeConfig.from_env()
     obj._spec, obj._spec_pre, obj._in_warmup = dec, None, False
     obj.data_parallel = 1  # Generator.__del__ reads it (no __init__ ran)
-    obj.model = [SimpleNamespace(vocab_size=vocab)]
+    class _FakeModel:
+        def __init__(self):
+            self.vocab_size = vocab
+            self.remaps = []
+
+        def _remap_gdn_slots(self, remap):
+            self.remaps.append([int(value) for value in remap])
+
+    obj.model = [_FakeModel()]
     obj._eos, obj._eos_fill = {eos}, eos
     obj._B = S
     obj._phys = list(range(S))
@@ -660,7 +668,7 @@ def test_decode_forward_live_after_is_composed_through_slot_remap(expect_error):
     dec = _RecordingDec(S4, cur_id="4x8")
     obj = _vllm_obj(dec, S4)
     dec.active[3] = True
-    obj._pending[1] = (100, torch.zeros(8, dtype=torch.int32))
+    obj._pending[1] = (100, torch.zeros(8, dtype=torch.int32), 1)
     remap = [3, 1, 0, 2]  # row 0 now reads the state that was at slot 3; row 1 slot 1
     obj.decode_forward(
         tokens=torch.zeros(S4, 1, dtype=torch.int32),
@@ -669,6 +677,7 @@ def test_decode_forward_live_after_is_composed_through_slot_remap(expect_error):
         slot_remap=torch.tensor(remap),
     )
     assert obj._phys == remap
+    assert obj.model[0].remaps == [remap]
     assert dec.calls[0] == ("plan", frozenset({3, 1})), "live_after names PHYSICAL slots after the remap"
     assert [c[1] for c in dec.calls if c[0] == "begin"] == [1]
     with expect_error(RuntimeError, "not a permutation"):
@@ -678,6 +687,28 @@ def test_decode_forward_live_after_is_composed_through_slot_remap(expect_error):
             page_table=None,
             slot_remap=torch.tensor([0, 0, 1, 2]),
         )
+
+
+@requires_vd
+@pytest.mark.host
+@pytest.mark.model
+def test_spec_decode_physically_remaps_target_and_pending_seed_slot():
+    S4 = 4
+    dec = _RecordingDec(S4, cur_id="4x8")
+    obj = _vllm_obj(dec, S4)
+    obj._pending[3] = (100, torch.zeros(8, dtype=torch.int32), 3)
+    remap = [2, 0, 3, 1]
+
+    obj.decode_forward(
+        tokens=torch.zeros(S4, 1, dtype=torch.int32),
+        start_pos=torch.tensor([-1, -1, 100, -1]),
+        page_table=torch.zeros(S4, 8, dtype=torch.int32),
+        slot_remap=torch.tensor(remap),
+    )
+
+    assert obj._phys == remap
+    assert obj.model[0].remaps == [remap]
+    assert ("begin", 3, 2) in dec.calls
 
 
 @requires_vd

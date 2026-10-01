@@ -1049,13 +1049,17 @@ class Qwen36DFlashForCausalLM(Qwen36ForCausalLM):
                     )
                 self._pending_state_slot_moves = expected_moves
 
-        if execution_lane == "ordinary":
-            if remap is not None:
-                # The base path below physically gathers target GDN rows as
-                # new[row] <- old[remap[row]].  Pending DFlash requests have
-                # not seeded their private rings yet, so follow that gather
-                # with the remembered base-state row. Active sessions no
-                # longer depend on base state and need no update.
+                # The plugin settles one global state-slot permutation for
+                # every lane. Ordinary decode applies it in the base wrapper;
+                # speculative decode bypasses that wrapper, so apply the same
+                # physical target-GDN gather here before a pending session can
+                # seed from the remapped row.
+                if execution_lane in {"speculative", "legacy_dflash"}:
+                    self.model[0]._remap_gdn_slots(remap)
+
+                # Every physical gather changes the coordinate of pending
+                # prompt state. Active DFlash sessions are already private and
+                # need only the _phys permutation above.
                 inverse = [0] * self._B
                 for new_slot, old_slot in enumerate(remap):
                     inverse[old_slot] = new_slot
@@ -1064,6 +1068,8 @@ class Qwen36DFlashForCausalLM(Qwen36ForCausalLM):
                         continue
                     T, pt_row, state_slot = pending
                     self._pending[phys] = (T, pt_row, inverse[int(state_slot)])
+
+        if execution_lane == "ordinary":
             return super().decode_forward(*args, **kwargs)
         if execution_lane == "speculative":
             if spec_mode != "argmax_ids":
