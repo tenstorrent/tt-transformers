@@ -39,9 +39,7 @@ def _fake_gdn(*, packed_valid: bool, batch_size: int = 8):
         events.append("sync_hist")
         # Model the production rebuild: the logical history follows the remapped taps,
         # while its physical row selector is encoded for the destination slot parity.
-        self.conv_hist_packed["rows"] = [
-            (self.conv_states[0]["rows"][dst][1], dst & 1) for dst in range(self.B)
-        ]
+        self.conv_hist_packed["rows"] = [(self.conv_states[0]["rows"][dst][1], dst & 1) for dst in range(self.B)]
         self._hist_packed_valid = True
 
     def remap_conv_hist_packed(self, idx):
@@ -58,6 +56,8 @@ def _fake_gdn(*, packed_valid: bool, batch_size: int = 8):
 
 
 @pytest.mark.parametrize("packed_valid", [True, False], ids=["packed-valid", "packed-invalid"])
+@pytest.mark.host
+@pytest.mark.model
 def test_gdn_slot_remap_identity_is_a_true_noop(packed_valid):
     gdn, events = _fake_gdn(packed_valid=packed_valid)
     packed_address = gdn.conv_hist_packed["address"]
@@ -82,6 +82,8 @@ def test_gdn_slot_remap_identity_is_a_true_noop(packed_valid):
         pytest.param([1, 2, 0, 3, 4, 5, 6, 7], id="mixed-parity-with-hold-rows"),
     ],
 )
+@pytest.mark.host
+@pytest.mark.model
 def test_gdn_slot_remap_rebuilds_packed_history_for_destination_parity(remap, packed_valid):
     gdn, events = _fake_gdn(packed_valid=packed_valid)
     packed_address = gdn.conv_hist_packed["address"]
@@ -109,6 +111,8 @@ def test_gdn_slot_remap_rebuilds_packed_history_for_destination_parity(remap, pa
         assert events[-1] == "sync_hist"
 
 
+@pytest.mark.host
+@pytest.mark.model
 def test_valid_packed_remap_updates_persistent_buffer_without_device_allocation(monkeypatch):
     """The host-assisted parity translation must not allocate a request-time device tensor."""
     batch_size = 4
