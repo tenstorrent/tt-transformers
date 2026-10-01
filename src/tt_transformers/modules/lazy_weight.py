@@ -24,7 +24,12 @@ from typing import TYPE_CHECKING
 import ttnn
 from loguru import logger
 
-from tt_transformers.tensor_utils import get_padded_hidden_dim, pad_to_shape, parse_shard_dims_from_mesh_mapper_config
+from tt_transformers.tensor_utils import (
+    get_padded_hidden_dim,
+    load_cached_tensor,
+    pad_to_shape,
+    parse_shard_dims_from_mesh_mapper_config,
+)
 
 if TYPE_CHECKING:
     import torch
@@ -121,7 +126,7 @@ class LazyWeight:
         )
         if cache_file_name and cache_file_name.exists():
             logger.info(f"\033[32m[cache hit]\033[0m Loading tensor from cache: {cache_file_name}")
-            self._value = ttnn.load_tensor(str(cache_file_name), device=self.device)
+            self._value = load_cached_tensor(cache_file_name, self.device, pad_value=self.pad_value)
             return self._value
 
         # Resolve source

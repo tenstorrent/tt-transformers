@@ -13,6 +13,7 @@ import torch
 import ttnn
 
 from tt_transformers.llm_runtime.config import PagedKVCacheConfig
+from tt_transformers.tensor_utils import load_cached_tensor
 
 
 @dataclass(frozen=True)
@@ -193,15 +194,25 @@ class PagedKVCacheManager:
                     cache_file_name = None
                     if cache_path is not None and len(dtypes_by_shape[shape]) == 1:
                         cache_file_name = cache_path / f"empty_{kv}cache_paged_attention{shape}"
-                    tensor = ttnn.as_tensor(
-                        host_tensor,
-                        device=self._mesh_device,
-                        mesh_mapper=ttnn.ReplicateTensorToMesh(self._mesh_device),
-                        layout=ttnn.TILE_LAYOUT,
-                        memory_config=self._config.memory_config,
-                        dtype=spec.dtype,
-                        cache_file_name=cache_file_name,
-                    )
+                    tensor = None
+                    if cache_file_name is not None:
+                        # The file ttnn.as_tensor writes for this name; hits load through
+                        # load_cached_tensor rather than straight from the file mapping.
+                        cached_file = Path(
+                            f"{cache_file_name}_dtype_{spec.dtype.name}_layout_{ttnn.TILE_LAYOUT.name}.tensorbin"
+                        )
+                        if cached_file.is_file():
+                            tensor = load_cached_tensor(cached_file, self._mesh_device)
+                    if tensor is None:
+                        tensor = ttnn.as_tensor(
+                            host_tensor,
+                            device=self._mesh_device,
+                            mesh_mapper=ttnn.ReplicateTensorToMesh(self._mesh_device),
+                            layout=ttnn.TILE_LAYOUT,
+                            memory_config=self._config.memory_config,
+                            dtype=spec.dtype,
+                            cache_file_name=cache_file_name,
+                        )
                     allocated.append(tensor)
                     pair.append(tensor)
                 cache.append(pair)
