@@ -81,6 +81,15 @@ def test_p150x4_trace_region_fits_the_traced_batch32_workload():
 
 @pytest.mark.host
 @pytest.mark.model
+def test_p300_trace_region_fits_the_traced_batch_workloads():
+    # On P300 the batch-1, batch-32 and eval-32 cases each capture 14 traces,
+    # up to about 85.3 MB with the three prefix-cached 1024 variants, so 52 MB
+    # failed during trace capture.
+    assert resolve_trace_region_size("llama3.1-8b", "P300") == 100_000_000
+
+
+@pytest.mark.host
+@pytest.mark.model
 def test_demo_exposes_seeded_bh_cross_cardinality_qualification_node():
     assert "def test_llama3_8b_bh_seeded_cross_cardinality(ttnn_mesh_device, optimizations):" in _DEMO_SOURCE
     function = next(
