@@ -617,8 +617,10 @@ def test_decode_forward_plans_before_any_begin_set_table_or_step():
     cfg = vd.DFlashRuntimeConfig.from_env()
     assert cfg.output_width > 1 and cfg.ragged, "this test drives the ragged multi-bucket profile's contract"
     capabilities = cfg.capabilities({})
-    assert capabilities["tt_block_kv_extent_tokens"] == cfg.output_width + vd._MAX_DRAFT + 1
-    assert "tt_block_output_kv_lookahead_tokens" not in capabilities
+    assert capabilities["supports_spec_decode"] is True
+    assert capabilities["supports_async_spec_decode"] is False
+    assert capabilities["spec_requirements"] == ["device_propose"]
+    assert "tt_block_kv_extent_tokens" not in capabilities
     dec = _RecordingDec(S)
     obj = _vllm_obj(dec, S)
     nb = 16
