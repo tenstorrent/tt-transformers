@@ -598,6 +598,7 @@ def _vllm_obj(dec, S, eos=151645, vocab=248320):
     obj._dflash = vd.DFlashRuntimeConfig.from_env()
     obj._spec, obj._spec_pre, obj._in_warmup = dec, None, False
     obj.data_parallel = 1  # Generator.__del__ reads it (no __init__ ran)
+
     class _FakeModel:
         def __init__(self):
             self.vocab_size = vocab
