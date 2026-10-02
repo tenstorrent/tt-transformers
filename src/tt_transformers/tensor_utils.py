@@ -7,6 +7,7 @@ Tensor utility functions for TTTv2 modules.
 
 import json
 import math
+import os
 import re
 
 import torch
@@ -170,6 +171,59 @@ def parse_shard_dims_from_mesh_mapper_config(mesh_mapper_config: ttnn.MeshMapper
     config_repr = repr(mesh_mapper_config)
     matches = re.findall(r"PlacementShard\((-?\d+)\)", config_repr)
     return [int(d) for d in matches]
+
+
+# ttnn.load_tensor reads a .tensorbin through a read-only file mapping and uploads straight from it.
+# Since ttnn 0.79.0, an upload larger than this pins its host memory read-only for the device to read,
+# and a pinned file mapping can stall the upload indefinitely (seen on Blackhole with the IOMMU
+# enabled) where the same upload from process memory completes.
+PINNED_UPLOAD_THRESHOLD_BYTES = 32 * 1024 * 1024
+
+
+def load_cached_tensor(
+    cache_file: str | os.PathLike[str], device: ttnn.MeshDevice, pad_value: float | None = None
+) -> ttnn.Tensor:
+    """
+    Load a cached .tensorbin onto ``device`` without uploading from the file mapping.
+
+    Files at or below PINNED_UPLOAD_THRESHOLD_BYTES load directly. Larger ones are loaded to host, and
+    each shard is rebuilt in process memory before the upload, keeping its dtype, layout, tile and
+    memory config and the tensor's mesh topology. ``pad_value`` fills tile padding, so pass the value
+    the cache was written with.
+
+    The rebuild covers the two layouts caches are written in: one unsharded tensor (replicated) and one
+    shard per device. Any other layout, and every multi-host mesh (rebuilding would gather every shard
+    onto this host), keeps the direct load.
+    """
+    path = os.fspath(cache_file)
+    if os.path.getsize(path) <= PINNED_UPLOAD_THRESHOLD_BYTES or ttnn.using_distributed_env():
+        return ttnn.load_tensor(path, device=device)
+
+    mapped = ttnn.load_tensor(path)
+    mapped_shards = ttnn.get_device_tensors(mapped)
+    if len(mapped_shards) not in (1, device.get_num_devices()):
+        return mapped.to(device, mapped.memory_config())
+
+    shards = [
+        ttnn.from_torch(
+            ttnn.to_torch(shard),
+            dtype=shard.dtype,
+            layout=shard.layout,
+            tile=shard.tile,
+            memory_config=shard.memory_config(),
+            pad_value=pad_value,
+        )
+        for shard in mapped_shards
+    ]
+    if len(shards) == 1:
+        # Uploads the way the unsharded tensor that wrote the cache did.
+        owned = shards[0]
+    else:
+        # The host buffer takes the device mesh's shape, as a mesh mapper's output does; the topology's
+        # distribution shape can have fewer dimensions than the mesh coordinates the upload indexes by.
+        owned = ttnn.from_host_shards(shards, device.shape)
+        owned.update_tensor_topology(mapped.tensor_topology())
+    return owned.to(device, mapped.memory_config())
 
 
 def memory_config_to_dict(memory_config: ttnn.MemoryConfig):

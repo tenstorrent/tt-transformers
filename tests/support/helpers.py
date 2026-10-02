@@ -18,3 +18,25 @@ def stable_model_seed(model_name: str) -> int:
     per-model stable seed keeps caches distinct and reduces correlated RNG paths.
     """
     return zlib.crc32(model_name.encode("utf-8")) & 0xFFFFFFFF
+
+
+def hf_config_or_skip(model_name: str, **kwargs):
+    """``AutoConfig.from_pretrained``, skipping the test when the config isn't available.
+
+    Skips when the hub can't be reached and the config isn't in the local cache, or when the repo
+    is gated and this machine has no access. Any other error, such as a misspelled model id,
+    still fails the test.
+    """
+    import pytest
+    from huggingface_hub.errors import GatedRepoError, LocalEntryNotFoundError
+    from transformers import AutoConfig
+
+    try:
+        return AutoConfig.from_pretrained(model_name, **kwargs)
+    except OSError as error:
+        cause: BaseException | None = error
+        while cause is not None and not isinstance(cause, (LocalEntryNotFoundError, GatedRepoError)):
+            cause = cause.__cause__
+        if cause is None:
+            raise
+        pytest.skip(f"Hugging Face config for {model_name} is not available: {str(error).splitlines()[0]}")

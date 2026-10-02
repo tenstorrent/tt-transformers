@@ -17,9 +17,9 @@ sizes:
       bh_p150:
         trace_region_size: 0
       bh_p300:
-        trace_region_size: 52000000
+        trace_region_size: 100000000
       p300x2:
-        trace_region_size: 52000000
+        trace_region_size: 100000000
   llama3.3-70b:
     aliases:
     - Llama-3.3-70B
@@ -34,7 +34,7 @@ sizes:
       bh_p300:
         trace_region_size: 80000000
       p300x2:
-        trace_region_size: 224000000
+        trace_region_size: 400000000
       bh_loudbox:
         trace_region_size: 84000000
   llama3.2-1b:
@@ -65,7 +65,7 @@ sizes:
       bh_p300:
         trace_region_size: 90000000
       p300x2:
-        trace_region_size: 100000000
+        trace_region_size: 200000000
       bh_loudbox:
         trace_region_size: 90000000
   qwen2.5-72b:

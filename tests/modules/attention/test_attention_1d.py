@@ -28,7 +28,7 @@ import pytest
 import torch
 from loguru import logger
 from tests.support.comparison import hf_cache_layer_kv, hf_cache_num_layers
-from transformers import AutoConfig, AutoModelForCausalLM, LlamaConfig, LlamaForCausalLM
+from transformers import AutoModelForCausalLM, LlamaConfig, LlamaForCausalLM
 
 # transformers 5.x moved no_init_weights to transformers.initialization; fall back
 # to the old location for transformers < 5.x.
@@ -40,7 +40,7 @@ except ImportError:
 import ttnn
 from examples.common.auto_compose import to_torch_auto_compose
 from tests.support.comparison import comp_allclose, comp_pcc
-from tests.support.helpers import stable_model_seed
+from tests.support.helpers import hf_config_or_skip, stable_model_seed
 
 from tt_transformers.modules.attention import attention_1d as attention_1d_module
 from tt_transformers.modules.attention.attention_1d import Attention1D, Attention1DConfig, _resolve_attention1d_config
@@ -167,7 +167,11 @@ class RotarySetupHelper:
         rotary_emb,  # HuggingFace rotary embedding module
         use_qk_fused: bool = False,
         datatype: ttnn.DataType = ttnn.bfloat16,
+        core_grid: ttnn.CoreCoord | None = None,
     ):
+        """``core_grid`` is the grid decode cos/sin are sharded over, row-wise. Pass the attention's
+        ``decode_transformation_core_grid`` so each user's cos/sin sit on the core that holds its query
+        heads. The default, the device grid, is that grid on Wormhole but not on Blackhole."""
         self.device = device
         self.head_dim = head_dim
         self.use_qk_fused = use_qk_fused
@@ -182,7 +186,7 @@ class RotarySetupHelper:
         else:
             self.batch_size_per_device_group = self.doubled_batch_size
 
-        self.core_grid = device.compute_with_storage_grid_size()
+        self.core_grid = core_grid if core_grid is not None else device.compute_with_storage_grid_size()
         self.batch_grid = ttnn.num_cores_to_corerangeset(self.doubled_batch_size, self.core_grid, row_wise=True)
 
         # Get cos/sin from HuggingFace rotary_emb
@@ -1306,7 +1310,7 @@ def test_attention_1d_vs_reference(
     torch.manual_seed(seed)
 
     # Load HF config directly (no ModelArgs)
-    hf_config = AutoConfig.from_pretrained(hf_model_name)
+    hf_config = hf_config_or_skip(hf_model_name)
 
     # Handle multimodal models (Mllama, LLaVA, etc.) which nest text config under .text_config
     is_multimodal = hasattr(hf_config, "text_config") and hf_config.text_config is not None
@@ -1734,6 +1738,7 @@ def _run_decode_test(
         max_seq_len,
         reference_wrapper.rotary_emb,
         use_qk_fused=False,
+        core_grid=tt_model.config.decode_transformation_core_grid,
     )
 
     # Decode iterations starting from position 0
@@ -1874,7 +1879,7 @@ def test_attention_1d_prefill_decode_transition(ttnn_mesh_device: ttnn.MeshDevic
     torch.manual_seed(seed)
 
     # Load HF config
-    hf_config = AutoConfig.from_pretrained(hf_model_name)
+    hf_config = hf_config_or_skip(hf_model_name)
     cfg = hf_config.text_config if hasattr(hf_config, "text_config") else hf_config
     cfg.num_hidden_layers = 1
 
@@ -2024,7 +2029,13 @@ def test_attention_1d_prefill_decode_transition(ttnn_mesh_device: ttnn.MeshDevic
     # This tests both KV cache integration AND data flow between modes.
     # =========================================================================
     decode_rope_setup = RotarySetupHelper(
-        ttnn_mesh_device, batch_size, head_dim, max_seq_len, rotary_emb, use_qk_fused=False
+        ttnn_mesh_device,
+        batch_size,
+        head_dim,
+        max_seq_len,
+        rotary_emb,
+        use_qk_fused=False,
+        core_grid=tt_model.config.decode_transformation_core_grid,
     )
 
     # First decode input: last position of prefill output (shape: batch, 1, dim)
@@ -2097,6 +2108,13 @@ def _attention_gate_kernel(fidelity, *, approximate, fp32):
         fp32_dest_acc_en=fp32,
         packer_l1_acc=True,
     )
+
+
+def _skip_unless_wormhole(mesh_device):
+    # The Wormhole gates leave the decode head grid unset, which only Wormhole resolves to None;
+    # Blackhole fills in its own grid, so the gate's geometry assertions cannot hold there.
+    if mesh_device.arch() != ttnn.device.Arch.WORMHOLE_B0:
+        pytest.skip("Wormhole common-config gate; Blackhole has its own common-config gates")
 
 
 def _build_synthetic_attention_gate(mesh_device, *, paged: bool, is_blackhole: bool):
@@ -2399,6 +2417,7 @@ def test_attention_1d_blackhole_common_config_paged_prefill_decode_transition_ca
 @pytest.mark.parametrize("mode", ["prefill", "decode"])
 def test_attention_1d_wormhole_common_config_correctness_cache_and_timing(request, ttnn_mesh_device, mode):
     """Focused WH correctness/cache gate using all six explicit compute slots."""
+    _skip_unless_wormhole(ttnn_mesh_device)
     ttnn.SetDefaultDevice(ttnn_mesh_device)
     request.addfinalizer(lambda: ttnn.SetDefaultDevice(None))
     model, reference, rotary_emb, _ = _build_synthetic_attention_gate(ttnn_mesh_device, paged=False, is_blackhole=False)
@@ -2439,6 +2458,7 @@ def test_attention_1d_wormhole_common_config_paged_prefill_decode_transition_cac
     request, ttnn_mesh_device
 ):
     """Focused WH paged transition gate with stable program-cache evidence."""
+    _skip_unless_wormhole(ttnn_mesh_device)
     ttnn.SetDefaultDevice(ttnn_mesh_device)
     request.addfinalizer(lambda: ttnn.SetDefaultDevice(None))
     model, reference, rotary_emb, page_config = _build_synthetic_attention_gate(
@@ -2549,7 +2569,7 @@ def test_attention_1d_sliding_window(
     torch.manual_seed(42)
 
     # Load HuggingFace model
-    hf_config = AutoConfig.from_pretrained(hf_model_name)
+    hf_config = hf_config_or_skip(hf_model_name)
     hf_model = AutoModelForCausalLM.from_pretrained(hf_model_name, torch_dtype=torch.bfloat16)
     reference_attn = hf_model.model.layers[0].self_attn
     rotary_emb = getattr(hf_model.model, "rotary_emb", None)

@@ -19,6 +19,7 @@ from tt_transformers.modules.lazy_weight import (
     _from_torch_and_dump,
     resolve_lazy_weight,
 )
+from tt_transformers.tensor_utils import PINNED_UPLOAD_THRESHOLD_BYTES
 
 # ============================================================================
 # Fixtures
@@ -1033,6 +1034,41 @@ class TestLazyWeightIntegration:
             result2 = lw2.get_device_weight()
 
             assert result2 is not None
+
+    @pytest.mark.device
+    @pytest.mark.parametrize(
+        "dtype, layout, shape",
+        [
+            (ttnn.bfloat8_b, ttnn.TILE_LAYOUT, (1, 1, 4096, 8192)),
+            (ttnn.bfloat16, ttnn.ROW_MAJOR_LAYOUT, (1, 1, 4096, 4352)),
+        ],
+        ids=["bfp8-tile", "bf16-row-major"],
+    )
+    def test_large_cache_hit_matches_cache_miss(self, ttnn_mesh_device: ttnn.MeshDevice, dtype, layout, shape):
+        """A cache hit above the pinned-upload threshold loads the same values as the miss that wrote it."""
+        tensor = torch.randn(shape, dtype=torch.bfloat16)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir)
+
+            def get_weight():
+                return LazyWeight(
+                    source=tensor,
+                    cache_dir_weight_name=(cache_dir, "large_weight"),
+                    device=ttnn_mesh_device,
+                    dtype=dtype,
+                    memory_config=ttnn.DRAM_MEMORY_CONFIG,
+                    layout=layout,
+                    mesh_mapper_config=None,
+                ).get_device_weight()
+
+            miss = get_weight()
+            (cache_file,) = cache_dir.glob("*.tensorbin")
+            assert cache_file.stat().st_size > PINNED_UPLOAD_THRESHOLD_BYTES
+            hit = get_weight()
+
+            assert hit.dtype == miss.dtype and hit.layout == miss.layout
+            assert torch.equal(ttnn.to_torch(hit), ttnn.to_torch(miss))
 
 
 if __name__ == "__main__":

@@ -182,16 +182,6 @@ def _create_attention_model_for_benchmark(
     if page_block_size is not None:
         paged_attention_config = PagedAttentionConfig(block_size=page_block_size, max_num_blocks=2048)
 
-    # RotarySetupHelper using HF rotary_emb (no rope_scaling needed - HF handles it)
-    rope_setup = RotarySetupHelper(
-        ttnn_mesh_device,
-        batch_size,
-        head_dim,
-        max_seq_len,
-        rotary_emb,  # HF rotary embedding already has rope_scaling applied
-        use_qk_fused=use_qk_fused,  # Use the parameterized value
-    )
-
     # Build Attention1DConfig with specified use_qk_fused
     # Note: kv_cache is auto-created by config resolution if not using paged attention
     config = Attention1DConfig(
@@ -222,6 +212,17 @@ def _create_attention_model_for_benchmark(
 
     # Create Attention1D
     tt_model = Attention1D.from_config(config)
+
+    # RotarySetupHelper using HF rotary_emb (no rope_scaling needed - HF handles it)
+    rope_setup = RotarySetupHelper(
+        ttnn_mesh_device,
+        batch_size,
+        head_dim,
+        max_seq_len,
+        rotary_emb,  # HF rotary embedding already has rope_scaling applied
+        use_qk_fused=use_qk_fused,  # Use the parameterized value
+        core_grid=tt_model.config.decode_transformation_core_grid,
+    )
 
     config_params = {
         "dim": dim,
@@ -400,6 +401,7 @@ def test_attention_1d_fused_qk_profiling(ttnn_mesh_device: ttnn.MeshDevice):
                     2048,
                     rotary_emb,
                     use_qk_fused=use_qk_fused,
+                    core_grid=tt_model.config.decode_transformation_core_grid,
                 )
                 decode_rot_mats = decode_rope_setup.get_rot_mats(position_idxs)
 

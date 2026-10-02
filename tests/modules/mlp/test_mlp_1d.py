@@ -20,7 +20,8 @@ from pathlib import Path
 import pytest
 import torch
 from loguru import logger
-from transformers import AutoConfig, AutoModelForCausalLM
+from tests.support.helpers import hf_config_or_skip
+from transformers import AutoModelForCausalLM
 
 # transformers 5.x moved no_init_weights to transformers.initialization; fall back
 # to the old location for transformers < 5.x.
@@ -556,7 +557,7 @@ def test_mlp_1d_vs_reference(
     torch.manual_seed(seed)
 
     # HF model (default small) for reference; skip global init to only seed MLP.
-    config = AutoConfig.from_pretrained(hf_model_name)
+    config = hf_config_or_skip(hf_model_name)
     config.num_hidden_layers = 1
 
     with no_init_weights():
@@ -883,7 +884,7 @@ def test_mlp_1d_config_prefill_override(ttnn_mesh_device: ttnn.MeshDevice):
 
     # Use Llama 8B config
     hf_model_name = "meta-llama/Llama-3.1-8B-Instruct"
-    hf_config = AutoConfig.from_pretrained(hf_model_name)
+    hf_config = hf_config_or_skip(hf_model_name)
     seq_len = 128
     batch_size = 1
 

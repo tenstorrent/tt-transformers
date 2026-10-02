@@ -8,6 +8,7 @@ import pytest
 import torch
 import ttnn
 
+from tt_transformers.llm_runtime import paged_kv_cache
 from tt_transformers.llm_runtime.config import PagedKVCacheConfig
 from tt_transformers.llm_runtime.paged_kv_cache import PagedKVCacheManager, torch_dtype_for_ttnn
 
@@ -209,6 +210,33 @@ def test_allocate_reuses_legacy_cache_files_when_dtype_is_unambiguous(fake_alloc
     ]
     assert [entry[2]["cache_file_name"] for entry in allocated] == expected * 2
     assert len({id(entry[1]) for entry in allocated}) == 1
+
+
+@pytest.mark.host
+def test_allocate_loads_existing_cache_files_through_load_cached_tensor(fake_allocator, tmp_path, monkeypatch):
+    allocated, _ = fake_allocator
+    loaded = []
+
+    def load_cached_tensor(path, device):
+        tensor = FakeTensor((4, 4, 32, 16), ttnn.bfloat8_b)
+        loaded.append((path, device, tensor))
+        return tensor
+
+    monkeypatch.setattr(paged_kv_cache, "load_cached_tensor", load_cached_tensor)
+    model = FakeModel()
+    model.model_args = SimpleNamespace(model_cache_path=tmp_path)
+    shape = (4, 4, 32, 16)
+    cached = tmp_path / f"empty_kcache_paged_attention{shape}_dtype_BFLOAT8_B_layout_TILE.tensorbin"
+    cached.touch()
+    manager = PagedKVCacheManager(model, cache_config(num_blocks=4))
+
+    cache = manager.allocate()
+
+    assert [(path, device) for path, device, _ in loaded] == [(cached, model.config.mesh_device)] * 2
+    assert [pair[0] for pair in cache] == [tensor for _, _, tensor in loaded]
+    assert [entry[2]["cache_file_name"] for entry in allocated] == [
+        tmp_path / f"empty_vcache_paged_attention{shape}"
+    ] * 2
 
 
 @pytest.mark.host

@@ -2,13 +2,16 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import json
+from types import SimpleNamespace
 
 import pytest
 import torch
 import ttnn
 
+from tt_transformers import tensor_utils
 from tt_transformers.tensor_utils import (
     get_rot_transformation_mat,
+    load_cached_tensor,
     pad_dim_to_size,
     pad_to_shape,
     parse_shard_dims_from_mesh_mapper_config,
@@ -313,6 +316,134 @@ def test_program_config_to_str():
     assert parsed["per_core_N"] == 4
 
     assert result == json.dumps(parsed, sort_keys=True)
+
+
+class _FakeHostTensor:
+    def __init__(self, name, *, topology=None):
+        self.name = name
+        self.dtype = ttnn.bfloat8_b
+        self.layout = ttnn.TILE_LAYOUT
+        self.tile = f"{name}-tile"
+        self._topology = topology
+        self.topology_updates = []
+        self.uploads = []
+
+    def memory_config(self):
+        return f"{self.name}-memcfg"
+
+    def tensor_topology(self):
+        return self._topology
+
+    def update_tensor_topology(self, topology):
+        self.topology_updates.append(topology)
+
+    def to(self, device, memory_config):
+        self.uploads.append((device, memory_config))
+        return f"{self.name}-on-device"
+
+
+def _write_cache_file(tmp_path, size):
+    path = tmp_path / "weight.tensorbin"
+    path.write_bytes(b"\0" * size)
+    return path
+
+
+@pytest.mark.host
+def test_load_cached_tensor_loads_small_files_directly(tmp_path, monkeypatch):
+    monkeypatch.setattr(tensor_utils, "PINNED_UPLOAD_THRESHOLD_BYTES", 16)
+    calls = []
+    monkeypatch.setattr(ttnn, "load_tensor", lambda path, device=None: calls.append((path, device)) or "direct")
+    path = _write_cache_file(tmp_path, 16)
+
+    assert load_cached_tensor(path, "mesh") == "direct"
+    assert calls == [(str(path), "mesh")]
+
+
+def _patch_rebuild(monkeypatch, shard_count):
+    """Fake the ttnn calls of the rebuild path; returns (mapped, shards, calls, owned)."""
+    monkeypatch.setattr(tensor_utils, "PINNED_UPLOAD_THRESHOLD_BYTES", 16)
+    mapped = _FakeHostTensor("mapped", topology="mapped-topology")
+    shards = [_FakeHostTensor(f"shard{index}") for index in range(shard_count)]
+    owned = _FakeHostTensor("owned")
+    calls = {"load": [], "from_torch": [], "from_host_shards": []}
+
+    def from_torch(tensor, **kwargs):
+        calls["from_torch"].append((tensor, kwargs))
+        return _FakeHostTensor(f"rebuilt-{tensor}")
+
+    def from_host_shards(tensors, shape):
+        calls["from_host_shards"].append(([tensor.name for tensor in tensors], shape))
+        return owned
+
+    monkeypatch.setattr(ttnn, "using_distributed_env", lambda: False)
+    monkeypatch.setattr(ttnn, "load_tensor", lambda path, device=None: calls["load"].append((path, device)) or mapped)
+    monkeypatch.setattr(ttnn, "get_device_tensors", lambda tensor: shards if tensor is mapped else None)
+    monkeypatch.setattr(ttnn, "to_torch", lambda shard: f"torch-{shard.name}")
+    monkeypatch.setattr(ttnn, "from_torch", from_torch)
+    monkeypatch.setattr(ttnn, "from_host_shards", from_host_shards)
+    return mapped, shards, calls, owned
+
+
+_MESH_1X2 = SimpleNamespace(get_num_devices=lambda: 2, shape="mesh-1x2")
+
+
+@pytest.mark.host
+def test_load_cached_tensor_rebuilds_sharded_files_on_the_device_mesh_shape(tmp_path, monkeypatch):
+    mapped, shards, calls, owned = _patch_rebuild(monkeypatch, shard_count=2)
+    path = _write_cache_file(tmp_path, 17)
+
+    assert load_cached_tensor(path, _MESH_1X2, pad_value=-1.0) == "owned-on-device"
+    assert calls["load"] == [(str(path), None)]
+    assert calls["from_torch"] == [
+        (
+            f"torch-{shard.name}",
+            {
+                "dtype": ttnn.bfloat8_b,
+                "layout": ttnn.TILE_LAYOUT,
+                "tile": f"{shard.name}-tile",
+                "memory_config": f"{shard.name}-memcfg",
+                "pad_value": -1.0,
+            },
+        )
+        for shard in shards
+    ]
+    assert calls["from_host_shards"] == [(["rebuilt-torch-shard0", "rebuilt-torch-shard1"], "mesh-1x2")]
+    assert owned.topology_updates == ["mapped-topology"]
+    assert owned.uploads == [(_MESH_1X2, "mapped-memcfg")]
+    assert mapped.uploads == []
+
+
+@pytest.mark.host
+def test_load_cached_tensor_uploads_a_replicated_file_as_its_rebuilt_shard(tmp_path, monkeypatch):
+    mapped, _, calls, _ = _patch_rebuild(monkeypatch, shard_count=1)
+    path = _write_cache_file(tmp_path, 17)
+
+    assert load_cached_tensor(path, _MESH_1X2) == "rebuilt-torch-shard0-on-device"
+    assert calls["from_host_shards"] == []
+    assert calls["from_torch"][0][1]["pad_value"] is None
+    assert mapped.uploads == []
+
+
+@pytest.mark.host
+def test_load_cached_tensor_keeps_the_direct_upload_for_other_shard_layouts(tmp_path, monkeypatch):
+    mapped, _, calls, _ = _patch_rebuild(monkeypatch, shard_count=3)
+    path = _write_cache_file(tmp_path, 17)
+
+    assert load_cached_tensor(path, _MESH_1X2) == "mapped-on-device"
+    assert calls["from_torch"] == []
+    assert mapped.uploads == [(_MESH_1X2, "mapped-memcfg")]
+
+
+@pytest.mark.host
+def test_load_cached_tensor_keeps_the_direct_load_on_multi_host_meshes(tmp_path, monkeypatch):
+    monkeypatch.setattr(tensor_utils, "PINNED_UPLOAD_THRESHOLD_BYTES", 16)
+    calls = []
+    monkeypatch.setattr(ttnn, "using_distributed_env", lambda: True)
+    monkeypatch.setattr(ttnn, "load_tensor", lambda path, device=None: calls.append((path, device)) or "direct")
+    path = _write_cache_file(tmp_path, 17)
+
+    assert load_cached_tensor(path, "mesh") == "direct"
+    assert calls == [(str(path), "mesh")]
 
 
 if __name__ == "__main__":
