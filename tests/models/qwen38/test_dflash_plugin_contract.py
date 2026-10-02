@@ -19,15 +19,24 @@ from tt_transformers.models.qwen38 import dflash2_serving as serving
 from tt_transformers.models.qwen38 import qwen36_vllm_dflash as adapter
 from tt_transformers.models.qwen38.dflash2_serving import Bucket
 
+_VOCAB = 4
+
 
 class _Target:
     def __init__(self):
         self.calls = []
         self.hidden = object()
+        self.logits = None
 
     def verify_traced(self, tokens, positions, mi_prev, **kwargs):
         self.calls.append((tokens, positions, mi_prev, kwargs))
-        return [12, 13, 99, 100], self.hidden, None
+        rows = sum(len(row) for row in tokens)
+        ids = [12, 13, 99, 100] * (rows // 4)
+        if not kwargs.get("read_logits"):
+            return ids, self.hidden, None
+        # Every value names its bucket row and vocabulary column, and bf16 holds these small integers exactly.
+        self.logits = torch.arange(rows * _VOCAB, dtype=torch.bfloat16).reshape(rows, _VOCAB)
+        return ids, self.hidden, self.logits
 
 
 class _Drafter:
@@ -43,33 +52,35 @@ class _Drafter:
         return [[31, 32, 33]]
 
 
-def _contract_decoder():
+def _contract_decoder(rows=(0,)):
+    """A decoder whose bucket row r seats physical slot ``rows[r]``; every slot is active at position 10."""
+    n = len(rows)
     dec = object.__new__(serving.DFlash2DualBucketDecoder)
     dec._captured = True
     dec._contract_pending = None
     dec.cur = Bucket(
-        id="1x4",
-        B=1,
+        id=f"{n}x4",
+        B=n,
         T=4,
         K=3,
-        identity=True,
-        rows=[0],
-        tables=torch.zeros(1, 1, dtype=torch.int32),
+        identity=list(rows) == list(range(n)),
+        rows=list(rows),
+        tables=torch.zeros(n, 1, dtype=torch.int32),
     )
     dec.model = _Target()
     dec.drafter = _Drafter()
-    dec.vision_context = [None]
-    dec.active = [True]
-    dec.fresh = [False]
-    dec.p = [9]
-    dec.pending = [11]
-    dec.mi = [0]
-    dec.ctx_len = [10]
-    dec.iters = [0]
-    dec.accepted = [0]
-    dec.drafted = [0]
-    dec.committed = [0]
-    dec.hist = [[0] * 4]
+    dec.vision_context = [None] * n
+    dec.active = [True] * n
+    dec.fresh = [False] * n
+    dec.p = [9] * n
+    dec.pending = [11] * n
+    dec.mi = [0] * n
+    dec.ctx_len = [10] * n
+    dec.iters = [0] * n
+    dec.accepted = [0] * n
+    dec.drafted = [0] * n
+    dec.committed = [0] * n
+    dec.hist = [[0] * 4 for _ in range(n)]
     dec.total_steps = 0
     dec._armed = True
     dec._planned = True
@@ -84,10 +95,12 @@ def test_verify_then_commit_and_propose_preserves_the_state_boundary():
     tokens = torch.tensor([[11, 12, 13, 14]], dtype=torch.int32)
     positions = torch.tensor([[10, 11, 12, 13]], dtype=torch.int32)
 
-    argmax, hidden = dec.verify_contract(tokens, positions, torch.tensor([3], dtype=torch.int32), [0])
+    argmax, hidden, logits = dec.verify_contract(tokens, positions, torch.tensor([3], dtype=torch.int32), [0])
 
     assert hidden is dec.model.hidden
     assert argmax.tolist() == [[12, 13, 99, 100]]
+    assert logits is None
+    assert dec.model.calls[0][3]["read_logits"] is False
     # Verify alone never advances authoritative host state.
     assert dec.p == [9]
     assert dec.pending == [11]
@@ -108,12 +121,40 @@ def test_verify_then_commit_and_propose_preserves_the_state_boundary():
     assert dec._contract_pending is None
 
 
+@pytest.mark.host
+@pytest.mark.model
+def test_logits_verify_puts_each_bucket_row_at_its_logical_row():
+    # Logical row 0 is slot 0, which sits on bucket row 1, so a row mix-up swaps the two rows' logits.
+    dec = _contract_decoder(rows=(1, 0))
+    tokens = torch.tensor([[11, 12, 13, 14, -1, -1, -1, -1]] * 2, dtype=torch.int32)
+    positions = torch.tensor([[10, 11, 12, 13, -1, -1, -1, -1]] * 2, dtype=torch.int32)
+
+    argmax, hidden, logits = dec.verify_contract(
+        tokens, positions, torch.tensor([3, 3], dtype=torch.int32), [0, 1], read_logits=True
+    )
+
+    bucket = dec.model.logits
+    assert dec.model.calls[0][3]["read_logits"] is True
+    assert hidden is dec.model.hidden
+    assert argmax.shape == (2, 8)
+    assert logits.shape == (2, 8, _VOCAB)
+    assert logits.dtype == bucket.dtype
+    assert torch.equal(logits[0, :4], bucket[4:8])
+    assert torch.equal(logits[1, :4], bucket[0:4])
+    # Columns past the bucket's T are padding the accept walk never reads; zeros keep a whole-block cast finite.
+    assert not logits[:, 4:].any()
+    # A verify never advances authoritative state, whichever mode it reads back.
+    assert dec.p == [9, 9]
+    assert dec.pending == [11, 11]
+
+
 class _ContractDecoder:
     def __init__(self, slots):
         self.active = [False] * slots
         self.mi = [0] * slots
         self.calls = []
         self.hidden = object()
+        self.logits = torch.ones(slots, 8, 16)
 
     def plan(self, live_after):
         self.calls.append(("plan", frozenset(live_after)))
@@ -126,11 +167,11 @@ class _ContractDecoder:
     def set_table(self, phys, row):
         self.calls.append(("set_table", phys))
 
-    def verify_contract(self, tokens, positions, valid, phys_by_row):
-        self.calls.append(("verify", list(phys_by_row)))
+    def verify_contract(self, tokens, positions, valid, phys_by_row, read_logits=False):
+        self.calls.append(("verify", list(phys_by_row), read_logits))
         out = torch.zeros(tokens.shape, dtype=torch.int32)
         out[0, :4] = torch.tensor([7, 8, 9, 10], dtype=torch.int32)
-        return out, self.hidden
+        return out, self.hidden, self.logits if read_logits else None
 
     def commit_and_draft_contract(self, committed, counts, requested_k, output_rows):
         self.calls.append(("propose", requested_k, output_rows))
@@ -151,7 +192,6 @@ def _adapter(decoder, slots=4):
     obj._B = slots
     obj._phys = list(range(slots))
     obj._pending = [None] * slots
-    obj._ordinary_state_slots = set()
     obj._carry = [[] for _ in range(slots)]
     obj._stopped = [False] * slots
     obj._prev_tail = [None] * slots
@@ -188,7 +228,7 @@ def test_adapter_returns_standard_verify_and_draft_outputs():
     assert dec.calls[:3] == [
         ("plan", frozenset({0})),
         ("begin", 0, 6, 10, 0, True),
-        ("verify", [0, None, None, None]),
+        ("verify", [0, None, None, None], False),
     ]
 
     drafted = obj.propose_draft_tokens(
@@ -212,9 +252,58 @@ def test_spec_plan_publishes_the_widest_exact_bucket(monkeypatch):
     plan = adapter.Qwen36DFlashForCausalLM.spec_plan(None, 8, 7)
     assert isinstance(plan, SpecPlan)
     assert plan.effective_k == 7
-    assert plan.supports_narrow_decode is True
+    assert plan.accept_modes == ("argmax_ids", "logits")
+    assert plan.supports_narrow_decode is False
     assert plan.k_by_rows == ((4, 7), (8, 3))
 
     rejected = adapter.Qwen36DFlashForCausalLM.spec_plan(None, 8, 3)
     assert isinstance(rejected, SpecReject)
     assert rejected.supported_k == (7,)
+
+
+def _first_verify_inputs(slots=4):
+    tokens = torch.zeros(slots, 8, dtype=torch.int32)
+    positions = torch.full((slots, 8), -1, dtype=torch.int32)
+    tokens[0, 0] = 6
+    positions[0] = torch.arange(10, 18, dtype=torch.int32)
+    return dict(
+        tokens=tokens,
+        start_pos=positions,
+        page_table=torch.zeros(slots, 8, dtype=torch.int32),
+        num_valid_drafts=torch.zeros(slots, dtype=torch.int32),
+        accepted_counts=torch.ones(slots, dtype=torch.int32),
+    )
+
+
+@pytest.mark.host
+@pytest.mark.model
+def test_adapter_returns_the_verify_logits_in_logits_mode():
+    dec = _ContractDecoder(4)
+    obj = _adapter(dec)
+    obj._pending[0] = (10, torch.zeros(8, dtype=torch.int32), 0)
+
+    verified = obj.decode_forward(**_first_verify_inputs(), spec_mode="logits")
+
+    assert isinstance(verified, VerifyOutput)
+    assert verified.spec_mode == "logits"
+    assert verified.logits is dec.logits
+    assert verified.argmax_ids is None
+    assert verified.hidden is dec.hidden
+    assert dec.calls[2] == ("verify", [0, None, None, None], True)
+
+
+@pytest.mark.host
+@pytest.mark.model
+def test_adapter_refuses_a_decode_without_spec_mode(expect_error):
+    dec = _ContractDecoder(4)
+    obj = _adapter(dec)
+    obj._pending[0] = (10, torch.zeros(8, dtype=torch.int32), 0)
+    inputs = _first_verify_inputs()
+
+    with expect_error(RuntimeError, "without spec_mode"):
+        obj.decode_forward(**inputs)
+    with expect_error(RuntimeError, "got 'fused_sample'"):
+        obj.decode_forward(**inputs, spec_mode="fused_sample")
+    # Neither refusal seeded the request or reached the decoder.
+    assert dec.calls == []
+    assert obj._pending[0] is not None
