@@ -17,7 +17,8 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 from loguru import logger
-from transformers import AutoConfig, AutoModelForCausalLM
+from tests.support.helpers import hf_config_or_skip
+from transformers import AutoModelForCausalLM
 
 # transformers 5.x moved no_init_weights to transformers.initialization; fall back
 # to the old location for transformers < 5.x.
@@ -178,7 +179,7 @@ def test_rmsnorm_2d_vs_reference(
 
     # Load HF model for reference
     hf_model_name = HF_MODEL_NAME
-    config = AutoConfig.from_pretrained(hf_model_name)
+    config = hf_config_or_skip(hf_model_name)
     config.num_hidden_layers = 1
 
     with no_init_weights():

@@ -28,7 +28,7 @@ import pytest
 import torch
 from loguru import logger
 from tests.support.comparison import hf_cache_layer_kv, hf_cache_num_layers
-from transformers import AutoConfig, AutoModelForCausalLM, LlamaConfig, LlamaForCausalLM
+from transformers import AutoModelForCausalLM, LlamaConfig, LlamaForCausalLM
 
 # transformers 5.x moved no_init_weights to transformers.initialization; fall back
 # to the old location for transformers < 5.x.
@@ -40,7 +40,7 @@ except ImportError:
 import ttnn
 from examples.common.auto_compose import to_torch_auto_compose
 from tests.support.comparison import comp_allclose, comp_pcc
-from tests.support.helpers import stable_model_seed
+from tests.support.helpers import hf_config_or_skip, stable_model_seed
 
 from tt_transformers.modules.attention import attention_1d as attention_1d_module
 from tt_transformers.modules.attention.attention_1d import Attention1D, Attention1DConfig, _resolve_attention1d_config
@@ -1310,7 +1310,7 @@ def test_attention_1d_vs_reference(
     torch.manual_seed(seed)
 
     # Load HF config directly (no ModelArgs)
-    hf_config = AutoConfig.from_pretrained(hf_model_name)
+    hf_config = hf_config_or_skip(hf_model_name)
 
     # Handle multimodal models (Mllama, LLaVA, etc.) which nest text config under .text_config
     is_multimodal = hasattr(hf_config, "text_config") and hf_config.text_config is not None
@@ -1879,7 +1879,7 @@ def test_attention_1d_prefill_decode_transition(ttnn_mesh_device: ttnn.MeshDevic
     torch.manual_seed(seed)
 
     # Load HF config
-    hf_config = AutoConfig.from_pretrained(hf_model_name)
+    hf_config = hf_config_or_skip(hf_model_name)
     cfg = hf_config.text_config if hasattr(hf_config, "text_config") else hf_config
     cfg.num_hidden_layers = 1
 
@@ -2569,7 +2569,7 @@ def test_attention_1d_sliding_window(
     torch.manual_seed(42)
 
     # Load HuggingFace model
-    hf_config = AutoConfig.from_pretrained(hf_model_name)
+    hf_config = hf_config_or_skip(hf_model_name)
     hf_model = AutoModelForCausalLM.from_pretrained(hf_model_name, torch_dtype=torch.bfloat16)
     reference_attn = hf_model.model.layers[0].self_attn
     rotary_emb = getattr(hf_model.model, "rotary_emb", None)

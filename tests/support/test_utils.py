@@ -1,6 +1,8 @@
 import pytest
+from huggingface_hub.errors import GatedRepoError, LocalEntryNotFoundError, RepositoryNotFoundError
+from transformers import AutoConfig
 
-from tests.support.helpers import stable_model_seed
+from tests.support.helpers import hf_config_or_skip, stable_model_seed
 
 # SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
@@ -45,3 +47,44 @@ def test_align_shape_to_tile():
     align_shape_to_tile(original)
     # ensure input is not mutated
     assert original == [1, 1, 10, 10]
+
+
+def _hub_error(error_type: type[Exception]) -> Exception:
+    import httpx
+
+    if error_type is LocalEntryNotFoundError:
+        return error_type("cannot reach the hub")
+    response = httpx.Response(
+        403 if error_type is GatedRepoError else 404, request=httpx.Request("GET", "https://hf.co")
+    )
+    return error_type("hub error", response=response)
+
+
+def _raising_from_pretrained(cause: Exception):
+    def from_pretrained(*_args, **_kwargs):
+        raise OSError("config unavailable\nsecond line") from cause
+
+    return from_pretrained
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("error_type", [LocalEntryNotFoundError, GatedRepoError], ids=["offline", "gated"])
+def test_hf_config_or_skip_skips_when_config_is_unavailable(monkeypatch, error_type) -> None:
+    monkeypatch.setattr(AutoConfig, "from_pretrained", _raising_from_pretrained(_hub_error(error_type)))
+    with pytest.raises(pytest.skip.Exception, match="org/model is not available: config unavailable$"):
+        hf_config_or_skip("org/model")
+
+
+@pytest.mark.host
+def test_hf_config_or_skip_fails_on_an_unknown_model_id(monkeypatch) -> None:
+    monkeypatch.setattr(AutoConfig, "from_pretrained", _raising_from_pretrained(_hub_error(RepositoryNotFoundError)))
+    with pytest.raises(OSError, match="config unavailable"):
+        hf_config_or_skip("org/misspelled")
+
+
+@pytest.mark.host
+def test_hf_config_or_skip_passes_arguments_through(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(AutoConfig, "from_pretrained", lambda *args, **kwargs: calls.append((args, kwargs)) or "cfg")
+    assert hf_config_or_skip("org/model", trust_remote_code=True) == "cfg"
+    assert calls == [(("org/model",), {"trust_remote_code": True})]
