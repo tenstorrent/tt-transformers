@@ -843,13 +843,17 @@ class DFlash2DualBucketDecoder(DFlash2Decoder):
         )
 
     # ------------------------------------------------------------------ the loop
-    def verify_contract(self, tokens, positions, num_valid, phys_by_row):
+    def verify_contract(self, tokens, positions, num_valid, phys_by_row, read_logits=False):
         """Run one exact target verify without accepting or advancing state.
 
         ``tokens`` and ``positions`` are the plugin's global ``[B, 1+Kmax]``
         candidate block. The current bucket may expose a smaller T. Only its
         first T columns are executed and returned; the plugin clamps each
         row's acceptance to that verified width.
+
+        Returns ``(argmax_ids [B, 1+Kmax], hidden, logits)``. ``logits`` is
+        ``[B, 1+Kmax, vocab]`` in the readback dtype when ``read_logits``,
+        else None.
         """
         assert self._captured
         if self._contract_pending is not None:
@@ -914,11 +918,11 @@ class DFlash2DualBucketDecoder(DFlash2Decoder):
             records.append((logical_row, phys, bucket_row, start, offered))
 
         hold = [row for row in range(b.B) if row not in used_bucket_rows]
-        ids, hidden, _ = self.model.verify_traced(
+        ids, hidden, bucket_logits = self.model.verify_traced(
             verify_tokens,
             verify_positions,
             mi_prev,
-            read_logits=False,
+            read_logits=read_logits,
             hold=hold,
             cfg_id=b.id,
             rope_deltas=self._rope_deltas_for(b),
@@ -926,11 +930,19 @@ class DFlash2DualBucketDecoder(DFlash2Decoder):
         # The contract return stays at the launch maximum width. k_by_rows
         # guarantees no live row offers more than this bucket's K, so columns
         # beyond b.T are inert padding and the accept walk never reads them.
+        # Padding logits are zeros rather than uninitialized memory, so a walk
+        # that converts the whole block stays finite.
         out = torch.zeros(tokens.shape, dtype=torch.int32)
+        logits = None
+        if read_logits:
+            vocab = int(bucket_logits.shape[-1])
+            logits = torch.zeros((*tokens.shape, vocab), dtype=bucket_logits.dtype)
         for logical_row, _phys, bucket_row, _start, _offered in records:
             out[logical_row, : b.T] = torch.as_tensor(ids[bucket_row * b.T : (bucket_row + 1) * b.T], dtype=torch.int32)
+            if logits is not None:
+                logits[logical_row, : b.T] = bucket_logits[bucket_row * b.T : (bucket_row + 1) * b.T]
         self._contract_pending = (b.id, tuple(records))
-        return out, hidden
+        return out, hidden, logits
 
     def commit_and_draft_contract(self, committed, counts, requested_k, output_rows):
         """Commit the preceding verify, extend drafter state, then propose.

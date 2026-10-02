@@ -9,13 +9,16 @@ committed output, request history, and KV lookahead; this adapter owns exact
 target verification plus the drafter's target/GDN/ring state:
 
   * prefill emits one sampled anchor and records request-local DFlash state;
-  * ``decode_forward(..., spec_mode="argmax_ids")`` verifies one candidate
-    block and returns ``VerifyOutput`` without advancing authoritative state;
+  * every decode step is a verify of one candidate block, also for a row with
+    no drafts (``supports_narrow_decode=False``). A plain decode cannot
+    continue an active request, because its GDN state lives only in the
+    speculative ring;
+  * ``spec_mode="argmax_ids"`` returns the target argmax ids, which certify
+    only greedy rows. ``spec_mode="logits"`` returns the target logits of
+    every candidate column, and the plugin samples each row with its own
+    sampling controls. Neither mode advances authoritative state;
   * after the plugin accepts a prefix, ``propose_draft_tokens`` commits the
-    matching candidate state, extends the drafter, and returns ``DraftOutput``;
-  * greedy-compatible requests run in homogeneous speculative batches, while
-    requests needing sampling, logprobs, constraints, or penalties run in
-    homogeneous ordinary width-one batches through the base Qwen adapter.
+    matching candidate state, extends the drafter, and returns ``DraftOutput``.
 
 The older block-output methods remain temporarily for compatibility with the
 banked v5.1 artifact, but the v6 launch does not advertise or select that rail.
@@ -71,10 +74,8 @@ from tt_transformers.models.qwen38.qwen36_vllm import (  # noqa: E402
     Qwen36ForCausalLM,
     TT_Qwen3_5ProcessingInfo,
     TTQwen3VLMultiModalProcessor,
-    _is_identity_slot_remap,
 )
 from tt_transformers.models.qwen38.spec_decode import MAX_SPEC_ROWS  # noqa: E402
-from tt_transformers.sampling.sampling_params import SamplingParams  # noqa: E402
 
 try:  # the multi-bucket decoder (profiles/dual_bucket_spec.json); a single bucket falls back to today's class without it
     from tt_transformers.models.qwen38.dflash2_serving import BucketPlanner, DFlash2DualBucketDecoder  # noqa: E402
@@ -249,6 +250,7 @@ class Qwen36DFlashForCausalLM(Qwen36ForCausalLM):
         """Resolve the plugin-visible maximum K across all exact buckets."""
         from vllm_tt_plugin.spec_decode import (
             ACCEPT_MODE_ARGMAX_IDS,
+            ACCEPT_MODE_LOGITS,
             DRAFTER_STATE_INTERNAL,
             SpecPlan,
             SpecReject,
@@ -300,9 +302,11 @@ class Qwen36DFlashForCausalLM(Qwen36ForCausalLM):
             lanes_per_request=max(t for _b, t in buckets),
             extra_bytes_per_seq=0,
             extra_bytes_per_token=0,
-            accept_modes=(ACCEPT_MODE_ARGMAX_IDS,),
+            accept_modes=(ACCEPT_MODE_ARGMAX_IDS, ACCEPT_MODE_LOGITS),
             drafter_state=DRAFTER_STATE_INTERNAL,
-            supports_narrow_decode=True,
+            # A plain decode reads the durable GDN rows, which an active
+            # request stopped updating at its first verify.
+            supports_narrow_decode=False,
             k_by_rows=tuple(k_by_rows),
         )
 
@@ -324,16 +328,9 @@ class Qwen36DFlashForCausalLM(Qwen36ForCausalLM):
         # keyed by the physical slot, while the target model's temporary GDN
         # seed must live in the request's unique logical base row.  Keeping
         # those two identities separate prevents a concurrently-prefilled
-        # plain request from overwriting a DFlash request's not-yet-seeded
-        # target state.
+        # request from overwriting another request's not-yet-seeded target
+        # state.
         self._pending = [None] * B
-        # Logical target-GDN rows whose state is still authoritative for an
-        # ordinary-lane request.  Active DFlash requests move their recurrent
-        # state into the private verifier on their first speculative step, so
-        # a pure-spec slot permutation need not gather the shared base state.
-        # Keeping the ordinary owners explicit lets that common join avoid a
-        # 48-layer packed-history rebuild while mixed-lane remaps stay exact.
-        self._ordinary_state_slots = set()
         self._carry = [[] for _ in range(B)]  # committed-but-unemitted tokens per physical slot
         self._stopped = [False] * B  # a stop token was committed; the row is EOS-filled from there
         self._prev_tail = [None] * B
@@ -375,41 +372,6 @@ class Qwen36DFlashForCausalLM(Qwen36ForCausalLM):
             )
         else:
             logger.info("Qwen36DFlash serving: speculation OFF (plain Qwen36ForCausalLM behaviour)")
-
-    def _create_sampling_params(self, can_sample_on_device, batch_size, greedy_only: bool = False):
-        """Warm every sampling trace that unified plain fallback can select.
-
-        The shared warmup covers the four ``penalties x log-probs`` contracts
-        for stochastic sampling plus bare greedy. Unified routing can also send
-        greedy requests carrying penalties or log-probs to plain decode, so the
-        other three greedy contracts must be resident before serving. Keep that
-        additional trace footprint local to this fallback-capable model.
-        """
-        configs = super()._create_sampling_params(
-            can_sample_on_device,
-            batch_size,
-            greedy_only=greedy_only,
-        )
-        if not can_sample_on_device or greedy_only or os.environ.get("TT_LEAN_DECODE_WARMUP"):
-            return configs
-
-        greedy_fallback_configs = []
-        for penalties, log_probs in ((True, True), (True, False), (False, True)):
-            greedy_fallback_configs.append(
-                SamplingParams(
-                    temperature=[0.0] * batch_size,
-                    top_k=[1] * batch_size,
-                    top_p=[1.0] * batch_size,
-                    presence_penalty=[1.2] * batch_size if penalties else None,
-                    frequency_penalty=[1.2] * batch_size if penalties else None,
-                    repetition_penalty=[1.5] * batch_size if penalties else None,
-                    enable_log_probs=[log_probs] * batch_size,
-                )
-            )
-
-        # The shared helper ends in [bare-greedy, None]. Preserve that order
-        # and insert fallback-only variants immediately before it.
-        return configs[:-2] + greedy_fallback_configs + configs[-2:]
 
     # ------------------------------------------------------------------ helpers
     @staticmethod
@@ -913,29 +875,12 @@ class Qwen36DFlashForCausalLM(Qwen36ForCausalLM):
         vision_contexts = [
             self._compute_vision_context(model, kwargs, user=u) if has_images else None for u in range(N)
         ]
-        request_lanes = kwargs.pop("request_spec_decode_lanes", None)
-        legacy_request_lanes = kwargs.pop("request_execution_lanes", None)
-        if request_lanes is None:
-            request_lanes = legacy_request_lanes
-        if request_lanes is None:
-            request_lanes = ["speculative"] * N
-        request_lanes = [
-            "speculative" if str(lane) == "dflash" else "ordinary" if str(lane) == "plain" else str(lane)
-            for lane in request_lanes
-        ]
-        if len(request_lanes) != N:
-            raise RuntimeError(f"Qwen36DFlash prefill received {len(request_lanes)} lanes for {N} requests")
-        bad_lanes = sorted(set(request_lanes) - {"speculative", "ordinary"})
-        if bad_lanes:
-            raise RuntimeError(f"Qwen36DFlash prefill received unknown request lanes {bad_lanes}")
         plens = [int(prompt_lens[u]) for u in range(N)] if prompt_lens is not None else [int(tokens.shape[1])] * N
         empty_slots = kwargs.get("empty_slots")
         logical = [int(s) for s in empty_slots] if empty_slots is not None else list(range(N))
         pt = torch.as_tensor(page_table)
-        out = [None] * N
-        dflash_users = [u for u, lane in enumerate(request_lanes) if lane == "speculative"]
-        plain_users = [u for u, lane in enumerate(request_lanes) if lane == "ordinary"]
-        for u in dflash_users:
+        out = []
+        for u in range(N):
             state_slot = logical[u]
             phys = self._phys[state_slot]
             if dec.active[phys]:
@@ -956,93 +901,35 @@ class Qwen36DFlashForCausalLM(Qwen36ForCausalLM):
                 vision_context=vision_contexts[u],
                 state_slot=state_slot,
             )
-            out[u] = lt.view(1, 1, -1)
+            out.append(lt.view(1, 1, -1))
             self._pending[phys] = (T, row, state_slot)
-            self._ordinary_state_slots.discard(state_slot)
-
-        if plain_users:
-            plain_prompts = []
-            plain_slots = []
-            plain_lens = []
-            for u in plain_users:
-                # Plain decode uses the base model's row layout. Unlike the
-                # speculative decoder, its GDN state is physically gathered
-                # by Qwen36ForCausalLM when vLLM supplies slot_remap, so the
-                # native prefill destination is the current logical state
-                # slot—not the speculative decoder's physical indirection.
-                state_slot = logical[u]
-                phys = self._phys[state_slot]
-                if dec.active[phys]:
-                    dec.end(phys)
-                self._pending[phys] = None
-                self._carry[phys], self._stopped[phys], self._prev_tail[phys] = [], False, None
-                T = plens[u]
-                plain_prompts.append(torch.as_tensor(tokens)[u : u + 1, :T].to(torch.int32))
-                plain_slots.append(state_slot)
-                plain_lens.append(T)
-            logger.info(
-                f"Prefilling {len(plain_users)} plain fallback request(s) into slots {plain_slots} (native TP prefill)"
-            )
-            plain_logits = model.prefill_paged_slots(
-                plain_prompts,
-                pt[plain_users],
-                plain_slots,
-                valid_lens=plain_lens,
-                vision_contexts=[vision_contexts[u] for u in plain_users],
-            )
-            for u, logits in zip(plain_users, plain_logits, strict=True):
-                out[u] = logits.view(1, 1, -1)
-            self._ordinary_state_slots.update(plain_slots)
-
-        if any(logits is None for logits in out):
-            raise RuntimeError("Qwen36DFlash prefill failed to produce every request row")
-        logger.info(
-            f"Finished prefill of {N} request(s) "
-            f"(dflash={len(dflash_users)}, plain={len(plain_users)}), starting decode..."
-        )
+        logger.info(f"Finished prefill of {N} request(s), starting decode...")
         return torch.cat(out, dim=0), torch.zeros(N, dtype=torch.long)
 
     # ------------------------------------------------------------------ decode: one block per step, all live slots
     def decode_forward(self, *args, **kwargs):
-        execution_lane = kwargs.pop("execution_lane", None)
-        spec_mode = kwargs.get("spec_mode")
-        if execution_lane is None:
-            execution_lane = (
-                "speculative"
-                if spec_mode is not None
-                else "ordinary"
-                if hasattr(self._spec, "verify_contract")
-                else "legacy_dflash"
-            )
-        execution_lane = {
-            "dflash": "legacy_dflash",
-            "plain": "ordinary",
-        }.get(execution_lane, execution_lane)
         if not self._dflash.spec_on or not self._spec_ready():
             return super().decode_forward(*args, **kwargs)
-
-        # Stable-slot lane scheduling sends the full identity map. Plain
-        # decode has no speculative state transition to reconcile in that
-        # case, so bypass all remap bookkeeping and let the base wrapper pick
-        # its compact B=1/2/4 trace immediately.
-        if execution_lane == "ordinary" and _is_identity_slot_remap(kwargs.get("slot_remap"), self._B):
-            kwargs["slot_remap"] = None
-            return super().decode_forward(*args, **kwargs)
+        spec_mode = kwargs.get("spec_mode")
+        if spec_mode is None and hasattr(self._spec, "verify_contract"):
+            raise RuntimeError(
+                "Qwen36DFlash verifies every decode step (supports_narrow_decode=False) but received a decode "
+                "without spec_mode; a plain decode would read GDN state that an active request stopped "
+                "updating at its first verify"
+            )
+        if spec_mode not in (None, "argmax_ids", "logits"):
+            raise RuntimeError(f"Qwen36DFlash supports spec_mode 'argmax_ids' or 'logits', got {spec_mode!r}")
 
         def _read(name, pos):
             if name in kwargs:
                 return kwargs[name]
             return args[pos] if pos < len(args) else None
 
-        # The ordinary Qwen decode below physically gathers its base GDN state
-        # when vLLM condenses rows. Spec state remains in its own fixed physical
-        # slots, so compose the same remap into this indirection for *both*
-        # lanes. Previously a remap observed on a plain step moved base state
-        # but left _phys stale; the next native prefill could then write the
-        # wrong row and produce a correct first token followed by stale-state
-        # continuations.
+        # Spec state stays in its fixed physical slots, so a row remap only
+        # changes this indirection. Nothing gathers the target GDN rows either:
+        # a request that has not seeded yet still seeds from the row its
+        # prefill wrote.
         slot_remap = _read("slot_remap", 10)
-        remap = None
         if slot_remap is not None:
             remap = [int(r) for r in torch.as_tensor(slot_remap).reshape(-1).tolist()]
             if sorted(remap) != list(range(self._B)):
@@ -1058,47 +945,15 @@ class Qwen36DFlashForCausalLM(Qwen36ForCausalLM):
                     )
                 self._pending_state_slot_moves = expected_moves
 
-                # The plugin settles one global state-slot permutation for
-                # every lane. Ordinary decode applies it in the base wrapper.
-                # A speculative step only needs the equivalent physical gather
-                # when hidden ordinary requests still own shared target-GDN
-                # rows. In a pure-spec cohort pending sessions seed directly
-                # from their unchanged prefill rows, then become private; a
-                # full gather there only rebuilds packed history in all 48 GDN
-                # layers and has no consumer.
-                ordinary_slots = self._ordinary_state_slots
-                physical_gather = execution_lane == "ordinary" or bool(ordinary_slots)
-                if execution_lane in {"speculative", "legacy_dflash"} and ordinary_slots:
-                    self.model[0]._remap_gdn_slots(remap)
-
-                inverse = [0] * self._B
-                for new_slot, old_slot in enumerate(remap):
-                    inverse[old_slot] = new_slot
-                if physical_gather:
-                    # A physical gather changes both ordinary ownership and
-                    # the coordinate of not-yet-seeded speculative prompt
-                    # state. Active DFlash sessions are already private.
-                    self._ordinary_state_slots = {inverse[int(slot)] for slot in ordinary_slots}
-                    for phys, pending in enumerate(self._pending):
-                        if pending is None or len(pending) < 3:
-                            continue
-                        T, pt_row, state_slot = pending
-                        self._pending[phys] = (T, pt_row, inverse[int(state_slot)])
-
-        if execution_lane == "ordinary":
-            return super().decode_forward(*args, **kwargs)
-        if execution_lane == "speculative":
-            if spec_mode != "argmax_ids":
-                raise RuntimeError(f"Qwen36DFlash supports only spec_mode='argmax_ids', got {spec_mode!r}")
+        if spec_mode is not None:
             return self._decode_spec_contract(
                 tokens=_read("tokens", 0),
                 start_pos=_read("start_pos", 1),
                 page_table=_read("page_table", 2),
                 num_valid_drafts=kwargs.get("num_valid_drafts"),
                 accepted_counts=kwargs.get("accepted_counts"),
+                spec_mode=spec_mode,
             )
-        if execution_lane != "legacy_dflash":
-            raise RuntimeError(f"Qwen36DFlash decode received unknown execution lane {execution_lane!r}")
 
         tokens = _read("tokens", 0)
         start_pos = _read("start_pos", 1)
@@ -1239,8 +1094,9 @@ class Qwen36DFlashForCausalLM(Qwen36ForCausalLM):
         page_table,
         num_valid_drafts,
         accepted_counts,
+        spec_mode,
     ):
-        """Verify one plugin-owned candidate block and return target argmax ids."""
+        """Verify one plugin-owned candidate block and return the target argmax ids or logits (``spec_mode``)."""
         from vllm_tt_plugin.spec_decode import VerifyOutput
 
         if tokens is None or start_pos is None:
@@ -1320,7 +1176,10 @@ class Qwen36DFlashForCausalLM(Qwen36ForCausalLM):
                 raise RuntimeError(f"Qwen36DFlash live row {logical_row} (slot {phys}) has no speculative session")
             phys_by_row[logical_row] = phys
 
-        argmax_ids, hidden = dec.verify_contract(tokens, positions, valid, phys_by_row)
+        read_logits = spec_mode == "logits"
+        argmax_ids, hidden, logits = dec.verify_contract(tokens, positions, valid, phys_by_row, read_logits=read_logits)
+        if read_logits:
+            return VerifyOutput(spec_mode="logits", logits=logits, hidden=hidden)
         return VerifyOutput(spec_mode="argmax_ids", argmax_ids=argmax_ids, hidden=hidden)
 
     def propose_draft_tokens(
@@ -1444,7 +1303,6 @@ class Qwen36DFlashForCausalLM(Qwen36ForCausalLM):
         self._pending_state_slot_moves = None
 
     def release_request(self, row: int) -> None:
-        self._ordinary_state_slots.discard(int(row))
         if self._spec is None:
             return
         phys = self._phys[int(row)] if 0 <= int(row) < self._B else None

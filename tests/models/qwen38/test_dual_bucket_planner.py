@@ -132,40 +132,18 @@ requires_vd = pytest.mark.skipif(vd is None, reason=f"qwen36_vllm_dflash not imp
 @requires_vd
 @pytest.mark.host
 @pytest.mark.model
-def test_prefill_routes_plain_rows_away_from_speculative_state():
-    """A mixed prefill must create DFlash state only for its pinned rows.
+def test_prefill_seeds_every_row_from_its_logical_state_slot():
+    """Every prefill row takes the tap-capturing spec prefill and stays pending until its first verify.
 
-    Plain decode consumes the model's packed GDN history. Sending a plain row
-    through ``prefill_for_spec`` leaves that history deliberately invalid and
-    used to make the first token correct but later tokens stale after slot
-    reuse. The native prefill is therefore part of the lane contract, not a
-    performance choice.
+    The drafter session is keyed by the physical slot, while the target GDN seed is written to the
+    request's logical state slot; the pending entry must keep both.
     """
 
     calls = []
 
+    # No native prefill method: a row routed to the plain prefill fails the test.
     class FakeModel:
         vocab_size = 16
-
-        def prefill_paged_slots(
-            self,
-            prompts,
-            page_table,
-            slots,
-            valid_lens=None,
-            vision_contexts=None,
-        ):
-            calls.append(
-                (
-                    "plain",
-                    [p.clone() for p in prompts],
-                    page_table.clone(),
-                    list(slots),
-                    list(valid_lens),
-                    list(vision_contexts),
-                )
-            )
-            return [torch.full((1, 1, self.vocab_size), 2.0)]
 
     class FakeDecoder:
         active = [False] * S
@@ -182,7 +160,6 @@ def test_prefill_routes_plain_rows_away_from_speculative_state():
     generator._phys = list(range(S))
     generator._phys[6], generator._phys[7] = 2, 3
     generator._pending = [None] * S
-    generator._ordinary_state_slots = {6}
     generator._carry = [[] for _ in range(S)]
     generator._stopped = [False] * S
     generator._prev_tail = [None] * S
@@ -209,20 +186,16 @@ def test_prefill_routes_plain_rows_away_from_speculative_state():
         kv_cache=None,
         prompt_lens=[2, 3],
         empty_slots=[6, 7],
-        request_execution_lanes=["dflash", "plain"],
     )
 
     assert logits.shape == (2, 1, 16)
     assert deltas.tolist() == [0, 0]
-    assert calls[0][0:2] == ("dflash", 2)
-    assert calls[0][2] == 6
-    plain = next(call for call in calls if call[0] == "plain")
-    assert plain[3] == [7]
-    assert plain[4] == [3]
-    assert generator._pending[2][0] == 2
-    assert generator._pending[2][2] == 6
-    assert generator._pending[3] is None
-    assert generator._ordinary_state_slots == {7}
+    assert [call[0] for call in calls] == ["dflash", "dflash"]
+    assert calls[0][1:3] == (2, 6)
+    assert calls[1][1:3] == (3, 7)
+    assert calls[1][4] == 3
+    assert generator._pending[2][0] == 2 and generator._pending[2][2] == 6
+    assert generator._pending[3][0] == 3 and generator._pending[3][2] == 7
 
 
 @requires_vd
@@ -472,37 +445,6 @@ def test_bucket_ids_and_default():
     assert serving.parse_buckets("", default=((4, 8),)) == ((4, 8),)
 
 
-@requires_vd
-@pytest.mark.host
-@pytest.mark.model
-def test_unified_warmup_covers_every_plain_fallback_sampling_contract(monkeypatch):
-    monkeypatch.delenv("TT_LEAN_DECODE_WARMUP", raising=False)
-    generator = object.__new__(vd.Qwen36DFlashForCausalLM)
-    generator.data_parallel = 1
-
-    configs = generator._create_sampling_params(True, 4)
-    keyed = {
-        (
-            all(value == 0.0 for value in config.temperature),
-            any(value != 0.0 for value in config.presence_penalty)
-            if isinstance(config.presence_penalty, list)
-            else config.presence_penalty not in (None, 0.0),
-            any(config.enable_log_probs)
-            if isinstance(config.enable_log_probs, list)
-            else bool(config.enable_log_probs),
-        )
-        for config in configs
-        if config is not None
-    }
-
-    assert keyed == {
-        (greedy, penalties, log_probs)
-        for greedy in (False, True)
-        for penalties in (False, True)
-        for log_probs in (False, True)
-    }
-
-
 # ------------------------------------------------------------------------------------------------ 3. env parsing / checks
 @requires_vd
 @pytest.mark.host
@@ -612,7 +554,6 @@ def _vllm_obj(dec, S, eos=151645, vocab=248320):
     obj._B = S
     obj._phys = list(range(S))
     obj._pending = [None] * S
-    obj._ordinary_state_slots = set()
     obj._carry = [[] for _ in range(S)]
     obj._stopped = [False] * S
     obj._prev_tail = [None] * S
@@ -696,7 +637,7 @@ def test_decode_forward_live_after_is_composed_through_slot_remap(expect_error):
 @requires_vd
 @pytest.mark.host
 @pytest.mark.model
-def test_pure_spec_decode_skips_unused_target_remap_and_keeps_pending_seed_slot():
+def test_decode_remap_moves_no_target_state_and_keeps_pending_seed_slot():
     S4 = 4
     dec = _RecordingDec(S4, cur_id="4x8")
     obj = _vllm_obj(dec, S4)
@@ -713,100 +654,6 @@ def test_pure_spec_decode_skips_unused_target_remap_and_keeps_pending_seed_slot(
     assert obj._phys == remap
     assert obj.model[0].remaps == []
     assert ("begin", 3, 3) in dec.calls
-
-
-@requires_vd
-@pytest.mark.host
-@pytest.mark.model
-def test_spec_decode_with_ordinary_owner_remaps_target_and_pending_seed_slot():
-    S4 = 4
-    dec = _RecordingDec(S4, cur_id="4x8")
-    obj = _vllm_obj(dec, S4)
-    obj._ordinary_state_slots = {0}
-    obj._pending[3] = (100, torch.zeros(8, dtype=torch.int32), 3)
-    remap = [2, 0, 3, 1]
-
-    obj.decode_forward(
-        tokens=torch.zeros(S4, 1, dtype=torch.int32),
-        start_pos=torch.tensor([-1, -1, 100, -1]),
-        page_table=torch.zeros(S4, 8, dtype=torch.int32),
-        slot_remap=torch.tensor(remap),
-    )
-
-    assert obj._phys == remap
-    assert obj.model[0].remaps == [remap]
-    assert obj._ordinary_state_slots == {1}
-    assert ("begin", 3, 2) in dec.calls
-
-
-@requires_vd
-@pytest.mark.host
-@pytest.mark.model
-def test_plain_decode_composes_spec_indirection_before_base_remap(monkeypatch):
-    obj = _vllm_obj(_RecordingDec(4, cur_id="4x8"), 4)
-    obj._ordinary_state_slots = {0, 2}
-    obj._pending[3] = (99, torch.zeros(8, dtype=torch.int32), 1)
-    seen = {}
-
-    def base_decode(self, *args, **kwargs):
-        seen.update(kwargs)
-        return "plain-output"
-
-    monkeypatch.setattr(vd.Qwen36ForCausalLM, "decode_forward", base_decode)
-    remap = torch.tensor([2, 0, 3, 1])
-    result = obj.decode_forward(
-        tokens=torch.zeros(4, 1, dtype=torch.int32),
-        start_pos=torch.zeros(4, dtype=torch.int32),
-        page_table=torch.zeros(4, 8, dtype=torch.int32),
-        slot_remap=remap,
-        execution_lane="plain",
-    )
-
-    assert result == "plain-output"
-    assert obj._phys == remap.tolist()
-    assert obj._pending[3][2] == 3
-    assert obj._ordinary_state_slots == {0, 1}
-    assert obj.model[0].remaps == [], "the base ordinary path owns the one physical gather"
-    assert torch.equal(seen["slot_remap"], remap)
-
-
-@requires_vd
-@pytest.mark.host
-@pytest.mark.model
-def test_release_request_drops_ordinary_state_ownership():
-    obj = _vllm_obj(_RecordingDec(4, cur_id="4x8"), 4)
-    obj._ordinary_state_slots = {1, 3}
-
-    obj.release_request(1)
-
-    assert obj._ordinary_state_slots == {3}
-
-
-@requires_vd
-@pytest.mark.host
-@pytest.mark.model
-def test_plain_decode_skips_identity_remap_bookkeeping(monkeypatch):
-    obj = _vllm_obj(_RecordingDec(4, cur_id="4x8"), 4)
-    obj._pending[3] = (99, torch.zeros(8, dtype=torch.int32), 1)
-    seen = {}
-
-    def base_decode(self, *args, **kwargs):
-        seen.update(kwargs)
-        return "plain-output"
-
-    monkeypatch.setattr(vd.Qwen36ForCausalLM, "decode_forward", base_decode)
-    result = obj.decode_forward(
-        tokens=torch.zeros(4, 1, dtype=torch.int32),
-        start_pos=torch.tensor([10, -1, -1, -1], dtype=torch.int32),
-        page_table=torch.zeros(4, 8, dtype=torch.int32),
-        slot_remap=torch.arange(4, dtype=torch.int32),
-        execution_lane="plain",
-    )
-
-    assert result == "plain-output"
-    assert obj._phys == list(range(4))
-    assert obj._pending[3][2] == 1
-    assert seen["slot_remap"] is None
 
 
 @requires_vd
