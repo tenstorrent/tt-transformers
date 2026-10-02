@@ -34,7 +34,7 @@ sizes:
       bh_p300:
         trace_region_size: 80000000
       p300x2:
-        trace_region_size: 224000000
+        trace_region_size: 400000000
       bh_loudbox:
         trace_region_size: 84000000
   llama3.2-1b:

@@ -29,6 +29,8 @@ All notable changes to this project will be documented here.
   70 MB on N300 and to 100 MB on P300, P150x4 and P300x2 for it.
 - The Qwen3-32B trace region on P150x4 and P300x2 grows to 200 MB. Its traced
   batch demos capture about 171 MB of traces there.
+- The Llama-3.3-70B trace region on P150x4 and P300x2 grows to 400 MB. Its
+  traced batch-32 demos capture about 304 MB of traces there.
 - Default KV-cache sizing leaves room for the decode page table. A paged KV
   cache narrower than the decode page table is refused at load with a
   `ValueError`, instead of failing on the first decode step.

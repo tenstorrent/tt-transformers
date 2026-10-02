@@ -65,7 +65,8 @@ def test_demo_resolves_central_trace_region_size_for_each_supported_sku():
     assert "resolve_trace_region_size('llama3.3-70b', env)" in source
     assert '"trace_region_size": 50_000_000' not in _DEMO_SOURCE
     assert resolve_trace_region_size("llama3.3-70b", "T3K") == 224_000_000
-    assert resolve_trace_region_size("llama3.3-70b", "P150x4") == 224_000_000
+    assert resolve_trace_region_size("llama3.3-70b", "P150x4") == 400_000_000
+    assert resolve_trace_region_size("llama3.3-70b", "P300x2") == 400_000_000
 
 
 @pytest.mark.host
