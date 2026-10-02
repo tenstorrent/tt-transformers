@@ -23,8 +23,7 @@ from pathlib import Path
 
 import pytest
 import torch
-from tests.support.helpers import hf_config_or_skip
-from transformers import AutoModelForCausalLM
+from transformers import AutoConfig, AutoModelForCausalLM
 
 # transformers 5.x moved no_init_weights to transformers.initialization; fall back
 # to the old location for transformers < 5.x.
@@ -88,7 +87,7 @@ def _create_attention_model_for_benchmark(
     mesh_shape = ttnn_mesh_device.shape
 
     # Load HF config
-    hf_config = hf_config_or_skip(hf_model_name, trust_remote_code=True)
+    hf_config = AutoConfig.from_pretrained(hf_model_name, trust_remote_code=True)
 
     # Extract dimensions
     text_config = getattr(hf_config, "text_config", hf_config)
