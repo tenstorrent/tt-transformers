@@ -216,6 +216,7 @@ _MESH_DEVICE_TO_SHAPE: dict[str, tuple[int, int]] = {
 
 def ttnn_mesh_device_param_from_env() -> dict:
     env = os.environ.get("MESH_DEVICE", "").strip()
+    env = next((name for name in _MESH_DEVICE_TO_SHAPE if name.upper() == env.upper()), env)
     if not env:
         raise UnsupportedConfiguration("MESH_DEVICE must be set to T3K. See module docstring.")
     shape = _MESH_DEVICE_TO_SHAPE.get(env)
