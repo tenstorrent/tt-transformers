@@ -173,21 +173,13 @@ def test_core_model_module_has_no_eager_optional_import(model_name):
 def test_sampling_params_has_one_identity_and_exact_defaults(monkeypatch):
     fake_ttnn = types.ModuleType("ttnn")
     fake_ttnn.Tensor = type("Tensor", (), {})
-    fake_penalties = types.ModuleType("tt_transformers.sampling.tt_penalties")
-    fake_penalties.TTPenalties = type("TTPenalties", (), {})
-    fake_sampling = types.ModuleType("tt_transformers.sampling.tt_sampling")
-    fake_sampling.TTSampling = type("TTSampling", (), {})
     monkeypatch.setitem(sys.modules, "ttnn", fake_ttnn)
-    monkeypatch.setitem(sys.modules, "tt_transformers.sampling.tt_penalties", fake_penalties)
-    monkeypatch.setitem(sys.modules, "tt_transformers.sampling.tt_sampling", fake_sampling)
-    sys.modules.pop("tt_transformers.sampling.generator", None)
 
     package = importlib.import_module("tt_transformers.sampling")
-    generator = importlib.import_module("tt_transformers.sampling.generator")
 
+    # The TTTv1 generator carried a second SamplingParams dataclass, so this used to assert that
+    # the two identities agreed. That module is gone; sampling_params is the only definition left.
     assert package.SamplingParams is SamplingParams
-    assert generator.SamplingParams is SamplingParams
-    assert generator.SAMPLING_PARAM_FIELDS == tuple(field.name for field in fields(SamplingParams))
 
     definitions = {field.name: field.default for field in fields(SamplingParams)}
     assert definitions == {
@@ -204,31 +196,18 @@ def test_sampling_params_has_one_identity_and_exact_defaults(monkeypatch):
 
 
 @pytest.mark.host
-def test_sampling_helpers_return_the_canonical_class(monkeypatch):
-    fake_ttnn = types.ModuleType("ttnn")
-    fake_ttnn.Tensor = type("Tensor", (), {})
-    fake_penalties = types.ModuleType("tt_transformers.sampling.tt_penalties")
-    fake_penalties.TTPenalties = type("TTPenalties", (), {})
-    fake_sampling = types.ModuleType("tt_transformers.sampling.tt_sampling")
-    fake_sampling.TTSampling = type("TTSampling", (), {})
-    monkeypatch.setitem(sys.modules, "ttnn", fake_ttnn)
-    monkeypatch.setitem(sys.modules, "tt_transformers.sampling.tt_penalties", fake_penalties)
-    monkeypatch.setitem(sys.modules, "tt_transformers.sampling.tt_sampling", fake_sampling)
-    sys.modules.pop("tt_transformers.sampling.generator", None)
-    generator = importlib.import_module("tt_transformers.sampling.generator")
+def test_sampling_package_no_longer_exports_the_tttv1_surface():
+    """The generator/TTSampling/TTPenalties surface was removed; nothing here consumed it.
 
-    params = SamplingParams(
-        temperature=[0.5, 0.7],
-        top_k=[4, 8],
-        top_p=[0.9, 0.8],
-        seed=[11, 22],
-    )
-    broadcast = generator.broadcast_sampling_params(params, 1, slot_len=3)
-    sliced = generator.slice_sampling_params(params, 1, 2)
-    chunks = generator.chunk_sampling_params(params, 2)
+    Its parameter helpers duplicated ``modules.sampling.params``, which owns them now. tt-metal
+    keeps its own copy of the removed modules under ``models/common/sampling`` and is unaffected.
+    """
+    package = importlib.import_module("tt_transformers.sampling")
 
-    assert type(broadcast) is SamplingParams
-    assert broadcast.temperature == [0.7, 0.7, 0.7]
-    assert type(sliced) is SamplingParams and sliced.top_k == [8]
-    assert all(type(chunk) is SamplingParams for chunk in chunks)
-    assert [chunk.seed for chunk in chunks] == [[11], [22]]
+    assert set(package.__all__) == {"LogProbsCalculator", "LogProbsResult", "SamplingParams", "split_list"}
+    for removed in ("SamplingGenerator", "TTSampling", "TTPenalties", "slice_sampling_params", "SeedManager"):
+        with pytest.raises(AttributeError):
+            getattr(package, removed)
+    for module in ("generator", "tt_sampling", "tt_penalties"):
+        with pytest.raises(ModuleNotFoundError):
+            importlib.import_module(f"tt_transformers.sampling.{module}")

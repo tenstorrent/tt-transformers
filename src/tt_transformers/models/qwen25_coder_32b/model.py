@@ -26,6 +26,7 @@ import torch
 import ttnn
 from loguru import logger
 
+from tt_transformers.llm_runtime.config import fit_paged_kv_num_blocks
 from tt_transformers.models.qwen25_coder_32b import weight_utils
 from tt_transformers.modules.attention.attention_1d import (
     Attention1D,
@@ -1002,7 +1003,11 @@ class Qwen25Coder32B(LightweightModule):
             paged_attention_config=(
                 Qwen25Coder32BPagedAttentionConfig(
                     block_size=block_size,
-                    max_num_blocks=((max_seq_len + block_size - 1) // block_size) * max_batch_size,
+                    max_num_blocks=fit_paged_kv_num_blocks(
+                        ((max_seq_len + block_size - 1) // block_size) * max_batch_size,
+                        max_seq_len=max_seq_len,
+                        block_size=block_size,
+                    ),
                 )
                 if executor_mode
                 else _INTERNAL_KV_CACHE_CONFIG

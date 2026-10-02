@@ -119,6 +119,7 @@ class _ExecutorFacadeSurface:
     prefill_forward = _delegate_to_model_executor("prefill_forward")
     decode_forward = _delegate_to_model_executor("decode_forward")
     can_trace_prefill = _delegate_to_model_executor("can_trace_prefill")
+    note_eager_prefill_degrade = _delegate_to_model_executor("note_eager_prefill_degrade")
     read_decode_output = _delegate_to_model_executor("read_decode_output")
     process_decode_output_host = _delegate_to_model_executor("process_decode_output_host")
     warmup_model_prefill = _delegate_to_model_executor("warmup_model_prefill")
@@ -152,6 +153,7 @@ _FACADE_SURFACE = (
     "prefill_forward",
     "decode_forward",
     "can_trace_prefill",
+    "note_eager_prefill_degrade",
     "read_decode_output",
     "process_decode_output_host",
     "warmup_model_prefill",
@@ -386,15 +388,11 @@ class Llama33_70BExecutor:
         if not isinstance(config, Llama33_70BExecutorConfig):
             raise TypeError("config must be a Llama33_70BExecutorConfig")
         sampling_state_controller, sampling_state = _create_sampling_state(model, config.device_sampling_enabled)
-        prefill_sequence_lengths = getattr(runtime_config, "trace_prefill_warmup_seq_lens", ())
-        if not prefill_sequence_lengths:
-            prefill_sequence_lengths = getattr(runtime_config, "trace_prefill_supported_seq_lens", (128,))
         self._model_executor = ModelExecutor(
             model,
             runtime_config,
             config,
             owner_name="Llama33_70BExecutor",
-            prefill_sequence_lengths=prefill_sequence_lengths,
             disable_batched_prefill=bool(runtime_config.disable_batched_prefill),
             sampling_state_controller=sampling_state_controller,
             sampling_state=sampling_state,
@@ -483,7 +481,9 @@ def _warmup_q128_topk_tile_ends(
         top_k=torch.full((1,), 32, dtype=torch.int32),
         top_p=torch.full((1,), 0.08),
     )
-    execution = executor.traced_executor if enable_trace else executor.eager_executor
+    # Without a Q128 trace family the trace pass primes these programs eagerly.
+    traced = enable_trace and 128 in executor.warmup.config.prefill_trace_sequence_lengths
+    execution = executor.traced_executor if traced else executor.eager_executor
     for sequence_length in (32, 64, 96):
         page_table_width = (
             sequence_length + executor.page_table_layout.block_size - 1

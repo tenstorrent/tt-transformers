@@ -2,7 +2,7 @@
 
 `tools/ttnn_dev.py` runs tt_transformers source against editable TTNN or a
 fixed wheel bundle. The released package and normal locks retain
-`ttnn==0.77.0`. The development environment installs TTNN and the resolved
+`ttnn==0.79.0`. The development environment installs TTNN and the resolved
 dependencies, then imports tt_transformers from its checkout without installing
 its distribution.
 

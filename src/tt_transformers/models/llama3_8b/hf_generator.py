@@ -24,7 +24,7 @@ from tt_transformers.cache_environment import (
     resolve_model_cache,
 )
 from tt_transformers.device_utils import cleanup_object_graph, get_device_name
-from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
+from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig, fit_paged_kv_num_blocks
 from tt_transformers.llm_runtime.tensor_resources import attach_cleanup_failures
 from tt_transformers.models.llama3_8b.model import Llama31_8BPagedAttentionConfig
 from tt_transformers.models.llama3_executor import Llama3Executor, Llama3ExecutorConfig
@@ -120,7 +120,7 @@ def compute_gather_cos_sin(
 
 def should_pad_sampling_logits_to_power_of_2(padded_vocab_size: int, sampling_splits: int) -> bool:
     if sampling_splits < 1:
-        return False
+        raise ValueError(f"sampling_splits must be >= 1, got {sampling_splits}")
     per_device_vocab = padded_vocab_size // sampling_splits
     return per_device_vocab > 0 and (per_device_vocab & (per_device_vocab - 1)) != 0
 
@@ -272,6 +272,7 @@ class Llama3RuntimeConfig:
     model_cache_path: Path
     max_prefill_chunk_size: int
     max_context_len: int
+    max_seq_len: int
     trace_prefill_supported_seq_lens: tuple[int, ...] = (128, 1024)
     supports_batched_prefill: bool = True
     max_prefill_batch_size: int = 32
@@ -590,6 +591,7 @@ def _load_model(
         model_cache_path=model_cache_path,
         max_prefill_chunk_size=max_prefill_chunk_size,
         max_context_len=text_config["max_position_embeddings"],
+        max_seq_len=max_seq_len,
         trace_prefill_supported_seq_lens=trace_prefill_supported_seq_lens,
         # TTTv1 disables batched prefill for Llama-3.1-8B on every supported
         # BlackHole SKU because BH prefill reductions are batch-variant. The
@@ -653,7 +655,11 @@ def from_pretrained(
         max_num_blocks = (
             executor_config.paged_kv_cache.max_num_blocks
             if executor_config is not None
-            else ((max_seq_len + block_size - 1) // block_size) * max_batch_size
+            else fit_paged_kv_num_blocks(
+                ((max_seq_len + block_size - 1) // block_size) * max_batch_size,
+                max_seq_len=max_seq_len,
+                block_size=block_size,
+            )
         )
         paged_attention_config = Llama31_8BPagedAttentionConfig(block_size=block_size, max_num_blocks=max_num_blocks)
     if executor_config is not None:

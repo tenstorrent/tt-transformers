@@ -23,7 +23,7 @@ from tt_transformers.cache_environment import (
     resolve_model_cache,
 )
 from tt_transformers.device_utils import cleanup_object_graph
-from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
+from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig, fit_paged_kv_num_blocks
 from tt_transformers.llm_runtime.tensor_resources import attach_cleanup_failures
 from tt_transformers.models.executor import ModelExecutor, ModelExecutorConfig
 from tt_transformers.models.qwen3_32b.model import (
@@ -436,6 +436,7 @@ class _ExecutorFacadeSurface:
     prefill_forward = _delegate_to_model_executor("prefill_forward")
     decode_forward = _delegate_to_model_executor("decode_forward")
     can_trace_prefill = _delegate_to_model_executor("can_trace_prefill")
+    note_eager_prefill_degrade = _delegate_to_model_executor("note_eager_prefill_degrade")
     read_decode_output = _delegate_to_model_executor("read_decode_output")
     process_decode_output_host = _delegate_to_model_executor("process_decode_output_host")
     warmup_model_prefill = _delegate_to_model_executor("warmup_model_prefill")
@@ -469,6 +470,7 @@ _FACADE_SURFACE = (
     "prefill_forward",
     "decode_forward",
     "can_trace_prefill",
+    "note_eager_prefill_degrade",
     "read_decode_output",
     "process_decode_output_host",
     "warmup_model_prefill",
@@ -582,7 +584,9 @@ def _warmup_q128_topk_tile_ends(
         top_k=torch.full((1,), 32, dtype=torch.int32),
         top_p=torch.full((1,), 0.08),
     )
-    execution = executor.traced_executor if enable_trace else executor.eager_executor
+    # Without a Q128 trace family the trace pass primes these programs eagerly.
+    traced = enable_trace and 128 in executor.warmup.config.prefill_trace_sequence_lengths
+    execution = executor.traced_executor if traced else executor.eager_executor
     for sequence_length in (32, 64, 96):
         page_table_width = (
             sequence_length + executor.page_table_layout.block_size - 1
@@ -619,11 +623,19 @@ def _compat_executor_config(model, *, trace_mode: str, device_sampling_enabled: 
     block_size = 32
     max_seq_len = int(getattr(runtime_config, "max_seq_len", model.config.max_seq_len))
     max_batch_size = int(getattr(runtime_config, "max_batch_size", model.config.max_batch_size))
-    max_num_blocks = ((max_seq_len + block_size - 1) // block_size) * max_batch_size
+    max_num_blocks = fit_paged_kv_num_blocks(
+        ((max_seq_len + block_size - 1) // block_size) * max_batch_size, max_seq_len=max_seq_len, block_size=block_size
+    )
     return Qwen3_32BExecutorConfig(
         trace=TraceConfig(mode=trace_mode),
         warmup=WarmupConfig(
-            prefill_seq_lens=tuple(getattr(runtime_config, "trace_prefill_supported_seq_lens", (128, 1024))),
+            # Under trace the shared default warms every bucket up to the chunk
+            # cap, so an untraced prompt has an eager program to degrade to.
+            prefill_seq_lens=(
+                None
+                if trace_mode != "none"
+                else tuple(getattr(runtime_config, "trace_prefill_supported_seq_lens", (128, 1024)))
+            ),
             prefill_batch_sizes=(1,),
             include_decode_top_k=device_sampling_enabled,
         ),
@@ -722,7 +734,11 @@ def from_pretrained(
         max_num_blocks = (
             executor_config.paged_kv_cache.max_num_blocks
             if executor_config is not None
-            else ((max_seq_len + block_size - 1) // block_size) * max_batch_size
+            else fit_paged_kv_num_blocks(
+                ((max_seq_len + block_size - 1) // block_size) * max_batch_size,
+                max_seq_len=max_seq_len,
+                block_size=block_size,
+            )
         )
         paged_attention_config = Qwen3_32BPagedAttentionConfig(block_size=block_size, max_num_blocks=max_num_blocks)
     if executor_config is not None:

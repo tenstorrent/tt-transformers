@@ -8,7 +8,6 @@ This test suite verifies:
 1. Unit tests for config dataclass and transformation matrix utility
 2. RotarySetup1D init + API methods (get_both_trans_mats, forward)
 3. Numerical correctness vs pure-torch HF reference
-4. from_model_args backward compatibility (vs TTTv1)
 """
 
 import math
@@ -153,19 +152,6 @@ def test_rope_1d_config_with_options():
     assert config.head_dim == 64
     assert config.use_qk_fused is True
     assert config.datatype == ttnn.bfloat8_b
-
-
-@pytest.mark.host
-@pytest.mark.skip(reason="TTTv1 from_model_args compatibility is outside standalone ownership")
-def test_rope_1d_from_model_args_rejects_galaxy(expect_error):
-    """Test that from_model_args raises for Galaxy devices."""
-    from unittest.mock import MagicMock
-
-    args = MagicMock()
-    args.is_galaxy = True
-
-    with expect_error(ValueError, "Galaxy"):
-        RotarySetup1D.from_model_args(device=MagicMock(), args=args)
 
 
 @pytest.mark.host
@@ -322,9 +308,7 @@ def test_rope_1d_decode_forward_vs_reference(
     Verifies:
     1. Construction succeeds with given parameters
     2. get_both_trans_mats() returns valid tensors with correct PCC
-    3. get_rot_idxs() produces correct shape
-    4. get_rot_mats() produces cos/sin with correct shapes and PCC vs reference
-    5. decode_forward() with ttnn.Tensor input matches torch-input path
+    3. decode_forward() with ttnn.Tensor input matches torch-input path
     """
     scaling = Llama3Scaling() if rope_scaling_str == "llama3" else None
 
@@ -418,71 +402,6 @@ def test_rope_1d_decode_forward_vs_reference(
         f"head_dim={head_dim}, max_seq_len={max_seq_len}, rope_theta={rope_theta}, "
         f"scaling={rope_scaling_str}, fused={use_qk_fused}"
     )
-
-
-# ============================================================================
-# Standalone helper test: prepare_rot_idxs
-# ============================================================================
-
-
-@pytest.mark.device
-@pytest.mark.parametrize(
-    "ttnn_mesh_device",
-    [(1, 1), (1, 2)],
-    ids=["1x1", "1x2"],
-    indirect=True,
-)
-@pytest.mark.parametrize(
-    "batch_size,use_qk_fused",
-    [
-        pytest.param(1, False, id="b1-nofused"),
-        pytest.param(1, True, id="b1-fused"),
-        pytest.param(32, True, id="b32-fused"),
-    ],
-)
-def test_prepare_rot_idxs(
-    ttnn_mesh_device: ttnn.MeshDevice,
-    batch_size,
-    use_qk_fused,
-):
-    """Test prepare_rot_idxs standalone helper produces correct ttnn tensor."""
-    cos_torch, sin_torch = _rope_cos_sin(head_dim=128, max_seq_len=8192, theta=500000.0, scaling=Llama3Scaling())
-    tag = "theta500000.0_llama3"
-    cache_dir = Path(os.getenv("TT_CACHE_PATH", "model_cache/rope_1d"))
-    cos_lw = LazyWeight(source=cos_torch, device=ttnn_mesh_device, cache_dir_weight_name=(cache_dir, f"cos_{tag}"))
-    sin_lw = LazyWeight(source=sin_torch, device=ttnn_mesh_device, cache_dir_weight_name=(cache_dir, f"sin_{tag}"))
-    config = Rope1DConfig(
-        cos_matrix=cos_lw,
-        sin_matrix=sin_lw,
-        max_batch_size=batch_size,
-        head_dim=128,
-        device=ttnn_mesh_device,
-        use_qk_fused=use_qk_fused,
-    )
-    rope = RotarySetup1D.from_config(config)
-
-    position_idxs = torch.arange(batch_size)
-
-    # Test on-device path
-    rot_idxs = prepare_rot_idxs(rope.config, position_idxs, on_host=False)
-    assert isinstance(rot_idxs, ttnn.Tensor)
-
-    # Test on-host path
-    rot_idxs_host = prepare_rot_idxs(rope.config, position_idxs, on_host=True)
-    assert isinstance(rot_idxs_host, ttnn.Tensor)
-
-    # Both paths should produce usable tensors for decode_forward()
-    cos_sin_device = rope.decode_forward(rot_idxs)
-    assert len(cos_sin_device) == 2
-
-    cos_sin_host = rope.get_rot_mats(rot_idxs_host)
-    assert len(cos_sin_host) == 2
-
-    # PCC: both paths should produce identical results
-    cos_d = to_torch_auto_compose(cos_sin_device[0])
-    cos_h = to_torch_auto_compose(cos_sin_host[0])
-    pcc_ok, msg = comp_pcc(cos_d, cos_h, 0.9999)
-    assert pcc_ok, f"on-device vs on-host cos mismatch: {msg}"
 
 
 # ============================================================================
@@ -743,21 +662,3 @@ def test_prefill_forward_bounds_check(ttnn_mesh_device: ttnn.MeshDevice, expect_
 
     with expect_error(AssertionError, "exceeds cos/sin table length"):
         rope.prefill_forward(start_pos=200, seq_len=128)
-
-
-# ============================================================================
-# from_model_args backward compatibility test
-# ============================================================================
-
-
-@pytest.mark.device
-@pytest.mark.parametrize(
-    "ttnn_mesh_device",
-    [(1, 1), (1, 2), (1, 8)],
-    ids=["1x1", "1x2", "1x8"],
-    indirect=True,
-)
-def test_rope_1d_vs_reference_from_model_args(ttnn_mesh_device: ttnn.MeshDevice):
-    pytest.skip(
-        "TTTv1 compatibility characterization retired; standalone constructor coverage lives in tests/host/test_foundation_boundary.py"
-    )

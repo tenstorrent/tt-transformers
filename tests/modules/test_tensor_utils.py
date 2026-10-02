@@ -283,7 +283,7 @@ def test_program_config_to_dict_with_to_json():
 
 @pytest.mark.host
 def test_program_config_to_dict_without_to_json():
-    """Serialize public data when TTNN 0.77 has neither to_json nor a usable repr."""
+    """Serialize public attributes when TTNN 0.79 program configs have no to_json."""
     cfg = ttnn.SDPAProgramConfig(
         compute_with_storage_grid_size=ttnn.CoreCoord(8, 8),
         q_chunk_size=256,

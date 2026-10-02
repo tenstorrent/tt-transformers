@@ -13,7 +13,7 @@ Tenstorrent hardware.
 
 - Linux on x86-64
 - CPython 3.10 or 3.12
-- `ttnn==0.77.0`
+- `ttnn==0.79.0`
 - a compatible Tenstorrent driver, firmware, and device configuration for
   hardware execution
 

@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from tt_transformers.llm_runtime.config import TraceConfig
+from tt_transformers.llm_runtime.config import TraceConfig, fit_paged_kv_num_blocks
 
 _DEMO_PATH = "examples/llama32_3b/benchmark.py"
 _DEMO_TREE = ast.parse(Path(_DEMO_PATH).read_text(encoding="utf-8"), filename=_DEMO_PATH)
@@ -90,6 +90,7 @@ def test_create_executor_preserves_3b_trace_device_matrix(num_devices, traced, e
         "Llama32_3BExecutorConfig": executor_config,
         "PagedKVCacheConfig": lambda **kwargs: SimpleNamespace(**kwargs),
         "TraceConfig": TraceConfig,
+        "fit_paged_kv_num_blocks": fit_paged_kv_num_blocks,
         "WarmupConfig": lambda: object(),
     }
     create_executor = _demo_function("create_executor", namespace)

@@ -86,7 +86,7 @@ def main() -> int:
             {"ttnn", "torch", "loguru", "pytest", "jsonschema", "transformers", "tqdm"},
             target=f"host-{python}",
         )
-        if base["ttnn"][0] != "0.77.0" or base["torch"][0] != "2.11.0+cpu":
+        if base["ttnn"][0] != "0.79.0" or base["torch"][0] != "2.11.0+cpu":
             raise ValueError(f"base-{python}: TTNN/Torch target drifted")
         if base["transformers"][0] != "5.12.1":
             raise ValueError(f"base-{python}: Transformers target drifted")

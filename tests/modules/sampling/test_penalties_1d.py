@@ -500,33 +500,6 @@ class TestPenalties1DDevice:
         result = pen.forward(logits_tt, params=None, accum=None)
         assert result is logits_tt
 
-    @pytest.mark.device
-    @pytest.mark.parametrize("vocab_size", [1024])
-    def test_from_model_args(self, ttnn_mesh_device, vocab_size):
-        """from_model_args backward compat factory."""
-
-        class MockArgs:
-            padded_vocab_size = vocab_size
-            sub_core_grids = None
-
-        pen = Penalties1D.from_model_args(ttnn_mesh_device, MockArgs())
-        assert pen.config.vocab_size == vocab_size
-        assert pen.config.mesh_device is ttnn_mesh_device
-
-    @pytest.mark.device
-    def test_rejects_galaxy(self, ttnn_mesh_device):
-        """from_model_args should reject 2D (Galaxy) topologies."""
-
-        class FakeMesh:
-            shape = (2, 4)
-
-        class MockArgs:
-            padded_vocab_size = 1024
-            sub_core_grids = None
-
-        with pytest.raises(ValueError, match="1D mesh topologies"):  # allow-pytest.raises: pre-existing
-            Penalties1D.from_model_args(FakeMesh(), MockArgs())
-
 
 # ==============================================================================
 # VS Reference tests — full penalty pipeline compared against pure-torch golden

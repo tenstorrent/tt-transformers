@@ -8,7 +8,15 @@ import torch
 import ttnn
 from examples.common.auto_compose import to_torch_auto_compose
 
-from tt_transformers.modules.sampling.sampling_1d import Sampling1D, Sampling1DConfig, _resolve_sampling1d_config
+from tt_transformers.modules.sampling.sampling_1d import (
+    TOPK_MAX_WIDTH,
+    Sampling1D,
+    Sampling1DConfig,
+    _num_single_device_vocab_splits,
+    _resolve_sampling1d_config,
+    _untilize_chunk_count,
+    _untilize_chunk_width,
+)
 
 # 1D module suites target the T3K; skip when the host system is a Galaxy.
 pytestmark = pytest.mark.usefixtures("skip_on_galaxy_system")
@@ -127,6 +135,62 @@ class TestConfigUnit:
         cfg = Sampling1DConfig(vocab_size=1024, mesh_device=mock_device, tt_ccl=None)
         assert not cfg.is_resolved()
 
+    # ------------------------------------------------------------------
+    # Adaptive single-device vocab split + chunked untilize (tt-metal
+    # #53167 / #55343). A 152064-wide vocab (Qwen2.5-7B / Qwen2-7B)
+    # exceeds both the ttnn.topk width cap and the single-program untilize
+    # width, so it must be chunked on both paths.
+    # ------------------------------------------------------------------
+
+    @pytest.mark.host
+    def test_adaptive_split_keeps_topk_chunks_under_cap(self):
+        padded_vocab = 152064  # Qwen2.5-7B / Qwen2-7B HF vocab
+        # The old fixed half-split would hand ttnn.topk a chunk over the cap.
+        assert padded_vocab // 2 > TOPK_MAX_WIDTH
+        num_splits = _num_single_device_vocab_splits(padded_vocab)
+        assert num_splits == 4
+        chunk_width = padded_vocab // num_splits
+        assert chunk_width <= TOPK_MAX_WIDTH
+        assert padded_vocab % num_splits == 0
+        assert chunk_width % ttnn.TILE_SIZE == 0
+
+    @pytest.mark.host
+    def test_adaptive_split_preserves_two_way_split_up_to_128k(self):
+        # Every vocab whose half fits the cap keeps the historical two-way split,
+        # so nothing below 128K changes behaviour.
+        for padded_vocab in (32768, 100352, 128256):
+            assert padded_vocab // 2 <= TOPK_MAX_WIDTH
+            assert _num_single_device_vocab_splits(padded_vocab) == 2
+
+    @pytest.mark.host
+    def test_adaptive_split_returns_none_when_no_tile_aligned_cut(self):
+        # 131072 + 32: the half is over the cap, and the quarter (32776) is not
+        # tile-aligned, so no valid single-device cut exists and the caller must
+        # fall back to host sampling rather than construct the device sampler.
+        assert _num_single_device_vocab_splits(2 * TOPK_MAX_WIDTH + ttnn.TILE_SIZE) is None
+
+    @pytest.mark.host
+    def test_untilize_chunking_bounds_and_covers_width(self):
+        padded_vocab = 152064
+        # Wider than one program can untilize (> 2 * cap) → must be chunked.
+        assert padded_vocab > 2 * TOPK_MAX_WIDTH
+        num_chunks = _untilize_chunk_count(padded_vocab)
+        assert num_chunks > 1
+        chunk_width = _untilize_chunk_width(padded_vocab, num_chunks)
+        assert chunk_width % ttnn.TILE_SIZE == 0
+        assert chunk_width <= 2 * TOPK_MAX_WIDTH
+        # The chunks cover the whole row, and the trailing chunk is non-empty
+        # (it may be shorter than the rest — an uneven trailing chunk is allowed).
+        assert chunk_width * num_chunks >= padded_vocab
+        assert chunk_width * (num_chunks - 1) < padded_vocab
+
+    @pytest.mark.host
+    def test_untilize_narrow_row_stays_single_program(self):
+        # A row that fits one program (<= 2 * cap) is untilized in a single call,
+        # keeping the common case unchanged.
+        assert _untilize_chunk_count(128256) == 1
+        assert _untilize_chunk_count(2 * TOPK_MAX_WIDTH) == 1
+
 
 # ==============================================================================
 # Device tests
@@ -192,22 +256,6 @@ class TestSampling1DDevice:
 
         with expect_error(ValueError, "k, p, temp must all be provided"):
             sampler.decode_forward(logits_tt, k=k_tt)
-
-    @pytest.mark.device
-    @pytest.mark.parametrize("vocab_size", [1024])
-    def test_from_model_args(self, ttnn_mesh_device, vocab_size):
-        """from_model_args backward compat factory."""
-
-        class MockArgs:
-            padded_vocab_size = vocab_size
-            sub_core_grids = None
-            sub_core_grid_topk = None
-            start_core = ttnn.CoreCoord(0, 0)
-            max_top_k = 32
-
-        sampler = Sampling1D.from_model_args(ttnn_mesh_device, None, MockArgs())
-        assert sampler.config.vocab_size == vocab_size
-        assert sampler.config.mesh_device is ttnn_mesh_device
 
     # ------------------------------------------------------------------
     # CCL introspection (_bind_strategy lines 116-126)
@@ -335,49 +383,6 @@ class TestSampling1DDevice:
         assert captured_kwargs.get("buffer_key") == "TEST_KEY"
 
     # ------------------------------------------------------------------
-    # from_model_args model_config branches (lines 406-408, 416-419)
-    # ------------------------------------------------------------------
-
-    @pytest.mark.device
-    def test_from_model_args_with_galaxy_num_links(self, ttnn_mesh_device):
-        """from_model_args reads num_gather_links from GALAXY_NUM_LINKS in model_config (lines 406-408)."""
-
-        class MockArgs:
-            padded_vocab_size = 1024
-            sub_core_grids = None
-            sub_core_grid_topk = None
-            start_core = ttnn.CoreCoord(0, 0)
-            max_top_k = 32
-
-        model_config = {"GALAXY_NUM_LINKS": 4}
-        sampler = Sampling1D.from_model_args(ttnn_mesh_device, None, MockArgs(), model_config=model_config)
-        # max_top_k=32 → 32//32=1, max_links=4 → min(1, 4) = 1
-        assert sampler.config.num_gather_links == 1
-
-    @pytest.mark.device
-    def test_from_model_args_with_sampling_ag_config(self, ttnn_mesh_device):
-        """from_model_args reads allow_force_argmax/num_links/topology from SAMPLING_AG_CONFIG (lines 416-419)."""
-
-        class MockArgs:
-            padded_vocab_size = 1024
-            sub_core_grids = None
-            sub_core_grid_topk = None
-            start_core = ttnn.CoreCoord(0, 0)
-            max_top_k = 32
-
-        model_config = {
-            "SAMPLING_AG_CONFIG": {
-                "allow_force_argmax": True,
-                "num_links": 3,
-                "topology": ttnn.Topology.Linear,
-            }
-        }
-        sampler = Sampling1D.from_model_args(ttnn_mesh_device, None, MockArgs(), model_config=model_config)
-        assert sampler.config.allow_force_argmax is True
-        assert sampler.config.num_argmax_gather_links == 3
-        assert sampler.config.ag_topology == ttnn.Topology.Linear
-
-    # ------------------------------------------------------------------
     # Buffer passthrough: _resolve_buf ttnn.Tensor path (lines 493-494)
     # and _materialize ttnn.Tensor path (line 554)
     # ------------------------------------------------------------------
@@ -437,26 +442,6 @@ class TestSampling1DDevice:
         resolved = _resolve_sampling1d_config(cfg)
         assert isinstance(resolved.index_offsets, LazyBuffer)
         assert resolved.index_offsets.device is ttnn_mesh_device  # filled in by resolve_lazy_buffer
-
-    @pytest.mark.device
-    def test_rejects_galaxy(self, ttnn_mesh_device, expect_error):
-        """from_model_args should reject 2D (Galaxy) topologies."""
-
-        class FakeMesh:
-            shape = (2, 4)
-
-            def get_num_devices(self):
-                return 8
-
-        class MockArgs:
-            padded_vocab_size = 1024
-            sub_core_grids = None
-            sub_core_grid_topk = None
-            start_core = ttnn.CoreCoord(0, 0)
-            max_top_k = 32
-
-        with expect_error(ValueError, "1D mesh topologies"):
-            Sampling1D.from_model_args(FakeMesh(), None, MockArgs())
 
 
 # ==============================================================================

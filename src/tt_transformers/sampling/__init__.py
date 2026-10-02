@@ -3,8 +3,15 @@
 
 """Model-neutral sampling values and helpers.
 
-The lazy exports preserve the pinned helper surface while keeping one canonical
-SamplingParams identity in sampling_params.
+One canonical SamplingParams identity lives in sampling_params. The on-device
+sampling implementation is ``tt_transformers.modules.sampling``; this package
+carries only the shared value types and the log-probability helper.
+
+The TTTv1-era ``SamplingGenerator`` / ``TTSampling`` / ``TTPenalties`` surface
+was removed. Nothing in this package consumed it, and tt-metal keeps and uses
+its own copy under ``models/common/sampling``. Their sampling-parameter helpers
+duplicated ``tt_transformers.modules.sampling.params``, which is the one to
+import.
 """
 
 from __future__ import annotations
@@ -12,20 +19,9 @@ from __future__ import annotations
 from importlib import import_module
 
 _EXPORTS = {
-    "TTSampling": (".tt_sampling", "TTSampling"),
-    "TTPenalties": (".tt_penalties", "TTPenalties"),
-    "apply_penalties": (".tt_penalties", "apply_penalties"),
     "LogProbsCalculator": (".tt_log_probs", "LogProbsCalculator"),
     "LogProbsResult": (".tt_log_probs", "LogProbsResult"),
-    "SamplingGenerator": (".generator", "SamplingGenerator"),
     "SamplingParams": (".sampling_params", "SamplingParams"),
-    "SAMPLING_PARAM_FIELDS": (".generator", "SAMPLING_PARAM_FIELDS"),
-    "format_sampling_params": (".generator", "format_sampling_params"),
-    "broadcast_sampling_params": (".generator", "broadcast_sampling_params"),
-    "scatter_sampling_params_to_slots": (".generator", "scatter_sampling_params_to_slots"),
-    "slice_sampling_params": (".generator", "slice_sampling_params"),
-    "chunk_sampling_params": (".generator", "chunk_sampling_params"),
-    "SeedManager": (".generator", "SeedManager"),
     "split_list": ("._utils", "split_list"),
 }
 

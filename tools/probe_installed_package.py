@@ -20,7 +20,7 @@ import sys
 BLOCKED_OPTIONAL = {"pytest"}
 EXPECTED_VERSIONS = {
     "tt-transformers": "2.0.0.dev0",
-    "ttnn": "0.77.0",
+    "ttnn": "0.79.0",
     "torch": "2.11.0+cpu",
     "loguru": "0.6.0",
     "transformers": "5.12.1",
@@ -225,7 +225,7 @@ def probe() -> dict[str, object]:
     )
     if report["offline"] or report["environment"]["HF_TOKEN"] != "<redacted>":
         raise AssertionError("cache preflight policy mismatch")
-    if report["cache_identity"]["ttnn_version"] != "0.77.0":
+    if report["cache_identity"]["ttnn_version"] != "0.79.0":
         raise AssertionError("cache identity did not report installed TTNN")
     sdpa = ttnn.SDPAProgramConfig(
         compute_with_storage_grid_size=ttnn.CoreCoord(8, 8),
@@ -234,7 +234,7 @@ def probe() -> dict[str, object]:
     )
     serialized_sdpa = program_config_to_dict(sdpa)
     if serialized_sdpa["compute_with_storage_grid_size"] != {"x": 8, "y": 8}:
-        raise AssertionError(f"TTNN 0.77 program-config serialization mismatch: {serialized_sdpa}")
+        raise AssertionError(f"TTNN 0.79 program-config serialization mismatch: {serialized_sdpa}")
 
     distribution = importlib.metadata.distribution("tt-transformers")
     distribution_root = pathlib.Path(distribution.locate_file("")).resolve()

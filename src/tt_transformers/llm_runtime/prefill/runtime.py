@@ -10,6 +10,7 @@ from collections.abc import Iterable, Sequence
 from typing import Any
 
 import torch
+from loguru import logger
 
 from tt_transformers.llm_runtime.config import PageTableLayout
 from tt_transformers.llm_runtime.prefill import postprocess as prefill_postprocess
@@ -68,6 +69,7 @@ class PrefillRuntime:
         self._sampling_state_controller = config.sampling_state_controller
         self._sampling_state = config.sampling_state
         self._transient_orphans: list[TensorResourceOrphan] = []
+        self._eager_degrade_buckets: set[int] = set()
         self.inputs = PrefillInputStager(
             model=config.model,
             mesh_device=config.mesh_device,
@@ -128,37 +130,33 @@ class PrefillRuntime:
     ) -> bool:
         """Classify trace applicability without allocating planned request tensors."""
 
-        if not isinstance(tokens, torch.Tensor) or tokens.ndim != 2 or int(tokens.shape[0]) == 0:
+        invocation_lengths = self._invocation_lengths(tokens=tokens, prompt_lens=prompt_lens, start_pos=start_pos)
+        if invocation_lengths is None:
             return False
-        batch_size, token_width = map(int, tokens.shape)
-        if prompt_lens is not None and (not isinstance(prompt_lens, torch.Tensor) or prompt_lens.ndim != 1):
-            return False
-        if start_pos is not None and (not isinstance(start_pos, torch.Tensor) or start_pos.ndim != 1):
-            return False
-        lengths = [token_width] * batch_size if prompt_lens is None else [int(value) for value in prompt_lens]
-        cached = [0] * batch_size if start_pos is None else [int(value) for value in start_pos]
-        if len(lengths) != batch_size or len(cached) != batch_size:
-            return False
-        for length, num_cached_tokens in zip(lengths, cached):
-            if (
-                num_cached_tokens < 0
-                or num_cached_tokens % self.config.page_table_layout.block_size
-                or length <= num_cached_tokens
-                or length > token_width
-            ):
-                return False
-            padded_length = _padded_prefill_length(length - num_cached_tokens)
-            invocation_length = (
-                _max_prefill_chunk_size(padded_length, self.config.max_prefill_chunk_size)
-                if padded_length > self.config.max_prefill_chunk_size
-                else padded_length
+        # Cached/chunk starts are runtime tensors. Static trace capability
+        # is therefore checked against invocation geometry, not the
+        # request's current cached offset.
+        return all(self.config.can_enable_trace(length, 0) for length in invocation_lengths)
+
+    def note_eager_degrade(
+        self,
+        *,
+        tokens: torch.Tensor,  # ↓ Core request
+        prompt_lens: torch.Tensor | None = None,  # ↓ Sequence metadata
+        start_pos: torch.Tensor | None = None,
+    ) -> None:
+        """Warn once per bucket when a request that asked for trace is served eager."""
+
+        invocation_lengths = self._invocation_lengths(tokens=tokens, prompt_lens=prompt_lens, start_pos=start_pos)
+        for length in sorted(set(invocation_lengths or ())):
+            if length in self._eager_degrade_buckets:
+                continue
+            self._eager_degrade_buckets.add(length)
+            logger.warning(
+                f"Prefill bucket {length} is served eager although trace was requested: it has no captured "
+                "trace, or it was batched with a request that has none. Prompts that pad to it take longer "
+                "to first token. Logged once per bucket."
             )
-            # Cached/chunk starts are runtime tensors. Static trace capability
-            # is therefore checked against invocation geometry, not the
-            # request's current cached offset.
-            if not self.config.can_enable_trace(invocation_length, 0):
-                return False
-        return True
 
     def prepare(
         self,
@@ -338,6 +336,43 @@ class PrefillRuntime:
             raise_cleanup_failures(failures)
 
     # Private implementation
+
+    def _invocation_lengths(
+        self,
+        *,
+        tokens: torch.Tensor,
+        prompt_lens: torch.Tensor | None,
+        start_pos: torch.Tensor | None,
+    ) -> list[int] | None:
+        # The first invocation's padded length per row, clamped to the chunk
+        # cap, or None when the request metadata is malformed.
+        if not isinstance(tokens, torch.Tensor) or tokens.ndim != 2 or int(tokens.shape[0]) == 0:
+            return None
+        batch_size, token_width = map(int, tokens.shape)
+        if prompt_lens is not None and (not isinstance(prompt_lens, torch.Tensor) or prompt_lens.ndim != 1):
+            return None
+        if start_pos is not None and (not isinstance(start_pos, torch.Tensor) or start_pos.ndim != 1):
+            return None
+        lengths = [token_width] * batch_size if prompt_lens is None else [int(value) for value in prompt_lens]
+        cached = [0] * batch_size if start_pos is None else [int(value) for value in start_pos]
+        if len(lengths) != batch_size or len(cached) != batch_size:
+            return None
+        invocation_lengths = []
+        for length, num_cached_tokens in zip(lengths, cached):
+            if (
+                num_cached_tokens < 0
+                or num_cached_tokens % self.config.page_table_layout.block_size
+                or length <= num_cached_tokens
+                or length > token_width
+            ):
+                return None
+            padded_length = _padded_prefill_length(length - num_cached_tokens)
+            invocation_lengths.append(
+                _max_prefill_chunk_size(padded_length, self.config.max_prefill_chunk_size)
+                if padded_length > self.config.max_prefill_chunk_size
+                else padded_length
+            )
+        return invocation_lengths
 
     def _prepare_sampling_state(self, prepared: PreparedPrefill, *, count_tokens: bool) -> None:
         controller = self._sampling_state_controller

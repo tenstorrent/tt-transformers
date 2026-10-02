@@ -46,6 +46,165 @@ def _upper_power_of_2(n: int) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Width limits: ttnn.topk and ttnn.untilize both cap the row width they accept
+# in a single program, so the single-device sampler must cut wide vocabularies
+# into chunks. The adaptive top-k split is from tt-metal #53167; the chunked
+# untilize (including its acceptance of an uneven trailing chunk) is from
+# tt-metal #55343.
+# ---------------------------------------------------------------------------
+
+# Widest input ttnn.topk accepts in one call; vocabs beyond it must be chunked.
+TOPK_MAX_WIDTH = 64 * 1024
+
+# ---------------------------------------------------------------------------
+# Greedy tie-break (port of TTTv1 TTSampling._adjust_values_for_tiebreak,
+# tt-metal #50687 / #52177). ttnn.sampling breaks exact value ties by candidate
+# position, and the position a tied logit lands at after the unstable top-k and
+# the all-gather is not stable, so a greedy (k == 1) user can flip between two
+# tied tokens across slots and runs. Boosting the lowest-global-index tied
+# maximum makes the greedy pick equal torch.argmax's.
+# ---------------------------------------------------------------------------
+
+# bfloat16 spacing at magnitude |x| is between |x| * 2^-8 and |x| * 2^-7, so a 2^-6
+# relative boost is at least 2 ULP at every magnitude; a power of two keeps it exact.
+TIEBREAK_DELTA_SCALE = 2**-6
+# Keeps the boost strictly positive when the tied maximum is exactly 0.0.
+TIEBREAK_DELTA_FLOOR = 1e-30
+# Added to the global index of every non-maximum so the row min over indices lands on
+# a tied maximum. A power of two (exact in bfloat16), above any padded vocabulary.
+TIEBREAK_INDEX_SENTINEL = 2**24
+
+
+def _num_single_device_vocab_splits(padded_vocab_size: int) -> int | None:
+    """Fewest power-of-two same-device chunks whose width fits ttnn.topk.
+
+    Two chunks preserve the historical behaviour for every vocab up to 128K;
+    larger vocabs get four (e.g. the 152064-wide Qwen 7B tokenizers, whose
+    half-split of 76032 is over the cap). Returns None when no tile-aligned cut
+    exists, in which case the caller must fall back to host sampling instead of
+    constructing the device sampler.
+    """
+    num_splits = 2
+    while padded_vocab_size // num_splits > TOPK_MAX_WIDTH:
+        num_splits *= 2
+    chunk_width = padded_vocab_size // num_splits
+    if padded_vocab_size % num_splits != 0 or chunk_width % ttnn.TILE_SIZE != 0:
+        return None
+    return num_splits
+
+
+def _untilize_chunk_count(width: int) -> int:
+    """Fewest tile-aligned chunks of at most TOPK_MAX_WIDTH each, or 1 when the
+    row is narrow enough (<= 2 * TOPK_MAX_WIDTH, the widest row known to untilize
+    in one program before its circular buffers clash with resident L1 buffers).
+
+    Prefer an even cut so every chunk is at least half of TOPK_MAX_WIDTH wide
+    (the search is bounded to twice the minimum count); the caller's split
+    accepts an uneven trailing chunk when no even cut exists.
+    """
+    if width <= 2 * TOPK_MAX_WIDTH:
+        return 1
+    min_chunks = (width + TOPK_MAX_WIDTH - 1) // TOPK_MAX_WIDTH  # ceil(width / TOPK_MAX_WIDTH)
+    num_chunks = min_chunks
+    max_chunks = 2 * num_chunks
+    while num_chunks <= max_chunks:
+        if width % num_chunks == 0 and (width // num_chunks) % ttnn.TILE_SIZE == 0:
+            return num_chunks
+        num_chunks += 1
+    return min_chunks
+
+
+def _untilize_chunk_width(width: int, num_chunks: int) -> int:
+    """Tile-aligned ttnn.split size that cuts ``width`` into ``num_chunks`` pieces
+    (the last one shorter when the row does not divide evenly)."""
+    per_chunk = (width + num_chunks - 1) // num_chunks  # ceil(width / num_chunks)
+    return (per_chunk + ttnn.TILE_SIZE - 1) // ttnn.TILE_SIZE * ttnn.TILE_SIZE  # round up to a tile
+
+
+def _greedy_column(k, rows: int, sub_core_grids=None):
+    """[1, 1, rows, 1] bfloat16 TILE mask, 1.0 where the per-user ``k`` is 1 (greedy).
+
+    Derived on device from the ``k`` tensor ttnn.sampling consumes, so it can never
+    disagree with it and needs no extra host-to-device write before a trace replay.
+    ``k`` is the [B] ROW_MAJOR uint32 per-user tensor; B >= rows.
+    """
+    batch = int(k.shape[-1])
+    k_row = ttnn.reshape(k, (1, 1, 1, batch))
+    k_tile = ttnn.to_layout(k_row, ttnn.TILE_LAYOUT)
+    k_bf16 = ttnn.typecast(k_tile, ttnn.bfloat16, sub_core_grids=sub_core_grids)  # k <= max_top_k: exact
+    ttnn.deallocate(k_tile)
+    is_greedy_row = ttnn.eq(k_bf16, 1.0, sub_core_grids=sub_core_grids)
+    ttnn.deallocate(k_bf16)
+    greedy_col = ttnn.transpose(is_greedy_row, -2, -1)  # [1, 1, batch, 1]
+    ttnn.deallocate(is_greedy_row)
+    if rows == batch:
+        return greedy_col
+    sliced = ttnn.slice(greedy_col, [0, 0, 0, 0], [1, 1, rows, 1])
+    ttnn.deallocate(greedy_col)
+    return sliced
+
+
+def _adjust_values_for_tiebreak(values, global_indices, greedy_col, sub_core_grids=None):
+    """Boost, for greedy rows only, the lowest-global-index candidate among the tied maxima.
+
+    ``values`` is the [1, 1, B, W] bfloat16 TILE candidate set ttnn.sampling reads and
+    ``global_indices`` the matching int32 TILE global vocab ids. The boost is >= 2 bf16 ULP of
+    the row maximum, so ttnn.sampling's pick for a k == 1 row is the lowest tied id whatever
+    position the candidates arrived in. Rows with ``greedy_col == 0`` get a zero boost, so
+    their values, and therefore their sampling, are bit-identical.
+
+    The value half runs in bfloat16, where the max and the comparisons against it are exact.
+    The index half must run in int32: min/max over a float tensor go to the FPU, which
+    truncates to a 10-bit mantissa, so every index above 2**11 would round to a value equal to
+    no real index and the boost would silently become a no-op.
+
+    Known limitation (as in TTTv1): the pick is the lowest id among the gathered candidates.
+    If one device shard holds more than ``max_top_k`` maxima tied at the same value, its local
+    top-k drops some of them before the gather.
+    """
+    scg = sub_core_grids
+    maxv = ttnn.max(values, dim=3, keepdim=True, sub_core_grids=scg)  # [1, 1, B, 1]
+    is_max = ttnn.eq(values, maxv, sub_core_grids=scg)
+    not_max = ttnn.lt(values, maxv, sub_core_grids=scg)
+
+    abs_max = ttnn.abs(maxv, sub_core_grids=scg)
+    ttnn.deallocate(maxv)
+    delta_scaled = ttnn.multiply(abs_max, TIEBREAK_DELTA_SCALE, sub_core_grids=scg)
+    ttnn.deallocate(abs_max)
+    delta = ttnn.add(delta_scaled, TIEBREAK_DELTA_FLOOR, sub_core_grids=scg)  # [1, 1, B, 1]
+    ttnn.deallocate(delta_scaled)
+
+    idx = ttnn.typecast(global_indices, ttnn.int32, sub_core_grids=scg)
+    offset = ttnn.multiply(not_max, TIEBREAK_INDEX_SENTINEL, sub_core_grids=scg)  # bf16, exact
+    ttnn.deallocate(not_max)
+    offset_i32 = ttnn.typecast(offset, ttnn.int32, sub_core_grids=scg)
+    ttnn.deallocate(offset)
+    masked_idx = ttnn.add(idx, offset_i32, sub_core_grids=scg)
+    ttnn.deallocate(offset_i32)
+    lowest_idx = ttnn.min(masked_idx, dim=3, keepdim=True, sub_core_grids=scg)  # [1, 1, B, 1] int32
+    ttnn.deallocate(masked_idx)
+
+    is_lowidx_i32 = ttnn.eq(idx, lowest_idx, sub_core_grids=scg)
+    ttnn.deallocate(idx)
+    ttnn.deallocate(lowest_idx)
+    is_lowidx = ttnn.typecast(is_lowidx_i32, ttnn.bfloat16, sub_core_grids=scg)
+    ttnn.deallocate(is_lowidx_i32)
+    is_winner = ttnn.multiply(is_max, is_lowidx, sub_core_grids=scg)  # 1.0 at exactly one candidate
+    ttnn.deallocate(is_max)
+    ttnn.deallocate(is_lowidx)
+
+    winner_gated = ttnn.multiply(is_winner, greedy_col, sub_core_grids=scg)
+    ttnn.deallocate(is_winner)
+    boost = ttnn.multiply(winner_gated, delta, sub_core_grids=scg)
+    ttnn.deallocate(winner_gated)
+    ttnn.deallocate(delta)
+
+    adjusted = ttnn.add(values, boost, sub_core_grids=scg)
+    ttnn.deallocate(boost)
+    return adjusted
+
+
+# ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 
@@ -149,8 +308,18 @@ class Sampling1D(LightweightModule):
         cluster_shape = self.config.mesh_device.shape
         self._multi_step_reduction = list(cluster_shape) == [1, 1]
         if self._multi_step_reduction:
+            # Same-device top-k runs the vocab in chunks that each fit ttnn.topk.
+            # _resolve_sampling1d_config already validated this cut and built
+            # index_offsets to match, so a None here would be a caller bug.
+            self._num_vocab_splits = _num_single_device_vocab_splits(self.config.vocab_size)
+            if self._num_vocab_splits is None:
+                raise ValueError(
+                    f"padded vocab_size={self.config.vocab_size} cannot be cut into tile-aligned "
+                    f"single-device top-k chunks of at most {TOPK_MAX_WIDTH}"
+                )
             self._topk = self._topk_single_device
         else:
+            self._num_vocab_splits = None
             self._topk = self._topk_multi_device
 
         # Argmax strategy: single vs multi-device
@@ -318,7 +487,7 @@ class Sampling1D(LightweightModule):
         logits = self._pre_argmax_gather(logits)
         if slice_valid_vocab:
             logits = self._slice_valid_vocab_for_argmax(logits)
-        x_untilized = ttnn.untilize(logits, use_multicore=True)
+        x_untilized = self._untilize_for_argmax(logits)
         tt_out_tok = ttnn.argmax(
             x_untilized,
             dim=-1,
@@ -328,6 +497,29 @@ class Sampling1D(LightweightModule):
         # Argmax path never emits logprobs (main's contract: force-argmax is disabled whenever
         # logprobs are requested). Return None unconditionally — do not call the calculator.
         return tt_out_tok, None
+
+    def _untilize_for_argmax(self, logits):
+        """Untilize a vocabulary row in bounded chunks while preserving its exact width.
+
+        A single ttnn.untilize needs a static circular-buffer region proportional to the
+        row width; past roughly 150K elements it clashes with the model's resident L1
+        buffers at compile. Cut the row into tile-aligned chunks, untilize each, and
+        concat — freeing each tiled chunk as soon as its row-major copy exists so peak
+        memory holds about one full-vocab buffer less. Port of tt-metal #55343, including
+        its acceptance of an uneven trailing chunk. Narrow rows stay a single program, so
+        the common case is unchanged."""
+        num_chunks = _untilize_chunk_count(logits.shape[-1])
+        if num_chunks == 1:
+            return ttnn.untilize(logits, use_multicore=True)
+        chunks = ttnn.split(logits, _untilize_chunk_width(logits.shape[-1], num_chunks), dim=3)
+        untilized_chunks = []
+        for chunk in chunks:
+            untilized_chunks.append(ttnn.untilize(chunk, use_multicore=True))
+            chunk.deallocate()
+        x_untilized = ttnn.concat(untilized_chunks, dim=3)
+        for chunk in untilized_chunks:
+            ttnn.deallocate(chunk)
+        return x_untilized
 
     def _get_argmax_all_gather_config(self, cluster_axis):
         """Clamp the tuned all-gather config to what the actual submesh supports.
@@ -429,6 +621,17 @@ class Sampling1D(LightweightModule):
 
         # Use distinct names so we can free the interleaved intermediate after untilize
         topk_global_indices_interleaved = ttnn.to_memory_config(topk_global_indices, ttnn.DRAM_MEMORY_CONFIG)
+
+        # Greedy tie-break on the TILE-domain candidates, before seeding: its int32 reduce
+        # runs on the SFPU, and SFPU work between manual_seed and the draw can perturb it.
+        greedy_col = _greedy_column(k, int(topk_values.shape[2]), sub_core_grids=cfg.sub_core_grids)
+        tiebroken_values = _adjust_values_for_tiebreak(
+            topk_values, topk_global_indices_interleaved, greedy_col, sub_core_grids=cfg.sub_core_grids
+        )
+        ttnn.deallocate(greedy_col)
+        ttnn.deallocate(topk_values)
+        topk_values = tiebroken_values
+
         topk_global_indices = ttnn.untilize(
             topk_global_indices_interleaved, use_multicore=True, sub_core_grids=cfg.sub_core_grids
         )
@@ -566,9 +769,13 @@ class Sampling1D(LightweightModule):
     # -- Top-k strategies (bound at init, no if-else in forward) --------------
 
     def _topk_single_device(self, x_bf16):
-        """Split vocab in half → two topk → concat. Port of tt_sampling.py:346-371."""
+        """Split the vocab into ``_num_vocab_splits`` tile-aligned chunks that each
+        fit ttnn.topk, run top-k per chunk, and concat. The split count is adaptive
+        (tt-metal #53167): two chunks for vocabs up to 128K, four for wider ones so
+        no chunk exceeds TOPK_MAX_WIDTH. index_offsets, built for the same count in
+        _resolve_sampling1d_config, restores the global vocab positions downstream."""
         cfg = self.config
-        x_list = ttnn.split(x_bf16, x_bf16.shape[-1] // 2, dim=3)
+        x_list = ttnn.split(x_bf16, x_bf16.shape[-1] // self._num_vocab_splits, dim=3)
 
         values_parts = []
         indices_parts = []
@@ -716,9 +923,16 @@ def _resolve_sampling1d_config(config: Sampling1DConfig) -> Sampling1DConfig:
     V = config.vocab_size
     replicate_mapper = ttnn.ShardTensor2dMesh(mesh_device, dims=(None, None), mesh_shape=cluster_shape)
 
-    # num_devices_in_mesh for index computation
+    # num_devices_in_mesh for index computation. On a 1×1 mesh the "devices" are
+    # the same-device top-k chunks; their count is the adaptive vocab split
+    # (tt-metal #53167), which _topk_single_device and index_offsets must agree on.
     if multi_step_reduction:
-        num_devices_in_mesh = 2
+        num_devices_in_mesh = _num_single_device_vocab_splits(V)
+        if num_devices_in_mesh is None:
+            raise ValueError(
+                f"padded vocab_size={V} cannot be cut into tile-aligned single-device "
+                f"top-k chunks of at most {TOPK_MAX_WIDTH}"
+            )
     else:
         num_devices_in_mesh = max(cluster_shape[0], cluster_shape[1])
     per_device_vocab = V // num_devices_in_mesh

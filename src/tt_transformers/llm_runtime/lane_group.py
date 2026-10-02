@@ -336,6 +336,25 @@ class LaneGroupExecutor:
 
         return self._run_guarded(operation)
 
+    def note_eager_prefill_degrade(
+        self,
+        *,
+        tokens: torch.Tensor,  # ↓ Core request
+        prompt_lens: torch.Tensor | None = None,  # ↓ Sequence metadata
+        start_pos: torch.Tensor | None = None,
+        empty_slots: Sequence[int] | None = None,  # ↓ Lane routing
+    ) -> None:
+        """Record on each participating lane that a prefill which requested trace runs eager."""
+
+        batch_size = int(tokens.shape[0])
+        slots = list(range(batch_size)) if empty_slots is None else list(empty_slots)
+        for lane_idx, rows, _ in self._prefill_lane_groups(slots):
+            self.lanes[lane_idx].note_eager_prefill_degrade(
+                tokens=_slice_rows(tokens, rows),
+                prompt_lens=None if prompt_lens is None else _slice_rows(prompt_lens, rows),
+                start_pos=None if start_pos is None else _slice_rows(start_pos, rows),
+            )
+
     def decode_forward(
         self,
         tokens: torch.Tensor,

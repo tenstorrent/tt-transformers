@@ -1,115 +1,78 @@
-# Sampling Module Overview
+# Sampling values and helpers
 
-The `tt_transformers.sampling` package bundles everything needed to run on-device
-sampling (top-k / top-p / temperature/ seed) plus presence/frequency/repetition
-penalties with optional trace capture.
+`tt_transformers.sampling` carries the **shared value types** for sampling plus the
+log-probability calculator. It is not the sampler.
 
-## Key Components
-- `SamplingGenerator`: high-level class that owns both `TTSampling` and
-  `TTPenalties`, exposes helper methods to reset sampling parameters, penalties,
-  prompt/output state, and to run sampling with or without trace capture.
-- `format_sampling_params`: utility that pads/clamps sampling parameters to the
-  hardware-friendly layout expected by `TTSampling`.
-- `LogProbsCalculator`: computes per-token log-probabilities across a sharded
-  vocabulary using numerically stable log-softmax (global max / sum-exp
-  reduction across devices).
+The on-device sampler lives in [`tt_transformers.modules.sampling`](../modules/README.md):
+`Sampling1D` (`sampling/sampling_1d.py`), `Penalties1D` (`sampling/penalties_1d.py`),
+`SeedManager1D`, and the parameter helpers in `sampling/params.py`.
 
-## Quick Start
-```python
-from tt_transformers.sampling import SamplingGenerator, format_sampling_params
-
-sampling = SamplingGenerator(args=args, mesh_device=mesh_device, tt_ccl=tt_ccl)
-
-params = format_sampling_params(user_params, max_batch_size=32)
-sampling.reset_sampling_params(params)
-
-sampling.reset_seed(seed)
-
-sampling.reset_prompt_tokens(prompt_tokens)   # torch tensor shaped [B, S]
-sampling.reset_output_state(output_tokens)
-
-tt_tokens = sampling.sample(
-    tt_logits,
-    tt_out_tok=tt_out_buffer,
-)
-```
-
-`SamplingGenerator.sample()` accepts `enable_trace=True` to record/replay
-sampling traces.
-
-## File Map
+## What is here
 
 | File | Purpose |
 |---|---|
-| `generator.py` | `SamplingGenerator` orchestrator; `SamplingParams`; `format_sampling_params`; `broadcast_sampling_params`; `chunk_sampling_params`; `SeedManager` |
-| `tt_sampling.py` | `TTSampling` — on-device top-k/top-p/temp with multi-device all-gather |
-| `tt_penalties.py` | `TTPenalties` — presence / frequency / repetition penalties |
-| `tt_log_probs.py` | `LogProbsCalculator` — log-softmax across sharded vocabulary |
-| `_utils.py` | Shared helpers: `clamp`, `is_default_value`, `filter_none`, `split_list` |
-
-## Required `args` Attributes
+| `sampling_params.py` | `SamplingParams` — the one canonical dataclass (temp, top_k, top_p, penalties, seed, log-probs) |
+| `tt_log_probs.py` | `LogProbsCalculator` / `LogProbsResult` — log-softmax across a sharded vocabulary (global max / sum-exp reduction across devices) |
+| `logprobs.py` | Re-export shim for `LogProbsCalculator` |
+| `vocab_padding.py` | Vocabulary padding geometry shared by the sampler and the LM head |
+| `_utils.py` | `filter_none`, `split_list` |
 
 ```python
-vocab_size: int           # actual vocabulary size (unpadded)
-cluster_shape: tuple      # (rows, cols) of the device mesh, e.g. (4, 8)
+from tt_transformers.sampling import SamplingParams
+
+params = SamplingParams(temperature=0.7, top_k=32, top_p=0.9)
 ```
 
-Optional (with defaults):
+`SamplingParams` has exactly one definition. vLLM has its own duck-type-compatible
+`TTSamplingParams`; the two are interchangeable at the call sites that accept either.
 
-```python
-padded_vocab_size: int    # tile-aligned total vocab; defaults to vocab_size
-max_batch_size: int       # per sampling row; default 32
-max_top_k: int            # default 32
-sampling_dp: int          # >1 for multi-row DP; default 1
-sub_core_grids            # CoreRangeSet or None
-model_config: dict        # keys: GALAXY_NUM_LINKS, DECODE_SAMPLING_INPUT_MEMCFG, SAMPLING_AG_CONFIG
-```
+To build, slice, broadcast or chunk parameters, import from
+`tt_transformers.modules.sampling.params` — `prepare_sampling_params`,
+`slice_sampling_params`, `format_sampling_params`, `place_prepared_sampling_params`.
+
+## Removed: the TTTv1 sampler surface
+
+`generator.py` (`SamplingGenerator`, `SeedManager`, and parameter helpers), `tt_sampling.py`
+(`TTSampling`) and `tt_penalties.py` (`TTPenalties`) were **removed**. Nothing in this package
+imported them, and their parameter helpers were a second implementation of what
+`modules/sampling/params.py` already owns — including a second `SamplingParams` dataclass, which
+is why this package now pins a single canonical identity.
+
+tt-metal keeps and uses **its own copy** of those modules under `models/common/sampling/`, with its
+own importers. Nothing there imported this package, so the removal does not affect it. The two
+copies were already diverging.
+
+If you are looking for the removed API, use `models.common.sampling` in tt-metal, or the v2
+modules here.
 
 ## `data_parallel` vs `sampling_dp`
 
-These are different concepts and should not be mixed:
+Different concepts, easily confused:
 
-- **`data_parallel`** lives above this package. It means multiple TT model
-  instances / submeshes process different requests in parallel.
-- **`sampling_dp`** lives inside this package. It means one TT model instance
-  has multiple independent sampling groups, usually one per mesh row.
-
-For `sampling_dp > 1`:
-- logits are still computed per sampling group
-- but sampling params, seeds, and penalty state are flattened to
-  `max_batch_size * sampling_dp`
-- those flattened host tensors are then row-sharded onto the device
-
-Decode already follows this contract by using `chunk_sampling_params(...)`
-plus `apply_decode_state(...)`.
-
-## Param Distribution API
-
-**`SamplingParams`**: Canonical dataclass for sampling parameters (temp, top_k, top_p, penalties, seed, log_probs). Import from `tt_transformers.sampling`. vLLM has its own duck-type-compatible `TTSamplingParams`.
-
-**`broadcast_sampling_params(params, idx, slot_len=32)`**: Expand a single user's params to fill `slot_len` slots. Used during prefill.
-
-**`chunk_sampling_params(params, sampling_dp)`**: Split a SamplingParams into `sampling_dp` pieces. List fields split evenly; scalars replicated. Works with duck-typed objects (vLLM).
-
-**`SamplingGenerator.apply_prefill_state(...)`**: Reset params, seeds, prompt tokens, and output state for a prefill request.
-
-**`SamplingGenerator.apply_decode_state(chunks, ...)`**: Format/merge params and apply for one model instance. Handles both simple (1 chunk) and row-sharded (multiple chunks) cases. Does NOT advance seeds — callers manage `seed_manager.get_new_values()` separately.
+- **`data_parallel`** lives above this package: multiple TT model instances / submeshes processing
+  different requests in parallel.
+- **`sampling_dp`** lives inside the sampler: one model instance with multiple independent sampling
+  groups, usually one per mesh row. Params, seeds and penalty state are flattened to
+  `max_batch_size * sampling_dp`, then row-sharded onto the device.
 
 ## Pitfalls
 
-**`padded_vocab_size` vs `vocab_size`**: TTSampling device offsets for global token IDs must use the padded vocab size to match how the LM head shards logits across devices. Using unpadded `vocab_size` for offsets shifts token IDs from devices 1+ and produces garbled output.
+Written against the removed TTTv1 sampler. They describe device behaviour rather than any one
+implementation, so they are retained here as reference — but they have **not** been re-verified
+against `modules/sampling`.
 
-**Padded vocab logits**: If the LM head pads output weights beyond the real tokenizer vocabulary, the sampler must mask those padded token IDs before force-argmax or local top-k. Zero-padded LM-head weights are useful for legal sharded matmul shapes, but they are not a sampling mask.
+**`padded_vocab_size` vs `vocab_size`**: device offsets for global token IDs must use the *padded*
+vocab size, to match how the LM head shards logits across devices. Using the unpadded `vocab_size`
+shifts token IDs from devices 1+ and produces garbled output.
 
-**`sampling_dp`**: When >1, k/p/temp tensors must have length `max_batch_size * sampling_dp` and are row-sharded via `ShardTensor2dMesh(dims=(0, None))`. Use `chunk_sampling_params` + `apply_decode_state` to distribute params across mesh rows.
+**Padded vocab logits**: if the LM head pads output weights beyond the real tokenizer vocabulary,
+the sampler must mask those padded token IDs before force-argmax or local top-k. Zero-padded
+LM-head weights give legal sharded matmul shapes; they are not a sampling mask.
 
-**Batched prefill + on-device sampling**: This path is only valid when the
-runtime prefill compute layout matches the sampling-group layout. If a model
-uses `sampling_dp > 1` but does not expose a row-sharded batched-prefill input
-contract, batched prefill must fall back to sequential prefill for correctness.
+**Batched prefill + on-device sampling**: only valid when the runtime prefill compute layout matches
+the sampling-group layout. A model with `sampling_dp > 1` that does not expose a row-sharded
+batched-prefill input contract must fall back to sequential prefill for correctness.
 
-**Trace invalidation**: Changing `force_argmax_sampling` state invalidates captured traces. Force-argmax is triggered when callers pass k=1, p=1.0, temp=1.0 (note: p=1.0 means "no top-p filtering", distinct from the internal initialization default of p=0). `SamplingGenerator.reset_sampling_params` handles this.
-
-## Future Work
-
-- Consolidate DeepSeek's minimal `SamplingParams` (in `models/demos/deepseek_v3/tt/generator.py`) to use the common one
+**Trace invalidation**: changing force-argmax state invalidates captured traces. Force-argmax is
+triggered by k=1, p=1.0, temp=1.0 — note that p=1.0 means "no top-p filtering", distinct from the
+internal initialization default of p=0.

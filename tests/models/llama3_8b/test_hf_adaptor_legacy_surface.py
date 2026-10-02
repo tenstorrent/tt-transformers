@@ -12,6 +12,7 @@ from tt_transformers.models.llama3_8b.hf_generator import (
     _max_prefill_chunk_size,
     _model_cache_path,
     _trace_prefill_supported_seq_lens,
+    should_pad_sampling_logits_to_power_of_2,
 )
 
 
@@ -154,9 +155,30 @@ def test_llama3_8b_runtime_trace_gate_uses_supported_lengths():
         model_cache_path="model_cache",
         max_prefill_chunk_size=64 * 1024,
         max_context_len=128 * 1024,
+        max_seq_len=128 * 1024,
         trace_prefill_supported_seq_lens=(128, 1024, 2048, 4096, 8192),
     )
 
     assert runtime_config.can_enable_trace(8192)
     assert not runtime_config.can_enable_trace(16384)
     assert not runtime_config.can_enable_trace(8192, num_cached_tokens=128)
+
+
+@pytest.mark.host
+@pytest.mark.model
+def test_should_pad_sampling_logits_rejects_non_positive_sampling_splits():
+    # A sampling split count below one has no meaning: the per-device vocab
+    # would be undefined. Fail loudly instead of silently declining to pad,
+    # so a miscomputed split count cannot masquerade as "padding not needed".
+    # See tt-metal #52444.
+    for invalid_splits in (0, -1):
+        with pytest.raises(ValueError, match="sampling_splits must be >= 1"):
+            should_pad_sampling_logits_to_power_of_2(128256, invalid_splits)
+
+
+@pytest.mark.host
+@pytest.mark.model
+def test_should_pad_sampling_logits_still_decides_valid_splits():
+    # A non-power-of-two per-device vocab needs padding; a power-of-two does not.
+    assert should_pad_sampling_logits_to_power_of_2(128256, 1) is True
+    assert should_pad_sampling_logits_to_power_of_2(131072, 1) is False

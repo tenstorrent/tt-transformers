@@ -22,7 +22,13 @@ from tt_transformers.cache_environment import (
     resolve_model_cache,
 )
 from tt_transformers.device_utils import cleanup_object_graph
-from tt_transformers.llm_runtime.config import PagedKVCacheConfig, PageTableLayout, TraceConfig, WarmupConfig
+from tt_transformers.llm_runtime.config import (
+    PagedKVCacheConfig,
+    PageTableLayout,
+    TraceConfig,
+    WarmupConfig,
+    fit_paged_kv_num_blocks,
+)
 from tt_transformers.llm_runtime.decode import DecodeRuntime, DecodeRuntimeConfig
 from tt_transformers.llm_runtime.execution import EagerExecutor, TracedExecutor
 from tt_transformers.llm_runtime.output_reader import OutputReader
@@ -32,7 +38,11 @@ from tt_transformers.llm_runtime.prefill.runtime import PrefillRuntime
 from tt_transformers.llm_runtime.program_compiler import ProgramCompiler
 from tt_transformers.llm_runtime.tensor_resources import attach_cleanup_failures
 from tt_transformers.llm_runtime.trace_compiler import TraceCompiler
-from tt_transformers.llm_runtime.warmup import WarmupCoordinator, WarmupCoordinatorConfig
+from tt_transformers.llm_runtime.warmup import (
+    WarmupCoordinator,
+    WarmupCoordinatorConfig,
+    resolve_prefill_warmup_seq_lens,
+)
 from tt_transformers.models.deepseek_r1_distill_qwen_14b import weight_utils
 from tt_transformers.models.deepseek_r1_distill_qwen_14b.model import (
     DEEPSEEK_R1_14B_ACCURACY,
@@ -346,7 +356,11 @@ def _load_model(
         block_size = 32
         paged_attention_config = DeepSeekR1Qwen14BPagedAttentionConfig(
             block_size=block_size,
-            max_num_blocks=((max_seq_len + block_size - 1) // block_size) * max_batch_size,
+            max_num_blocks=fit_paged_kv_num_blocks(
+                ((max_seq_len + block_size - 1) // block_size) * max_batch_size,
+                max_seq_len=max_seq_len,
+                block_size=block_size,
+            ),
         )
     head_dim = hf_config.hidden_size // hf_config.num_attention_heads
     params = DeepSeekR1Qwen14BModelParameters(
@@ -536,7 +550,7 @@ class DeepSeekR1Qwen14BExecutor:
         self._prefill_execution = self.traced_prefill_execution or self.eager_executor
         self._decode_execution = self.traced_decode_execution or self.eager_executor
 
-        prefill_sequence_lengths = getattr(runtime_config, "trace_prefill_supported_seq_lens", (128,))
+        prefill_sequence_lengths = resolve_prefill_warmup_seq_lens(runtime_config, config.trace)
         self.warmup = WarmupCoordinator(
             config=WarmupCoordinatorConfig.resolve(
                 warmup=config.warmup,
@@ -659,7 +673,11 @@ class DeepSeekR1Qwen14BExecutor:
         self._ensure_active()
         self._validate_bound_cache(kv_cache)
         self._ensure_sampling_for(sampling_params)
-        return (execution or self._prefill_execution).compile_prefill(
+        if execution is None:
+            execution = self._resolve_prefill_execution(
+                tokens=tokens, prompt_lens=prompt_lens, start_pos=start_pos, empty_slots=empty_slots
+            )
+        return execution.compile_prefill(
             tokens=tokens,
             page_table=page_table,
             prompt_lens=prompt_lens,
@@ -709,7 +727,11 @@ class DeepSeekR1Qwen14BExecutor:
         self._ensure_active()
         self._validate_bound_cache(kv_cache)
         self._ensure_sampling_for(sampling_params)
-        return (execution or self._prefill_execution).prefill_forward(
+        if execution is None:
+            execution = self._resolve_prefill_execution(
+                tokens=tokens, prompt_lens=prompt_lens, start_pos=start_pos, empty_slots=empty_slots
+            )
+        return execution.prefill_forward(
             tokens=tokens,
             page_table=page_table,
             prompt_lens=prompt_lens,
@@ -717,6 +739,26 @@ class DeepSeekR1Qwen14BExecutor:
             empty_slots=empty_slots,
             sampling_params=sampling_params,
         )
+
+    def _resolve_prefill_execution(self, *, tokens, prompt_lens, start_pos, empty_slots):
+        """Choose the prefill executor for one request (guarded eager degrade).
+
+        A request whose padded bucket was never captured has no required trace, so it
+        runs eager against a program pre-compiled at warmup instead of raising a trace
+        coverage error. A trace-eligible request still selects the traced executor, which
+        hard-fails if its captured artifact is missing, so a required trace miss is never
+        silently turned into eager KV writes.
+        """
+        traced = getattr(self, "traced_prefill_execution", None)
+        eager = getattr(self, "eager_executor", None)
+        if traced is None or eager is None:
+            # No traced prefill target, or a partially constructed executor: host contract
+            # tests bind only _prefill_execution. Keep the pre-existing selection.
+            return self._prefill_execution
+        if self.can_trace_prefill(tokens=tokens, prompt_lens=prompt_lens, start_pos=start_pos, empty_slots=empty_slots):
+            return traced
+        self.prefill_runtime.note_eager_degrade(tokens=tokens, prompt_lens=prompt_lens, start_pos=start_pos)
+        return eager
 
     def decode_forward(
         self,
@@ -761,6 +803,18 @@ class DeepSeekR1Qwen14BExecutor:
             prompt_lens=prompt_lens,
             start_pos=start_pos,
         )
+
+    def note_eager_prefill_degrade(
+        self,
+        *,
+        tokens: torch.Tensor,  # ↓ Core request
+        prompt_lens: torch.Tensor | None = None,  # ↓ Sequence metadata
+        start_pos: torch.Tensor | None = None,
+        empty_slots: Sequence[int] | None = None,  # ↓ Lane routing
+    ) -> None:
+        """Record that a prefill which requested trace is served by the eager executor."""
+
+        self.prefill_runtime.note_eager_degrade(tokens=tokens, prompt_lens=prompt_lens, start_pos=start_pos)
 
     def read_decode_output(self, tt_out: Any, *, async_read: bool = False) -> Any:
         self._ensure_active()
@@ -869,7 +923,9 @@ class DeepSeekR1Qwen14BExecutor:
             top_k=torch.full((1,), 32, dtype=torch.int32),
             top_p=torch.full((1,), 0.08),
         )
-        execution = self.traced_executor if enable_trace else self.eager_executor
+        # Without a Q128 trace family the trace pass primes these programs eagerly.
+        traced = enable_trace and 128 in self.warmup.config.prefill_trace_sequence_lengths
+        execution = self.traced_executor if traced else self.eager_executor
         for sequence_length in (32, 64, 96):
             page_table_width = (
                 sequence_length + self.page_table_layout.block_size - 1
@@ -1030,7 +1086,11 @@ def from_pretrained(
         max_num_blocks = (
             executor_config.paged_kv_cache.max_num_blocks
             if executor_config is not None
-            else ((max_seq_len + block_size - 1) // block_size) * max_batch_size
+            else fit_paged_kv_num_blocks(
+                ((max_seq_len + block_size - 1) // block_size) * max_batch_size,
+                max_seq_len=max_seq_len,
+                block_size=block_size,
+            )
         )
         paged_attention_config = DeepSeekR1Qwen14BPagedAttentionConfig(
             block_size=block_size, max_num_blocks=max_num_blocks

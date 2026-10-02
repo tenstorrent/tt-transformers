@@ -67,7 +67,7 @@ from examples.common.run_helpers import (
 from examples.common.runtime import UnsupportedConfiguration, open_mesh_device
 from tt_transformers.cache_environment import resolve_model_cache_path
 from tt_transformers.device_utils import cleanup_dp_model_case, cleanup_model_case
-from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
+from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig, fit_paged_kv_num_blocks
 from tt_transformers.llm_runtime.lane_group import LaneGroupExecutor
 from tt_transformers.models.deepseek_r1_distill_qwen_14b.hf_generator import DEFAULT_HF_REVISION as DEMO_HF_REVISION
 from tt_transformers.models.deepseek_r1_distill_qwen_14b.hf_generator import (
@@ -549,7 +549,11 @@ def create_executor(
     trace_mode=None,
 ) -> DeepSeekR1Qwen14BExecutor:
     block_size = 32
-    max_num_blocks = ((model.config.max_seq_len + block_size - 1) // block_size) * model.config.max_batch_size
+    max_num_blocks = fit_paged_kv_num_blocks(
+        ((model.config.max_seq_len + block_size - 1) // block_size) * model.config.max_batch_size,
+        max_seq_len=model.config.max_seq_len,
+        block_size=block_size,
+    )
     attention_config = model.config.block_configs[0].attention_config
     if trace_mode is None:
         trace_mode = "all" if traced else "none"

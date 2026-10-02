@@ -924,6 +924,52 @@ def assert_within_batch_slot_consistency(
         )
 
 
+def warmup_demo_executor(
+    executor,
+    *,
+    kv_cache,
+    page_table,
+    prefill_compile_case=None,
+    prefill_sampling_params=None,
+    prefill_compile_execution=None,
+):
+    """Compile eager programs and representative requests before trace activation.
+
+    Prefill and decode traces are only captured by the executor's warmup
+    (``requires_prefill_trace_warmup``), never lazily on first use, so every fresh traced
+    executor has to go through this before its first request -- otherwise the first one
+    fails preflight with ``TraceCoverageError``.
+    """
+    config = executor.config
+    prefill_kwargs = {
+        "kv_cache": kv_cache,
+        "can_sample_on_device": config.device_sampling_enabled,
+    }
+    decode_kwargs = {
+        "kv_cache": kv_cache,
+        "max_batch_size": int(executor.model.config.max_batch_size),
+        "num_blocks": int(page_table.shape[-1]),
+        "can_sample_on_device": config.device_sampling_enabled,
+    }
+    executor.warmup_model_decode(enable_trace=False, **decode_kwargs)
+    executor.warmup_model_prefill(enable_trace=False, **prefill_kwargs)
+    if prefill_compile_case is not None:
+        tokens, prompt_lens = prefill_compile_case
+        executor.compile_prefill(
+            tokens=tokens,
+            page_table=page_table,
+            kv_cache=kv_cache,
+            prompt_lens=prompt_lens,
+            empty_slots=list(range(tokens.shape[0])),
+            sampling_params=prefill_sampling_params,
+            execution=prefill_compile_execution if prefill_compile_execution is not None else executor.eager_execution,
+        )
+    if config.trace.prefill_enabled:
+        executor.warmup_model_prefill(enable_trace=True, **prefill_kwargs)
+    if config.trace.decode_enabled:
+        executor.warmup_model_decode(enable_trace=True, **decode_kwargs)
+
+
 def run_eval_repeat_batch32(
     *,
     make_executor,

@@ -27,6 +27,7 @@ import torch
 import ttnn
 from loguru import logger
 
+from tt_transformers.llm_runtime.config import fit_paged_kv_num_blocks
 from tt_transformers.models.qwen3_32b import weight_utils
 from tt_transformers.modules.attention.attention_1d import (
     Attention1D,
@@ -923,7 +924,9 @@ class Qwen3_32B(LightweightModule):
         rope_len = (rope_len + 127) // 128 * 128
 
         blocks_per_user = (max_seq_len + block_size - 1) // block_size
-        max_num_blocks = blocks_per_user * max_batch_size
+        max_num_blocks = fit_paged_kv_num_blocks(
+            blocks_per_user * max_batch_size, max_seq_len=max_seq_len, block_size=block_size
+        )
         paged_cfg = (
             Qwen3_32BPagedAttentionConfig(block_size=block_size, max_num_blocks=max_num_blocks)
             if executor_mode

@@ -1398,3 +1398,33 @@ def test_explicit_mesh_device_is_preserved_by_identity():
     assert group.mesh_device is mesh_device
 
     group.cleanup()
+
+
+@pytest.mark.host
+def test_eager_degrade_note_reaches_only_the_lanes_that_serve_the_rows():
+    class NoteLane(_Lane):
+        def note_eager_prefill_degrade(self, *, tokens, prompt_lens=None, start_pos=None):
+            self._call(
+                "note_eager_prefill_degrade",
+                {
+                    "tokens": tokens,
+                    "prompt_lens": prompt_lens,
+                    "start_pos": start_pos,
+                },
+            )
+
+    lanes = [NoteLane(0), NoteLane(1)]
+    group = LaneGroupExecutor(lanes)
+
+    group.note_eager_prefill_degrade(
+        tokens=torch.tensor([[10], [11]]),
+        prompt_lens=torch.tensor([7, 9]),
+        empty_slots=[2, 3],
+    )
+
+    assert lanes[0].calls == []
+    [(method, note_kwargs)] = lanes[1].calls
+    assert method == "note_eager_prefill_degrade"
+    assert note_kwargs["tokens"].flatten().tolist() == [10, 11]
+    assert note_kwargs["prompt_lens"].tolist() == [7, 9]
+    assert note_kwargs["start_pos"] is None

@@ -12,6 +12,7 @@ from typing import Any
 
 import ttnn
 from loguru import logger
+from ttnn.tools import trace_allocation_tracker
 
 from tt_transformers.llm_runtime.program_compiler import (
     ProgramCompiler,
@@ -311,22 +312,41 @@ class TraceCompiler:
                     logger.info(f"Primed {plan.operation} trace capture body: signature={plan.trace_signature!r}")
 
                 self.program_compiler.set_trace_capture_in_progress(True)
-                trace_id = ttnn.begin_trace_capture(self.mesh_device, cq_id=0)
-                outputs = None
-                try:
-                    outputs = plan.capture(persistent)
-                    ttnn.end_trace_capture(self.mesh_device, trace_id, cq_id=0)
-                    ttnn.synchronize_device(self.mesh_device)
-                except BaseException as primary:
-                    record.artifact = TraceArtifact(
-                        trace_id=trace_id,
-                        persistent_inputs=persistent,
-                        outputs=outputs,
-                        refresh_policy=plan.refresh_policy,
-                    )
-                    captured_keys.add(trace_key)
-                    attach_cleanup_failures(primary, self._release_trace(record))
-                    raise
+                # Whatever the capture body allocates belongs to the trace and stays allocated
+                # for replay, even while earlier traces are live. The scope acknowledges those
+                # allocations to ttnn's trace allocation tracker; it is a no-op unless
+                # TT_METAL_TRACE_ALLOC_TRACKING=1 is set when the process starts. Ported from
+                # tenstorrent/tt-metal#53735.
+                with trace_allocation_tracker.corruptible_allocation_scope(self.mesh_device):
+                    trace_id = ttnn.begin_trace_capture(self.mesh_device, cq_id=0)
+                    outputs = None
+                    capture_ended = False
+                    try:
+                        outputs = plan.capture(persistent)
+                        ttnn.end_trace_capture(self.mesh_device, trace_id, cq_id=0)
+                        capture_ended = True
+                        ttnn.synchronize_device(self.mesh_device)
+                    except BaseException as primary:
+                        # A capture that raised before ``end_trace_capture`` leaves the device
+                        # recording. Releasing the trace without closing the region first leaks it,
+                        # and every later capture records into it. Ported from
+                        # tenstorrent/tt-metal#55343.
+                        cleanup_failures = []
+                        if not capture_ended:
+                            try:
+                                ttnn.end_trace_capture(self.mesh_device, trace_id, cq_id=0)
+                            except BaseException as error:
+                                cleanup_failures.append(error)
+                        record.artifact = TraceArtifact(
+                            trace_id=trace_id,
+                            persistent_inputs=persistent,
+                            outputs=outputs,
+                            refresh_policy=plan.refresh_policy,
+                        )
+                        captured_keys.add(trace_key)
+                        cleanup_failures.extend(self._release_trace(record))
+                        attach_cleanup_failures(primary, cleanup_failures)
+                        raise
                 record.artifact = TraceArtifact(
                     trace_id=trace_id,
                     persistent_inputs=persistent,

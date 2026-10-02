@@ -4,7 +4,7 @@ All current model packages are **experimental**. A concrete implementation,
 runnable repository example, or passing regression cell is not a promise that
 the model's complete geometry and workload matrix is qualified.
 
-Software target: `tt-transformers==2.0.0.dev0`, `ttnn==0.77.0`, Python 3.10
+Software target: `tt-transformers==2.0.0.dev0`, `ttnn==0.79.0`, Python 3.10
 or 3.12, and Linux on x86-64.
 
 | Model | Status | Pinned Hugging Face revision | Declared candidate geometry |

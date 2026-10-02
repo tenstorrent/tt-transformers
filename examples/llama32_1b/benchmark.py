@@ -62,7 +62,7 @@ from examples.common.run_helpers import (
 from examples.common.runtime import UnsupportedConfiguration, open_mesh_device
 from tt_transformers.cache_environment import resolve_model_cache_path
 from tt_transformers.device_utils import cleanup_dp_model_case, cleanup_model_case
-from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig
+from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig, fit_paged_kv_num_blocks
 from tt_transformers.llm_runtime.lane_group import LaneGroupExecutor
 from tt_transformers.models.llama32_1b.hf_generator import DEFAULT_HF_REVISION as DEMO_HF_REVISION
 from tt_transformers.models.llama32_1b.hf_generator import Llama32_1BExecutor, Llama32_1BExecutorConfig, _load_model
@@ -434,7 +434,11 @@ def create_executor(
     model: Llama32_1BTransformer1D, *, traced: bool, device_sampling_enabled: bool
 ) -> Llama32_1BExecutor:
     block_size = 32
-    max_num_blocks = ((model.config.max_seq_len + block_size - 1) // block_size) * model.config.max_batch_size
+    max_num_blocks = fit_paged_kv_num_blocks(
+        ((model.config.max_seq_len + block_size - 1) // block_size) * model.config.max_batch_size,
+        max_seq_len=model.config.max_seq_len,
+        block_size=block_size,
+    )
     attention_config = model.config.block_configs[0].attention_config
     return Llama32_1BExecutor(
         model,

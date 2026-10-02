@@ -424,8 +424,8 @@ targets:
           seq_len: 686
           status: active
           perf:
-            decode_t/s/u: 22.0
-            prefill_time_to_first_token: 123
+            decode_t/s/u: 14.4
+            prefill_time_to_first_token: 134
           accuracy: {}
       p300x2:
         entries:

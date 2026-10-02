@@ -43,7 +43,7 @@ Run the concrete Mistral tensor model through direct executor accuracy, throughp
 This is the declared qualification candidate, not a passing verdict:
 
 - `tt-transformers==2.0.0.dev0`
-- `ttnn==0.77.0`
+- `ttnn==0.79.0`
 - Python `3.10, 3.12`
 - `torch==2.11.0`
 - `transformers==5.12.1`

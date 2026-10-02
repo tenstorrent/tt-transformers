@@ -10,7 +10,13 @@ from typing import Any
 
 import ttnn
 
-from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, TraceMode, WarmupConfig
+from tt_transformers.llm_runtime.config import (
+    PagedKVCacheConfig,
+    TraceConfig,
+    TraceMode,
+    WarmupConfig,
+    fit_paged_kv_num_blocks,
+)
 from tt_transformers.llm_runtime.lane_group import LaneGroupExecutor
 from tt_transformers.llm_runtime.vllm_adapter import NormalizedPrefillKwargs, VLLMAdapter, VLLMAdapterConfig
 from tt_transformers.models.qwen25_72b.hf_generator import (
@@ -62,6 +68,10 @@ class Qwen25_72BGenerator:
         "supports_async_decode": True,
         "supports_sample_on_device": True,
         "accepts_trace_mode": True,
+        # The only supported geometry (T3K) needs a ring fabric. The vLLM plugin
+        # (vllm-tt-plugin #116) otherwise defaults a mesh it is not told about to
+        # FABRIC_1D.
+        "fabric_config": {"config": ttnn.FabricConfig.FABRIC_1D_RING},
     }
     requires_prefill_trace_warmup = True
 
@@ -228,10 +238,28 @@ class Qwen25_72BGenerator:
         return self.target.cleanup()
 
     def _select_prefill_execution(self, normalized: NormalizedPrefillKwargs, trace_requested: bool):
-        # Static trace intent is authoritative. Eligibility and configured
-        # coverage are preflighted by the selected execution target; this
-        # facade must never turn a required trace miss into eager KV writes.
-        return self._select_execution("prefill", trace_requested)
+        # Guarded eager degrade. Static trace intent still gates whether a trace
+        # is attempted, but a request whose padded bucket was never captured has no
+        # required trace, so it runs eager (against a program pre-compiled at warmup)
+        # rather than raising. A trace-eligible request still selects the traced target,
+        # which hard-fails on a missing artifact, so a required trace miss is never turned
+        # into eager KV writes.
+        if not trace_requested:
+            return self.target.eager_execution
+        if self.target.can_trace_prefill(
+            tokens=normalized["tokens"],
+            prompt_lens=normalized.get("prompt_lens"),
+            start_pos=normalized.get("start_pos"),
+            empty_slots=normalized.get("empty_slots"),
+        ):
+            return self._select_execution("prefill", True)
+        self.target.note_eager_prefill_degrade(
+            tokens=normalized["tokens"],
+            prompt_lens=normalized.get("prompt_lens"),
+            start_pos=normalized.get("start_pos"),
+            empty_slots=normalized.get("empty_slots"),
+        )
+        return self.target.eager_execution
 
     def _select_execution(self, operation: str, enable_trace: bool):
         if not enable_trace:
@@ -252,9 +280,11 @@ def build_qwen25_72b_generator(config: Qwen25_72BGeneratorConfig) -> Qwen25_72BG
     if len(submeshes) != config.tt_data_parallel:
         raise ValueError(f"Expected {config.tt_data_parallel} submeshes, got {len(submeshes)}")
 
-    max_num_blocks = (
-        config.max_seq_len + _PROVISIONAL_BLOCK_SIZE - 1
-    ) // _PROVISIONAL_BLOCK_SIZE + per_lane_max_batch_size
+    max_num_blocks = fit_paged_kv_num_blocks(
+        (config.max_seq_len + _PROVISIONAL_BLOCK_SIZE - 1) // _PROVISIONAL_BLOCK_SIZE + per_lane_max_batch_size,
+        max_seq_len=config.max_seq_len,
+        block_size=_PROVISIONAL_BLOCK_SIZE,
+    )
     lanes = []
     try:
         for submesh in submeshes:

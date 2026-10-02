@@ -117,6 +117,7 @@ class _ExecutorFacadeSurface:
     prefill_forward = _delegate_to_model_executor("prefill_forward")
     decode_forward = _delegate_to_model_executor("decode_forward")
     can_trace_prefill = _delegate_to_model_executor("can_trace_prefill")
+    note_eager_prefill_degrade = _delegate_to_model_executor("note_eager_prefill_degrade")
     read_decode_output = _delegate_to_model_executor("read_decode_output")
     process_decode_output_host = _delegate_to_model_executor("process_decode_output_host")
     warmup_model_prefill = _delegate_to_model_executor("warmup_model_prefill")
@@ -168,6 +169,7 @@ _FACADE_SURFACE = (
     "prefill_forward",
     "decode_forward",
     "can_trace_prefill",
+    "note_eager_prefill_degrade",
     "read_decode_output",
     "process_decode_output_host",
     "warmup_model_prefill",
@@ -504,7 +506,9 @@ def _warmup_q128_topk_tile_ends(
         top_k=torch.full((1,), 32, dtype=torch.int32),
         top_p=torch.full((1,), 0.08),
     )
-    execution = executor.traced_executor if enable_trace else executor.eager_executor
+    # Without a Q128 trace family the trace pass primes these programs eagerly.
+    traced = enable_trace and 128 in executor.warmup.config.prefill_trace_sequence_lengths
+    execution = executor.traced_executor if traced else executor.eager_executor
     for sequence_length in (32, 64, 96):
         page_table_width = (
             sequence_length + executor.page_table_layout.block_size - 1

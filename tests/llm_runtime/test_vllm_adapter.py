@@ -825,9 +825,11 @@ def test_registered_generator_compile_methods_normalize_and_select_execution():
         kv_cache=kv_cache,
         sampling_params=sampling_params,
     )
-    assert target.calls[0][0] == "compile_prefill"
-    assert target.calls[0][1]["execution"] is target.traced_prefill_execution
-    assert set(target.calls[0][1]) == set(NormalizedPrefillKwargs.__annotations__) | {"execution"}
+    # The facade probes trace eligibility before it selects the prefill target.
+    assert target.calls[0][0] == "can_trace_prefill"
+    assert target.calls[1][0] == "compile_prefill"
+    assert target.calls[1][1]["execution"] is target.traced_prefill_execution
+    assert set(target.calls[1][1]) == set(NormalizedPrefillKwargs.__annotations__) | {"execution"}
 
     generator.compile_decode(
         tokens[:, 0],
@@ -838,9 +840,9 @@ def test_registered_generator_compile_methods_normalize_and_select_execution():
         sampling_params=sampling_params,
         reset_batch=True,
     )
-    assert target.calls[1][0] == "compile_decode"
-    assert target.calls[1][1]["execution"] is target.traced_decode_execution
-    assert set(target.calls[1][1]) == set(NormalizedDecodeKwargs.__annotations__) | {"execution"}
+    assert target.calls[2][0] == "compile_decode"
+    assert target.calls[2][1]["execution"] is target.traced_decode_execution
+    assert set(target.calls[2][1]) == set(NormalizedDecodeKwargs.__annotations__) | {"execution"}
 
 
 @pytest.mark.host
@@ -868,9 +870,11 @@ def test_registered_generator_discards_allowlisted_compatibility_and_limits_trac
         )
         == "prefill"
     )
-    assert target.calls[0][0] == "prefill_forward"
-    assert target.calls[0][1]["execution"] is target.traced_prefill_execution
-    assert set(target.calls[0][1]) == set(NormalizedPrefillKwargs.__annotations__) | {"execution"}
+    # The facade probes trace eligibility before it selects the prefill target.
+    assert target.calls[0][0] == "can_trace_prefill"
+    assert target.calls[1][0] == "prefill_forward"
+    assert target.calls[1][1]["execution"] is target.traced_prefill_execution
+    assert set(target.calls[1][1]) == set(NormalizedPrefillKwargs.__annotations__) | {"execution"}
 
     assert (
         generator.decode_forward(
@@ -886,10 +890,10 @@ def test_registered_generator_discards_allowlisted_compatibility_and_limits_trac
         )
         == "decode"
     )
-    assert target.calls[1][0] == "decode_forward"
-    assert target.calls[1][1]["execution"] is target.traced_decode_execution
-    assert target.calls[1][1]["read_from_device"] is False
-    assert set(target.calls[1][1]) == set(NormalizedDecodeKwargs.__annotations__) | {
+    assert target.calls[2][0] == "decode_forward"
+    assert target.calls[2][1]["execution"] is target.traced_decode_execution
+    assert target.calls[2][1]["read_from_device"] is False
+    assert set(target.calls[2][1]) == set(NormalizedDecodeKwargs.__annotations__) | {
         "read_from_device",
         "execution",
     }

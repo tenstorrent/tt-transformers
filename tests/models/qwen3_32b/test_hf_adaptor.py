@@ -78,7 +78,8 @@ def test_runtime_config_preserves_p150x4_q128_and_q1024_prefill_buckets():
         trace_mode="all",
         device_sampling_enabled=True,
     )
-    assert compat.warmup.prefill_seq_lens == (128, 1024)
+    # Under trace the shared default ladder applies, so untraced buckets have an eager program.
+    assert compat.warmup.prefill_seq_lens is None
 
 
 @pytest.mark.host
