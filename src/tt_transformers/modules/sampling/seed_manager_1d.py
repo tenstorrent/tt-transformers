@@ -294,6 +294,36 @@ class SeedManager1D:
         if removed or changed:
             self._write_current_values(state)
 
+    def reset_decode(self, state: SeedState, slot_seeds, active_slots: Iterable[int]) -> None:
+        """Reset decode counters while retaining the salts of continuing requests."""
+
+        active = self._normalize_slots(active_slots, label="active slot")
+        self.synchronize(state, slot_seeds, active, reset_batch=True)
+        for slot in active:
+            state.token_counters[slot] = 0
+            state.last_absolute_positions[slot] = None
+            state.current_device_seeds[slot] = None
+            if state.request_seeds[slot] is None:
+                state.unseeded_rngs[slot].seed(self._entropy_factory(64))
+        self._write_current_values(state)
+
+    def reload_request_seeds(self, state: SeedState, slot_seeds, active_slots: Iterable[int]) -> None:
+        """Change configured seeds without resetting resident token counters."""
+
+        self._validate_state(state)
+        active = self._normalize_slots(active_slots, label="active slot")
+        desired = {slot: self._slot_indexed_seed(slot_seeds, slot) for slot in active}
+        changed = [slot for slot in active if state.request_seeds[slot] != desired[slot]]
+        for slot in changed:
+            state.request_seeds[slot] = desired[slot]
+            state.salts[slot] = 0
+            state.last_absolute_positions[slot] = None
+            state.current_device_seeds[slot] = None
+        for slot in changed:
+            seed = desired[slot]
+            state.salts[slot] = 0 if seed is None else self._next_free_salt(state, slot, seed)
+            state.unseeded_rngs[slot].seed(self._entropy_factory(64) if seed is None else int(seed))
+
     def refresh(
         self,
         state: SeedState,

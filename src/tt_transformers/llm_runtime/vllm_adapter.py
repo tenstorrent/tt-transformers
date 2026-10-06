@@ -51,7 +51,10 @@ class _NormalizedDecodeRequiredKwargs(TypedDict):
     page_table: torch.Tensor
     kv_cache: Any  # ↓ Borrowed resources
     sampling_params: Any  # ↓ Sampling
-    reset_batch: bool  # ↓ State transition
+    reload_inputs: bool  # ↓ Decode update commands
+    reload_page_table: bool
+    reload_sampling_params: bool
+    reset_sampling_state: bool
 
 
 class NormalizedDecodeKwargs(_NormalizedDecodeRequiredKwargs, total=False):
@@ -177,22 +180,46 @@ class VLLMAdapter:
         enable_trace: bool,  # ↓ Required policy
         kv_cache: Any = None,  # ↓ Borrowed resources
         sampling_params: Any = None,  # ↓ Sampling
-        reset_batch: bool = False,  # ↓ State transition
+        reload_inputs: bool = True,  # ↓ Decode update commands
+        reload_page_table: bool = False,
+        reload_sampling_params: bool = False,
+        reset_sampling_state: bool = False,
         compatibility_kwargs: Mapping[str, Any] | None = None,  # ↓ Compatibility
     ) -> tuple[NormalizedDecodeKwargs, bool]:
         """Normalize one explicit decode request and return trace intent separately."""
 
         self._validate_compatibility_kwargs(compatibility_kwargs, operation="decode")
         self._validate_trace_selection(enable_trace, operation="decode")
+        for name, value in (
+            ("reload_inputs", reload_inputs),
+            ("reload_page_table", reload_page_table),
+            ("reload_sampling_params", reload_sampling_params),
+            ("reset_sampling_state", reset_sampling_state),
+        ):
+            if type(value) is not bool:
+                raise TypeError(f"{name} must be bool")
+        if reload_inputs and reload_page_table:
+            raise ValueError("reload_inputs and reload_page_table are mutually exclusive")
+        if reset_sampling_state and not reload_inputs:
+            raise ValueError("reset_sampling_state requires reload_inputs=True")
+        if not reload_inputs and (not enable_trace or sampling_params is None):
+            raise ValueError("reload_inputs=False requires traced device sampling")
         normalized: NormalizedDecodeKwargs = {
             "tokens": tokens,
             "start_pos": start_pos,
             "page_table": page_table,
             "kv_cache": kv_cache,
             "sampling_params": sampling_params,
-            "reset_batch": reset_batch,
+            "reload_inputs": reload_inputs,
+            "reload_page_table": reload_page_table,
+            "reload_sampling_params": reload_sampling_params,
+            "reset_sampling_state": reset_sampling_state,
         }
         _copy_supplied_sampling_state(normalized, compatibility_kwargs, self.config.request_state_fields)
+        # Slot state must move even when the device sampler is dormant, and
+        # even for models that do not accept prompt or output token histories.
+        if compatibility_kwargs is not None and compatibility_kwargs.get("slot_remap") is not None:
+            normalized["slot_remap"] = compatibility_kwargs["slot_remap"]
         _normalize_tensor(normalized, "tokens", torch.long)
         _normalize_tensor(normalized, "start_pos", torch.long)
         _normalize_tensor(normalized, "page_table", torch.int32)

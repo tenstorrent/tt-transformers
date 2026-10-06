@@ -472,7 +472,12 @@ class Sampling1D(LightweightModule):
         if k is None or p is None or temp is None:
             raise ValueError("k, p, temp must all be provided, or all be None (for argmax)")
 
-        return self._sample_topk(logits, k, p, temp, seeds, tt_out_tok)
+        tokens, log_probs = self._sample_topk(logits, k, p, temp, seeds, tt_out_tok)
+        # The calculator reuses its output buffer. Runtime outputs are owned
+        # by the caller and are released after warmup, readback, or trace cleanup.
+        if log_probs is not None:
+            log_probs = ttnn.clone(log_probs)
+        return tokens, log_probs
 
     def forward(self, logits, **kwargs):
         """Dispatcher."""

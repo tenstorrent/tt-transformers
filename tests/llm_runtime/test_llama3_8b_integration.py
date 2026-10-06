@@ -261,6 +261,10 @@ def test_model_owned_executor_constructs_exact_composition(mode):
                 "output_tokens",
                 "slot_remap",
                 "reset_batch",
+                "reload_inputs",
+                "reload_page_table",
+                "reload_sampling_params",
+                "reset_sampling_state",
                 "execution",
             ),
         ),
@@ -289,6 +293,10 @@ def test_model_owned_executor_constructs_exact_composition(mode):
                 "output_tokens",
                 "slot_remap",
                 "reset_batch",
+                "reload_inputs",
+                "reload_page_table",
+                "reload_sampling_params",
+                "reset_sampling_state",
                 "read_from_device",
                 "execution",
             ),
@@ -334,6 +342,9 @@ def test_model_owned_executor_has_exact_call_contract(method_name, positional_na
     }[method_name]
     special_defaults = {
         "reset_batch": False,
+        "reload_page_table": False,
+        "reload_sampling_params": False,
+        "reset_sampling_state": False,
         "read_from_device": True,
         "async_read": False,
         "is_tokens": False,
@@ -443,6 +454,10 @@ def test_model_owned_executor_validates_cache_then_omits_it_from_execution():
                 "output_tokens",
                 "slot_remap",
                 "reset_batch",
+                "reload_inputs",
+                "reload_page_table",
+                "reload_sampling_params",
+                "reset_sampling_state",
             ),
         ),
         (
@@ -470,6 +485,10 @@ def test_model_owned_executor_validates_cache_then_omits_it_from_execution():
                 "output_tokens",
                 "slot_remap",
                 "reset_batch",
+                "reload_inputs",
+                "reload_page_table",
+                "reload_sampling_params",
+                "reset_sampling_state",
                 "read_from_device",
             ),
         ),
@@ -983,6 +1002,10 @@ class _RecordingTarget:
         output_tokens: Any = None,
         slot_remap: Any = None,
         reset_batch: bool = False,  # ↓ State transition
+        reload_inputs=None,
+        reload_page_table=False,
+        reload_sampling_params=False,
+        reset_sampling_state=False,
         read_from_device: bool = True,  # ↓ Output policy
         execution: EagerExecutor | TracedExecutor | None = None,  # ↓ Internal dispatch
     ) -> str:

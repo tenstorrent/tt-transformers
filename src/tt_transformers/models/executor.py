@@ -388,6 +388,10 @@ class ModelExecutor:
         output_tokens: Any = None,
         slot_remap: Any = None,
         reset_batch: bool = False,
+        reload_inputs: bool | None = None,
+        reload_page_table: bool = False,
+        reload_sampling_params: bool = False,
+        reset_sampling_state: bool = False,
         execution: EagerExecutor | TracedExecutor | None = None,
     ) -> None:
         """Compile decode on the supplied eager or traced execution target."""
@@ -401,6 +405,7 @@ class ModelExecutor:
             output_tokens=output_tokens,
             slot_remap=slot_remap,
         )
+        request_state["slot_remap"] = slot_remap
         return (execution or self._decode_execution).compile_decode(
             tokens=tokens,
             start_pos=start_pos,
@@ -408,6 +413,10 @@ class ModelExecutor:
             sampling_params=sampling_params,
             **request_state,
             reset_batch=reset_batch,
+            reload_inputs=reload_inputs,
+            reload_page_table=reload_page_table,
+            reload_sampling_params=reload_sampling_params,
+            reset_sampling_state=reset_sampling_state,
         )
 
     def prefill_forward(
@@ -462,6 +471,10 @@ class ModelExecutor:
         output_tokens: Any = None,
         slot_remap: Any = None,
         reset_batch: bool = False,
+        reload_inputs: bool | None = None,
+        reload_page_table: bool = False,
+        reload_sampling_params: bool = False,
+        reset_sampling_state: bool = False,
         read_from_device: bool = True,
         execution: EagerExecutor | TracedExecutor | None = None,
     ) -> Any:
@@ -476,6 +489,7 @@ class ModelExecutor:
             output_tokens=output_tokens,
             slot_remap=slot_remap,
         )
+        request_state["slot_remap"] = slot_remap
         return (execution or self._decode_execution).decode_forward(
             tokens=tokens,
             start_pos=start_pos,
@@ -483,6 +497,10 @@ class ModelExecutor:
             sampling_params=sampling_params,
             **request_state,
             reset_batch=reset_batch,
+            reload_inputs=reload_inputs,
+            reload_page_table=reload_page_table,
+            reload_sampling_params=reload_sampling_params,
+            reset_sampling_state=reset_sampling_state,
             read_from_device=read_from_device,
         )
 
