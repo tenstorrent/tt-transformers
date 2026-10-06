@@ -9,6 +9,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+import ttnn
+
 from tt_transformers.llm_runtime.prefill.inputs import (
     PrefillDeviceInputs,
     PrefillInputStager,
@@ -30,7 +32,7 @@ from tt_transformers.llm_runtime.prefill.signatures import (
     capture_schema_fingerprint,
     workspace_fingerprint,
 )
-from tt_transformers.llm_runtime.tensor_resources import attach_cleanup_failures
+from tt_transformers.llm_runtime.tensor_resources import attach_cleanup_failures, raise_cleanup_failures
 
 
 @dataclass(frozen=True)
@@ -80,6 +82,7 @@ class PrefillCapturePlan:
     refresh_fields: tuple[str, ...] = ("tokens", "page_table", "last_token", "sampling")
     prime: Callable[[PrefillHiddenPersistentInputs], Any] | None = None
     release_prime_output: Callable[[Any], list[BaseException]] | None = None
+    prime_workspace: Callable[[PrefillHiddenPersistentInputs, PrefillReplayState], None] | None = None
 
 
 @dataclass(frozen=True)
@@ -91,6 +94,7 @@ class PrefillTraceHooks:
     run_hidden_body: Callable[..., Any]
     run_chunk_hidden_body: Callable[..., Any]
     release_transient: Callable[[Any], list[BaseException]]
+    prepare_sampling_state: Callable[[PreparedPrefill], None] | None = None
     trace_capture_prime_sequence_lengths: tuple[int, ...] = ()
 
 
@@ -125,10 +129,26 @@ class PrefillTraceLifecycle:
                 fill_rows=prepared.request.padded_batch_size,
             )
 
-        should_prime = (
-            prepared.request.kind == "batched"
-            and prepared.trace_signature.padded_sequence_length in self.hooks.trace_capture_prime_sequence_lengths
-        )
+        def prime_workspace(persistent: PrefillHiddenPersistentInputs, state: PrefillReplayState) -> None:
+            # Replay uses retained output buffers. Warm that exact postprocess
+            # path for every alias before any capture, including sampling.
+            hidden = None
+            result = None
+            try:
+                if self.hooks.prepare_sampling_state is not None:
+                    self.hooks.prepare_sampling_state(prepared)
+                hidden = capture(persistent)
+                result = self.finish(prepared, hidden, state)
+                ttnn.synchronize_device(self.hooks.input_stager.mesh_device)
+            except BaseException as primary:
+                failures = self.hooks.release_transient((hidden, None if result is None else result.owned))
+                attach_cleanup_failures(primary, failures)
+                raise
+            failures = self.hooks.release_transient((hidden, result.owned))
+            ttnn.synchronize_device(self.hooks.input_stager.mesh_device)
+            if failures:
+                raise_cleanup_failures(failures)
+
         return PrefillCapturePlan(
             signature=prepared.trace_signature,
             prepare_inputs=prepare_inputs,
@@ -139,8 +159,9 @@ class PrefillTraceLifecycle:
                 prepared,
                 sampling_output_rows=self.hooks.postprocessor.sampling_output_rows(prepared),
             ),
-            prime=capture if should_prime else None,
-            release_prime_output=self.hooks.release_transient if should_prime else None,
+            prime=capture,
+            release_prime_output=self.hooks.release_transient,
+            prime_workspace=prime_workspace,
         )
 
     def refresh(

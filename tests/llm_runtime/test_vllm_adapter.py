@@ -3,6 +3,7 @@
 
 import dataclasses
 import inspect
+from importlib import import_module
 from types import SimpleNamespace
 from unittest.mock import create_autospec
 
@@ -200,7 +201,10 @@ def test_adapter_is_plain_orchestration_with_one_config_surface(expect_error):
                 ("enable_trace", inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.empty),
                 ("kv_cache", inspect.Parameter.KEYWORD_ONLY, None),
                 ("sampling_params", inspect.Parameter.KEYWORD_ONLY, None),
-                ("reset_batch", inspect.Parameter.KEYWORD_ONLY, False),
+                ("reload_inputs", inspect.Parameter.KEYWORD_ONLY, True),
+                ("reload_page_table", inspect.Parameter.KEYWORD_ONLY, False),
+                ("reload_sampling_params", inspect.Parameter.KEYWORD_ONLY, False),
+                ("reset_sampling_state", inspect.Parameter.KEYWORD_ONLY, False),
                 ("compatibility_kwargs", inspect.Parameter.KEYWORD_ONLY, None),
             ],
         ),
@@ -236,13 +240,26 @@ def test_normalized_typed_dicts_have_stable_key_order_and_optional_request_state
         "page_table",
         "kv_cache",
         "sampling_params",
-        "reset_batch",
+        "reload_inputs",
+        "reload_page_table",
+        "reload_sampling_params",
+        "reset_sampling_state",
         "prompt_tokens",
         "output_tokens",
         "slot_remap",
     )
     assert NormalizedDecodeKwargs.__required_keys__ == frozenset(
-        {"tokens", "start_pos", "page_table", "kv_cache", "sampling_params", "reset_batch"}
+        {
+            "tokens",
+            "start_pos",
+            "page_table",
+            "kv_cache",
+            "sampling_params",
+            "reload_inputs",
+            "reload_page_table",
+            "reload_sampling_params",
+            "reset_sampling_state",
+        }
     )
     assert NormalizedDecodeKwargs.__optional_keys__ == frozenset({"prompt_tokens", "output_tokens", "slot_remap"})
 
@@ -307,7 +324,10 @@ def test_normalize_decode_converts_existing_tensors_and_flattens_column_tokens()
         "page_table",
         "kv_cache",
         "sampling_params",
-        "reset_batch",
+        "reload_inputs",
+        "reload_page_table",
+        "reload_sampling_params",
+        "reset_sampling_state",
         "slot_remap",
     )
     assert normalized["tokens"].shape == (2,)
@@ -319,7 +339,10 @@ def test_normalize_decode_converts_existing_tensors_and_flattens_column_tokens()
     assert "prompt_tokens" not in normalized
     assert "output_tokens" not in normalized
     assert normalized["slot_remap"] == [0, 1]
-    assert normalized["reset_batch"] is False
+    assert normalized["reload_inputs"] is True
+    assert normalized["reload_page_table"] is False
+    assert normalized["reload_sampling_params"] is False
+    assert normalized["reset_sampling_state"] is False
     assert enable_trace is True
 
 
@@ -387,7 +410,11 @@ class _NarrowQwenRequestTarget:
         *,
         kv_cache=None,
         sampling_params=None,
-        reset_batch=False,
+        slot_remap=None,
+        reload_inputs=True,
+        reload_page_table=False,
+        reload_sampling_params=False,
+        reset_sampling_state=False,
         read_from_device=True,
         execution=None,
     ):
@@ -400,7 +427,11 @@ class _NarrowQwenRequestTarget:
                     "page_table": page_table,
                     "kv_cache": kv_cache,
                     "sampling_params": sampling_params,
-                    "reset_batch": reset_batch,
+                    "slot_remap": slot_remap,
+                    "reload_inputs": reload_inputs,
+                    "reload_page_table": reload_page_table,
+                    "reload_sampling_params": reload_sampling_params,
+                    "reset_sampling_state": reset_sampling_state,
                     "read_from_device": read_from_device,
                     "execution": execution,
                 },
@@ -414,7 +445,7 @@ class _NarrowQwenRequestTarget:
     "generator_class",
     (Qwen2Generator, Qwen25Generator, Qwen25_72BGenerator, Qwen25Coder32BGenerator),
 )
-def test_qwen_generator_dispatch_omits_absent_state_for_narrow_request_surface(generator_class):
+def test_qwen_generator_dispatch_keeps_decode_remap_without_sampling_history(generator_class):
     generator = object.__new__(generator_class)
     generator._adapter = _adapter(request_state_fields=())
     generator.target = _NarrowQwenRequestTarget()
@@ -430,6 +461,7 @@ def test_qwen_generator_dispatch_omits_absent_state_for_narrow_request_surface(g
     assert [name for name, _ in generator.target.calls] == ["prefill", "decode"]
     assert generator.target.calls[0][1]["execution"] is prefill_execution
     assert generator.target.calls[1][1]["execution"] is decode_execution
+    assert generator.target.calls[1][1]["slot_remap"] == [0]
 
 
 @pytest.mark.host
@@ -601,7 +633,10 @@ def _signature_entries(method):
                 ("enable_trace", inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.empty),
                 ("kv_cache", inspect.Parameter.KEYWORD_ONLY, None),
                 ("sampling_params", inspect.Parameter.KEYWORD_ONLY, None),
-                ("reset_batch", inspect.Parameter.KEYWORD_ONLY, False),
+                ("reload_inputs", inspect.Parameter.KEYWORD_ONLY, True),
+                ("reload_page_table", inspect.Parameter.KEYWORD_ONLY, False),
+                ("reload_sampling_params", inspect.Parameter.KEYWORD_ONLY, False),
+                ("reset_sampling_state", inspect.Parameter.KEYWORD_ONLY, False),
             ],
         ),
         (
@@ -629,7 +664,10 @@ def _signature_entries(method):
                 ("enable_trace", inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.empty),
                 ("kv_cache", inspect.Parameter.KEYWORD_ONLY, None),
                 ("sampling_params", inspect.Parameter.KEYWORD_ONLY, None),
-                ("reset_batch", inspect.Parameter.KEYWORD_ONLY, False),
+                ("reload_inputs", inspect.Parameter.KEYWORD_ONLY, True),
+                ("reload_page_table", inspect.Parameter.KEYWORD_ONLY, False),
+                ("reload_sampling_params", inspect.Parameter.KEYWORD_ONLY, False),
+                ("reset_sampling_state", inspect.Parameter.KEYWORD_ONLY, False),
                 ("read_from_device", inspect.Parameter.KEYWORD_ONLY, True),
                 ("compatibility_kwargs", inspect.Parameter.VAR_KEYWORD, inspect.Parameter.empty),
             ],
@@ -762,7 +800,10 @@ class _ExplicitGeneratorTarget:
         prompt_tokens=None,  # ↓ Request-owned sampling state
         output_tokens=None,
         slot_remap=None,
-        reset_batch=False,  # ↓ State transition
+        reload_inputs=True,
+        reload_page_table=False,
+        reload_sampling_params=False,
+        reset_sampling_state=False,  # ↓ State transition
         execution=None,  # ↓ Internal dispatch
     ):
         self._record("compile_decode", locals())
@@ -796,7 +837,10 @@ class _ExplicitGeneratorTarget:
         prompt_tokens=None,  # ↓ Request-owned sampling state
         output_tokens=None,
         slot_remap=None,
-        reset_batch=False,  # ↓ State transition
+        reload_inputs=True,
+        reload_page_table=False,
+        reload_sampling_params=False,
+        reset_sampling_state=False,  # ↓ State transition
         read_from_device=True,  # ↓ Output policy
         execution=None,  # ↓ Internal dispatch
     ):
@@ -838,7 +882,9 @@ def test_registered_generator_compile_methods_normalize_and_select_execution():
         enable_trace=True,
         kv_cache=kv_cache,
         sampling_params=sampling_params,
-        reset_batch=True,
+        reload_inputs=True,
+        reload_sampling_params=True,
+        reset_sampling_state=True,
     )
     assert target.calls[2][0] == "compile_decode"
     assert target.calls[2][1]["execution"] is target.traced_decode_execution
@@ -884,7 +930,9 @@ def test_registered_generator_discards_allowlisted_compatibility_and_limits_trac
             enable_trace=True,
             kv_cache=kv_cache,
             sampling_params=sampling_params,
-            reset_batch=True,
+            reload_inputs=True,
+            reload_sampling_params=True,
+            reset_sampling_state=True,
             read_from_device=False,
             slot_remap=[0],
         )
@@ -1058,3 +1106,113 @@ def test_resolve_legacy_kv_cache_rejects_replacing_resolved_capacity(expect_erro
 
     with expect_error(ValueError, "already resolved"):
         adapter.resolve_legacy_kv_cache_config((64, 8, 32, 128), torch.bfloat16, 32)
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(
+    "command", ("reload_inputs", "reload_page_table", "reload_sampling_params", "reset_sampling_state")
+)
+@pytest.mark.parametrize("value", (0, 1, None, "false"))
+def test_decode_commands_require_actual_booleans(command, value, expect_error):
+    with expect_error(TypeError, f"{command} must be bool"):
+        _adapter().normalize_decode([1], [0], [[0]], enable_trace=True, **{command: value})
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(
+    ("commands", "message"),
+    (
+        ({"reload_inputs": True, "reload_page_table": True}, "mutually exclusive"),
+        ({"reload_inputs": False, "reset_sampling_state": True}, "requires reload_inputs=True"),
+        ({"reload_inputs": False}, "requires traced device sampling"),
+    ),
+)
+def test_decode_rejects_unsupported_command_combinations(commands, message, expect_error):
+    with expect_error(ValueError, message):
+        _adapter().normalize_decode([1], [0], [[0]], enable_trace=True, **commands)
+
+
+@pytest.mark.host
+def test_decode_rejects_resident_inputs_without_trace(expect_error):
+    with expect_error(ValueError, "requires traced device sampling"):
+        _adapter().normalize_decode([1], [0], [[0]], sampling_params=object(), enable_trace=False, reload_inputs=False)
+
+
+_V1_GENERATORS = (
+    ("llama3_8b", "Llama3Generator"),
+    ("llama32_1b", "Llama32_1BGenerator"),
+    ("llama32_3b", "Llama32_3BGenerator"),
+    ("llama33_70b", "Llama33_70BGenerator"),
+    ("qwen2_7b", "Qwen2Generator"),
+    ("qwen25_7b", "Qwen25Generator"),
+    ("qwen25_72b", "Qwen25_72BGenerator"),
+    ("qwen25_coder_32b", "Qwen25Coder32BGenerator"),
+    ("qwen3_32b", "Qwen3_32BGenerator"),
+    ("mistral_7b", "Mistral7BGenerator"),
+    ("phi4", "Phi4Generator"),
+    ("deepseek_r1_distill_qwen_14b", "DeepSeekR1Qwen14BGenerator"),
+)
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(("model", "class_name"), _V1_GENERATORS)
+@pytest.mark.parametrize(
+    "commands",
+    (
+        {},
+        {"reload_inputs": True, "reload_sampling_params": True, "reset_sampling_state": True},
+        {"reload_inputs": False},
+        {"reload_inputs": False, "reload_page_table": True},
+        {"reload_inputs": False, "reload_sampling_params": True},
+    ),
+)
+def test_every_generator_forwards_explicit_v1_commands(model, class_name, commands):
+    generator_class = getattr(import_module(f"tt_transformers.models.{model}.vllm_generator"), class_name)
+    target = _ExplicitGeneratorTarget()
+    generator = generator_class(target, _adapter(request_state_fields=()))
+    assert generator_class.decode_input_update_contract == 1
+    assert generator_class.model_capabilities["supports_device_penalties"] is (
+        model in {"llama3_8b", "llama32_1b", "llama32_3b", "llama33_70b", "qwen3_32b"}
+    )
+    assert "reset_batch" not in inspect.signature(generator_class.decode_forward).parameters
+    assert (
+        generator.decode_forward(
+            [1], [0], [[0]], sampling_params=object(), enable_trace=True, slot_remap=[0], **commands
+        )
+        == "decode"
+    )
+    name, actual = target.calls[-1]
+    assert name == "decode_forward"
+    defaults = dict(
+        reload_inputs=True, reload_page_table=False, reload_sampling_params=False, reset_sampling_state=False
+    )
+    expected = defaults | commands
+    assert {key: actual[key] for key in expected} == expected
+    assert actual["slot_remap"] == [0]
+    assert "reset_batch" not in actual
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(("model", "class_name"), _V1_GENERATORS)
+@pytest.mark.parametrize("reset_batch", (False, True))
+def test_every_v1_generator_rejects_legacy_reset_batch(model, class_name, reset_batch, expect_error):
+    generator_class = getattr(import_module(f"tt_transformers.models.{model}.vllm_generator"), class_name)
+    target = _ExplicitGeneratorTarget()
+    generator = generator_class(target, _adapter())
+    with expect_error(TypeError, "unexpected keyword argument 'reset_batch'"):
+        generator.decode_forward([1], [0], [[0]], enable_trace=True, reset_batch=reset_batch)
+    assert target.calls == []
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(("model", "class_name"), _V1_GENERATORS)
+def test_every_v1_generator_forwards_remap_while_device_sampling_is_dormant(model, class_name):
+    generator_class = getattr(import_module(f"tt_transformers.models.{model}.vllm_generator"), class_name)
+    target = _ExplicitGeneratorTarget()
+    generator = generator_class(target, _adapter(request_state_fields=()))
+    remap = [1, 0]
+    generator.decode_forward([1, 2], [4, 5], [[0], [1]], enable_trace=False, slot_remap=remap)
+    _, actual = target.calls[-1]
+    assert actual["slot_remap"] is remap
+    assert actual["sampling_params"] is None
+    assert actual["reload_inputs"] is True
