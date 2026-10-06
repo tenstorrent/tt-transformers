@@ -63,10 +63,13 @@ class Qwen25_72BGeneratorConfig:
 
 
 class Qwen25_72BGenerator:
+    decode_input_update_contract = 1
+
     model_capabilities = {
         "supports_prefix_caching": True,
         "supports_async_decode": True,
         "supports_sample_on_device": True,
+        "supports_device_penalties": False,
         "accepts_trace_mode": True,
         # The only supported geometry (T3K) needs a ring fabric. The vLLM plugin
         # (vllm-tt-plugin #116) otherwise defaults a mesh it is not told about to
@@ -193,7 +196,10 @@ class Qwen25_72BGenerator:
         enable_trace: bool,
         kv_cache=None,
         sampling_params=None,
-        reset_batch=False,
+        reload_inputs: bool = True,
+        reload_page_table: bool = False,
+        reload_sampling_params: bool = False,
+        reset_sampling_state: bool = False,
         read_from_device=True,
         **compatibility_kwargs,
     ):
@@ -204,7 +210,10 @@ class Qwen25_72BGenerator:
             enable_trace=enable_trace,
             kv_cache=kv_cache,
             sampling_params=sampling_params,
-            reset_batch=reset_batch,
+            reload_inputs=reload_inputs,
+            reload_page_table=reload_page_table,
+            reload_sampling_params=reload_sampling_params,
+            reset_sampling_state=reset_sampling_state,
             compatibility_kwargs=compatibility_kwargs,
         )
         execution = self._select_execution("decode", trace_requested)

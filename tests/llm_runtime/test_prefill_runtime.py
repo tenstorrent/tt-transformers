@@ -2692,7 +2692,7 @@ def test_trace_capture_uses_hidden_body_without_eager_sequence(monkeypatch):
 
 @pytest.mark.host
 @pytest.mark.parametrize("prompt_length", (80, 700), ids=("q128", "q1024"))
-def test_opt_in_trace_capture_prime_uses_padded_body_and_releases_output(monkeypatch, prompt_length):
+def test_trace_capture_prime_uses_padded_body_and_releases_output(monkeypatch, prompt_length):
     padded_length = 128 if prompt_length <= 128 else 1024
     runtime = _runtime(trace_capture_prime_sequence_lengths=(padded_length,))
     tokens, page_table, prompt_lens, start_pos = _inputs(prompt_length=prompt_length, rows=3)
@@ -2726,7 +2726,7 @@ def test_opt_in_trace_capture_prime_uses_padded_body_and_releases_output(monkeyp
 
 
 @pytest.mark.host
-def test_opt_in_trace_capture_prime_does_not_expand_single_request_warmup():
+def test_single_request_capture_also_primes_exact_body():
     runtime = _runtime(trace_capture_prime_sequence_lengths=(128, 1024))
     tokens, page_table, prompt_lens, start_pos = _inputs(prompt_length=80, rows=1)
     prepared = runtime.prepare(
@@ -2738,7 +2738,7 @@ def test_opt_in_trace_capture_prime_does_not_expand_single_request_warmup():
     )[0]
 
     assert prepared.request.kind == "single"
-    assert runtime.capture_plan(prepared).prime is None
+    assert runtime.capture_plan(prepared).prime is not None
 
 
 @pytest.mark.host
@@ -2754,10 +2754,7 @@ def test_partial_wave_primes_every_padded_child_program_before_capture(
     padded_rows,
 ):
     padded_length = 128 if prompt_length <= 128 else 1024
-    runtime = _runtime(
-        max_prefill_batch_size=32,
-        trace_capture_prime_sequence_lengths=(padded_length,),
-    )
+    runtime = _runtime(max_prefill_batch_size=32)
     tokens, page_table, prompt_lens, start_pos = _inputs(prompt_length=prompt_length, rows=active_rows)
     prepared = runtime.prepare(
         tokens=tokens,
@@ -3205,3 +3202,43 @@ def test_eager_degrade_ignores_malformed_request_metadata(warnings_logged):
     runtime = _runtime()
     runtime.note_eager_degrade(tokens=torch.zeros(4, dtype=torch.long))
     assert warnings_logged == []
+
+
+@pytest.mark.host
+def test_trace_workspace_prime_uses_persistent_output_and_releases_only_transients(monkeypatch):
+    runtime = _runtime()
+    tokens, page_table, prompt_lens, start_pos = _inputs(prompt_length=80)
+    prepared = runtime.prepare(
+        tokens=tokens, page_table=page_table, prompt_lens=prompt_lens, empty_slots=[0], start_pos=start_pos
+    )[0]
+    persistent = PrefillHiddenPersistentInputs(device_inputs="device-inputs")
+    state = PrefillReplayState(position_inputs="positions", kpt=None, sampled_output="persistent-output")
+    events = []
+    monkeypatch.setattr(
+        runtime,
+        "_prepare_sampling_state",
+        lambda value, *, count_tokens: events.append(("sampling", value, count_tokens)),
+    )
+    monkeypatch.setattr(runtime, "_run_hidden_body", lambda *args, **kwargs: "temporary-hidden")
+
+    def finish(value, hidden, workspace):
+        assert value is prepared
+        assert hidden == "temporary-hidden"
+        assert workspace is state
+        return InvocationResult(value="persistent-output", owned=("temporary-logits",))
+
+    monkeypatch.setattr(runtime.trace, "finish", finish)
+    monkeypatch.setattr(ttnn, "synchronize_device", lambda _: events.append(("sync",)))
+    monkeypatch.setattr(
+        runtime, "_release_or_retain_transient", lambda values: events.append(("release", values)) or []
+    )
+    plan = runtime.capture_plan(prepared)
+
+    plan.prime_workspace(persistent, state)
+
+    assert events == [
+        ("sampling", prepared, True),
+        ("sync",),
+        ("release", ("temporary-hidden", ("temporary-logits",))),
+        ("sync",),
+    ]

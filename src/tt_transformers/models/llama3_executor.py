@@ -208,7 +208,12 @@ class _Llama32RequestSurface:
         page_table: torch.Tensor,
         kv_cache: Any = None,
         sampling_params: Any = None,
+        slot_remap: Any = None,
         reset_batch: bool = False,
+        reload_inputs: bool | None = None,
+        reload_page_table: bool = False,
+        reload_sampling_params: bool = False,
+        reset_sampling_state: bool = False,
         execution: EagerExecutor | TracedExecutor | None = None,
     ) -> None:
         return ModelExecutor.compile_decode(
@@ -218,7 +223,12 @@ class _Llama32RequestSurface:
             page_table=page_table,
             kv_cache=kv_cache,
             sampling_params=sampling_params,
+            slot_remap=slot_remap,
             reset_batch=reset_batch,
+            reload_inputs=reload_inputs,
+            reload_page_table=reload_page_table,
+            reload_sampling_params=reload_sampling_params,
+            reset_sampling_state=reset_sampling_state,
             execution=execution,
         )
 
@@ -254,7 +264,12 @@ class _Llama32RequestSurface:
         *,
         kv_cache: Any = None,
         sampling_params: Any = None,
+        slot_remap: Any = None,
         reset_batch: bool = False,
+        reload_inputs: bool | None = None,
+        reload_page_table: bool = False,
+        reload_sampling_params: bool = False,
+        reset_sampling_state: bool = False,
         read_from_device: bool = True,
         execution: EagerExecutor | TracedExecutor | None = None,
     ) -> Any:
@@ -265,7 +280,12 @@ class _Llama32RequestSurface:
             page_table,
             kv_cache=kv_cache,
             sampling_params=sampling_params,
+            slot_remap=slot_remap,
             reset_batch=reset_batch,
+            reload_inputs=reload_inputs,
+            reload_page_table=reload_page_table,
+            reload_sampling_params=reload_sampling_params,
+            reset_sampling_state=reset_sampling_state,
             read_from_device=read_from_device,
             execution=execution,
         )

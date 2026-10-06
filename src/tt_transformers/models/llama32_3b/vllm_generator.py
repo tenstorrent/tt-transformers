@@ -78,10 +78,13 @@ class Llama32_3BGenerator:
     delegates to the target that owns those resources.
     """
 
+    decode_input_update_contract = 1
+
     model_capabilities = {
         "supports_prefix_caching": True,
         "supports_async_decode": True,
         "supports_sample_on_device": True,
+        "supports_device_penalties": True,
         "accepts_trace_mode": True,
     }
     requires_prefill_trace_warmup = True
@@ -210,7 +213,10 @@ class Llama32_3BGenerator:
         enable_trace: bool,  # ↓ Required policy
         kv_cache: Any = None,  # ↓ Borrowed resources
         sampling_params: Any = None,  # ↓ Sampling
-        reset_batch: bool = False,  # ↓ State transition
+        reload_inputs: bool = True,  # ↓ Decode update commands
+        reload_page_table: bool = False,
+        reload_sampling_params: bool = False,
+        reset_sampling_state: bool = False,
     ) -> None:
         """Normalize a vLLM decode call and compile its selected target."""
 
@@ -221,7 +227,10 @@ class Llama32_3BGenerator:
             enable_trace=enable_trace,
             kv_cache=kv_cache,
             sampling_params=sampling_params,
-            reset_batch=reset_batch,
+            reload_inputs=reload_inputs,
+            reload_page_table=reload_page_table,
+            reload_sampling_params=reload_sampling_params,
+            reset_sampling_state=reset_sampling_state,
         )
         execution = self._select_execution("decode", trace_requested)
         return self.target.compile_decode(execution=execution, **normalized)
@@ -264,7 +273,10 @@ class Llama32_3BGenerator:
         enable_trace: bool,  # ↓ Required policy
         kv_cache: Any = None,  # ↓ Borrowed resources
         sampling_params: Any = None,  # ↓ Sampling
-        reset_batch: bool = False,  # ↓ State transition
+        reload_inputs: bool = True,  # ↓ Decode update commands
+        reload_page_table: bool = False,
+        reload_sampling_params: bool = False,
+        reset_sampling_state: bool = False,
         read_from_device: bool = True,  # ↓ Output policy
         **compatibility_kwargs: Any,  # ↓ Compatibility
     ) -> Any:
@@ -277,7 +289,10 @@ class Llama32_3BGenerator:
             enable_trace=enable_trace,
             kv_cache=kv_cache,
             sampling_params=sampling_params,
-            reset_batch=reset_batch,
+            reload_inputs=reload_inputs,
+            reload_page_table=reload_page_table,
+            reload_sampling_params=reload_sampling_params,
+            reset_sampling_state=reset_sampling_state,
             compatibility_kwargs=compatibility_kwargs,
         )
         execution = self._select_execution("decode", trace_requested)

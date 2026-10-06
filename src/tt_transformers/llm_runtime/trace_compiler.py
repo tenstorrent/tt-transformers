@@ -94,6 +94,8 @@ class TraceCapturePlan:
     workspace_fingerprint: Any = None
     prime: Callable[[PersistentInputs], Any] | None = None
     release_prime_output: Callable[[Any], list[BaseException]] | None = None
+    prepare_capture: Callable[[PersistentInputs], None] | None = None
+    prime_workspace: Callable[[PersistentInputs, Any], None] | None = None
 
     def __post_init__(self) -> None:
         if self.operation not in ("prefill", "decode"):
@@ -116,6 +118,7 @@ class TraceAliasRecord:
     trace_key: TraceKey
     workspace_fingerprint: Any
     prepare_workspace: Callable[[], Any] | None = field(default=None, repr=False)
+    prime_workspace: Callable[[PersistentInputs, Any], None] | None = field(default=None, repr=False)
     workspace: Any = None
     deallocated_tensor_ids: set[int] = field(default_factory=set, repr=False)
 
@@ -147,6 +150,8 @@ class TraceCompiler:
         self._previous_replay_key: TraceKey | None = None
         self._replay_count = 0
         self._replay_counts = {"prefill": 0, "decode": 0}
+        self._device_program_cache_entries: tuple[int, ...] | None = None
+        self._replay_failed = False
 
     # Public API
 
@@ -246,6 +251,7 @@ class TraceCompiler:
                 trace_key=trace_key,
                 workspace_fingerprint=plan.workspace_fingerprint,
                 prepare_workspace=plan.prepare_workspace,
+                prime_workspace=plan.prime_workspace,
             )
         return trace_key
 
@@ -282,13 +288,9 @@ class TraceCompiler:
             )
             for trace_key in capture_order:
                 persistent, plan = prepared[trace_key]
-                record = self._traces[trace_key]
-                # Program signatures intentionally describe padded trace
-                # identity, not active-row cardinality. Selected operation
-                # plans therefore prime their exact persistent-input body
-                # immediately before capturing that same body. No unrelated
-                # trace can perturb allocator/program state between the prime
-                # and ``begin_trace_capture``.
+                # All exact bodies must run before any trace can retain addresses.
+                if plan.prepare_capture is not None:
+                    plan.prepare_capture(persistent)
                 if plan.prime is not None:
                     prime_output = None
                     try:
@@ -311,42 +313,49 @@ class TraceCompiler:
                         raise_cleanup_failures(release_failures)
                     logger.info(f"Primed {plan.operation} trace capture body: signature={plan.trace_signature!r}")
 
+            for alias in self._aliases.values():
+                if alias.prime_workspace is not None:
+                    persistent, _ = prepared[alias.trace_key]
+                    alias.prime_workspace(persistent, alias.workspace)
+
+            self._device_program_cache_entries = self.program_compiler.device_program_cache_entries()
+            for trace_key in capture_order:
+                persistent, plan = prepared[trace_key]
+                record = self._traces[trace_key]
+                if plan.prepare_capture is not None:
+                    plan.prepare_capture(persistent)
+                self._require_unchanged_program_cache("before capture")
                 self.program_compiler.set_trace_capture_in_progress(True)
-                # Whatever the capture body allocates belongs to the trace and stays allocated
-                # for replay, even while earlier traces are live. The scope acknowledges those
-                # allocations to ttnn's trace allocation tracker; it is a no-op unless
-                # TT_METAL_TRACE_ALLOC_TRACKING=1 is set when the process starts. Ported from
-                # tenstorrent/tt-metal#53735.
-                with trace_allocation_tracker.corruptible_allocation_scope(self.mesh_device):
-                    trace_id = ttnn.begin_trace_capture(self.mesh_device, cq_id=0)
-                    outputs = None
-                    capture_ended = False
-                    try:
-                        outputs = plan.capture(persistent)
-                        ttnn.end_trace_capture(self.mesh_device, trace_id, cq_id=0)
-                        capture_ended = True
-                        ttnn.synchronize_device(self.mesh_device)
-                    except BaseException as primary:
-                        # A capture that raised before ``end_trace_capture`` leaves the device
-                        # recording. Releasing the trace without closing the region first leaks it,
-                        # and every later capture records into it. Ported from
-                        # tenstorrent/tt-metal#55343.
-                        cleanup_failures = []
-                        if not capture_ended:
-                            try:
-                                ttnn.end_trace_capture(self.mesh_device, trace_id, cq_id=0)
-                            except BaseException as error:
-                                cleanup_failures.append(error)
-                        record.artifact = TraceArtifact(
-                            trace_id=trace_id,
-                            persistent_inputs=persistent,
-                            outputs=outputs,
-                            refresh_policy=plan.refresh_policy,
-                        )
-                        captured_keys.add(trace_key)
-                        cleanup_failures.extend(self._release_trace(record))
-                        attach_cleanup_failures(primary, cleanup_failures)
-                        raise
+                trace_id = ttnn.begin_trace_capture(self.mesh_device, cq_id=0)
+                outputs = None
+                capture_ended = False
+                try:
+                    outputs = plan.capture(persistent)
+                    ttnn.end_trace_capture(self.mesh_device, trace_id, cq_id=0)
+                    capture_ended = True
+                    ttnn.synchronize_device(self.mesh_device)
+                    self._require_unchanged_program_cache("during capture")
+                except BaseException as primary:
+                    # A capture that raised before ``end_trace_capture`` leaves the device
+                    # recording. Releasing the trace without closing the region first leaks it,
+                    # and every later capture records into it. Ported from
+                    # tenstorrent/tt-metal#55343.
+                    cleanup_failures = []
+                    if not capture_ended:
+                        try:
+                            ttnn.end_trace_capture(self.mesh_device, trace_id, cq_id=0)
+                        except BaseException as error:
+                            cleanup_failures.append(error)
+                    record.artifact = TraceArtifact(
+                        trace_id=trace_id,
+                        persistent_inputs=persistent,
+                        outputs=outputs,
+                        refresh_policy=plan.refresh_policy,
+                    )
+                    captured_keys.add(trace_key)
+                    cleanup_failures.extend(self._release_trace(record))
+                    attach_cleanup_failures(primary, cleanup_failures)
+                    raise
                 record.artifact = TraceArtifact(
                     trace_id=trace_id,
                     persistent_inputs=persistent,
@@ -355,6 +364,7 @@ class TraceCompiler:
                 )
                 logger.info(f"Captured {plan.operation} trace: signature={plan.trace_signature!r}")
                 captured_keys.add(trace_key)
+                _acknowledge_trace_outputs(outputs)
                 self.program_compiler.set_trace_capture_in_progress(False)
 
             ttnn.synchronize_device(self.mesh_device)
@@ -398,10 +408,15 @@ class TraceCompiler:
         device_feedback_enabled: bool = False,
         feedback_compatible: bool = False,
         page_table_changed: bool = False,
+        reload_inputs: bool | None = None,
+        reload_page_table: bool = False,
+        reload_sampling_params: bool = False,
     ) -> Any:
         """Refresh persistent inputs and enqueue one non-blocking trace replay."""
 
         self._ensure_live()
+        if self._replay_failed:
+            raise RuntimeError("Trace replay previously failed; clean up this executor before further execution")
         self.program_compiler.require_compiled(program_key)
         trace_key = self._program_to_trace.get(program_key)
         if trace_key is None:
@@ -413,18 +428,37 @@ class TraceCompiler:
 
         policy = artifact.refresh_policy
         switched = self._previous_replay_key != trace_key
-        full = (
-            (policy.full_on_batch_reset and reset_batch)
-            or (policy.full_on_graph_switch and switched)
-            or (policy.full_without_device_feedback and not (device_feedback_enabled and feedback_compatible))
-        )
-        decision = RefreshDecision(
-            full=full,
-            page_table=policy.refresh_page_table_on_change and page_table_changed,
-            fields=policy.every_replay,
-        )
-        refresh_inputs(artifact, decision)
-        ttnn.execute_trace(self.mesh_device, artifact.trace_id, cq_id=0, blocking=False)
+        if reload_inputs is None:
+            full = (
+                (policy.full_on_batch_reset and reset_batch)
+                or (policy.full_on_graph_switch and switched)
+                or (policy.full_without_device_feedback and not (device_feedback_enabled and feedback_compatible))
+            )
+            decision = RefreshDecision(
+                full=full,
+                page_table=policy.refresh_page_table_on_change and page_table_changed,
+                fields=policy.every_replay,
+            )
+        else:
+            if reload_inputs and reload_page_table:
+                raise ValueError("reload_inputs and reload_page_table are mutually exclusive")
+            if not reload_inputs and (switched or not (device_feedback_enabled and feedback_compatible)):
+                raise RuntimeError("Decode trace requires reload_inputs=True to establish resident inputs")
+            decision = RefreshDecision(
+                full=reload_inputs,
+                page_table=reload_page_table,
+                fields=("sampling",) if reload_sampling_params else (),
+            )
+        self._require_unchanged_program_cache("before replay")
+        try:
+            refresh_inputs(artifact, decision)
+            self._require_unchanged_program_cache("while refreshing replay inputs")
+            ttnn.execute_trace(self.mesh_device, artifact.trace_id, cq_id=0, blocking=False)
+        except BaseException:
+            # Refresh can move slot state or advance RNG counters. Its partial
+            # device work cannot be rolled back safely or repeated on retry.
+            self._replay_failed = True
+            raise
         self._replay_count += 1
         self._replay_counts[record.operation] += 1
         self._previous_replay_key = trace_key
@@ -452,6 +486,9 @@ class TraceCompiler:
         self._released = True
 
     # Private implementation
+
+    def _require_unchanged_program_cache(self, phase: str) -> None:
+        self.program_compiler.require_unchanged_device_program_cache(self._device_program_cache_entries, phase=phase)
 
     def _release_trace_resources(self) -> list[BaseException]:
         failures: list[BaseException] = []
@@ -508,3 +545,16 @@ def _trim_host_allocator() -> None:
     malloc_trim.argtypes = (ctypes.c_size_t,)
     malloc_trim.restype = ctypes.c_int
     malloc_trim(0)
+
+
+def _acknowledge_trace_outputs(value: Any) -> None:
+    """Exempt only retained trace outputs, never implicit or cache allocations."""
+
+    if isinstance(value, ttnn.Tensor):
+        trace_allocation_tracker.acknowledge_corruptible(value)
+    elif isinstance(value, dict):
+        for nested in value.values():
+            _acknowledge_trace_outputs(nested)
+    elif isinstance(value, (tuple, list)):
+        for nested in value:
+            _acknowledge_trace_outputs(nested)

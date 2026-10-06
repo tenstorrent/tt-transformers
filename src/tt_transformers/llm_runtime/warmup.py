@@ -32,6 +32,8 @@ class WarmupCase:
     sequence_length: int | None
     sampling_path: str
     cached_tokens: int = 0
+    penalties_enabled: bool = False
+    logprobs_enabled: bool = False
 
 
 @dataclass(frozen=True)
@@ -77,6 +79,9 @@ class WarmupCoordinatorConfig:
     sampled_plan: WarmupPlan
     prefill_trace_sequence_lengths: tuple[int, ...]  # Plan lengths whose first invocation has a trace family.
 
+    decode_sampling_state_enabled: bool = False
+    sampling_logprobs_enabled: bool = False
+
     def __post_init__(self) -> None:
         if not isinstance(self.warmup, WarmupConfig):
             raise TypeError("warmup must be a WarmupConfig")
@@ -98,6 +103,8 @@ class WarmupCoordinatorConfig:
             "prime_q128_tile_ends",
             "prefill_trace_enabled",
             "decode_trace_enabled",
+            "decode_sampling_state_enabled",
+            "sampling_logprobs_enabled",
         ):
             if not isinstance(getattr(self, name), bool):
                 raise TypeError(f"{name} must be bool")
@@ -131,6 +138,8 @@ class WarmupCoordinatorConfig:
             lane_batch_size=self.lane_batch_size,
             allow_force_argmax=self.allow_force_argmax,
             can_sample_on_device=True,
+            decode_sampling_state_enabled=self.decode_sampling_state_enabled,
+            sampling_logprobs_enabled=self.sampling_logprobs_enabled,
         )
         if self.eager_plan != expected_eager or self.sampled_plan != expected_sampled:
             raise ValueError("warmup plans must match resolved policy and geometry")
@@ -204,6 +213,8 @@ class WarmupCoordinatorConfig:
             lane_batch_size=lane_batch_size,
             allow_force_argmax=allow_force_argmax,
             can_sample_on_device=True,
+            decode_sampling_state_enabled=decode.sampling_state_controller is not None,
+            sampling_logprobs_enabled=device_sampling_enabled and decode.num_devices in (8, 32),
         )
         return cls(
             warmup=warmup,
@@ -218,6 +229,8 @@ class WarmupCoordinatorConfig:
             decode_trace_enabled=trace.decode_enabled,
             eager_plan=eager_plan,
             sampled_plan=sampled_plan,
+            decode_sampling_state_enabled=decode.sampling_state_controller is not None,
+            sampling_logprobs_enabled=device_sampling_enabled and decode.num_devices in (8, 32),
             prefill_trace_sequence_lengths=prefill_trace_sequence_lengths,
             page_table_layout_ceiling=prefill.page_table_layout_ceiling,
         )
@@ -254,6 +267,8 @@ class WarmupCoordinatorConfig:
                 lane_batch_size=self.lane_batch_size,
                 allow_force_argmax=self.allow_force_argmax,
                 can_sample_on_device=True,
+                decode_sampling_state_enabled=self.decode_sampling_state_enabled,
+                sampling_logprobs_enabled=self.sampling_logprobs_enabled,
             ),
         )
 
@@ -322,7 +337,6 @@ class WarmupCoordinator:
         self._capture_deferred = False
         self._capture_pending = False
         self._pending_manifest: CoverageManifest | None = None
-        self._prefill_trace_postprocess_primed = False
         self._configuration_sealed = False
 
     # Public API
@@ -440,6 +454,12 @@ class WarmupCoordinator:
                 sampling = _greedy_sampling_params(case.batch_size)
             elif case.sampling_path == "topk":
                 sampling = _topk_sampling_params(case.batch_size)
+            if sampling is not None:
+                sampling = replace(
+                    sampling,
+                    presence_penalty=0.5 if case.penalties_enabled else 0.0,
+                    enable_log_probs=case.logprobs_enabled,
+                )
             actual_uncached_lengths = (min(int(case.sequence_length), servable_length - case.cached_tokens),)
             if (
                 case.batch_size == 1
@@ -509,6 +529,12 @@ class WarmupCoordinator:
                 sampling = _greedy_sampling_params(lane_batch)
             elif case.sampling_path == "topk":
                 sampling = _topk_sampling_params(lane_batch)
+            if sampling is not None:
+                sampling = replace(
+                    sampling,
+                    presence_penalty=0.5 if case.penalties_enabled else 0.0,
+                    enable_log_probs=case.logprobs_enabled,
+                )
             compile_target = self.execution if enable_trace else self.eager
             program = compile_target.compile_decode(
                 tokens=torch.zeros(lane_batch, dtype=torch.long),
@@ -532,6 +558,13 @@ class WarmupCoordinator:
     def _maybe_capture(self) -> None:
         if self.trace_compiler is None or self._captured:
             return
+        for operation in ("prefill", "decode"):
+            can_sample = self._sampling_decisions.get(operation)
+            if can_sample is None:
+                return
+            required = set(getattr(self._plan(can_sample_on_device=can_sample), operation))
+            if not required.issubset(self._eager | self._trace_registered):
+                return
         required_trace: set[WarmupCase] = set()
         if self.config.prefill_trace_enabled:
             prefill_decision = self._trace_decisions.get("prefill")
@@ -577,7 +610,6 @@ class WarmupCoordinator:
         self._captured = True
         self._coverage_manifest = manifest
         self._log_prefill_coverage()
-        self._prime_prefill_trace_postprocess()
 
     def _log_prefill_coverage(self) -> None:
         lengths = tuple(sorted(self.config.prefill_sequence_lengths))
@@ -599,30 +631,6 @@ class WarmupCoordinator:
         self._required_program_keys.update(keys)
         if traced:
             self._required_trace_program_keys.update(keys)
-
-    def _prime_prefill_trace_postprocess(self) -> None:
-        if (
-            self._prefill_trace_postprocess_primed
-            or self._trace_decisions.get("prefill") is False
-            or not self.config.prefill_trace_enabled
-        ):
-            return
-        prefill_can_sample = self._sampling_decisions.get("prefill", self.config.device_sampling_enabled)
-        traced_lengths = self.config.prefill_trace_sequence_lengths
-        if not prefill_can_sample or not self.config.allow_force_argmax or not traced_lengths:
-            self._prefill_trace_postprocess_primed = True
-            return
-        sequence_length = 128 if 128 in traced_lengths else int(traced_lengths[0])
-        width = _ceil_div(sequence_length, self.config.page_table_layout.block_size)
-        self.execution.prefill_forward(
-            tokens=torch.zeros((1, sequence_length), dtype=torch.long),
-            page_table=torch.zeros((1, width), dtype=torch.int32),
-            prompt_lens=torch.full((1,), sequence_length, dtype=torch.long),
-            empty_slots=[0],
-            start_pos=None,
-            sampling_params=_greedy_sampling_params(1),
-        )
-        self._prefill_trace_postprocess_primed = True
 
     def _validate_hints(self, operation: str, enable_trace: bool, can_sample_on_device: bool) -> None:
         trace_enabled = (
@@ -767,6 +775,8 @@ def _build_plan(
     lane_batch_size: int,
     allow_force_argmax: bool,
     can_sample_on_device: bool,
+    decode_sampling_state_enabled: bool = False,
+    sampling_logprobs_enabled: bool = False,
 ) -> WarmupPlan:
     sampling_paths = ["logits"]
     if can_sample_on_device:
@@ -809,7 +819,22 @@ def _build_plan(
         if not allow_force_argmax or warmup.include_decode_top_k:
             decode_paths.append("topk")
     decode = tuple(WarmupCase("decode", lane_batch_size, None, sampling_path) for sampling_path in decode_paths)
-    return WarmupPlan(tuple(prefill), decode)
+
+    def sampling_variants(cases: tuple[WarmupCase, ...]) -> tuple[WarmupCase, ...]:
+        # Penalty state and sampled-token log probabilities are independent
+        # capabilities. Both affect prefill and decode program identities.
+        return tuple(
+            replace(case, penalties_enabled=penalties, logprobs_enabled=logprobs)
+            for case in cases
+            for penalties in (
+                (False, True) if decode_sampling_state_enabled and case.sampling_path != "logits" else (False,)
+            )
+            for logprobs in (
+                (False, True) if sampling_logprobs_enabled and case.sampling_path != "logits" else (False,)
+            )
+        )
+
+    return WarmupPlan(sampling_variants(tuple(prefill)), sampling_variants(decode))
 
 
 def _greedy_sampling_params(batch_size: int) -> SamplingParams:

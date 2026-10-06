@@ -666,6 +666,10 @@ def test_runtime_inactive_peer_is_cleaned_up_without_readmitting_survivor():
                 ("output_tokens", inspect.Parameter.KEYWORD_ONLY, None),
                 ("slot_remap", inspect.Parameter.KEYWORD_ONLY, None),
                 ("reset_batch", inspect.Parameter.KEYWORD_ONLY, False),
+                ("reload_inputs", inspect.Parameter.KEYWORD_ONLY, None),
+                ("reload_page_table", inspect.Parameter.KEYWORD_ONLY, False),
+                ("reload_sampling_params", inspect.Parameter.KEYWORD_ONLY, False),
+                ("reset_sampling_state", inspect.Parameter.KEYWORD_ONLY, False),
             ),
         ),
         (
@@ -1423,3 +1427,383 @@ def test_host_to_device_sampling_switch_forces_a_full_trace_refresh(monkeypatch)
     # A replay that stays in the same mode does not. This second assertion is what gives
     # the test teeth: a policy that always refreshed fully would still pass without it.
     assert decisions[2].full is False
+
+
+def prepare_v1(runtime, *, positions=(7, -1), sampling_params=None, page_table=None, **commands):
+    return runtime.prepare(
+        torch.tensor([11, 0]),
+        torch.tensor(positions),
+        torch.tensor([[3, 4, 5], [6, 7, 8]], dtype=torch.int32) if page_table is None else page_table,
+        sampling_params=sampling_params,
+        reload_inputs=commands.pop("reload_inputs", True),
+        **commands,
+    )
+
+
+def submit_seeded_v1(runtime, sampling):
+    initial = prepare_v1(runtime, sampling_params=sampling, reload_sampling_params=True, reset_sampling_state=True)
+    runtime._refresh_sampling_seeds(initial)
+    runtime.note_submitted(initial)
+    return initial
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("seed", [None, 19])
+def test_v1_resident_sampling_ignores_stale_positions_and_advances_once(seed):
+    buffer = FakeLazySeedBuffer()
+    runtime = make_runtime(seed_buffer=buffer)
+    sampling = stochastic_sampling(seed)
+    initial = submit_seeded_v1(runtime, sampling)
+    before = runtime._seed_state.snapshot()
+    stale = prepare_v1(
+        runtime,
+        positions=(-100, 99999),
+        sampling_params=SamplingParams(temperature=[float("nan")], top_k=[9999], top_p=[1.0]),
+        reload_inputs=False,
+    )
+    assert stale.prepared_sampling == initial.prepared_sampling
+    runtime._refresh_sampling_seeds(stale)
+    after = runtime._seed_state.snapshot()
+    assert after.active_slots == (0,)
+    assert after.token_counters[0] == before.token_counters[0] + 1
+    assert after.token_counters[1] == 0
+    assert after.current_device_seeds[0] != before.current_device_seeds[0] or seed is None
+
+
+@pytest.mark.host
+def test_v1_page_only_copy_uses_full_scheduler_mapping_without_staging_forward_inputs(monkeypatch):
+    runtime = make_runtime(seed_buffer=FakeLazySeedBuffer())
+    sampling = stochastic_sampling(19)
+    initial = submit_seeded_v1(runtime, sampling)
+    table = torch.tensor([[30, 40, 50, 60], [70, 80, 90, 100]], dtype=torch.int32)
+    prepared = prepare_v1(
+        runtime,
+        positions=(-100, 99999),
+        sampling_params=sampling,
+        page_table=table,
+        reload_inputs=False,
+        reload_page_table=True,
+    )
+    assert torch.equal(prepared.page_table[:, :4], table)
+    inputs = DecodeDeviceInputs(object(), object(), object(), object())
+    persistent = DecodePersistentInputs(
+        inputs,
+        (object(), object(), object()),
+        [(initial.prepared_sampling.top_k, initial.prepared_sampling.top_p, initial.prepared_sampling.temperature)],
+        runtime._seed_device_handle(),
+    )
+    copied = []
+    monkeypatch.setattr(runtime, "_prepare_inputs_host", lambda _: pytest.fail("stale forward inputs were staged"))
+    monkeypatch.setattr(runtime, "_prepare_page_table_host", lambda value: value)
+    monkeypatch.setattr(ttnn, "copy_host_to_device_tensor", lambda source, target: copied.append((source, target)))
+    runtime.refresh_trace(persistent, prepared, SimpleNamespace(full=False, page_table=True))
+    assert len(copied) == 1
+    assert copied[0][1] is inputs.page_table
+    assert torch.equal(copied[0][0][:, :4], table)
+
+
+@pytest.mark.host
+def test_v1_sampling_reload_changes_parameters_without_resetting_seed_counter():
+    runtime = make_runtime(seed_buffer=FakeLazySeedBuffer())
+    submit_seeded_v1(runtime, stochastic_sampling(19))
+    before = runtime._seed_state.snapshot()
+    prepared = prepare_v1(
+        runtime,
+        positions=(-100, 99999),
+        sampling_params=stochastic_sampling(27),
+        reload_inputs=False,
+        reload_sampling_params=True,
+    )
+    runtime._refresh_sampling_seeds(prepared)
+    after = runtime._seed_state.snapshot()
+    assert after.request_seeds[0] == 27
+    assert after.token_counters[0] == before.token_counters[0] + 1
+    assert after.active_slots == (0,)
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("remap", [None, [1, 0]])
+def test_v1_selected_trace_restores_resident_kpt_without_loading_new_caller_params(monkeypatch, remap):
+    runtime = make_runtime(seed_buffer=FakeLazySeedBuffer())
+    initial = prepare_v1(
+        runtime,
+        positions=(7, 7),
+        sampling_params=SamplingParams(temperature=[0.5, 0.8], top_k=[8, 32], top_p=[0.7, 0.9]),
+        reload_sampling_params=True,
+        reset_sampling_state=True,
+    )
+    runtime._refresh_sampling_seeds(initial)
+    runtime.note_submitted(initial)
+    prepared = prepare_v1(
+        runtime,
+        positions=(8, 8),
+        sampling_params=SamplingParams(temperature=0.0, top_k=1, top_p=0.0),
+        slot_remap=remap,
+    )
+    # A selected trace may still hold warmup values, or values from an older layout.
+    previous = initial.prepared_sampling
+    old_k = previous.top_k if remap else (1, 1)
+    kpt = tuple(torch.tensor(values) for values in (old_k, previous.top_p, previous.temperature))
+    persistent = DecodePersistentInputs(
+        DecodeDeviceInputs(object(), object(), object(), object()),
+        kpt,
+        [(old_k, previous.top_p, previous.temperature)],
+        runtime._seed_device_handle(),
+    )
+    monkeypatch.setattr(runtime, "_prepare_inputs_host", lambda _: SimpleNamespace(values=lambda: ()))
+    monkeypatch.setattr(decode_module, "_copy_host_to_device", lambda *args, **kwargs: None)
+
+    def upload(buffers, request):
+        sampling = request.prepared_sampling
+        for buffer, values in zip(buffers, (sampling.top_k, sampling.top_p, sampling.temperature)):
+            buffer.copy_(torch.tensor(values))
+
+    monkeypatch.setattr(runtime, "_refresh_kpt", upload)
+    runtime.refresh_trace(persistent, prepared, SimpleNamespace(full=True, page_table=False))
+    expected_order = remap or [0, 1]
+    assert kpt[0].tolist() == [previous.top_k[row] for row in expected_order]
+    assert kpt[1].tolist() == pytest.approx([previous.top_p[row] for row in expected_order])
+    assert kpt[2].tolist() == pytest.approx([previous.temperature[row] for row in expected_order])
+
+
+@pytest.mark.host
+def test_v1_host_sampling_remaps_dormant_seed_state_once():
+    runtime = make_runtime(seed_buffer=FakeLazySeedBuffer())
+    submit_seeded_v1(runtime, stochastic_sampling(19))
+    before = runtime._seed_state.snapshot()
+    prepared = prepare_v1(runtime, positions=(-1, 8), slot_remap=[1, 0])
+    runtime._refresh_sampling_seeds(prepared)
+    runtime.note_submitted(prepared)
+    after = runtime._seed_state.snapshot()
+    assert after.active_slots == (1,)
+    assert after.request_seeds[1] == before.request_seeds[0]
+    assert after.token_counters[1] == before.token_counters[0]
+    assert after.unseeded_rng_states[1] == before.unseeded_rng_states[0]
+    assert runtime._resident_sampling.active_mask == (False, True)
+
+
+@pytest.mark.host
+def test_failed_eager_forward_cannot_apply_an_absolute_remap_twice(monkeypatch):
+    runtime = make_runtime(seed_buffer=FakeLazySeedBuffer())
+    initial = prepare_v1(
+        runtime,
+        positions=(7, 7),
+        sampling_params=stochastic_sampling([17, 29]),
+        reload_sampling_params=True,
+        reset_sampling_state=True,
+    )
+    runtime._refresh_sampling_seeds(initial)
+    runtime.note_submitted(initial)
+    moved = prepare_v1(runtime, positions=(8, 8), slot_remap=[1, 0])
+    monkeypatch.setattr(runtime, "_prepare_inputs_host", lambda _: object())
+    monkeypatch.setattr(
+        runtime, "_stage_inputs_and_kpt", lambda *args: (DecodeDeviceInputs(None, None, None, None), None)
+    )
+    monkeypatch.setattr(runtime, "_release_or_retain_transient", lambda values: [])
+
+    def fail_forward(*args, **kwargs):
+        raise RuntimeError("forward failed")
+
+    monkeypatch.setattr(runtime, "_run_body", fail_forward)
+    with pytest.raises(RuntimeError, match="forward failed"):
+        runtime.invoke(moved)
+    assert runtime._seed_state.request_seeds == [29, 17]
+    with pytest.raises(RuntimeError, match="recreate this runtime"):
+        runtime.invoke(moved)
+    with pytest.raises(RuntimeError, match="recreate this runtime"):
+        runtime.ensure_trace_safe()
+    assert runtime._seed_state.request_seeds == [29, 17]
+
+
+@pytest.mark.host
+def test_failed_synchronous_read_blocks_resubmission(monkeypatch):
+    runtime = make_runtime()
+
+    def fail_read(*args, **kwargs):
+        raise RuntimeError("read failed")
+
+    monkeypatch.setattr(runtime.config.output_reader, "read", fail_read)
+    with pytest.raises(RuntimeError, match="read failed"):
+        runtime.consume(InvocationResult(object(), None, False))
+    with pytest.raises(RuntimeError, match="recreate this runtime"):
+        prepare_v1(runtime)
+
+
+@pytest.mark.host
+def test_v1_rejects_device_penalties_without_a_native_controller():
+    runtime = make_runtime(seed_buffer=FakeLazySeedBuffer())
+    prepared = prepare_v1(
+        runtime,
+        sampling_params=SamplingParams(temperature=0.8, top_k=8, top_p=0.9, presence_penalty=0.5),
+        reload_sampling_params=True,
+        reset_sampling_state=True,
+    )
+    before = runtime._seed_state.snapshot()
+    with pytest.raises(ValueError, match="use host sampling"):
+        runtime.validate_submission(prepared)
+    assert runtime._seed_state.snapshot() == before
+    assert not runtime._submission_failed
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(
+    "commands, message",
+    [
+        ({"reload_inputs": True, "reload_page_table": True}, "mutually exclusive"),
+        ({"reload_inputs": False, "reset_sampling_state": True}, "requires reload_inputs"),
+        ({"reload_inputs": True, "reset_batch": True}, "reset_batch"),
+        ({"reload_inputs": "false"}, "must be bool"),
+    ],
+)
+def test_v1_invalid_commands_fail_before_state_changes(commands, message, expect_error):
+    runtime = make_runtime(seed_buffer=FakeLazySeedBuffer())
+    before = runtime._seed_state.snapshot()
+    with expect_error((ValueError, TypeError), message):
+        prepare_v1(runtime, **commands)
+    assert runtime._seed_state.snapshot() == before
+
+
+@pytest.mark.host
+def test_v1_eager_decode_rejects_resident_inputs_before_staging(monkeypatch, expect_error):
+    runtime = make_runtime(seed_buffer=FakeLazySeedBuffer())
+    sampling = stochastic_sampling(19)
+    submit_seeded_v1(runtime, sampling)
+    prepared = prepare_v1(runtime, sampling_params=sampling, reload_inputs=False)
+    monkeypatch.setattr(runtime, "_prepare_inputs_host", lambda _: pytest.fail("resident eager inputs were staged"))
+    with expect_error(ValueError, "eager decode requires"):
+        runtime.invoke(prepared)
+
+
+@pytest.mark.host
+def test_trace_output_blocks_replay_until_copy_is_queued_and_preserves_multiple_host_leases(monkeypatch, expect_error):
+    runtime = make_runtime()
+    raw = object()
+    first = PendingRead(value=object(), events=(object(),), sequence=1, _owner=object())
+    second = PendingRead(value=object(), events=(object(),), sequence=2, _owner=object())
+    reads = iter((first, second))
+    monkeypatch.setattr(runtime.config.output_reader, "submit", lambda value: next(reads))
+    monkeypatch.setattr(
+        runtime.config.output_reader, "complete", lambda value: value.value if isinstance(value, PendingRead) else value
+    )
+    runtime.consume(InvocationResult(raw, None, True), read_from_device=False)
+    with expect_error(RuntimeError, "read outstanding"):
+        runtime.ensure_trace_safe()
+    runtime.read_decode_output(raw, async_read=True)
+    runtime.ensure_trace_safe()
+    runtime.consume(InvocationResult(raw, None, True), read_from_device=False)
+    runtime._release_external_lease(runtime._external_by_host_id[id(first.value)])
+    with expect_error(RuntimeError, "read outstanding"):
+        runtime.ensure_trace_safe()
+    runtime.read_decode_output(raw, async_read=True)
+    runtime.ensure_trace_safe()
+    assert len(runtime._external_by_host_id) == 1
+
+
+@pytest.mark.host
+def test_live_eager_decode_buffers_block_trace_until_read_completes(monkeypatch, expect_error):
+    runtime = make_runtime()
+    raw = object()
+    pending = PendingRead(value=object(), events=(object(),), sequence=1, _owner=object())
+    monkeypatch.setattr(runtime.config.output_reader, "submit", lambda value: pending)
+    monkeypatch.setattr(runtime.config.output_reader, "complete", lambda value: pending.value)
+    runtime.consume(InvocationResult(raw, (), True), read_from_device=False)
+    runtime.read_decode_output(raw, async_read=True)
+    with expect_error(RuntimeError, "read outstanding"):
+        runtime.ensure_trace_safe()
+    runtime._release_external_lease(runtime._external_by_host_id[id(pending.value)])
+    runtime.ensure_trace_safe()
+
+
+@pytest.mark.host
+def test_v1_remap_and_reset_preserve_continuing_equal_seed_salt():
+    runtime = make_runtime(seed_buffer=FakeLazySeedBuffer())
+    initial = prepare_v1(
+        runtime,
+        positions=(7, 7),
+        sampling_params=stochastic_sampling([19, 19]),
+        reload_sampling_params=True,
+        reset_sampling_state=True,
+    )
+    runtime._refresh_sampling_seeds(initial)
+    runtime.note_submitted(initial)
+    salt = runtime._seed_state.salts[1]
+    assert salt != runtime._seed_state.salts[0]
+    moved = prepare_v1(
+        runtime,
+        positions=(8, -1),
+        sampling_params=stochastic_sampling(19),
+        slot_remap=[1, 1],
+        reload_sampling_params=True,
+        reset_sampling_state=True,
+    )
+    runtime._refresh_sampling_seeds(moved)
+    assert runtime._seed_state.salts[0] == salt
+    assert runtime._seed_state.snapshot().active_slots == (0,)
+    assert runtime._seed_state.token_counters[0] == 10
+
+
+@pytest.mark.host
+def test_v1_rejected_membership_change_does_not_consume_remap(expect_error):
+    runtime = make_runtime(seed_buffer=FakeLazySeedBuffer())
+    sampling = stochastic_sampling(19)
+    submit_seeded_v1(runtime, sampling)
+    before = runtime._seed_state.snapshot()
+    invalid = prepare_v1(
+        runtime,
+        positions=(8, -1),
+        sampling_params=sampling,
+        slot_remap=[1, 0],
+        reload_sampling_params=True,
+    )
+    with expect_error(RuntimeError, "sampling membership changed"):
+        runtime._refresh_sampling_seeds(invalid)
+    assert runtime._seed_state.snapshot() == before
+
+
+@pytest.mark.host
+def test_decode_capture_restores_each_shared_sampling_identity_without_device_reset(monkeypatch):
+    runtime = make_runtime()
+    state = SimpleNamespace(static_identity=None, active_mask=())
+    resets = []
+
+    def reset(_state, sampling=None):
+        resets.append(sampling)
+        state.static_identity = None if sampling is None else sampling.sampling_path
+
+    runtime._sampling_state = state
+    runtime._sampling_state_controller = SimpleNamespace(
+        reset=reset, static_identity=lambda sampling: sampling.sampling_path
+    )
+    monkeypatch.setattr(runtime, "_prepare_inputs_host", lambda _: None)
+    monkeypatch.setattr(
+        runtime, "_stage_inputs_and_kpt", lambda *args: (DecodeDeviceInputs(None, None, None, None), None)
+    )
+    identities = []
+    monkeypatch.setattr(runtime, "_run_body", lambda *args, **kwargs: identities.append(state.static_identity))
+    first = runtime.capture_plan(prepare(runtime, sampling_params=greedy_sampling()))
+    second = runtime.capture_plan(prepare(runtime, sampling_params=stochastic_sampling()))
+    first_inputs = first.prepare_inputs()
+    second_inputs = second.prepare_inputs()
+    reset_count = len(resets)
+    first.prepare_capture(first_inputs)
+    first.capture(first_inputs)
+    second.prepare_capture(second_inputs)
+    second.capture(second_inputs)
+    assert identities == ["argmax", "topk"]
+    assert len(resets) == reset_count
+
+
+@pytest.mark.host
+def test_compile_only_native_sampling_warms_penalty_update_without_advancing_seeds(monkeypatch):
+    runtime = make_runtime()
+    resets = []
+    runtime._sampling_state = object()
+    runtime._sampling_state_controller = SimpleNamespace(reset=lambda *args: resets.append(args))
+    prepared = prepare(runtime, sampling_params=greedy_sampling())
+    calls = []
+    _stub_compile_only_decode(runtime, monkeypatch, lambda *args, **kwargs: calls.append(kwargs))
+    runtime.invoke(prepared, count_tokens=False)
+    assert calls[0]["count_tokens"] is True
+    assert calls[0]["advance_seeds"] is False
+    assert len(resets) == 2
+    assert runtime._resident_sampling is None

@@ -17,6 +17,7 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 import torch
+import ttnn
 
 from tt_transformers.modules.lazy_buffer import LazyBuffer
 from tt_transformers.modules.sampling.params import PreparedSamplingParams, place_prepared_sampling_params
@@ -330,6 +331,106 @@ class SamplingState1D:
         )
         self._synchronize_penalties_and_identity(state, prepared, rebuild_history=True)
         return replace(prepared, slot_remap=None)
+
+    def remap_slots(self, state: SamplingState1DState, remap) -> None:
+        """Move every slot buffer, including state of a dormant sampler.
+
+        Transitions drain previous work. Copy through host memory to keep the
+        captured buffer handles stable and avoid compiling a gather after capture.
+        """
+
+        self._require_idle(state)
+        normalized = tuple(int(slot) for slot in remap)
+        projected_active, _ = self._project_seed_membership(state.seed_state, normalized)
+        moved_sources = {source for target, source in enumerate(normalized) if source != target}
+        moved_targets = {target for target, source in enumerate(normalized) if source != target}
+        cleared = moved_sources - moved_targets
+        values = {}
+        for name in ("prompt_mask", "output_mask", "output_counts", "output_counts_gathered"):
+            specification = getattr(self.penalties.config, name)
+            tensor = _materialize(specification)
+            shards = [ttnn.to_torch(shard) for shard in ttnn.get_device_tensors(tensor.cpu(blocking=True))]
+            source = shards[0] if name == "output_counts_gathered" else torch.cat(shards, dim=-1)
+            source = source[: len(normalized), : int(self.sampling.config.vocab_size)]
+            moved = source[list(normalized)].clone()
+            if cleared:
+                moved[list(cleared)] = 0
+            values[name] = moved
+        for name in (
+            "presence_penalties",
+            "frequency_penalties",
+            "repetition_penalties",
+            "inverse_repetition_penalties",
+        ):
+            source = getattr(self.penalties.config, name).source
+            values[name] = source[list(normalized)].clone()
+        self.seed_manager.apply_slot_remap(state.seed_state, normalized)
+        for name, source in values.items():
+            self._update_penalty_buffer(name, source)
+        state.active_mask = projected_active
+
+    def reset_decode_state(
+        self, state: SamplingState1DState, prepared: PreparedSamplingParams, *, reload_params: bool
+    ) -> None:
+        """Rebuild history and RNG state without implicitly replacing parameters."""
+
+        self._require_idle(state)
+        self._validate_prepared(prepared)
+        self._validate_prepared_history(prepared)
+        active = self._active_slots(prepared)
+        self.seed_manager.reset_decode(state.seed_state, prepared.seeds, active)
+        if reload_params:
+            self._write_penalty_params(prepared)
+        self._rebuild_penalty_history(
+            state,
+            prompt_tokens=prepared.prompt_tokens,
+            output_tokens=prepared.output_tokens,
+            active_mask=prepared.active_mask,
+        )
+        state.active_mask = prepared.active_mask
+        state.static_identity = self.static_identity(prepared)
+        state.penalty_history_valid = True
+
+    def configure_decode(
+        self,
+        state: SamplingState1DState,
+        prepared: PreparedSamplingParams,
+        *,
+        reload_params: bool,
+    ) -> None:
+        """Select static sampling behavior without rebuilding mutable history."""
+
+        self._require_idle(state)
+        self._validate_prepared(prepared)
+        if state.static_identity is None or not state.penalty_history_valid:
+            raise RuntimeError("sampling state requires reset_sampling_state=True")
+        if state.active_mask != prepared.active_mask:
+            raise RuntimeError("sampling membership changed without reset_sampling_state=True")
+        identity = self.static_identity(prepared)
+        if not reload_params and identity != state.static_identity:
+            raise RuntimeError("sampling parameters changed without reload_sampling_params=True")
+        if reload_params:
+            self.validate_decode_history(state, prepared)
+            self._write_penalty_params(prepared)
+            state.static_identity = identity
+
+    def validate_decode_history(
+        self, state: SamplingState1DState, prepared: PreparedSamplingParams, *, slot_remap=None
+    ) -> None:
+        """Reject parameter changes that require history absent from the trace."""
+
+        if state.static_identity is None:
+            raise RuntimeError("sampling state requires reset_sampling_state=True")
+        if prepared.penalties_enabled and not state.static_identity.penalties_enabled:
+            raise RuntimeError("enabling penalties requires reset_sampling_state=True and token history")
+        previous_repetition = self._current_repetition_values()
+        if slot_remap is not None:
+            previous_repetition = tuple(previous_repetition[int(slot)] for slot in slot_remap)
+        if any(
+            active and previous == 1.0 and current != 1.0
+            for active, previous, current in zip(prepared.active_mask, previous_repetition, prepared.repetition_penalty)
+        ):
+            raise RuntimeError("enabling repetition penalty requires reset_sampling_state=True and prompt history")
 
     def synchronize_decode(
         self,

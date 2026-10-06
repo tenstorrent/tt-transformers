@@ -125,6 +125,11 @@ class PreparedDecode:
     reset_batch: bool
     device_feedback: bool
     page_table_changed: bool
+    reload_inputs: bool | None = None
+    reload_page_table: bool = False
+    reload_sampling_params: bool = False
+    reset_sampling_state: bool = False
+    slot_remap: Any = None
 
     @property
     def sampling_values(self):
@@ -168,6 +173,9 @@ class DecodeCapturePlan:
     prepare_inputs: Any
     capture: Any
     refresh_policy: DecodeRefreshPolicy = DecodeRefreshPolicy()
+    prepare_capture: Any = None
+    prime: Any = None
+    release_prime_output: Any = None
 
 
 @dataclass(frozen=True)
@@ -344,6 +352,9 @@ class DecodeRuntime:
             raise TypeError("config must be a DecodeRuntimeConfig")
         self.config = config
         self._previous_page_table: torch.Tensor | None = None
+        self._resident_sampling: PreparedSamplingParams | None = None
+        self._resident_feedback = False
+        self._submission_failed = False
         self._normalization_source: torch.Tensor | None = None
         self._normalization_copy_blocks: tuple[int, ...] | None = None
         self._normalization_layout: tuple[int, int, int] | None = None
@@ -399,16 +410,42 @@ class DecodeRuntime:
         output_tokens: Any = None,
         slot_remap: Any = None,
         reset_batch: bool = False,  # ↓ State transition
+        reload_inputs: bool | None = None,
+        reload_page_table: bool = False,
+        reload_sampling_params: bool = False,
+        reset_sampling_state: bool = False,
     ) -> PreparedDecode:
         """Normalize one host decode request into an immutable prepared value."""
 
         self._ensure_usable()
         self._validate_inputs(tokens, start_pos, page_table)
         self._validate_sampling_request(sampling_params)
+        _validate_reload_commands(
+            reload_inputs, reload_page_table, reload_sampling_params, reset_sampling_state, reset_batch
+        )
+        if reload_inputs is False and (sampling_params is None or not self._resident_feedback):
+            raise ValueError("resident decode requires a previous submitted device-feedback decode")
+        if sampling_params is None and (reload_sampling_params or reset_sampling_state):
+            raise ValueError("sampling commands require device sampling parameters")
+        normalized_remap = _normalize_decode_slot_remap(
+            slot_remap,
+            lane_capacity=self.config.lane_capacity,
+            sampling_batch_size=self.config.sampling_batch_size,
+        )
+        if reload_inputs is False and normalized_remap is not None:
+            raise ValueError("slot_remap requires reload_inputs=True for resident forward buffers")
         feedback = self._classify_feedback(sampling_params)
         prepared_sampling = None
-        if sampling_params is not None:
-            active_slots = tuple(slot for slot, position in enumerate(start_pos) if int(position) >= 0)
+        if sampling_params is not None and (
+            reload_inputs is None or reload_sampling_params or self._resident_sampling is None
+        ):
+            if reload_inputs is False:
+                resident = self._resident_sampling
+                if resident is None:
+                    raise RuntimeError("resident decode has no sampling parameters")
+                active_slots = tuple(slot for slot, active in enumerate(resident.active_mask) if active)
+            else:
+                active_slots = tuple(slot for slot, position in enumerate(start_pos) if int(position) >= 0)
             if not active_slots:
                 raise ValueError("decode sampling requires at least one active slot")
             request_sampling = slice_sampling_params(sampling_params, active_slots)
@@ -427,21 +464,54 @@ class DecodeRuntime:
                     active_slots=active_slots,
                     lane_capacity=self.config.lane_capacity,
                 ),
-                slot_remap=_normalize_decode_slot_remap(
-                    slot_remap,
-                    lane_capacity=self.config.lane_capacity,
-                    sampling_batch_size=self.config.sampling_batch_size,
-                ),
+                slot_remap=normalized_remap,
             )
             prepared_sampling = place_prepared_sampling_params(
                 prepared_sampling,
                 active_slots,
             )
-        normalized = self._normalize_page_table(
-            page_table,
-            start_pos,
-            allow_one_step_feedback_lag=feedback,
-        )
+        if reload_inputs is not None and sampling_params is not None and not reload_sampling_params:
+            if self._resident_sampling is not None:
+                prepared_sampling = (
+                    _remap_sampling_params(self._resident_sampling, normalized_remap)
+                    if normalized_remap is not None
+                    else dataclasses.replace(self._resident_sampling, slot_remap=None)
+                )
+                if prepared_sampling is None:
+                    raise ValueError("sampling remap removed every active row")
+                if reload_inputs:
+                    active_mask = tuple(int(position) >= 0 for position in start_pos)
+                    active_mask += (False,) * (prepared_sampling.batch_size - len(active_mask))
+                    if not any(active_mask):
+                        raise ValueError("decode sampling requires at least one active slot")
+                    if active_mask != prepared_sampling.active_mask and not reset_sampling_state:
+                        raise ValueError("sampling membership changed without reset_sampling_state=True")
+                    prepared_sampling = dataclasses.replace(
+                        prepared_sampling, active_mask=active_mask, active_rows=sum(active_mask)
+                    )
+                if reset_sampling_state:
+                    prepared_sampling = dataclasses.replace(
+                        prepared_sampling, prompt_tokens=prompt_tokens, output_tokens=output_tokens
+                    )
+        if reload_inputs is None:
+            normalized = self._normalize_page_table(
+                page_table,
+                start_pos,
+                allow_one_step_feedback_lag=feedback,
+            )
+        elif reload_inputs or reload_page_table:
+            if reload_inputs:
+                for row, position in enumerate(start_pos):
+                    required = _num_blocks(max(0, int(position) + 1), self.config.page_table_layout.block_size)
+                    if required > self.config.page_table_layout.raw_capacity_width:
+                        raise ValueError("decode position exceeds the configured paged-KV capacity")
+                    if required > int(page_table.shape[1]):
+                        raise ValueError(f"page table is too narrow for decode row {row}")
+            normalized = self._normalize_scheduler_page_table(page_table)
+        else:
+            if self._previous_page_table is None:
+                raise RuntimeError("resident decode has no page table")
+            normalized = self._previous_page_table
         return PreparedDecode(
             tokens=tokens,
             start_pos=start_pos,
@@ -454,6 +524,11 @@ class DecodeRuntime:
             page_table_changed=(
                 self._previous_page_table is None or not torch.equal(self._previous_page_table, normalized)
             ),
+            reload_inputs=reload_inputs,
+            reload_page_table=reload_page_table,
+            reload_sampling_params=reload_sampling_params,
+            reset_sampling_state=reset_sampling_state,
+            slot_remap=normalized_remap,
         )
 
     def program_signature(self, prepared: PreparedDecode) -> DecodeProgramSignature:
@@ -487,6 +562,10 @@ class DecodeRuntime:
 
         self._ensure_usable()
         self._require_prepared(prepared)
+        if prepared.reload_inputs is False:
+            raise ValueError("eager decode requires reload_inputs=True")
+        if count_tokens:
+            self.validate_submission(prepared)
         host_inputs = self._prepare_inputs_host(prepared)
         device_inputs, kpt = self._stage_inputs_and_kpt(host_inputs, prepared)
         owned = (device_inputs, kpt)
@@ -507,7 +586,16 @@ class DecodeRuntime:
                     # manager a temporary replacement batch so its normal
                     # strict serving checks do not mistake synthetic warmup
                     # rows for live requests.
-                    self._refresh_sampling_seeds(dataclasses.replace(prepared, reset_batch=True))
+                    self._refresh_sampling_seeds(
+                        dataclasses.replace(
+                            prepared,
+                            reset_batch=True,
+                            reload_inputs=None,
+                            reload_page_table=False,
+                            reload_sampling_params=False,
+                            reset_sampling_state=False,
+                        )
+                    )
             else:
                 self._refresh_sampling_seeds(prepared)
             with _validate_module_inputs(self.config.model):
@@ -516,10 +604,12 @@ class DecodeRuntime:
                     prepared,
                     kpt,
                     device_feedback=device_feedback and prepared.device_feedback,
-                    count_tokens=count_tokens,
-                    advance_seeds=count_tokens,
+                    count_tokens=count_tokens or self._sampling_state_controller is not None,
+                    advance_seeds=False,
                 )
         except BaseException as primary:
+            if count_tokens:
+                self.invalidate_after_failed_submission()
             if compile_only_state:
                 try:
                     self._reset_compile_only_sampling_state()
@@ -530,7 +620,8 @@ class DecodeRuntime:
             raise
         if compile_only_state:
             self._reset_compile_only_sampling_state()
-        self._note_submitted(prepared)
+        if count_tokens:
+            self._note_submitted(prepared, feedback=device_feedback and prepared.device_feedback)
         return InvocationResult(
             value=output,
             owned=(output, owned),
@@ -559,6 +650,12 @@ class DecodeRuntime:
                 seed_buffer=self._seed_device_handle(),
             )
 
+        def prepare_capture(_persistent: Any) -> None:
+            sampling = prepared.prepared_sampling
+            if self._sampling_state_controller is not None and sampling is not None:
+                self._sampling_state.static_identity = self._sampling_state_controller.static_identity(sampling)
+                self._sampling_state.active_mask = sampling.active_mask
+
         def capture(persistent: Any) -> Any:
             values = _persistent_values(persistent)
             return self._run_body(
@@ -569,7 +666,13 @@ class DecodeRuntime:
                 advance_seeds=False,
             )
 
-        return DecodeCapturePlan(prepare_inputs=prepare_inputs, capture=capture)
+        return DecodeCapturePlan(
+            prepare_inputs=prepare_inputs,
+            prepare_capture=prepare_capture,
+            capture=capture,
+            prime=capture,
+            release_prime_output=self._release_or_retain_transient,
+        )
 
     def refresh_trace(
         self,
@@ -588,14 +691,20 @@ class DecodeRuntime:
             host_inputs = self._prepare_inputs_host(prepared)
             _copy_host_to_device(host_inputs.values(), values.device_inputs.values())
         elif bool(decision.page_table):
-            host_inputs = self._prepare_inputs_host(prepared)
-            ttnn.copy_host_to_device_tensor(host_inputs.page_table, values.device_inputs.page_table)
+            page_table = self._prepare_page_table_host(prepared.page_table)
+            ttnn.copy_host_to_device_tensor(page_table, values.device_inputs.page_table)
         if prepared.sampling_path == "topk":
             sampling = prepared.prepared_sampling
             if sampling is None:
                 raise RuntimeError("top-k decode trace is missing prepared sampling parameters")
             signature = sampling.top_k, sampling.top_p, sampling.temperature
-            if values.kpt_signature is None or values.kpt_signature[0] != signature:
+            # Each trace owns its K/P/T buffers. Restore accepted resident
+            # parameters after a remap or trace switch. prepare() ignores new
+            # caller values unless reload_sampling_params was commanded.
+            refresh = (
+                prepared.reload_sampling_params or values.kpt_signature is None or values.kpt_signature[0] != signature
+            )
+            if refresh:
                 self._refresh_kpt(values.kpt, prepared)
                 if values.kpt_signature is not None:
                     values.kpt_signature[0] = signature
@@ -607,14 +716,25 @@ class DecodeRuntime:
         self._require_prepared(prepared)
         self._note_submitted(prepared)
 
+    def invalidate_after_failed_submission(self) -> None:
+        """Block retries that could repeat a partially applied remap or sample."""
+
+        self._submission_failed = True
+
+    def validate_submission(self, prepared: PreparedDecode) -> None:
+        """Reject unsupported sampling transitions before device or slot mutation."""
+
+        self._ensure_usable()
+        if getattr(prepared, "reload_inputs", None) is not None:
+            self._validate_sampling_v1(prepared)
+
     def consume(self, result: InvocationResult, *, read_from_device: bool = True) -> Any:
         """Read and normalize an invocation or transfer it to an external lease."""
         if not isinstance(result, InvocationResult):
             raise TypeError("result must be an InvocationResult")
         if not read_from_device:
-            if result.owned is not None:
-                lease = DecodeOutputLease(raw_value=result.value, owned_values=result.owned)
-                self._external_by_raw_id[id(result.value)] = lease
+            lease = DecodeOutputLease(raw_value=result.value, owned_values=result.owned)
+            self._external_by_raw_id[id(result.value)] = lease
             return result.value
         try:
             host = self.config.output_reader.read(result.value, blocking=True)
@@ -623,11 +743,13 @@ class DecodeRuntime:
                 is_tokens=result.is_tokens,
             )
         except BaseException as primary:
+            self.invalidate_after_failed_submission()
             failures = self._release_or_retain_transient(result.owned)
             attach_cleanup_failures(primary, failures)
             raise
         failures = self._release_or_retain_transient(result.owned)
         if failures:
+            self.invalidate_after_failed_submission()
             raise_cleanup_failures(failures)
         return normalized
 
@@ -644,6 +766,10 @@ class DecodeRuntime:
             lease.host_value = pending.value
             lease.pending = pending
             self._external_by_host_id[id(pending.value)] = lease
+            if lease.owned_values is None:
+                # The copy and the next replay use CQ0. Once the copy is queued,
+                # its host destination owns this result and replay can proceed.
+                self._external_by_raw_id.pop(id(tt_out), None)
         return pending.value, list(pending.events)
 
     def process_decode_output_host(self, tt_out: Any, *, is_tokens: bool = False) -> tuple[Any, Any]:
@@ -657,7 +783,10 @@ class DecodeRuntime:
         """Synchronize and release every outstanding externally owned output."""
 
         failures = []
-        for lease in tuple(self._external_by_raw_id.values()):
+        leases = {
+            id(lease): lease for lease in (*self._external_by_raw_id.values(), *self._external_by_host_id.values())
+        }
+        for lease in tuple(leases.values()):
             try:
                 if lease.pending is None:
                     ttnn.synchronize_device(self.config.mesh_device)
@@ -666,6 +795,15 @@ class DecodeRuntime:
                 failures.append(error)
         if failures:
             raise_cleanup_failures(failures)
+
+    def ensure_trace_safe(self) -> None:
+        """Reject replay until raw trace output is copied and eager buffers are released."""
+
+        self._ensure_usable()
+        if self._external_by_raw_id:
+            raise RuntimeError("read outstanding decode outputs before trace replay")
+        if any(lease.owned_values is not None for lease in self._external_by_host_id.values()):
+            raise RuntimeError("complete eager decode readback before trace replay")
 
     def cleanup_transients(self) -> None:
         """Retry every transient tensor release that previously failed."""
@@ -715,8 +853,11 @@ class DecodeRuntime:
             device_feedback=prepared.device_feedback,
         )
 
-    def _note_submitted(self, prepared: PreparedDecode) -> None:
+    def _note_submitted(self, prepared: PreparedDecode, *, feedback: bool | None = None) -> None:
         self._previous_page_table = prepared.page_table.clone()
+        self._resident_feedback = prepared.device_feedback if feedback is None else feedback
+        if prepared.prepared_sampling is not None:
+            self._resident_sampling = dataclasses.replace(prepared.prepared_sampling, slot_remap=None)
 
     def _normalize_host_output(self, host_output: Any, *, is_tokens: bool) -> tuple[Any, Any]:
         if isinstance(host_output, tuple):
@@ -729,6 +870,23 @@ class DecodeRuntime:
             tokens = _process_output_tokens(output, self.config.lane_capacity, self.config.cluster_shape)
             return tokens.to(torch.int64), _process_sampled_log_probs(log_probs, self.config.lane_capacity)
         return self._convert_logits(output), log_probs
+
+    def _normalize_scheduler_page_table(self, page_table: torch.Tensor) -> torch.Tensor:
+        """Copy scheduler-owned block mappings without consulting host positions."""
+
+        layout = self.config.page_table_layout
+        width = min(int(page_table.shape[1]), layout.raw_capacity_width)
+        normalized = torch.zeros(
+            (int(page_table.shape[0]), layout.decode_width), dtype=torch.int32, device=page_table.device
+        )
+        normalized[:, :width] = page_table[:, :width].to(torch.int32)
+        return normalized
+
+    def _prepare_page_table_host(self, page_table: torch.Tensor):
+        mapper = ttnn.ShardTensor2dMesh(
+            self.config.mesh_device, dims=(None, None), mesh_shape=self.config.cluster_shape
+        )
+        return ttnn.from_torch(page_table, device=None, dtype=ttnn.int32, mesh_mapper=mapper)
 
     def _normalize_page_table(self, page_table, start_pos, *, allow_one_step_feedback_lag):
         layout = self.config.page_table_layout
@@ -836,7 +994,7 @@ class DecodeRuntime:
                 k=None if kpt is None else kpt[0],
                 p=None if kpt is None else kpt[1],
                 temp=None if kpt is None else kpt[2],
-                positions=prepared.start_pos,
+                positions=None if prepared.reload_inputs is False else prepared.start_pos,
                 tt_out_tok=None,
                 count_tokens=count_tokens,
                 advance_seeds=advance_seeds,
@@ -880,6 +1038,9 @@ class DecodeRuntime:
             raise RuntimeError("decode trace seed buffer handle changed after capture")
 
     def _refresh_sampling_seeds(self, prepared: PreparedDecode) -> None:
+        if prepared.reload_inputs is not None:
+            self._refresh_sampling_v1(prepared)
+            return
         if self._sampling_state_controller is not None:
             sampling = prepared.prepared_sampling
             if sampling is None:
@@ -919,6 +1080,91 @@ class DecodeRuntime:
         if prepared.sampling_path == "topk":
             manager.refresh(state, active_slots, positions=prepared.start_pos)
         else:
+            manager.restore_defaults(state)
+
+    def _validate_sampling_v1(self, prepared: PreparedDecode) -> None:
+        """Validate command effects without changing request-owned state."""
+
+        sampling = prepared.prepared_sampling
+        manager = self._seed_manager
+        state = self._seed_state
+        controller = self._sampling_state_controller
+        if sampling is not None:
+            if self._resident_sampling is None and not prepared.reload_sampling_params:
+                raise RuntimeError("initial device sampling requires reload_sampling_params=True")
+            if manager is None or state is None:
+                raise TypeError("version-1 device sampling requires a mutable Sampling1D seed buffer")
+            if controller is None and sampling.penalties_enabled:
+                raise ValueError("device penalties require a native sampling state controller; use host sampling")
+            active = tuple(slot for slot, enabled in enumerate(sampling.active_mask) if enabled)
+            projected_active = tuple(state.active)
+            if prepared.slot_remap is not None:
+                sources = tuple(int(slot) for slot in prepared.slot_remap)
+                moved_sources = {source for target, source in enumerate(sources) if target != source}
+                moved_targets = {target for target, source in enumerate(sources) if target != source}
+                cleared = moved_sources - moved_targets
+                projected_active = tuple(
+                    state.active[source] and target not in cleared for target, source in enumerate(sources)
+                )
+            if (
+                not prepared.reset_sampling_state
+                and tuple(slot for slot, enabled in enumerate(projected_active) if enabled) != active
+            ):
+                raise RuntimeError("sampling membership changed without reset_sampling_state=True")
+            if controller is not None:
+                controller._require_idle(self._sampling_state)
+                controller._validate_prepared(sampling)
+                if prepared.reset_sampling_state:
+                    controller._validate_prepared_history(sampling)
+                elif self._sampling_state.static_identity is None or not self._sampling_state.penalty_history_valid:
+                    raise RuntimeError("sampling state requires reset_sampling_state=True")
+                elif not prepared.reload_sampling_params and (
+                    controller.static_identity(sampling) != self._sampling_state.static_identity
+                ):
+                    raise RuntimeError("sampling parameters changed without reload_sampling_params=True")
+                elif prepared.reload_sampling_params:
+                    controller.validate_decode_history(self._sampling_state, sampling, slot_remap=prepared.slot_remap)
+
+    def _refresh_sampling_v1(self, prepared: PreparedDecode) -> None:
+        """Apply independent reload commands before advancing one sample."""
+
+        self._validate_sampling_v1(prepared)
+        sampling = prepared.prepared_sampling
+        manager = self._seed_manager
+        state = self._seed_state
+        controller = self._sampling_state_controller
+        if prepared.slot_remap is not None:
+            if controller is not None:
+                controller.remap_slots(self._sampling_state, prepared.slot_remap)
+            elif manager is not None and state is not None:
+                manager.apply_slot_remap(state, prepared.slot_remap)
+            if self._resident_sampling is not None:
+                self._resident_sampling = _remap_sampling_params(self._resident_sampling, prepared.slot_remap)
+        if sampling is None:
+            # A host-sampling step must still move dormant request state.
+            return
+        sampling = dataclasses.replace(sampling, slot_remap=None)
+        active = tuple(slot for slot, enabled in enumerate(sampling.active_mask) if enabled)
+        assert manager is not None and state is not None
+        if prepared.reset_sampling_state:
+            if controller is not None:
+                controller.reset_decode_state(
+                    self._sampling_state, sampling, reload_params=prepared.reload_sampling_params
+                )
+            else:
+                manager.reset_decode(state, sampling.seeds, active)
+        else:
+            if tuple(slot for slot, enabled in enumerate(state.active) if enabled) != active:
+                raise RuntimeError("sampling membership changed without reset_sampling_state=True")
+            if prepared.reload_sampling_params:
+                manager.reload_request_seeds(state, sampling.seeds, active)
+            if controller is not None:
+                controller.configure_decode(
+                    self._sampling_state, sampling, reload_params=prepared.reload_sampling_params
+                )
+        if sampling.sampling_path == "topk":
+            manager.refresh(state, active, positions=prepared.start_pos if prepared.reload_inputs else None)
+        elif prepared.reload_sampling_params or prepared.reset_sampling_state:
             manager.restore_defaults(state)
 
     def _reset_compile_only_sampling_state(self) -> None:
@@ -990,6 +1236,8 @@ class DecodeRuntime:
             raise TypeError("prepared must be a PreparedDecode")
 
     def _ensure_usable(self):
+        if self._submission_failed:
+            raise RuntimeError("Decode submission failed; clean up and recreate this runtime before further execution")
         if self._transient_orphans:
             raise RuntimeError("DecodeRuntime has unreleased transient resources; clean up this runtime")
 
@@ -1007,7 +1255,8 @@ class DecodeRuntime:
         if failures:
             raise_cleanup_failures(failures)
         lease.released = True
-        self._external_by_raw_id.pop(id(lease.raw_value), None)
+        if self._external_by_raw_id.get(id(lease.raw_value)) is lease:
+            self._external_by_raw_id.pop(id(lease.raw_value), None)
         if lease.host_value is not None:
             self._external_by_host_id.pop(id(lease.host_value), None)
 
@@ -1017,6 +1266,60 @@ class DecodeRuntime:
         if failures:
             self._transient_orphans.append(orphan)
         return failures
+
+
+def _validate_reload_commands(
+    reload_inputs, reload_page_table, reload_sampling_params, reset_sampling_state, reset_batch
+):
+    if reload_inputs is not None and not isinstance(reload_inputs, bool):
+        raise TypeError("reload_inputs must be bool or None")
+    for name, value in (
+        ("reload_page_table", reload_page_table),
+        ("reload_sampling_params", reload_sampling_params),
+        ("reset_sampling_state", reset_sampling_state),
+    ):
+        if not isinstance(value, bool):
+            raise TypeError(f"{name} must be bool")
+    if reload_inputs is None:
+        if reload_page_table or reload_sampling_params or reset_sampling_state:
+            raise ValueError("reload commands require an explicit reload_inputs value")
+        return
+    if reset_batch:
+        raise ValueError("reset_batch cannot be combined with version-1 reload commands")
+    if reload_inputs and reload_page_table:
+        raise ValueError("reload_inputs and reload_page_table are mutually exclusive")
+    if reset_sampling_state and not reload_inputs:
+        raise ValueError("reset_sampling_state requires reload_inputs=True")
+
+
+def _remap_sampling_params(sampling: PreparedSamplingParams, remap) -> PreparedSamplingParams | None:
+    sources = tuple(int(slot) for slot in remap)
+    moved_sources = {source for target, source in enumerate(sources) if target != source}
+    moved_targets = {target for target, source in enumerate(sources) if target != source}
+    cleared = moved_sources - moved_targets
+    updates = {}
+    for name in (
+        "top_k",
+        "top_p",
+        "temperature",
+        "presence_penalty",
+        "frequency_penalty",
+        "repetition_penalty",
+        "seeds",
+        "enable_log_probs",
+        "num_logprobs",
+        "logprob_modes",
+        "greedy_mask",
+        "row_paths",
+        "active_mask",
+    ):
+        values = getattr(sampling, name)
+        updates[name] = tuple(values[source] for source in sources)
+    updates["active_mask"] = tuple(active and slot not in cleared for slot, active in enumerate(updates["active_mask"]))
+    active_rows = sum(updates["active_mask"])
+    if not active_rows:
+        return None
+    return dataclasses.replace(sampling, **updates, active_rows=active_rows, slot_remap=None)
 
 
 def _persistent_values(value: Any) -> DecodePersistentInputs:
@@ -1092,6 +1395,12 @@ def _normalize_decode_slot_remap(
     else:
         raise TypeError("decode slot_remap must be a tensor or sequence")
     if length == int(sampling_batch_size):
+        sources = [int(source) for source in flat]
+        if any(source < 0 or source >= int(sampling_batch_size) for source in sources):
+            raise ValueError("decode slot_remap contains a source outside the sampler capacity")
+        moved_sources = [source for target, source in enumerate(sources) if target != source]
+        if len(set(moved_sources)) != len(moved_sources):
+            raise ValueError("slot remap cannot copy one seed stream into multiple destinations")
         return value
     if length != int(lane_capacity):
         raise ValueError(
