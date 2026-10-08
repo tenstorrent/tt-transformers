@@ -160,6 +160,10 @@ def server_selection(manifest: dict[str, Any]) -> str:
 # PCIe devices, and on Wormhole an N300 card is one PCIe device with two chips, so
 # the mesh size comes from the platform, not from counting visible devices.
 TILE_SIZE = 32
+# vLLM aborts in-flight engine work on SIGINT unless given a drain window, and the
+# engine core is then killed with its mesh open. The runner waits 60 s after SIGINT
+# before escalating, so a 30 s drain lets the engine close its devices first.
+SERVER_SHUTDOWN_TIMEOUT_SECONDS = 30
 PLATFORM_MESH_DEVICES = {
     "N150": 1,
     "P100": 1,
@@ -825,6 +829,8 @@ def expected_server_argv(expectations: dict[str, Any], manifest: dict[str, Any],
         str(manifest["max_model_len"]),
         "--block-size",
         str(manifest["block_size"]),
+        "--shutdown-timeout",
+        str(SERVER_SHUTDOWN_TIMEOUT_SECONDS),
         "--data-parallel-size",
         str(manifest["dp"]),
         "--max_num_seqs",
