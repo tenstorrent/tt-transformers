@@ -46,6 +46,7 @@ REQUIRED_MODULES = (
     "tt_transformers.device_utils",
     "tt_transformers.mesh_utils",
     "tt_transformers.tensor_utils",
+    "tt_transformers.vllm_registry",
     "tt_transformers.modules",
     "tt_transformers.modules.attention.attention_1d",
     "tt_transformers.modules.embedding.embedding_1d",
