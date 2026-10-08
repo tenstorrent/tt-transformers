@@ -24,8 +24,9 @@ from __future__ import annotations
 
 import importlib
 from dataclasses import dataclass
-from pathlib import PurePosixPath
 from typing import Any, ClassVar
+
+from tt_transformers.cache_environment import hf_repo_id
 
 __all__ = [
     "GeneratorEntry",
@@ -60,28 +61,7 @@ def _entry(hf_id: str, package: str, class_name: str) -> GeneratorEntry:
     return GeneratorEntry(hf_id, package, f"tt_transformers.models.{package}.vllm_generator:{class_name}")
 
 
-def resolve_hf_id(name_or_path: str | None) -> str | None:
-    """Return the Hugging Face id that ``name_or_path`` names, or ``None``.
-
-    Two spellings are recognised: the id itself (``org/name``), and a snapshot
-    directory of the Hugging Face cache (``.../models--org--name/snapshots/<rev>``),
-    which is what ``_name_or_path`` holds when a checkpoint is loaded from the
-    cache by path. Any other path does not identify a checkpoint and returns
-    ``None``.
-    """
-
-    if not name_or_path:
-        return None
-    text = str(name_or_path)
-    parts = PurePosixPath(text).parts
-    if len(parts) >= 3 and parts[-2] == "snapshots" and parts[-3].startswith("models--"):
-        repo = parts[-3][len("models--") :].split("--")
-        if len(repo) == 2 and all(repo):
-            return "/".join(repo)
-        return None
-    if text.count("/") == 1 and not text.startswith(("/", ".", "~")) and all(text.split("/")):
-        return text
-    return None
+resolve_hf_id = hf_repo_id
 
 
 # Boolean capabilities read by the plugin from the registered class before the

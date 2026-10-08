@@ -19,6 +19,7 @@ from tt_transformers.cache_environment import (
     environment_flag,
     environment_int,
     environment_value,
+    hf_model_name,
     offline_mode,
     report_model_preflight,
     resolve_model_cache,
@@ -520,7 +521,7 @@ def _load_model(
     hf_model = resolve_hf_model_id(hf_model)
     hf_revision = _resolve_hf_revision(hf_model, hf_revision)
     if instruct is None:
-        instruct = "Instruct" in Path(hf_model).name
+        instruct = "Instruct" in hf_model_name(hf_model)
 
     hf_config = AutoConfig.from_pretrained(
         hf_model,
@@ -528,7 +529,7 @@ def _load_model(
         local_files_only=offline_mode(),
     )
     text_config = hf_config.to_dict()
-    model_name = Path(hf_model).name
+    model_name = hf_model_name(hf_model)
     tokenizer = load_tokenizer(hf_model, hf_revision=hf_revision)
     num_hidden_layers = n_layers if n_layers is not None else text_config["num_hidden_layers"]
 
