@@ -70,6 +70,7 @@ class ExpectationsContractTest(unittest.TestCase):
                         "tokenizer_revision": "a" * 40,
                         "max_model_len": 4096,
                         "max_num_seqs_per_rank": 32,
+                        "block_size": 64,
                         "async_scheduling": True,
                         "prefix_caching": True,
                         "cache_root": "/tmp/unit-cache",
@@ -362,6 +363,17 @@ class ExpectationsContractTest(unittest.TestCase):
         self.assertEqual(self.validate(document).errors, [])
         self.manifest(document)["dp"] = 3
         self.assertTrue(any("divide evenly" in error for error in self.validate(document).errors))
+
+    def test_block_size_is_required_and_tile_aligned(self) -> None:
+        document = copy.deepcopy(self.expectations)
+        del self.manifest(document)["block_size"]
+        self.assertTrue(any("block_size" in e for e in self.validate(document).errors))
+        for value in (16, 48, 0):
+            with self.subTest(value=value):
+                self.manifest(document)["block_size"] = value
+                self.assertTrue(any("block_size" in e for e in self.validate(document).errors))
+        self.manifest(document)["block_size"] = 32
+        self.assertEqual(self.validate(document).errors, [])
 
     def test_wormhole_card_rows_count_chips_not_pcie_devices(self) -> None:
         # An N300 card is one PCIe device with two chips; a T3K is four such cards.

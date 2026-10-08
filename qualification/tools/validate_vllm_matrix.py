@@ -156,6 +156,7 @@ def server_selection(manifest: dict[str, Any]) -> str:
 # Device count of each MESH_DEVICE preset the plugin accepts. visible_devices lists
 # PCIe devices, and on Wormhole an N300 card is one PCIe device with two chips, so
 # the mesh size comes from the platform, not from counting visible devices.
+TILE_SIZE = 32
 PLATFORM_MESH_DEVICES = {
     "N150": 1,
     "P100": 1,
@@ -550,6 +551,7 @@ def validate_expectations_document(expectations: dict[str, Any], expectations_pa
                 "tokenizer_revision",
                 "max_model_len",
                 "max_num_seqs_per_rank",
+                "block_size",
                 "async_scheduling",
                 "prefix_caching",
                 "cache_root",
@@ -579,13 +581,19 @@ def validate_expectations_document(expectations: dict[str, Any], expectations_pa
         validation.require(
             manifest.get("trace_mode") in ("decode_only", "all"), f"{row_id}: trace_mode must be decode_only/all"
         )
-        for key in ("trace_region_size", "max_model_len", "max_num_seqs_per_rank"):
+        for key in ("trace_region_size", "max_model_len", "max_num_seqs_per_rank", "block_size"):
             validation.require(
                 isinstance(manifest.get(key), int)
                 and not isinstance(manifest.get(key), bool)
                 and manifest.get(key, 0) > 0,
                 f"{row_id}: manifest.{key} must be a positive integer",
             )
+        # The paged KV block is the SDPA chunk unit on device, which must be a whole
+        # number of 32-wide tiles; vLLM's own default (16) fails at warmup.
+        validation.require(
+            isinstance(manifest.get("block_size"), int) and manifest.get("block_size", 0) % TILE_SIZE == 0,
+            f"{row_id}: manifest.block_size must be a multiple of {TILE_SIZE}",
+        )
         for key in ("async_scheduling", "prefix_caching"):
             validation.require(type(manifest.get(key)) is bool, f"{row_id}: manifest.{key} must be boolean")
         expected_traces = row.get("expected_traces")
@@ -800,6 +808,8 @@ def expected_server_argv(expectations: dict[str, Any], manifest: dict[str, Any],
         str(contract["port"]),
         "--max-model-len",
         str(manifest["max_model_len"]),
+        "--block-size",
+        str(manifest["block_size"]),
         "--data-parallel-size",
         str(manifest["dp"]),
         "--max_num_seqs",

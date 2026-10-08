@@ -641,6 +641,7 @@ server_argv = [
     execution["python"], "-m", "vllm.entrypoints.openai.api_server", "--model", manifest["model"],
     "--revision", manifest["revision"], "--tokenizer-revision", manifest["tokenizer_revision"],
     "--host", host, "--port", port, "--max-model-len", str(manifest["max_model_len"]),
+    "--block-size", str(manifest["block_size"]),
     "--data-parallel-size", str(manifest["dp"]), "--max_num_seqs", str(manifest["max_num_seqs_per_rank"]),
     "--additional-config", json.dumps({"tt": tt}, separators=(",", ":")),
 ]
