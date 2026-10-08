@@ -592,7 +592,7 @@ import pathlib
 import re
 import sys
 patterns = (
-    re.compile(r"\bERROR\b", re.I), re.compile(r"\bCRITICAL\b", re.I),
+    re.compile(r"\bERROR\b"), re.compile(r"\|\s*error\s*\|", re.I), re.compile(r"\bCRITICAL\b", re.I),
     re.compile(r"Traceback"), re.compile(r"RuntimeError"), re.compile(r"EngineDead", re.I),
     re.compile(r"index_cpu", re.I), re.compile(r"sampled[- ]token[^\n]*(?:shape|dtype)", re.I),
     re.compile(r"invalid[- ]token", re.I), re.compile(r"SIGKILL", re.I),
@@ -652,10 +652,11 @@ server_env.update(manifest["server_env"])
 server_env.update({
     "MESH_DEVICE": manifest["platform"], "HF_MODEL": manifest["model"],
     "HF_HOME": data["hf_cache"]["hf_home"], "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1", "TOKENIZERS_PARALLELISM": "false",
-    "TT_VISIBLE_DEVICES": ",".join(str(value) for value in manifest["visible_devices"]),
 })
 if manifest.get("cache_root"):
     server_env["TT_CACHE_PATH"] = manifest["cache_root"]
+if "visible_devices" in manifest:
+    server_env["TT_VISIBLE_DEVICES"] = ",".join(str(value) for value in manifest["visible_devices"])
 record = {"schema_version": 1, "server": {"kind": "process", "cwd": execution["plugin_dir"], "argv": server_argv, "env": server_env}}
 if tier == "benchmark":
     common = data["common"]

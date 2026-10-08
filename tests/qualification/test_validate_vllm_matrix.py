@@ -375,6 +375,25 @@ class ExpectationsContractTest(unittest.TestCase):
         self.manifest(document)["block_size"] = 32
         self.assertEqual(self.validate(document).errors, [])
 
+    def test_visible_devices_may_be_omitted_for_a_known_platform(self) -> None:
+        document = copy.deepcopy(self.expectations)
+        manifest = self.manifest(document)
+        del manifest["visible_devices"]
+        manifest.update({"platform": "N300"})
+        self.assertEqual(self.validate(document).errors, [])
+        del manifest["fabric_config"]
+        self.assertTrue(any("2 devices per data-parallel rank" in e for e in self.validate(document).errors))
+        manifest.update({"platform": "custom", "fabric_config": "FABRIC_1D"})
+        self.assertTrue(any("omitted only for a known platform" in e for e in self.validate(document).errors))
+
+    def test_failure_patterns_match_log_levels_not_compiler_flags(self) -> None:
+        def hits(line: str) -> bool:
+            return any(pattern.search(line) for pattern in validator.FAILURE_PATTERNS)
+
+        self.assertFalse(hits("riscv-tt-elf-g++ -O3 -Wall -Werror -Wno-error=deprecated-declarations"))
+        self.assertTrue(hits("(EngineCore pid=1) ERROR 10-08 19:56:15 [core.py:1374] Traceback"))
+        self.assertTrue(hits("2026-10-08 19:56:15.030 | error    |      Metal | something failed"))
+
     def test_wormhole_card_rows_count_chips_not_pcie_devices(self) -> None:
         # An N300 card is one PCIe device with two chips; a T3K is four such cards.
         for platform, visible, dp, per_rank in (

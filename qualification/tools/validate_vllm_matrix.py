@@ -18,7 +18,10 @@ from pathlib import Path
 from typing import Any
 
 FAILURE_PATTERNS = (
-    re.compile(r"\bERROR\b", re.IGNORECASE),
+    # Log levels only: vLLM and loguru write ERROR, tt-metal writes "| error |".
+    # A case-insensitive word match would also hit JIT compile lines ("-Wno-error=").
+    re.compile(r"\bERROR\b"),
+    re.compile(r"\|\s*error\s*\|", re.IGNORECASE),
     re.compile(r"\bCRITICAL\b", re.IGNORECASE),
     re.compile(r"Traceback"),
     re.compile(r"RuntimeError"),
@@ -196,12 +199,15 @@ def visible_devices_split(manifest: dict[str, Any]) -> bool:
 
 def devices_per_rank(manifest: dict[str, Any]) -> int | None:
     """Return the mesh size each data-parallel rank opens, or None when it is undefined."""
-    if not visible_devices_split(manifest):
+    dp = manifest.get("dp")
+    if not isinstance(dp, int) or isinstance(dp, bool) or dp <= 0:
         return None
-    dp = manifest["dp"]
+    if "visible_devices" in manifest and not visible_devices_split(manifest):
+        return None
     mesh_devices = platform_mesh_devices(manifest.get("platform"))
     if mesh_devices is None:
-        return len(manifest["visible_devices"]) // dp
+        visible = manifest.get("visible_devices")
+        return len(visible) // dp if isinstance(visible, list) and visible else None
     if mesh_devices % dp:
         return None
     return mesh_devices // dp
@@ -555,10 +561,9 @@ def validate_expectations_document(expectations: dict[str, Any], expectations_pa
                 "async_scheduling",
                 "prefix_caching",
                 "cache_root",
-                "visible_devices",
                 "context_subcases",
             },
-            {"fabric_config"},
+            {"fabric_config", "visible_devices"},
             f"{row_id}: manifest",
             validation,
         )
@@ -620,20 +625,30 @@ def validate_expectations_document(expectations: dict[str, Any], expectations_pa
         validation.require(
             isinstance(dp, int) and not isinstance(dp, bool) and dp > 0, f"{row_id}: dp must be a positive integer"
         )
+        # visible_devices becomes TT_VISIBLE_DEVICES, which names PCIe devices. Omit it
+        # where a PCIe device carries chips the mesh needs (Wormhole N300 and T3K): the
+        # server then sees the whole host and opens the platform's mesh.
         visible = manifest.get("visible_devices")
-        validation.require(
-            isinstance(visible, list)
-            and bool(visible)
-            and all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in visible)
-            and len(visible) == len(set(visible)),
-            f"{row_id}: visible_devices must be a non-empty unique integer list",
-        )
-        per_rank = devices_per_rank(manifest)
-        if isinstance(visible, list) and visible and isinstance(dp, int) and not isinstance(dp, bool) and dp > 0:
+        if "visible_devices" in manifest:
             validation.require(
-                visible_devices_split(manifest),
-                f"{row_id}: visible_devices ({len(visible)}) must divide evenly across dp={dp}",
+                isinstance(visible, list)
+                and bool(visible)
+                and all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in visible)
+                and len(visible) == len(set(visible)),
+                f"{row_id}: visible_devices must be a non-empty unique integer list",
             )
+        else:
+            validation.require(
+                platform_mesh_devices(manifest.get("platform")) is not None,
+                f"{row_id}: visible_devices may be omitted only for a known platform",
+            )
+        per_rank = devices_per_rank(manifest)
+        if isinstance(dp, int) and not isinstance(dp, bool) and dp > 0:
+            if isinstance(visible, list) and visible:
+                validation.require(
+                    visible_devices_split(manifest),
+                    f"{row_id}: visible_devices ({len(visible)}) must divide evenly across dp={dp}",
+                )
             mesh_devices = platform_mesh_devices(manifest.get("platform"))
             validation.require(
                 mesh_devices is None or mesh_devices % dp == 0,
@@ -836,7 +851,8 @@ def expected_server_env(expectations: dict[str, Any], manifest: dict[str, Any]) 
     )
     if manifest.get("cache_root"):
         env["TT_CACHE_PATH"] = manifest["cache_root"]
-    env["TT_VISIBLE_DEVICES"] = ",".join(str(value) for value in manifest["visible_devices"])
+    if "visible_devices" in manifest:
+        env["TT_VISIBLE_DEVICES"] = ",".join(str(value) for value in manifest["visible_devices"])
     return env
 
 
