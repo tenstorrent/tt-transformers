@@ -363,6 +363,33 @@ class ExpectationsContractTest(unittest.TestCase):
         self.manifest(document)["dp"] = 3
         self.assertTrue(any("divide evenly" in error for error in self.validate(document).errors))
 
+    def test_wormhole_card_rows_count_chips_not_pcie_devices(self) -> None:
+        # An N300 card is one PCIe device with two chips; a T3K is four such cards.
+        for platform, visible, dp, per_rank in (
+            ("N300", [0], 1, 2),
+            ("T3K", [0, 1, 2, 3], 1, 8),
+            ("T3K", [0, 1, 2, 3], 4, 2),
+        ):
+            with self.subTest(platform=platform, dp=dp):
+                document = copy.deepcopy(self.expectations)
+                manifest = self.manifest(document)
+                del manifest["fabric_config"]
+                manifest.update({"platform": platform, "visible_devices": visible, "dp": dp})
+                errors = self.validate(document).errors
+                self.assertTrue(any(f"{per_rank} devices per data-parallel rank" in error for error in errors))
+
+    def test_platform_must_divide_across_dp(self) -> None:
+        document = copy.deepcopy(self.expectations)
+        self.manifest(document).update({"platform": "N300", "visible_devices": [0, 1], "dp": 2})
+        self.assertEqual(self.validate(document).errors, [])
+        self.manifest(document).update({"platform": "N150", "visible_devices": [0, 1], "dp": 2})
+        self.assertTrue(any("must divide evenly across dp=2" in e for e in self.validate(document).errors))
+
+    def test_mesh_shape_platform_counts_its_devices(self) -> None:
+        self.assertEqual(validator.platform_mesh_devices("(4, 8)"), 32)
+        self.assertEqual(validator.platform_mesh_devices("(1,2)"), 2)
+        self.assertIsNone(validator.platform_mesh_devices("unknown"))
+
     def test_single_device_row_without_fabric_config_is_accepted(self) -> None:
         document = copy.deepcopy(self.expectations)
         manifest = self.manifest(document)

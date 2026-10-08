@@ -153,15 +153,57 @@ def server_selection(manifest: dict[str, Any]) -> str:
     return "override" if MODEL_CLASS_OVERRIDES in manifest.get("server_env", {}) else "native"
 
 
-def devices_per_rank(manifest: dict[str, Any]) -> int | None:
-    """Return the mesh size each data-parallel rank opens, or None when it is undefined."""
+# Device count of each MESH_DEVICE preset the plugin accepts. visible_devices lists
+# PCIe devices, and on Wormhole an N300 card is one PCIe device with two chips, so
+# the mesh size comes from the platform, not from counting visible devices.
+PLATFORM_MESH_DEVICES = {
+    "N150": 1,
+    "P100": 1,
+    "P150": 1,
+    "N300": 2,
+    "P300": 2,
+    "P150x2": 2,
+    "N150x4": 4,
+    "P150x4": 4,
+    "P300x2": 4,
+    "T3K": 8,
+    "P150x8": 8,
+    "TG": 32,
+    "BH-Galaxy": 32,
+}
+MESH_SHAPE_PLATFORM = re.compile(r"\(\s*(\d+)\s*,\s*(\d+)\s*\)")
+
+
+def platform_mesh_devices(platform: Any) -> int | None:
+    """Return the number of devices a MESH_DEVICE value opens, or None when unknown."""
+    if not isinstance(platform, str):
+        return None
+    if platform in PLATFORM_MESH_DEVICES:
+        return PLATFORM_MESH_DEVICES[platform]
+    match = MESH_SHAPE_PLATFORM.fullmatch(platform.strip())
+    return int(match.group(1)) * int(match.group(2)) if match else None
+
+
+def visible_devices_split(manifest: dict[str, Any]) -> bool:
+    """Return whether visible_devices divides evenly across dp."""
     visible = manifest.get("visible_devices")
     dp = manifest.get("dp")
     if not isinstance(visible, list) or not visible or not isinstance(dp, int) or isinstance(dp, bool) or dp <= 0:
+        return False
+    return len(visible) % dp == 0
+
+
+def devices_per_rank(manifest: dict[str, Any]) -> int | None:
+    """Return the mesh size each data-parallel rank opens, or None when it is undefined."""
+    if not visible_devices_split(manifest):
         return None
-    if len(visible) % dp:
+    dp = manifest["dp"]
+    mesh_devices = platform_mesh_devices(manifest.get("platform"))
+    if mesh_devices is None:
+        return len(manifest["visible_devices"]) // dp
+    if mesh_devices % dp:
         return None
-    return len(visible) // dp
+    return mesh_devices // dp
 
 
 def validate_server_env(manifest: dict[str, Any], row_id: str, validation: Validation) -> None:
@@ -581,7 +623,13 @@ def validate_expectations_document(expectations: dict[str, Any], expectations_pa
         per_rank = devices_per_rank(manifest)
         if isinstance(visible, list) and visible and isinstance(dp, int) and not isinstance(dp, bool) and dp > 0:
             validation.require(
-                per_rank is not None, f"{row_id}: visible_devices ({len(visible)}) must divide evenly across dp={dp}"
+                visible_devices_split(manifest),
+                f"{row_id}: visible_devices ({len(visible)}) must divide evenly across dp={dp}",
+            )
+            mesh_devices = platform_mesh_devices(manifest.get("platform"))
+            validation.require(
+                mesh_devices is None or mesh_devices % dp == 0,
+                f"{row_id}: platform {manifest.get('platform')!r} ({mesh_devices} devices) must divide evenly across dp={dp}",
             )
         fabric_config = manifest.get("fabric_config")
         if "fabric_config" in manifest:
