@@ -58,17 +58,18 @@ omit ``serve`` from the stages:
         --model-dir models/autoports/<model_name> \\
         --hf-model <hf-model-id>
 
-To install vLLM, if not already present:
-1. Clone `https://github.com/tenstorrent/vllm.git`
-2. Switch to the `dev` branch
-3. Follow the Tenstorrent vLLM installation instructions for that checkout.
+To install vLLM, if not already present, clone
+`https://github.com/tenstorrent/vllm-tt-plugin.git` and follow its README; it
+installs upstream vLLM and the TT platform plugin into the active environment.
 
 Before invoking it, two things must already be true:
 
   1. `<model_dir>/tt/generator_vllm.py` exists and implements the model.
-  2. The model architecture is registered in the TT vLLM platform registry.
-     Without that registration vLLM will reject the architecture at startup with
-     "architecture not in TT registry".
+  2. The plugin can resolve the model class: either it registers the
+     architecture natively, or the server environment selects a class with
+     `TT_MODEL_CLASS_OVERRIDES=TT<Architecture>=module.path:ClassName` (always
+     the `TT`-prefixed architecture name). Without either, vLLM rejects the
+     architecture at startup.
 
 The launch command and env vars match `.github/workflows/vllm-nightly-tests-impl.yaml`.
 
@@ -171,18 +172,18 @@ _MESH_SHAPES: dict[str, tuple[int, int]] = {
 
 
 def _find_plugin_tests_dir() -> Path:
-    """Locate the TT vLLM pytest suite in either old plugin or in-tree layouts."""
+    """Locate the TT vLLM pytest suite in the plugin checkout or a vLLM checkout that carries it."""
     candidates: list[Path] = []
 
     plugin_spec = importlib.util.find_spec("vllm_tt_plugin")
     if plugin_spec is not None and plugin_spec.origin is not None:
-        # Old layout: <plugin_root>/src/vllm_tt_plugin/__init__.py
+        # Plugin checkout: <plugin_root>/src/vllm_tt_plugin/__init__.py
         plugin_root = Path(plugin_spec.origin).resolve().parent.parent.parent
         candidates.append(plugin_root / "tests" / "tt")
 
     vllm_spec = importlib.util.find_spec("vllm")
     if vllm_spec is not None and vllm_spec.origin is not None:
-        # Current Tenstorrent fork layout: <vllm_repo>/vllm/__init__.py
+        # vLLM checkout: <vllm_repo>/vllm/__init__.py
         vllm_repo = Path(vllm_spec.origin).resolve().parent.parent
         candidates.append(vllm_repo / "tests" / "tt")
 
@@ -221,8 +222,8 @@ def _launch_server(
     """
     Launch vLLM via `python -m vllm.entrypoints.openai.api_server`.
 
-    Mirrors `vllm-tt-plugin/examples/server_example_tt.py` (which is what the
-    nightly CI runs) but inlined — the example is just argv-munging + runpy.
+    TT options travel in vLLM's generic `--additional-config` under the `tt`
+    namespace, which is where the TT plugin reads them.
     """
     cmd: list[str] = [
         sys.executable,
@@ -242,7 +243,7 @@ def _launch_server(
     # Pass TT plugin config as a single JSON dict so JSON quoting can't be
     # mangled by intermediate shells. The dict already has
     # `sample_on_device_mode` enforced; callers extend via `tt_config`.
-    cmd += ["--plugin-config", json.dumps({"tt": tt_config})]
+    cmd += ["--additional-config", json.dumps({"tt": tt_config})]
     cmd += additional_args
 
     env = {
@@ -860,7 +861,7 @@ def _main() -> None:
         default="",
         help=(
             "Catch-all for other vLLM CLI args not covered by the typed flags. "
-            'Quoted, e.g. "--async-scheduling --tokenizer X". Avoid --plugin-config / '
+            'Quoted, e.g. "--async-scheduling --tokenizer X". Avoid --additional-config / '
             "--max_model_len here; use --tt-config / --max-model-len."
         ),
     )

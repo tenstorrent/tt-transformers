@@ -2,16 +2,16 @@
 # Canonical TTTv2 vLLM hardware qualification runner.
 #
 # Examples:
-#   ./tttv2_vllm_hardware_gate_runner.sh --tier smoke --expectations tttv2_llama3_8b_vllm_expectations_bh.json --artifact-root /tmp/smoke
-#   ./tttv2_vllm_hardware_gate_runner.sh --tier benchmark --expectations tttv2_qwen3_32b_vllm_expectations_bh.json --artifact-root /tmp/bench --row p150x4_dp1_decode_only --row p150x4_dp1_all
-#   ./tttv2_vllm_hardware_gate_runner.sh --tier quality --expectations tttv2_llama33_70b_vllm_expectations_bh.json --artifact-root /tmp/quality
-#   ./tttv2_vllm_hardware_gate_runner.sh --tier quality --expectations tttv2_llama33_70b_vllm_expectations_bh.json --artifact-root /tmp/quality --validate-only
+#   ./vllm_hardware_gate_runner.sh --tier smoke --expectations tttv2_llama3_8b_vllm_expectations_bh.json --artifact-root /tmp/smoke
+#   ./vllm_hardware_gate_runner.sh --tier benchmark --expectations tttv2_qwen3_32b_vllm_expectations_bh.json --artifact-root /tmp/bench --row p150x4_dp1_decode_only --row p150x4_dp1_all
+#   ./vllm_hardware_gate_runner.sh --tier quality --expectations tttv2_llama33_70b_vllm_expectations_bh.json --artifact-root /tmp/quality
+#   ./vllm_hardware_gate_runner.sh --tier quality --expectations tttv2_llama33_70b_vllm_expectations_bh.json --artifact-root /tmp/quality --validate-only
 
 set -u
 set -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-: "${VLLM_DIR:?set VLLM_DIR to the vLLM checkout}"
+: "${PLUGIN_DIR:?set PLUGIN_DIR to the vLLM TT plugin checkout}"
 : "${PY:?set PY to the qualified Python interpreter}"
 VALIDATOR=""
 RUNNER_PATH="$(realpath "$0")"
@@ -62,7 +62,10 @@ Selection and control:
 
 Environment overrides: HOST, PORT, HEALTH_TIMEOUT_SECONDS,
 RESET_TIMEOUT_SECONDS, and RESET_KILL_AFTER_SECONDS. Acceptance always uses
-reset. VLLM_DIR and PY must match W0; the validator is expectations-pinned.
+reset. PLUGIN_DIR and PY must match execution.plugin_dir and execution.python;
+the validator is expectations-pinned. The server is launched as
+"$PY -m vllm.entrypoints.openai.api_server"; the plugin installed in PY must be
+imported from PLUGIN_DIR.
 
 Quality runs create quality_review.json with each pair unaccepted. A human
 must review every decode_only/all pair, fill accepted/reviewer/note, and rerun
@@ -325,32 +328,22 @@ PY
 }
 check_hf_cache_and_ref || die "HF cache/revision/ref preflight failed"
 
-EXPECTED_VLLM_DIR="$($PY - "$EXPECTATIONS" <<'PY'
+EXPECTED_PLUGIN_DIR="$($PY - "$EXPECTATIONS" <<'PY'
 import json, sys
-print(json.load(open(sys.argv[1]))["execution"]["vllm_dir"])
+print(json.load(open(sys.argv[1]))["execution"]["plugin_dir"])
 PY
-)" || die "cannot read pinned vLLM path"
+)" || die "cannot read pinned plugin path"
 EXPECTED_PY="$($PY - "$EXPECTATIONS" <<'PY'
 import json, sys
 print(json.load(open(sys.argv[1]))["execution"]["python"])
 PY
 )" || die "cannot read pinned Python path"
-[[ "$VLLM_DIR" == "$EXPECTED_VLLM_DIR" ]] || die "VLLM_DIR differs from the W0-pinned execution path"
-[[ "$PY" == "$EXPECTED_PY" ]] || die "PY differs from the W0-pinned execution path"
-[[ -d "$VLLM_DIR/.git" ]] || die "vLLM checkout is missing: $VLLM_DIR"
-EXPECTED_SERVER_SCRIPT="$($PY - "$EXPECTATIONS" <<'PY'
-import json, sys
-print(json.load(open(sys.argv[1]))["execution"]["server_script"])
-PY
-)" || die "cannot read pinned server entrypoint"
-if [[ "$EXPECTED_SERVER_SCRIPT" = /* ]]; then
-    [[ -f "$EXPECTED_SERVER_SCRIPT" ]] || die "pinned server entrypoint is missing: $EXPECTED_SERVER_SCRIPT"
-else
-    [[ -f "$VLLM_DIR/$EXPECTED_SERVER_SCRIPT" ]] || die "pinned server entrypoint is missing beneath vLLM_DIR: $EXPECTED_SERVER_SCRIPT"
-fi
+[[ "$PLUGIN_DIR" == "$EXPECTED_PLUGIN_DIR" ]] || die "PLUGIN_DIR differs from the pinned execution.plugin_dir"
+[[ "$PY" == "$EXPECTED_PY" ]] || die "PY differs from the pinned execution.python"
+[[ -e "$PLUGIN_DIR/.git" ]] || die "vLLM TT plugin checkout is missing: $PLUGIN_DIR"
 TT_METAL_DIR="$(realpath "$SCRIPT_DIR/..")"
 [[ -z "$(git -C "$TT_METAL_DIR" status --porcelain --untracked-files=no)" ]] || die "tt-metal has tracked changes; pause before hardware"
-[[ -z "$(git -C "$VLLM_DIR" status --porcelain --untracked-files=no)" ]] || die "vLLM has tracked changes; zero-code-change qualification requires a clean checkout"
+[[ -z "$(git -C "$PLUGIN_DIR" status --porcelain --untracked-files=no)" ]] || die "vLLM TT plugin has tracked changes; zero-code-change qualification requires a clean checkout"
 for required_command in curl timeout tt-smi ps awk sha256sum setsid flock git find; do
     command -v "$required_command" >/dev/null 2>&1 || die "required command is missing: $required_command"
 done
@@ -360,6 +353,21 @@ path = pathlib.Path(sys.argv[1])
 compile(path.read_text(), str(path), "exec")
 PY
 "$PY" "$VALIDATOR" --expectations "$EXPECTATIONS" --check-expectations || die "expectations schema preflight failed"
+
+# The recorded plugin HEAD only describes the server if PY imports the plugin
+# from that checkout.
+check_plugin_install() {
+    "$PY" - "$PLUGIN_DIR" <<'PY'
+import importlib.util, pathlib, sys
+plugin_dir = pathlib.Path(sys.argv[1]).resolve()
+for name in ("vllm", "vllm_tt_plugin"):
+    if importlib.util.find_spec(name) is None:
+        raise SystemExit(f"{name} is not importable from this Python environment")
+origin = pathlib.Path(importlib.util.find_spec("vllm_tt_plugin").origin).resolve()
+if not origin.is_relative_to(plugin_dir):
+    raise SystemExit(f"vllm_tt_plugin is imported from {origin}, not from {plugin_dir}")
+PY
+}
 
 # Only these ambient values can cross the env -i boundary. Every other server
 # and client value is constructed from the frozen expectations document.
@@ -397,17 +405,18 @@ PY
 }
 if ((!DRY_RUN)) && ((!VALIDATE_ONLY)) && (( ${#AGGREGATE_ROOTS[@]} == 0 )); then
     preflight_cache_roots || die "cache-root preflight failed"
+    check_plugin_install || die "vLLM TT plugin install preflight failed"
 fi
 
 write_run_contract() {
     local destination="$1" scope="$2" host="$3" port="$4"
-    "$PY" - "$EXPECTATIONS" "$destination" "$TIER" "$scope" "$host" "$port" "$TT_DEVICE_RECOVERY_MODE" "$RUNNER_PATH" "$VALIDATOR" "$VLLM_DIR" "$BASE_ENV_JSON" "$ROOT" "${SELECTED_ROWS[@]}" <<'PY'
+    "$PY" - "$EXPECTATIONS" "$destination" "$TIER" "$scope" "$host" "$port" "$TT_DEVICE_RECOVERY_MODE" "$RUNNER_PATH" "$VALIDATOR" "$PLUGIN_DIR" "$BASE_ENV_JSON" "$ROOT" "${SELECTED_ROWS[@]}" <<'PY'
 import json
 import pathlib
 import subprocess
 import sys
 import hashlib
-source, destination, tier, scope, host, port, recovery_mode, runner, validator, vllm_dir, base_env_raw, root_raw, *selected = sys.argv[1:]
+source, destination, tier, scope, host, port, recovery_mode, runner, validator, plugin_dir, base_env_raw, root_raw, *selected = sys.argv[1:]
 data = json.load(open(source))
 def digest(path): return hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
 def repository(path):
@@ -416,7 +425,7 @@ def repository(path):
     status = subprocess.check_output(["git", "-C", root, "status", "--porcelain", "--untracked-files=no"], text=True)
     return {"path": str(pathlib.Path(root).resolve()), "head": head, "dirty": bool(status), "tracked_status": status.splitlines()}
 root = pathlib.Path(root_raw)
-repositories = {"tt_metal": repository(str(pathlib.Path(runner).parent.parent)), "vllm": repository(vllm_dir)}
+repositories = {"tt_metal": repository(str(pathlib.Path(runner).parent.parent)), "vllm_tt_plugin": repository(plugin_dir)}
 record = {
     "schema_version": 2,
     "tier": tier,
@@ -432,7 +441,7 @@ record = {
     "tt_device_recovery_mode": recovery_mode,
     "base_env": json.loads(base_env_raw),
     "tested_code_sha": repositories["tt_metal"]["head"],
-    "vllm_sha": repositories["vllm"]["head"],
+    "plugin_sha": repositories["vllm_tt_plugin"]["head"],
     "repositories": repositories,
     "tools": {"runner": {"path": runner, "sha256": digest(runner)}, "validator": {"path": validator, "sha256": digest(validator)}},
     "inputs": data["provenance"],
@@ -448,7 +457,7 @@ PY
 
 list_vllm_processes() {
     ps -eo pid=,pgid=,stat=,args= | awk '
-        /plugins\/vllm-tt-plugin\/examples\/server_example_tt.py|vllm\.entrypoints\.cli\.main (bench )?serve|(^|[[:space:]])vllm serve([[:space:]]|$)|vllm\.entrypoints\.openai\.api_server|EngineCore|python.*multiprocessing\.(spawn|resource_tracker)|ray::.*[vV][lL][lL][mM]|[vV][lL][lL][mM].*[wW]orker|[wW]orker.*[vV][lL][lL][mM]/ &&
+        /vllm\.entrypoints\.cli\.main (bench )?serve|(^|[[:space:]])vllm serve([[:space:]]|$)|vllm\.entrypoints\.openai\.api_server|VLLM::|EngineCore|python.*multiprocessing\.(spawn|resource_tracker)|ray::.*[vV][lL][lL][mM]|[vV][lL][lL][mM].*[wW]orker|[wW]orker.*[vV][lL][lL][mM]/ &&
         $0 !~ /awk/ {print}
     '
 }
@@ -558,7 +567,8 @@ import pathlib
 import sys
 row, destination, tier, status, error_hits = sys.argv[1:]
 record = dict(json.loads(row)["manifest"])
-record.update({"tier": tier, "row_id": json.loads(row)["id"], "status": status, "error_hits": int(error_hits)})
+selection = "override" if "TT_MODEL_CLASS_OVERRIDES" in record["server_env"] else "native"
+record.update({"tier": tier, "row_id": json.loads(row)["id"], "status": status, "error_hits": int(error_hits), "selection": selection})
 target = pathlib.Path(destination)
 temporary = target.with_suffix(target.suffix + ".tmp")
 temporary.write_text(json.dumps(record, indent=2) + "\n")
@@ -625,10 +635,10 @@ manifest = row["manifest"]
 execution = data["execution"]
 base_env = json.loads(base_env_raw)
 tt = {"trace_mode": manifest["trace_mode"], "trace_region_size": manifest["trace_region_size"], "sample_on_device_mode": manifest["sample_on_device_mode"]}
-if manifest.get("fabric_config") is not None:
+if "fabric_config" in manifest:
     tt["fabric_config"] = manifest["fabric_config"]
 server_argv = [
-    execution["python"], execution["server_script"], "--model", manifest["model"],
+    execution["python"], "-m", "vllm.entrypoints.openai.api_server", "--model", manifest["model"],
     "--revision", manifest["revision"], "--tokenizer-revision", manifest["tokenizer_revision"],
     "--host", host, "--port", port, "--max-model-len", str(manifest["max_model_len"]),
     "--data-parallel-size", str(manifest["dp"]), "--max_num_seqs", str(manifest["max_num_seqs_per_rank"]),
@@ -637,14 +647,15 @@ server_argv = [
 server_argv.append("--async-scheduling" if manifest["async_scheduling"] else "--no-async-scheduling")
 server_argv.append("--enable-prefix-caching" if manifest["prefix_caching"] else "--no-enable-prefix-caching")
 server_env = dict(base_env)
+server_env.update(manifest["server_env"])
 server_env.update({
-    "MESH_DEVICE": manifest["platform"], "HF_MODEL": manifest["model"], manifest["family_var"]: manifest["family_version"],
+    "MESH_DEVICE": manifest["platform"], "HF_MODEL": manifest["model"],
     "HF_HOME": data["hf_cache"]["hf_home"], "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1", "TOKENIZERS_PARALLELISM": "false",
     "TT_VISIBLE_DEVICES": ",".join(str(value) for value in manifest["visible_devices"]),
 })
 if manifest.get("cache_root"):
     server_env["TT_CACHE_PATH"] = manifest["cache_root"]
-record = {"schema_version": 1, "server": {"kind": "process", "cwd": execution["vllm_dir"], "argv": server_argv, "env": server_env}}
+record = {"schema_version": 1, "server": {"kind": "process", "cwd": execution["plugin_dir"], "argv": server_argv, "env": server_env}}
 if tier == "benchmark":
     common = data["common"]
     client_argv = [
@@ -659,7 +670,7 @@ if tier == "benchmark":
     ]
     client_env = dict(base_env)
     client_env.update({"HF_HOME": data["hf_cache"]["hf_home"], "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1", "TOKENIZERS_PARALLELISM": "false"})
-    record["client"] = {"kind": "process", "cwd": execution["vllm_dir"], "argv": client_argv, "env": client_env}
+    record["client"] = {"kind": "process", "cwd": execution["plugin_dir"], "argv": client_argv, "env": client_env}
     context_program = r'''import json,pathlib,sys,urllib.request
 spec=json.loads(sys.argv[1]); host=sys.argv[2]; port=sys.argv[3]; model=sys.argv[4]; output=pathlib.Path(sys.argv[5])
 def call(prompt):
@@ -677,7 +688,7 @@ output.write_text(json.dumps({"schema_version":1,"subcase":spec,"calls":calls},i
         kind = subcase["kind"]
         result_path = pathlib.Path(case_dir_raw) / "context_subcases" / kind / "result.json"
         context_clients[kind] = {
-            "kind": "process", "cwd": execution["vllm_dir"], "env": client_env,
+            "kind": "process", "cwd": execution["plugin_dir"], "env": client_env,
             "argv": [execution["python"], "-c", context_program, json.dumps(subcase, separators=(",", ":")), host, port, manifest["model"], str(result_path)],
         }
     record["context_clients"] = context_clients
@@ -898,7 +909,7 @@ contract = {
     "tt_device_recovery_mode": "reset",
     **shared_provenance,
     "tested_code_sha": shared_provenance["repositories"]["tt_metal"]["head"],
-    "vllm_sha": shared_provenance["repositories"]["vllm"]["head"],
+    "plugin_sha": shared_provenance["repositories"]["vllm_tt_plugin"]["head"],
     "launch_sha256_by_row": {row_id: launch_hash_by_row[row_id] for row_id in canonical},
     "resolved_cache_roots": {row_id: json.loads((destination / row_id / "manifest.json").read_text())["cache_root"] for row_id in canonical},
 }

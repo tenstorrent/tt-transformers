@@ -53,6 +53,32 @@ BENCHMARK_METRICS = {
 }
 THROUGHPUT_METRICS = {"request_throughput", "output_throughput", "total_token_throughput"}
 LATENCY_METRICS = {"median_ttft_ms", "p99_ttft_ms", "median_tpot_ms", "p99_tpot_ms"}
+SERVER_MODULE = "vllm.entrypoints.openai.api_server"
+# Variables the harness sets itself; a row's server_env may not redefine them.
+RESERVED_SERVER_ENV = {
+    "PATH",
+    "HOME",
+    "LD_LIBRARY_PATH",
+    "TT_METAL_HOME",
+    "PYTHONNOUSERSITE",
+    "MESH_DEVICE",
+    "HF_MODEL",
+    "HF_HOME",
+    "HF_HUB_OFFLINE",
+    "TRANSFORMERS_OFFLINE",
+    "TOKENIZERS_PARALLELISM",
+    "TT_CACHE_PATH",
+    "TT_VISIBLE_DEVICES",
+}
+SERVER_ENV_KEY = re.compile(r"[A-Z][A-Z0-9_]*")
+MODEL_CLASS_OVERRIDES = "TT_MODEL_CLASS_OVERRIDES"
+# vLLM resolves the TT-prefixed architecture name; an entry keyed on the bare
+# checkpoint name does not select the class.
+MODEL_CLASS_OVERRIDE_ENTRY = re.compile(
+    r"TT[A-Za-z0-9_]+=[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*:[A-Za-z_][A-Za-z0-9_]*"
+)
+# The plugin resolves fabric_config by ttnn.FabricConfig member name.
+FABRIC_CONFIG_NAME = re.compile(r"[A-Z][A-Z0-9_]*")
 CONTEXT_CLIENT_PROGRAM = r"""import json,pathlib,sys,urllib.request
 spec=json.loads(sys.argv[1]); host=sys.argv[2]; port=sys.argv[3]; model=sys.argv[4]; output=pathlib.Path(sys.argv[5])
 def call(prompt):
@@ -120,6 +146,47 @@ def validate_process_spec(spec: Any, name: str, validation: Validation) -> None:
         isinstance(env, dict) and all(isinstance(k, str) and k and isinstance(v, str) for k, v in env.items()),
         f"{name}.env must be a complete string map",
     )
+
+
+def server_selection(manifest: dict[str, Any]) -> str:
+    """Return how a row selects its TT model class: native registration or an override."""
+    return "override" if MODEL_CLASS_OVERRIDES in manifest.get("server_env", {}) else "native"
+
+
+def devices_per_rank(manifest: dict[str, Any]) -> int | None:
+    """Return the mesh size each data-parallel rank opens, or None when it is undefined."""
+    visible = manifest.get("visible_devices")
+    dp = manifest.get("dp")
+    if not isinstance(visible, list) or not visible or not isinstance(dp, int) or isinstance(dp, bool) or dp <= 0:
+        return None
+    if len(visible) % dp:
+        return None
+    return len(visible) // dp
+
+
+def validate_server_env(manifest: dict[str, Any], row_id: str, validation: Validation) -> None:
+    server_env = manifest.get("server_env")
+    validation.require(
+        isinstance(server_env, dict) and all(isinstance(v, str) for v in server_env.values()),
+        f"{row_id}: manifest.server_env must be a string-to-string object",
+    )
+    if not isinstance(server_env, dict):
+        return
+    for key in server_env:
+        validation.require(
+            isinstance(key, str)
+            and SERVER_ENV_KEY.fullmatch(key) is not None
+            and key not in RESERVED_SERVER_ENV
+            and not key.startswith("DISABLE_"),
+            f"{row_id}: manifest.server_env key {key!r} is unsafe or reserved",
+        )
+    if MODEL_CLASS_OVERRIDES in server_env:
+        entries = [entry.strip() for entry in str(server_env[MODEL_CLASS_OVERRIDES]).split(",")]
+        validation.require(
+            all(MODEL_CLASS_OVERRIDE_ENTRY.fullmatch(entry) for entry in entries),
+            f"{row_id}: manifest.server_env.{MODEL_CLASS_OVERRIDES} must be comma-separated "
+            "'TT<Architecture>=module.path:ClassName' entries",
+        )
 
 
 def validate_performance_thresholds(value: Any, row_id: str, validation: Validation) -> None:
@@ -214,17 +281,17 @@ def validate_expectations_document(expectations: dict[str, Any], expectations_pa
     execution = expectations.get("execution")
     validate_exact_fields(
         execution,
-        {"python", "vllm_dir", "server_script", "prompt", "validator"},
+        {"python", "plugin_dir", "prompt", "validator"},
         set(),
         "execution",
         validation,
     )
     if isinstance(execution, dict):
-        for key in ("python", "vllm_dir", "server_script", "prompt"):
+        for key in ("python", "plugin_dir", "prompt"):
             validation.require(
                 isinstance(execution.get(key), str) and bool(execution.get(key)), f"execution.{key} must be non-empty"
             )
-        for key in ("python", "vllm_dir"):
+        for key in ("python", "plugin_dir"):
             validation.require(
                 isinstance(execution.get(key), str) and Path(execution.get(key, "x")).is_absolute(),
                 f"execution.{key} must be absolute",
@@ -436,8 +503,7 @@ def validate_expectations_document(expectations: dict[str, Any], expectations_pa
                 "trace_mode",
                 "trace_region_size",
                 "sample_on_device_mode",
-                "family_var",
-                "family_version",
+                "server_env",
                 "revision",
                 "tokenizer_revision",
                 "max_model_len",
@@ -459,8 +525,6 @@ def validate_expectations_document(expectations: dict[str, Any], expectations_pa
             "platform",
             "trace_mode",
             "sample_on_device_mode",
-            "family_var",
-            "family_version",
             "revision",
             "tokenizer_revision",
         ):
@@ -468,29 +532,7 @@ def validate_expectations_document(expectations: dict[str, Any], expectations_pa
                 isinstance(manifest.get(key), str) and bool(manifest.get(key)),
                 f"{row_id}: manifest.{key} must be non-empty",
             )
-        family_var = manifest.get("family_var")
-        reserved_env = {
-            "PATH",
-            "HOME",
-            "LD_LIBRARY_PATH",
-            "TT_METAL_HOME",
-            "PYTHONNOUSERSITE",
-            "MESH_DEVICE",
-            "HF_MODEL",
-            "HF_HOME",
-            "HF_HUB_OFFLINE",
-            "TRANSFORMERS_OFFLINE",
-            "TOKENIZERS_PARALLELISM",
-            "TT_CACHE_PATH",
-            "TT_VISIBLE_DEVICES",
-        }
-        validation.require(
-            isinstance(family_var, str)
-            and re.fullmatch(r"[A-Z][A-Z0-9_]*", family_var or "") is not None
-            and family_var not in reserved_env
-            and not family_var.startswith("DISABLE_"),
-            f"{row_id}: family_var is unsafe or reserved",
-        )
+        validate_server_env(manifest, str(row_id), validation)
         validation.equal(manifest.get("model"), expectations.get("model"), f"{row_id}: manifest.model")
         validation.require(
             manifest.get("trace_mode") in ("decode_only", "all"), f"{row_id}: trace_mode must be decode_only/all"
@@ -536,6 +578,23 @@ def validate_expectations_document(expectations: dict[str, Any], expectations_pa
             and len(visible) == len(set(visible)),
             f"{row_id}: visible_devices must be a non-empty unique integer list",
         )
+        per_rank = devices_per_rank(manifest)
+        if isinstance(visible, list) and visible and isinstance(dp, int) and not isinstance(dp, bool) and dp > 0:
+            validation.require(
+                per_rank is not None, f"{row_id}: visible_devices ({len(visible)}) must divide evenly across dp={dp}"
+            )
+        fabric_config = manifest.get("fabric_config")
+        if "fabric_config" in manifest:
+            validation.require(
+                isinstance(fabric_config, str) and FABRIC_CONFIG_NAME.fullmatch(fabric_config) is not None,
+                f"{row_id}: manifest.fabric_config must be a ttnn.FabricConfig member name such as FABRIC_1D",
+            )
+        if per_rank is not None and per_rank > 1:
+            validation.require(
+                "fabric_config" in manifest,
+                f"{row_id}: manifest.fabric_config is required on a multi-device row "
+                f"({per_rank} devices per data-parallel rank)",
+            )
         subcases = manifest.get("context_subcases")
         validation.require(isinstance(subcases, list), f"{row_id}: context_subcases must be a list")
         if isinstance(subcases, list):
@@ -670,7 +729,7 @@ def expected_tt_config(manifest: dict[str, Any]) -> str:
         "trace_region_size": manifest["trace_region_size"],
         "sample_on_device_mode": manifest["sample_on_device_mode"],
     }
-    if manifest.get("fabric_config") is not None:
+    if "fabric_config" in manifest:
         config["fabric_config"] = manifest["fabric_config"]
     return json.dumps({"tt": config}, separators=(",", ":"))
 
@@ -679,7 +738,8 @@ def expected_server_argv(expectations: dict[str, Any], manifest: dict[str, Any],
     execution = expectations["execution"]
     argv = [
         execution["python"],
-        execution["server_script"],
+        "-m",
+        SERVER_MODULE,
         "--model",
         manifest["model"],
         "--revision",
@@ -705,15 +765,17 @@ def expected_server_argv(expectations: dict[str, Any], manifest: dict[str, Any],
 
 
 def expected_server_env(expectations: dict[str, Any], manifest: dict[str, Any]) -> dict[str, str]:
-    env = {
-        "MESH_DEVICE": manifest["platform"],
-        "HF_MODEL": manifest["model"],
-        manifest["family_var"]: manifest["family_version"],
-        "HF_HOME": expectations["hf_cache"]["hf_home"],
-        "HF_HUB_OFFLINE": "1",
-        "TRANSFORMERS_OFFLINE": "1",
-        "TOKENIZERS_PARALLELISM": "false",
-    }
+    env = dict(manifest["server_env"])
+    env.update(
+        {
+            "MESH_DEVICE": manifest["platform"],
+            "HF_MODEL": manifest["model"],
+            "HF_HOME": expectations["hf_cache"]["hf_home"],
+            "HF_HUB_OFFLINE": "1",
+            "TRANSFORMERS_OFFLINE": "1",
+            "TOKENIZERS_PARALLELISM": "false",
+        }
+    )
     if manifest.get("cache_root"):
         env["TT_CACHE_PATH"] = manifest["cache_root"]
     env["TT_VISIBLE_DEVICES"] = ",".join(str(value) for value in manifest["visible_devices"])
@@ -791,7 +853,7 @@ def validate_root_contract(
             "tt_device_recovery_mode",
             "base_env",
             "tested_code_sha",
-            "vllm_sha",
+            "plugin_sha",
             "repositories",
             "tools",
             "inputs",
@@ -876,11 +938,11 @@ def validate_root_contract(
                 except OSError as error:
                     validation.errors.append(f"cannot hash live {name}: {error}")
     validation.require(
-        isinstance(repositories, dict) and set(repositories) == {"tt_metal", "vllm"},
-        "run_contract.repositories must exactly cover tt_metal/vllm",
+        isinstance(repositories, dict) and set(repositories) == {"tt_metal", "vllm_tt_plugin"},
+        "run_contract.repositories must exactly cover tt_metal/vllm_tt_plugin",
     )
     if isinstance(repositories, dict):
-        for name in ("tt_metal", "vllm"):
+        for name in ("tt_metal", "vllm_tt_plugin"):
             item = repositories.get(name)
             validate_exact_fields(
                 item,
@@ -916,7 +978,7 @@ def validate_root_contract(
         validation.equal(
             contract.get("tested_code_sha"), repositories.get("tt_metal", {}).get("head"), "tested_code_sha"
         )
-        validation.equal(contract.get("vllm_sha"), repositories.get("vllm", {}).get("head"), "vllm_sha")
+        validation.equal(contract.get("plugin_sha"), repositories.get("vllm_tt_plugin", {}).get("head"), "plugin_sha")
     validation.equal(inputs, expectations.get("provenance"), "run_contract input provenance")
     base_env = contract.get("base_env")
     allowed_base_env = {"PATH", "HOME", "LD_LIBRARY_PATH", "TT_METAL_HOME", "PYTHONNOUSERSITE"}
@@ -968,7 +1030,7 @@ def validate_manifest(case_dir: Path, row: dict[str, Any], tier: str, validation
         return None
     validate_exact_fields(
         manifest,
-        set(row["manifest"]) | {"tier", "row_id", "status", "error_hits"},
+        set(row["manifest"]) | {"tier", "row_id", "status", "error_hits", "selection"},
         set(),
         f"{row['id']}: manifest.json",
         validation,
@@ -979,6 +1041,7 @@ def validate_manifest(case_dir: Path, row: dict[str, Any], tier: str, validation
     validation.equal(manifest.get("tier"), tier, f"{row['id']}: manifest.tier")
     validation.equal(manifest.get("status"), "ok", f"{row['id']}: manifest.status")
     validation.equal(manifest.get("error_hits"), 0, f"{row['id']}: manifest.error_hits")
+    validation.equal(manifest.get("selection"), server_selection(row["manifest"]), f"{row['id']}: manifest.selection")
     return manifest
 
 
@@ -1015,7 +1078,7 @@ def validate_launch(
         f"{row_id}: manifest.cache_root is required (per-row TT cache isolation)",
     )
     if isinstance(server, dict):
-        validation.equal(server.get("cwd"), expectations["execution"]["vllm_dir"], f"{row_id}: server cwd")
+        validation.equal(server.get("cwd"), expectations["execution"]["plugin_dir"], f"{row_id}: server cwd")
         validation.equal(
             server.get("argv"), expected_server_argv(expectations, row["manifest"], contract), f"{row_id}: server argv"
         )
@@ -1030,7 +1093,7 @@ def validate_launch(
         row_sources = contract.get("row_sources")
         if isinstance(row_sources, dict) and isinstance(row_sources.get(row_id), str):
             provenance_case_dir = Path(row_sources[row_id]) / row_id
-        validation.equal(client.get("cwd"), expectations["execution"]["vllm_dir"], f"{row_id}: client cwd")
+        validation.equal(client.get("cwd"), expectations["execution"]["plugin_dir"], f"{row_id}: client cwd")
         validation.equal(
             client.get("argv"),
             expected_benchmark_argv(expectations, contract, provenance_case_dir),
@@ -1058,7 +1121,7 @@ def validate_launch(
                 validate_process_spec(spec, f"{row_id}: context client {item['kind']}", validation)
                 if isinstance(spec, dict):
                     validation.equal(
-                        spec.get("cwd"), expectations["execution"]["vllm_dir"], f"{row_id}: {item['kind']} cwd"
+                        spec.get("cwd"), expectations["execution"]["plugin_dir"], f"{row_id}: {item['kind']} cwd"
                     )
                     validation.equal(spec.get("env"), expected_client_env, f"{row_id}: {item['kind']} env")
                     argv = spec.get("argv")
@@ -1664,6 +1727,20 @@ def validate_root(
     return validation
 
 
+def print_selections(expectations: dict[str, Any], row_ids: list[str]) -> None:
+    """Report, per row, whether the server used native registration or a class override."""
+    rows = {row["id"]: row for row in expectations["rows"]}
+    for row_id in row_ids:
+        manifest = rows[row_id]["manifest"]
+        selection = server_selection(manifest)
+        detail = (
+            f" {MODEL_CLASS_OVERRIDES}={manifest['server_env'][MODEL_CLASS_OVERRIDES]}"
+            if selection == "override"
+            else ""
+        )
+        print(f"SELECTION: {row_id} {selection}{detail}")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--artifact-root", type=Path)
@@ -1698,6 +1775,7 @@ def main() -> int:
         if args.artifact_root is not None or args.tier is not None or args.subset_evidence:
             print("FAIL: --check-expectations cannot be combined with artifact/tier/subset arguments", file=sys.stderr)
             return 1
+        print_selections(expectations, expectations["canonical_row_ids"])
         print(f"PASS: expectations schema ({len(expectations['canonical_row_ids'])} row(s))")
         return 0
     if args.artifact_root is None or args.tier is None:
@@ -1719,6 +1797,9 @@ def main() -> int:
     if args.subset_evidence:
         print("EVIDENCE_OK_NOT_ACCEPTED: selected rows are valid; aggregate the canonical row set", file=sys.stderr)
         return 3
+    print_selections(
+        expectations, [expectations["smoke"]["row_id"]] if args.tier == "smoke" else expectations["canonical_row_ids"]
+    )
     print(
         f"PASS: {args.tier} acceptance ({len(expectations['canonical_row_ids']) if args.tier != 'smoke' else 1} row(s))"
     )

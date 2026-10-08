@@ -63,9 +63,9 @@ class ExpectationsContractTest(unittest.TestCase):
                         "dp": 1,
                         "trace_mode": "decode_only",
                         "trace_region_size": 1,
+                        "fabric_config": "FABRIC_1D",
                         "sample_on_device_mode": "all",
-                        "family_var": "LLAMA_VERSION",
-                        "family_version": "llama3_8b",
+                        "server_env": {},
                         "revision": "a" * 40,
                         "tokenizer_revision": "a" * 40,
                         "max_model_len": 4096,
@@ -118,8 +118,7 @@ class ExpectationsContractTest(unittest.TestCase):
             },
             "execution": {
                 "python": "/usr/bin/python3",
-                "vllm_dir": "/tmp/vllm",
-                "server_script": "/tmp/server.py",
+                "plugin_dir": "/tmp/vllm-tt-plugin",
                 "prompt": "rain on a road",
                 "validator": {"path": str(VALIDATOR_PATH), "sha256": digest(VALIDATOR_PATH)},
             },
@@ -215,11 +214,9 @@ class ExpectationsContractTest(unittest.TestCase):
 
     def test_runner_dry_run_executes_schema_and_renders_frozen_launch_without_artifacts(self) -> None:
         root = Path(self.temp.name)
-        vllm_dir = root / "vllm"
-        vllm_dir.mkdir()
-        subprocess.run(["git", "init", "-q", str(vllm_dir)], check=True)
-        server = vllm_dir / "server.py"
-        server.write_text("raise SystemExit('dry-run only')\n")
+        plugin_dir = root / "vllm-tt-plugin"
+        plugin_dir.mkdir()
+        subprocess.run(["git", "init", "-q", str(plugin_dir)], check=True)
 
         revision = "a" * 40
         hf_home = root / "hf"
@@ -234,8 +231,7 @@ class ExpectationsContractTest(unittest.TestCase):
         document["execution"].update(
             {
                 "python": "/usr/bin/python3",
-                "vllm_dir": str(vllm_dir),
-                "server_script": str(server),
+                "plugin_dir": str(plugin_dir),
             }
         )
         document["hf_cache"].update(
@@ -259,7 +255,7 @@ class ExpectationsContractTest(unittest.TestCase):
         expectations_path.write_text(json.dumps(document))
         artifact_root = root / "artifacts"
         environment = dict(os.environ)
-        environment.update({"PY": "/usr/bin/python3", "VLLM_DIR": str(vllm_dir)})
+        environment.update({"PY": "/usr/bin/python3", "PLUGIN_DIR": str(plugin_dir)})
         result = subprocess.run(
             [
                 "bash",
@@ -280,7 +276,124 @@ class ExpectationsContractTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("immutable LaunchSpec", result.stdout)
         self.assertIn('"context_clients"', result.stdout)
+        launch = json.loads(result.stdout.split("immutable LaunchSpec:\n", 1)[1])
+        server_argv = launch["server"]["argv"]
+        self.assertEqual(server_argv[1:3], ["-m", "vllm.entrypoints.openai.api_server"])
+        tt_config = json.loads(server_argv[server_argv.index("--additional-config") + 1])["tt"]
+        self.assertEqual(tt_config["fabric_config"], "FABRIC_1D")
+        self.assertEqual(launch["server"]["cwd"], str(plugin_dir))
         self.assertFalse(artifact_root.exists())
+
+    def manifest(self, document) -> dict:
+        return document["rows"][0]["manifest"]
+
+    def test_native_row_has_empty_server_env(self) -> None:
+        self.assertEqual(self.manifest(self.expectations)["server_env"], {})
+        self.assertEqual(self.validate().errors, [])
+        self.assertEqual(validator.server_selection(self.manifest(self.expectations)), "native")
+
+    def test_override_row_is_recorded_as_override(self) -> None:
+        override = "TTLlamaForCausalLM=tt_transformers.vllm_registry:LlamaForCausalLM"
+        document = copy.deepcopy(self.expectations)
+        self.manifest(document)["server_env"] = {"TT_MODEL_CLASS_OVERRIDES": override}
+        self.assertEqual(self.validate(document).errors, [])
+        self.assertEqual(validator.server_selection(self.manifest(document)), "override")
+        server_env = validator.expected_server_env(document, self.manifest(document))
+        self.assertEqual(server_env["TT_MODEL_CLASS_OVERRIDES"], override)
+
+        path = Path(self.temp.name) / "expectations.json"
+        path.write_text(json.dumps(document))
+        result = subprocess.run(
+            ["python3", str(VALIDATOR_PATH), "--expectations", str(path), "--check-expectations"],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"SELECTION: p150x4_dp1_all override TT_MODEL_CLASS_OVERRIDES={override}", result.stdout)
+
+    def test_override_must_name_the_tt_prefixed_architecture(self) -> None:
+        for value in (
+            "LlamaForCausalLM=tt_transformers.vllm_registry:LlamaForCausalLM",
+            "TTLlamaForCausalLM=tt_transformers.vllm_registry",
+            "",
+        ):
+            with self.subTest(value=value):
+                document = copy.deepcopy(self.expectations)
+                self.manifest(document)["server_env"] = {"TT_MODEL_CLASS_OVERRIDES": value}
+                self.assertTrue(any("TT_MODEL_CLASS_OVERRIDES" in error for error in self.validate(document).errors))
+
+    def test_unsafe_or_reserved_server_env_is_rejected(self) -> None:
+        for key in ("MESH_DEVICE", "HF_MODEL", "TT_VISIBLE_DEVICES", "PATH", "DISABLE_TRACE", "lower_case", "1ABC"):
+            with self.subTest(key=key):
+                document = copy.deepcopy(self.expectations)
+                self.manifest(document)["server_env"] = {key: "1"}
+                self.assertTrue(any("unsafe or reserved" in error for error in self.validate(document).errors))
+        for server_env in ({"VLLM_RPC_TIMEOUT": 300000}, ["TT_MODEL_CLASS_OVERRIDES"], None):
+            with self.subTest(server_env=server_env):
+                document = copy.deepcopy(self.expectations)
+                self.manifest(document)["server_env"] = server_env
+                self.assertTrue(any("string-to-string" in error for error in self.validate(document).errors))
+
+    def test_family_selection_fields_are_unknown(self) -> None:
+        document = copy.deepcopy(self.expectations)
+        self.manifest(document).update({"family_var": "LLAMA_VERSION", "family_version": "llama3_8b"})
+        self.assertTrue(any("unknown fields" in error for error in self.validate(document).errors))
+
+    def test_missing_trace_region_size_is_rejected(self) -> None:
+        document = copy.deepcopy(self.expectations)
+        del self.manifest(document)["trace_region_size"]
+        errors = self.validate(document).errors
+        self.assertTrue(any("missing required fields" in e and "trace_region_size" in e for e in errors))
+
+    def test_multi_device_row_requires_fabric_config(self) -> None:
+        document = copy.deepcopy(self.expectations)
+        del self.manifest(document)["fabric_config"]
+        errors = self.validate(document).errors
+        self.assertTrue(any("fabric_config is required on a multi-device row" in error for error in errors))
+
+    def test_fabric_config_counts_devices_per_data_parallel_rank(self) -> None:
+        document = copy.deepcopy(self.expectations)
+        del self.manifest(document)["fabric_config"]
+        self.manifest(document)["dp"] = 2
+        errors = self.validate(document).errors
+        self.assertTrue(any("2 devices per data-parallel rank" in error for error in errors))
+        self.manifest(document)["dp"] = 4
+        self.assertEqual(self.validate(document).errors, [])
+        self.manifest(document)["dp"] = 3
+        self.assertTrue(any("divide evenly" in error for error in self.validate(document).errors))
+
+    def test_single_device_row_without_fabric_config_is_accepted(self) -> None:
+        document = copy.deepcopy(self.expectations)
+        manifest = self.manifest(document)
+        del manifest["fabric_config"]
+        manifest.update({"platform": "N150", "visible_devices": [0]})
+        self.assertEqual(self.validate(document).errors, [])
+        self.assertNotIn("fabric_config", validator.expected_tt_config(manifest))
+
+    def test_fabric_config_must_be_a_fabric_member_name(self) -> None:
+        for value in ("fabric_1d", "", None, 1):
+            with self.subTest(value=value):
+                document = copy.deepcopy(self.expectations)
+                self.manifest(document)["fabric_config"] = value
+                self.assertTrue(any("ttnn.FabricConfig member" in error for error in self.validate(document).errors))
+
+    def test_server_argv_launches_the_openai_api_server_module(self) -> None:
+        manifest = self.manifest(self.expectations)
+        argv = validator.expected_server_argv(self.expectations, manifest, {"host": "127.0.0.1", "port": 8000})
+        self.assertEqual(argv[:3], ["/usr/bin/python3", "-m", "vllm.entrypoints.openai.api_server"])
+        config = json.loads(argv[argv.index("--additional-config") + 1])
+        self.assertEqual(
+            config,
+            {
+                "tt": {
+                    "trace_mode": "decode_only",
+                    "trace_region_size": 1,
+                    "sample_on_device_mode": "all",
+                    "fabric_config": "FABRIC_1D",
+                }
+            },
+        )
 
 
 class EvidenceContractTest(unittest.TestCase):
@@ -396,6 +509,8 @@ class EvidenceContractTest(unittest.TestCase):
         self.assertIn('find "$case_dir/context_subcases" -type f -name client.log', source)
         self.assertIn('reset_tt "${CURRENT_CASE:-$ROOT}/trap_reset_after.log"', source)
         self.assertNotIn('-m py_compile "$VALIDATOR"', source)
+        self.assertNotIn("server_example_tt.py", source)
+        self.assertIn("VLLM::", source)
 
     def test_live_process_python_heredoc_is_executable_and_shell_helper_is_outside(self) -> None:
         source = RUNNER_PATH.read_text()

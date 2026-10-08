@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+import json
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -77,3 +78,28 @@ def test_request_qualitative_completion_uses_raw_endpoint_for_base_models():
         temperature=0.7,
         top_p=0.9,
     )
+
+
+@pytest.mark.host
+def test_launch_server_passes_tt_options_through_additional_config(monkeypatch, tmp_path):
+    popen = Mock()
+    monkeypatch.setattr(run_vllm_server.subprocess, "Popen", popen)
+
+    run_vllm_server._launch_server(
+        hf_model="org/model",
+        mesh_device="N300",
+        max_num_seqs=32,
+        block_size=64,
+        port=8000,
+        log_file=tmp_path / "server.log",
+        max_model_len=None,
+        tt_config={"sample_on_device_mode": "all", "trace_region_size": 1, "fabric_config": "FABRIC_1D"},
+        additional_args=[],
+    )
+
+    cmd = popen.call_args.args[0]
+    assert cmd[1:3] == ["-m", "vllm.entrypoints.openai.api_server"]
+    assert "--plugin-config" not in cmd
+    tt_config = json.loads(cmd[cmd.index("--additional-config") + 1])
+    assert tt_config == {"tt": {"sample_on_device_mode": "all", "trace_region_size": 1, "fabric_config": "FABRIC_1D"}}
+    assert popen.call_args.kwargs["env"]["MESH_DEVICE"] == "N300"
