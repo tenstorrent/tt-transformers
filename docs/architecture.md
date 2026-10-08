@@ -37,6 +37,9 @@ construction. Device resources have explicit owners and ordered, idempotent
 cleanup paths. Production code never imports repository examples, tests, or
 qualification helpers.
 
+See [vLLM decode and trace lifecycle](vllm-decode.md) for reload commands,
+resident state, output ownership, and capture preparation.
+
 All model APIs are experimental until their support manifests say otherwise.
 
 ## Repository entry points

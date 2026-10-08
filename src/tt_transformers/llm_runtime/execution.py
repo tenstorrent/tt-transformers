@@ -157,6 +157,10 @@ class EagerExecutor:
         output_tokens: Any = None,
         slot_remap: Any = None,
         reset_batch: bool = False,  # ↓ State transition
+        reload_inputs: bool | None = None,
+        reload_page_table: bool = False,
+        reload_sampling_params: bool = False,
+        reset_sampling_state: bool = False,
     ) -> CompiledProgram:
         """Prepare and compile the eager program needed by one decode call."""
 
@@ -170,6 +174,10 @@ class EagerExecutor:
                 output_tokens=output_tokens,
                 slot_remap=slot_remap,
                 reset_batch=reset_batch,
+                reload_inputs=reload_inputs,
+                reload_page_table=reload_page_table,
+                reload_sampling_params=reload_sampling_params,
+                reset_sampling_state=reset_sampling_state,
             )
         )
 
@@ -184,6 +192,10 @@ class EagerExecutor:
         output_tokens: Any = None,
         slot_remap: Any = None,
         reset_batch: bool = False,  # ↓ State transition
+        reload_inputs: bool | None = None,
+        reload_page_table: bool = False,
+        reload_sampling_params: bool = False,
+        reset_sampling_state: bool = False,
         read_from_device: bool = True,  # ↓ Output policy
     ):
         """Prepare and execute one eager decode call."""
@@ -197,6 +209,10 @@ class EagerExecutor:
             output_tokens=output_tokens,
             slot_remap=slot_remap,
             reset_batch=reset_batch,
+            reload_inputs=reload_inputs,
+            reload_page_table=reload_page_table,
+            reload_sampling_params=reload_sampling_params,
+            reset_sampling_state=reset_sampling_state,
         )
         return self._execute_decode(prepared, read_from_device=read_from_device)
 
@@ -246,6 +262,7 @@ class EagerExecutor:
         return tuple(programs)
 
     def _execute_prefill(self, prepared: Any):
+        self.decode.ensure_trace_safe()
         self._require_ready_after_trace_gate(prepared.program_signatures)
         result = self.prefill.invoke(prepared)
         self._eager_prefill_count += 1
@@ -262,6 +279,10 @@ class EagerExecutor:
         output_tokens: Any = None,
         slot_remap: Any = None,
         reset_batch: bool = False,  # ↓ State transition
+        reload_inputs: bool | None = None,
+        reload_page_table: bool = False,
+        reload_sampling_params: bool = False,
+        reset_sampling_state: bool = False,
     ):
         kwargs: dict[str, Any] = {
             "tokens": tokens,
@@ -277,6 +298,13 @@ class EagerExecutor:
         ):
             if value is not None:
                 kwargs[name] = value
+        if reload_inputs is not None or reload_page_table or reload_sampling_params or reset_sampling_state:
+            kwargs.update(
+                reload_inputs=reload_inputs,
+                reload_page_table=reload_page_table,
+                reload_sampling_params=reload_sampling_params,
+                reset_sampling_state=reset_sampling_state,
+            )
         return self.decode.prepare(**kwargs)
 
     def _compile_decode(self, prepared: Any):
@@ -292,6 +320,7 @@ class EagerExecutor:
         )
 
     def _execute_decode(self, prepared: Any, *, read_from_device: bool = True):
+        self.decode.ensure_trace_safe()
         if self._program_gate_active():
             self._require_ready_after_trace_gate((self.decode.program_signature(prepared),))
         result = self.decode.invoke(prepared, device_feedback=False)
@@ -507,6 +536,10 @@ class TracedExecutor:
         output_tokens: Any = None,
         slot_remap: Any = None,
         reset_batch: bool = False,  # ↓ State transition
+        reload_inputs: bool | None = None,
+        reload_page_table: bool = False,
+        reload_sampling_params: bool = False,
+        reset_sampling_state: bool = False,
     ) -> CompiledProgram:
         """Compile the eager decode program and register its trace plan."""
 
@@ -520,6 +553,10 @@ class TracedExecutor:
                 output_tokens=output_tokens,
                 slot_remap=slot_remap,
                 reset_batch=reset_batch,
+                reload_inputs=reload_inputs,
+                reload_page_table=reload_page_table,
+                reload_sampling_params=reload_sampling_params,
+                reset_sampling_state=reset_sampling_state,
             )
         )
 
@@ -534,6 +571,10 @@ class TracedExecutor:
         output_tokens: Any = None,
         slot_remap: Any = None,
         reset_batch: bool = False,  # ↓ State transition
+        reload_inputs: bool | None = None,
+        reload_page_table: bool = False,
+        reload_sampling_params: bool = False,
+        reset_sampling_state: bool = False,
         read_from_device: bool = True,  # ↓ Output policy
     ):
         """Replay one traced decode step and consume its output."""
@@ -547,6 +588,10 @@ class TracedExecutor:
             output_tokens=output_tokens,
             slot_remap=slot_remap,
             reset_batch=reset_batch,
+            reload_inputs=reload_inputs,
+            reload_page_table=reload_page_table,
+            reload_sampling_params=reload_sampling_params,
+            reset_sampling_state=reset_sampling_state,
         )
         return self._execute_decode(
             prepared,
@@ -578,6 +623,15 @@ class TracedExecutor:
                         else None
                     ),
                     release_prime_output=operation_plan.release_prime_output,
+                    prime_workspace=(
+                        (
+                            lambda persistent, workspace, plan=operation_plan: plan.prime_workspace(
+                                persistent.values, workspace
+                            )
+                        )
+                        if getattr(operation_plan, "prime_workspace", None) is not None
+                        else None
+                    ),
                 )
             )
         return programs
@@ -614,6 +668,7 @@ class TracedExecutor:
         lane: int = 0,
         evidence: list[PrefillReplayEvidence] | None = None,
     ):
+        self.eager_executor.decode.ensure_trace_safe()
         coverage = self._preflight_prefill(prepared) if coverage is None else coverage
         if len(coverage) != 1:
             raise RuntimeError("Traced chunk replay requires one shared program geometry per prepared request")
@@ -719,6 +774,9 @@ class TracedExecutor:
                     trace_signature=self.eager_executor.decode.trace_signature(prepared),
                     operation="decode",
                     prepare_inputs=operation_plan.prepare_inputs,
+                    prepare_capture=getattr(operation_plan, "prepare_capture", None),
+                    prime=getattr(operation_plan, "prime", None),
+                    release_prime_output=getattr(operation_plan, "release_prime_output", None),
                     capture=lambda persistent, plan=operation_plan: plan.capture(persistent.values),
                     refresh_policy=InputRefreshPolicy(
                         every_replay=operation_plan.refresh_policy.every_replay,
@@ -762,14 +820,36 @@ class TracedExecutor:
                 "Add the missing signature to construction-time trace coverage, or rerun with "
                 "TraceConfig(mode='none') for debugging."
             )
-        output = self.trace_compiler.replay(
-            program_key,
-            lambda artifact, decision: decode.refresh_trace(artifact, prepared, decision),
-            reset_batch=prepared.reset_batch,
-            device_feedback_enabled=decode.config.position_feedback_capable,
-            feedback_compatible=prepared.device_feedback,
-            page_table_changed=prepared.page_table_changed,
-        )
+        decode.ensure_trace_safe()
+        decode.validate_submission(prepared)
+        commands = {}
+        if getattr(prepared, "reload_inputs", None) is not None:
+            commands = {
+                "reload_inputs": prepared.reload_inputs,
+                "reload_page_table": prepared.reload_page_table,
+                "reload_sampling_params": prepared.reload_sampling_params,
+            }
+        refresh_started = False
+
+        def refresh(artifact, decision):
+            nonlocal refresh_started
+            refresh_started = True
+            decode.refresh_trace(artifact, prepared, decision)
+
+        try:
+            output = self.trace_compiler.replay(
+                program_key,
+                refresh,
+                reset_batch=prepared.reset_batch,
+                device_feedback_enabled=decode.config.position_feedback_capable,
+                feedback_compatible=prepared.device_feedback,
+                page_table_changed=prepared.page_table_changed,
+                **commands,
+            )
+        except BaseException:
+            if refresh_started:
+                decode.invalidate_after_failed_submission()
+            raise
         decode.note_submitted(prepared)
         result = DecodeInvocationResult(
             value=output,

@@ -126,6 +126,8 @@ class Mesh:
 def make_runtime_configs(
     *,
     sampling=True,
+    num_devices=1,
+    native_sampling_state=False,
     lane_capacity=4,
     allow_force_argmax=True,
     page_table_layout=None,
@@ -135,13 +137,14 @@ def make_runtime_configs(
     can_enable_trace=None,
 ):
     mesh = Mesh()
+    mesh.shape = (1, num_devices)
     sampling_config = sampling_config or SimpleNamespace(
         allow_force_argmax=allow_force_argmax,
         max_top_k=32,
     )
     sampling_config.max_batch_size = lane_capacity
     model = model or SimpleNamespace(
-        config=SimpleNamespace(max_batch_size=lane_capacity, mesh_device=mesh, num_devices=1),
+        config=SimpleNamespace(max_batch_size=lane_capacity, mesh_device=mesh, num_devices=num_devices),
         sampling=SimpleNamespace(
             config=sampling_config,
             decode_forward=lambda logits,
@@ -156,6 +159,12 @@ def make_runtime_configs(
         vocab_size=128,
     )
     mesh = model.config.mesh_device
+    state_controller = (
+        SimpleNamespace(sampling=model.sampling, admit=lambda *args: None, decode_forward=lambda *args: None)
+        if native_sampling_state
+        else None
+    )
+    sampling_state = object() if native_sampling_state else None
     layout = page_table_layout or PageTableLayout(
         block_size=32,
         raw_capacity_width=128,
@@ -171,6 +180,8 @@ def make_runtime_configs(
             max_batch_size=lane_capacity,
             max_prefill_chunk_size=max_prefill_chunk_size,
             device_sampling_enabled=sampling,
+            sampling_state_controller=state_controller,
+            sampling_state=sampling_state,
             can_enable_trace=can_enable_trace or (lambda _sequence_length, _num_cached_tokens: True),
         ),
         DecodeRuntimeConfig.resolve(
@@ -179,6 +190,8 @@ def make_runtime_configs(
             lane_capacity=lane_capacity,
             page_table_layout=layout,
             device_sampling_enabled=sampling,
+            sampling_state_controller=state_controller,
+            sampling_state=sampling_state,
         ),
     )
 
@@ -187,6 +200,8 @@ def make_coordinator(
     *,
     trace_mode="all",
     sampling=True,
+    num_devices=1,
+    native_sampling_state=False,
     warmup_config=None,
     sequence_lengths=(128, 1024, 2048),
     lane_capacity=4,
@@ -222,6 +237,8 @@ def make_coordinator(
     )
     prefill_config, decode_config = make_runtime_configs(
         sampling=sampling,
+        num_devices=num_devices,
+        native_sampling_state=native_sampling_state,
         lane_capacity=lane_capacity,
         allow_force_argmax=allow_force_argmax,
         page_table_layout=layout,
@@ -1452,3 +1469,103 @@ def test_eager_qwen_compat_executor_config_keeps_its_warmup_lengths(model_id):
     model = SimpleNamespace(model_args=runtime, config=SimpleNamespace(max_seq_len=4096, max_batch_size=32))
     compat = hf_generator._compat_executor_config(model, trace_mode="none", device_sampling_enabled=False)
     assert compat.warmup.prefill_seq_lens == tuple(getattr(runtime, "trace_prefill_supported_seq_lens", (128, 1024)))
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("decode_first", (False, True))
+def test_decode_only_capture_waits_for_complete_eager_prefill_in_both_orders(decode_first):
+    coordinator, _, trace_compiler, *_ = make_coordinator(trace_mode="decode_only", sampling=False)
+
+    def prefill():
+        coordinator.warmup_prefill(kv_cache="cache", enable_trace=False, can_sample_on_device=False)
+
+    def decode():
+        coordinator.warmup_decode(
+            kv_cache="cache", enable_trace=True, can_sample_on_device=False, max_batch_size=4, num_blocks=128
+        )
+
+    first, second = (decode, prefill) if decode_first else (prefill, decode)
+    first()
+    assert trace_compiler.calls == 0
+    second()
+    assert trace_compiler.calls == 1
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("num_devices", (1, 2, 4, 8, 32))
+@pytest.mark.parametrize("native_sampling_state", (False, True))
+def test_sampling_warmup_resolves_independent_penalty_and_logprob_capabilities(num_devices, native_sampling_state):
+    coordinator, *_ = make_coordinator(num_devices=num_devices, native_sampling_state=native_sampling_state)
+    config = coordinator.config
+    logprobs_supported = num_devices in (8, 32)
+    expected = {
+        (penalties, logprobs)
+        for penalties in ((False, True) if native_sampling_state else (False,))
+        for logprobs in ((False, True) if logprobs_supported else (False,))
+    }
+
+    assert config.decode_sampling_state_enabled is native_sampling_state
+    assert config.sampling_logprobs_enabled is logprobs_supported
+    for operation in ("prefill", "decode"):
+        cases = getattr(config.sampled_plan, operation)
+        variants_by_request = {}
+        for case in cases:
+            if case.sampling_path != "logits":
+                key = case.batch_size, case.sequence_length, case.sampling_path, case.cached_tokens
+                variants_by_request.setdefault(key, set()).add((case.penalties_enabled, case.logprobs_enabled))
+        assert variants_by_request
+        assert all(variants == expected for variants in variants_by_request.values())
+        assert all(
+            not case.penalties_enabled and not case.logprobs_enabled for case in cases if case.sampling_path == "logits"
+        )
+        assert all(
+            not case.penalties_enabled and not case.logprobs_enabled for case in getattr(config.eager_plan, operation)
+        )
+    # Final KV geometry must preserve both independent capabilities.
+    resized = config.with_page_table_layout(PageTableLayout(32, 64, 128, 64))
+    assert resized.decode_sampling_state_enabled is native_sampling_state
+    assert resized.sampling_logprobs_enabled is logprobs_supported
+    for operation in ("prefill", "decode"):
+        assert {
+            (case.penalties_enabled, case.logprobs_enabled)
+            for case in getattr(resized.sampled_plan, operation)
+            if case.sampling_path != "logits"
+        } == expected
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("num_devices", (1, 8))
+@pytest.mark.parametrize("native_sampling_state", (False, True))
+def test_prefill_and_decode_warmup_register_every_sampling_variant_once(num_devices, native_sampling_state):
+    coordinator, execution, trace_compiler, *_ = make_coordinator(
+        num_devices=num_devices,
+        native_sampling_state=native_sampling_state,
+    )
+
+    def warmup():
+        coordinator.warmup_prefill(kv_cache="cache", enable_trace=True, can_sample_on_device=True)
+        coordinator.warmup_decode(
+            kv_cache="cache", enable_trace=True, can_sample_on_device=True, max_batch_size=4, num_blocks=128
+        )
+
+    warmup()
+    expected = {
+        (penalties, logprobs)
+        for penalties in ((False, True) if native_sampling_state else (False,))
+        for logprobs in ((False, True) if num_devices in (8, 32) else (False,))
+    }
+    for calls in (execution.prefill_calls, execution.decode_calls):
+        variants_by_request = {}
+        for call in calls:
+            sampling = call["sampling_params"]
+            if sampling is None:
+                continue
+            positions = None if call["start_pos"] is None else tuple(call["start_pos"].tolist())
+            key = tuple(call["tokens"].shape), positions, bool(torch.all(sampling.temperature == 0))
+            variants_by_request.setdefault(key, set()).add((sampling.presence_penalty != 0, sampling.enable_log_probs))
+        assert variants_by_request
+        assert all(variants == expected for variants in variants_by_request.values())
+    counts = len(execution.prefill_calls), len(execution.decode_calls)
+    warmup()
+    assert (len(execution.prefill_calls), len(execution.decode_calls)) == counts
+    assert trace_compiler.calls == 1

@@ -123,6 +123,24 @@ class ProgramCompiler:
 
         return self._post_activation_compile_rejections
 
+    def device_program_cache_entries(self) -> tuple[int, ...] | None:
+        """Read the backend cache counts when the device exposes them."""
+
+        devices = self.mesh_device.get_devices() if hasattr(self.mesh_device, "get_devices") else (self.mesh_device,)
+        counts = []
+        for device in devices:
+            count = getattr(device, "num_program_cache_entries", None)
+            if not callable(count):
+                return None
+            counts.append(int(count()))
+        return tuple(counts)
+
+    def require_unchanged_device_program_cache(self, expected: tuple[int, ...] | None, *, phase: str) -> None:
+        """Reject late compilation before a trace can use unsafe cache buffers."""
+
+        if expected is not None and self.device_program_cache_entries() != expected:
+            raise RuntimeError(f"TTNN program cache changed {phase}; complete exact-body warmup before trace capture")
+
     def key_for(self, signature: Any) -> ProgramKey:
         """Return the stable program key for one operation signature."""
 

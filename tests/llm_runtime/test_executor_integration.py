@@ -1109,6 +1109,10 @@ def test_qwen3_generator_sampling_policy_controls_decode_topk_warmup(monkeypatch
                 "output_tokens",
                 "slot_remap",
                 "reset_batch",
+                "reload_inputs",
+                "reload_page_table",
+                "reload_sampling_params",
+                "reset_sampling_state",
                 "execution",
             ],
         ),
@@ -1137,6 +1141,10 @@ def test_qwen3_generator_sampling_policy_controls_decode_topk_warmup(monkeypatch
                 "output_tokens",
                 "slot_remap",
                 "reset_batch",
+                "reload_inputs",
+                "reload_page_table",
+                "reload_sampling_params",
+                "reset_sampling_state",
                 "read_from_device",
                 "execution",
             ],
@@ -1155,7 +1163,10 @@ def test_qwen3_generator_sampling_policy_controls_decode_topk_warmup(monkeypatch
 )
 def test_executor_call_contract(binding, method, positional, keyword_only):
     if binding.executor_module not in (llama33_70b_executor, qwen3_32b_executor):
-        keyword_only = [name for name in keyword_only if name not in {"prompt_tokens", "output_tokens", "slot_remap"}]
+        excluded = {"prompt_tokens", "output_tokens"}
+        if method not in ("decode_forward", "compile_decode"):
+            excluded.add("slot_remap")
+        keyword_only = [name for name in keyword_only if name not in excluded]
     signature = inspect.signature(getattr(binding.executor_class, method))
     parameters = signature.parameters
     required = {
@@ -1176,7 +1187,15 @@ def test_executor_call_contract(binding, method, positional, keyword_only):
             "enable_trace",
         },
     }[method]
-    non_none_defaults = {"reset_batch": False, "read_from_device": True, "async_read": False, "is_tokens": False}
+    non_none_defaults = {
+        "reset_batch": False,
+        "reload_page_table": False,
+        "reload_sampling_params": False,
+        "reset_sampling_state": False,
+        "read_from_device": True,
+        "async_read": False,
+        "is_tokens": False,
+    }
 
     assert list(parameters) == positional + keyword_only
     assert all(parameters[name].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for name in positional)
@@ -1391,6 +1410,7 @@ def test_executor_validates_borrowed_cache_then_omits_it_from_execution(binding)
         if "prompt_tokens" in inspect.signature(binding.executor_class.compile_prefill).parameters
         else ()
     )
+    decode_request_state_names = request_state_names or ("slot_remap",)
     for target, expected_names in (
         (
             execution.compile_prefill,
@@ -1406,7 +1426,18 @@ def test_executor_validates_borrowed_cache_then_omits_it_from_execution(binding)
         ),
         (
             execution.compile_decode,
-            ("tokens", "start_pos", "page_table", "sampling_params", *request_state_names, "reset_batch"),
+            (
+                "tokens",
+                "start_pos",
+                "page_table",
+                "sampling_params",
+                *decode_request_state_names,
+                "reset_batch",
+                "reload_inputs",
+                "reload_page_table",
+                "reload_sampling_params",
+                "reset_sampling_state",
+            ),
         ),
         (
             execution.prefill_forward,
@@ -1427,8 +1458,12 @@ def test_executor_validates_borrowed_cache_then_omits_it_from_execution(binding)
                 "start_pos",
                 "page_table",
                 "sampling_params",
-                *request_state_names,
+                *decode_request_state_names,
                 "reset_batch",
+                "reload_inputs",
+                "reload_page_table",
+                "reload_sampling_params",
+                "reset_sampling_state",
                 "read_from_device",
             ),
         ),
@@ -1878,3 +1913,29 @@ def test_llama33_generator_emits_serving_ready_and_idempotent_shutdown_summaries
     generator.cleanup()
 
     assert phases == ["serving_ready", "shutdown"]
+
+
+@pytest.mark.host
+def test_every_executor_forwards_host_decode_remap_and_v1_commands(binding):
+    execution = create_autospec(EagerExecutor, instance=True)
+    executor = object.__new__(binding.executor_class)
+    executor._decode_execution = execution
+    executor._ensure_active = lambda: None
+    executor._validate_bound_cache = lambda cache: None
+    executor._ensure_sampling_for = lambda params: None
+    remap = [1, 0]
+    commands = dict(
+        reload_inputs=True, reload_page_table=False, reload_sampling_params=False, reset_sampling_state=False
+    )
+    executor.decode_forward(
+        torch.tensor([1, 2]),
+        torch.tensor([4, 5]),
+        torch.tensor([[0], [1]]),
+        sampling_params=None,
+        slot_remap=remap,
+        **commands,
+    )
+    actual = execution.decode_forward.call_args.kwargs
+    assert actual["slot_remap"] is remap
+    assert actual["sampling_params"] is None
+    assert {key: actual[key] for key in commands} == commands

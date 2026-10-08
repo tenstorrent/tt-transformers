@@ -694,7 +694,12 @@ class DeepSeekR1Qwen14BExecutor:
         page_table: torch.Tensor,
         kv_cache: Any = None,  # ↓ Borrowed resources
         sampling_params: Any = None,  # ↓ Sampling
+        slot_remap: Any = None,
         reset_batch: bool = False,  # ↓ State transition
+        reload_inputs: bool | None = None,
+        reload_page_table: bool = False,
+        reload_sampling_params: bool = False,
+        reset_sampling_state: bool = False,
         execution: EagerExecutor | TracedExecutor | None = None,  # ↓ Internal dispatch
     ) -> None:
         """Compile decode on the supplied eager or traced execution target."""
@@ -707,7 +712,12 @@ class DeepSeekR1Qwen14BExecutor:
             start_pos=start_pos,
             page_table=page_table,
             sampling_params=sampling_params,
+            slot_remap=slot_remap,
             reset_batch=reset_batch,
+            reload_inputs=reload_inputs,
+            reload_page_table=reload_page_table,
+            reload_sampling_params=reload_sampling_params,
+            reset_sampling_state=reset_sampling_state,
         )
 
     def prefill_forward(
@@ -768,7 +778,12 @@ class DeepSeekR1Qwen14BExecutor:
         *,
         kv_cache: Any = None,  # ↓ Borrowed resources
         sampling_params: Any = None,  # ↓ Sampling
+        slot_remap: Any = None,
         reset_batch: bool = False,  # ↓ State transition
+        reload_inputs: bool | None = None,
+        reload_page_table: bool = False,
+        reload_sampling_params: bool = False,
+        reset_sampling_state: bool = False,
         read_from_device: bool = True,  # ↓ Output policy
         execution: EagerExecutor | TracedExecutor | None = None,  # ↓ Internal dispatch
     ) -> Any:
@@ -782,7 +797,12 @@ class DeepSeekR1Qwen14BExecutor:
             start_pos=start_pos,
             page_table=page_table,
             sampling_params=sampling_params,
+            slot_remap=slot_remap,
             reset_batch=reset_batch,
+            reload_inputs=reload_inputs,
+            reload_page_table=reload_page_table,
+            reload_sampling_params=reload_sampling_params,
+            reset_sampling_state=reset_sampling_state,
             read_from_device=read_from_device,
         )
 
