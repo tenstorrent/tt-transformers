@@ -43,6 +43,7 @@ from tt_transformers.llm_runtime.warmup import (
     WarmupCoordinator,
     WarmupCoordinatorConfig,
     resolve_prefill_warmup_seq_lens,
+    topk_warmup_sampling_variants,
 )
 from tt_transformers.models.deepseek_r1_distill_qwen_14b import weight_utils
 from tt_transformers.models.deepseek_r1_distill_qwen_14b.model import (
@@ -57,7 +58,6 @@ from tt_transformers.models.deepseek_r1_distill_qwen_14b.model import (
     build_deepseek_r1_distill_qwen_14b_transformer_config,
 )
 from tt_transformers.modules.sampling.sampling_1d import Sampling1D
-from tt_transformers.sampling.sampling_params import SamplingParams
 
 DEFAULT_HF_MODEL = "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B"
 DEFAULT_HF_REVISION = "1df8507178afcc1bef68cd8c393f61a886323761"
@@ -919,27 +919,23 @@ class DeepSeekR1Qwen14BExecutor:
             or self.warmup.config.prime_q128_tile_ends
         ):
             return
-        sampling = SamplingParams(
-            temperature=torch.ones(1),
-            top_k=torch.full((1,), 32, dtype=torch.int32),
-            top_p=torch.full((1,), 0.08),
-        )
         # Without a Q128 trace family the trace pass primes these programs eagerly.
         traced = enable_trace and 128 in self.warmup.config.prefill_trace_sequence_lengths
         execution = self.traced_executor if traced else self.eager_executor
-        for sequence_length in (32, 64, 96):
-            page_table_width = (
-                sequence_length + self.page_table_layout.block_size - 1
-            ) // self.page_table_layout.block_size
-            self.compile_prefill(
-                tokens=torch.zeros((1, sequence_length), dtype=torch.long),
-                page_table=torch.zeros((1, page_table_width), dtype=torch.int32),
-                prompt_lens=torch.full((1,), sequence_length, dtype=torch.long),
-                empty_slots=[0],
-                kv_cache=kv_cache,
-                sampling_params=sampling,
-                execution=execution,
-            )
+        for sampling in topk_warmup_sampling_variants(1):
+            for sequence_length in (32, 64, 96):
+                page_table_width = (
+                    sequence_length + self.page_table_layout.block_size - 1
+                ) // self.page_table_layout.block_size
+                self.compile_prefill(
+                    tokens=torch.zeros((1, sequence_length), dtype=torch.long),
+                    page_table=torch.zeros((1, page_table_width), dtype=torch.int32),
+                    prompt_lens=torch.full((1,), sequence_length, dtype=torch.long),
+                    empty_slots=[0],
+                    kv_cache=kv_cache,
+                    sampling_params=sampling,
+                    execution=execution,
+                )
         self._q128_topk_tile_ends_warmed.add(enable_trace)
 
     def _resolve_page_table_layout(self) -> PageTableLayout:

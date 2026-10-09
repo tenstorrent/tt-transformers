@@ -43,6 +43,7 @@ from tt_transformers.llm_runtime.warmup import (
     WarmupCoordinator,
     WarmupCoordinatorConfig,
     resolve_prefill_warmup_seq_lens,
+    topk_warmup_sampling_variants,
 )
 from tt_transformers.models.mistral_7b import weight_utils
 from tt_transformers.models.mistral_7b.model import (
@@ -57,7 +58,6 @@ from tt_transformers.models.mistral_7b.model import (
     build_mistral_7b_transformer_config,
 )
 from tt_transformers.modules.sampling.sampling_1d import Sampling1D
-from tt_transformers.sampling.sampling_params import SamplingParams
 
 DEFAULT_HF_MODEL = "mistralai/Mistral-7B-Instruct-v0.3"
 DEFAULT_HF_REVISION = "c170c708c41dac9275d15a8fff4eca08d52bab71"
@@ -925,27 +925,23 @@ class Mistral7BExecutor:
             or self.warmup.config.prime_q128_tile_ends
         ):
             return
-        sampling = SamplingParams(
-            temperature=torch.ones(1),
-            top_k=torch.full((1,), 32, dtype=torch.int32),
-            top_p=torch.full((1,), 0.08),
-        )
         # Without a Q128 trace family the trace pass primes these programs eagerly.
         traced = enable_trace and 128 in self.warmup.config.prefill_trace_sequence_lengths
         execution = self.traced_executor if traced else self.eager_executor
-        for sequence_length in (32, 64, 96):
-            page_table_width = (
-                sequence_length + self.page_table_layout.block_size - 1
-            ) // self.page_table_layout.block_size
-            self.compile_prefill(
-                tokens=torch.zeros((1, sequence_length), dtype=torch.long),
-                page_table=torch.zeros((1, page_table_width), dtype=torch.int32),
-                prompt_lens=torch.full((1,), sequence_length, dtype=torch.long),
-                empty_slots=[0],
-                kv_cache=kv_cache,
-                sampling_params=sampling,
-                execution=execution,
-            )
+        for sampling in topk_warmup_sampling_variants(1):
+            for sequence_length in (32, 64, 96):
+                page_table_width = (
+                    sequence_length + self.page_table_layout.block_size - 1
+                ) // self.page_table_layout.block_size
+                self.compile_prefill(
+                    tokens=torch.zeros((1, sequence_length), dtype=torch.long),
+                    page_table=torch.zeros((1, page_table_width), dtype=torch.int32),
+                    prompt_lens=torch.full((1,), sequence_length, dtype=torch.long),
+                    empty_slots=[0],
+                    kv_cache=kv_cache,
+                    sampling_params=sampling,
+                    execution=execution,
+                )
         self._q128_topk_tile_ends_warmed.add(enable_trace)
 
     def _resolve_page_table_layout(self) -> PageTableLayout:

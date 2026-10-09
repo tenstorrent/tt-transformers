@@ -62,13 +62,13 @@ def test_qwen2_family_warms_every_q128_topk_tile_end_once_per_execution_mode(exe
             enable_trace=enable_trace,
         )
 
-    assert executor.compile_prefill.call_count == 6
+    assert executor.compile_prefill.call_count == 12
     calls = executor.compile_prefill.call_args_list
-    assert [call.kwargs["tokens"].shape[1] for call in calls] == [32, 64, 96, 32, 64, 96]
-    assert [call.kwargs["page_table"].shape[1] for call in calls] == [1, 2, 3, 1, 2, 3]
+    assert [call.kwargs["tokens"].shape[1] for call in calls] == [32, 64, 96] * 4
+    assert [call.kwargs["page_table"].shape[1] for call in calls] == [1, 2, 3] * 4
     assert all(call.kwargs["kv_cache"] is kv_cache for call in calls)
-    assert all(call.kwargs["execution"] is executor.eager_executor for call in calls[:3])
-    assert all(call.kwargs["execution"] is executor.traced_executor for call in calls[3:])
+    assert all(call.kwargs["execution"] is executor.eager_executor for call in calls[:6])
+    assert all(call.kwargs["execution"] is executor.traced_executor for call in calls[6:])
     assert executor._q128_topk_tile_ends_warmed == {False, True}
 
 

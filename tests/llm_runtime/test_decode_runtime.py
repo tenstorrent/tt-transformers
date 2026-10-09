@@ -1179,6 +1179,59 @@ def test_capture_plan_describes_full_step_refresh_and_typed_persistent_inputs(mo
 
 
 @pytest.mark.host
+def test_capture_prime_restores_each_trace_sampling_state_after_every_plan_was_prepared(monkeypatch):
+    """The trace compiler prepares every plan before the first capture, and each
+    preparation resets the shared sampling state to its own identity. Each plan's
+    prime must reset it to that plan's request again, before its capture opens."""
+
+    runtime = make_runtime()
+    greedy = prepare(runtime, sampling_params=greedy_sampling())
+    stochastic = prepare(runtime, sampling_params=stochastic_sampling(seed=3))
+    monkeypatch.setattr(runtime, "_prepare_inputs_host", lambda request: "host")
+    monkeypatch.setattr(runtime, "_stage_inputs_and_kpt", lambda host, request: ("device", None))
+    resets = []
+    runtime._sampling_state_controller = SimpleNamespace(
+        reset=lambda state, sampling: resets.append(sampling.sampling_path)
+    )
+
+    plans = [runtime.capture_plan(greedy), runtime.capture_plan(stochastic)]
+    persistent = [plan.prepare_inputs() for plan in plans]
+
+    assert plans[0].prime(persistent[0]) is None
+    assert resets == [greedy.sampling_path, stochastic.sampling_path, greedy.sampling_path]
+    assert greedy.sampling_path != stochastic.sampling_path
+
+
+@pytest.mark.host
+def test_penalised_capture_prime_runs_the_counting_body_once_outside_the_trace(monkeypatch):
+    """Compile-only warmup never counts a sampled token, so the penalty-history
+    update has never run. The prime runs the body once, counting the token, and
+    resets the state afterwards so that phantom token is dropped."""
+
+    runtime = make_runtime()
+    penalised = prepare(
+        runtime, sampling_params=dataclasses.replace(stochastic_sampling(seed=3), presence_penalty=[1.2, 1.2])
+    )
+    assert penalised.prepared_sampling.penalties_enabled
+    monkeypatch.setattr(runtime, "_prepare_inputs_host", lambda request: "host")
+    monkeypatch.setattr(runtime, "_stage_inputs_and_kpt", lambda host, request: ("device", "kpt"))
+    events = []
+    runtime._sampling_state_controller = SimpleNamespace(reset=lambda state, sampling: events.append("reset"))
+
+    def run_body(inputs, prepared, kpt, *, device_feedback, count_tokens=True, advance_seeds=True):
+        events.append(("body", device_feedback, count_tokens, advance_seeds))
+        return "primed"
+
+    monkeypatch.setattr(runtime, "_run_body", run_body)
+    plan = runtime.capture_plan(penalised)
+    persistent = plan.prepare_inputs()
+    events.clear()
+
+    assert plan.prime(persistent) == "primed"
+    assert events == ["reset", ("body", False, True, False), "reset"]
+
+
+@pytest.mark.host
 def test_trace_refresh_skips_unchanged_sampling_values(monkeypatch):
     runtime = make_runtime(force_greedy_top_k=True)
     prepared = prepare(runtime, sampling_params=greedy_sampling())

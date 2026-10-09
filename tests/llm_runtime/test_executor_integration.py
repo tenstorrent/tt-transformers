@@ -648,8 +648,10 @@ def test_large_qwen_builder_threads_exact_decode_sampling_coverage(
             allow_force_argmax=True,
             can_sample_on_device=device_sampling_enabled,
         )
-        assert [case.sampling_path for case in plan.decode] == (
-            ["logits", "argmax", "topk"] if device_sampling_enabled else ["logits"]
+        assert [(case.sampling_path, case.penalties) for case in plan.decode] == (
+            [("logits", False), ("argmax", False), ("topk", False), ("argmax", True), ("topk", True)]
+            if device_sampling_enabled
+            else [("logits", False)]
         )
     finally:
         generator.cleanup()
@@ -897,13 +899,13 @@ def test_llama32_1b_warms_every_q128_topk_tile_start_once_per_execution_mode():
             enable_trace=enable_trace,
         )
 
-    assert executor.compile_prefill.call_count == 6
+    assert executor.compile_prefill.call_count == 12
     calls = executor.compile_prefill.call_args_list
-    assert [call.kwargs["tokens"].shape[1] for call in calls] == [32, 64, 96, 32, 64, 96]
-    assert [call.kwargs["page_table"].shape[1] for call in calls] == [1, 2, 3, 1, 2, 3]
+    assert [call.kwargs["tokens"].shape[1] for call in calls] == [32, 64, 96] * 4
+    assert [call.kwargs["page_table"].shape[1] for call in calls] == [1, 2, 3] * 4
     assert all(call.kwargs["kv_cache"] is kv_cache for call in calls)
-    assert all(call.kwargs["execution"] is executor.eager_executor for call in calls[:3])
-    assert all(call.kwargs["execution"] is executor.traced_executor for call in calls[3:])
+    assert all(call.kwargs["execution"] is executor.eager_executor for call in calls[:6])
+    assert all(call.kwargs["execution"] is executor.traced_executor for call in calls[6:])
     assert executor._q128_topk_tile_ends_warmed == {False, True}
 
 
@@ -930,7 +932,7 @@ def test_q128_tile_warmup_primes_eagerly_when_q128_has_no_trace_family():
     executor._warmup_q128_topk_tile_ends(kv_cache=object(), can_sample_on_device=True, enable_trace=True)
 
     calls = executor.compile_prefill.call_args_list
-    assert len(calls) == 3
+    assert len(calls) == 6
     assert all(call.kwargs["execution"] is executor.eager_executor for call in calls)
 
 
@@ -938,8 +940,8 @@ def test_q128_tile_warmup_primes_eagerly_when_q128_has_no_trace_family():
 @pytest.mark.parametrize(
     ("enable_trace", "expected_order"),
     [
-        (False, ("default", 96, 0, 32, 64)),
-        (True, (0, 32, 64, "default", 96)),
+        (False, ("default", 96, 96, 0, 32, 64, 0, 32, 64)),
+        (True, (0, 32, 64, 0, 32, 64, "default", 96, 96)),
     ],
     ids=("eager", "traced"),
 )
@@ -962,7 +964,7 @@ def test_qwen3_lane4_warms_every_runtime_q128_topk_signature_before_activation(e
     order = []
     activation = []
 
-    def record_signature(prompt_length):
+    def record_signature(prompt_length, penalties_enabled):
         assert not activation
         order.append(((prompt_length - 1) // 32) * 32)
         compiled.append(
@@ -973,7 +975,7 @@ def test_qwen3_lane4_warms_every_runtime_q128_topk_signature_before_activation(e
                 page_table_width=64,
                 chunk_page_table_width=None,
                 sampling_path="topk",
-                penalties_enabled=False,
+                penalties_enabled=penalties_enabled,
                 logprobs_enabled=False,
                 last_token_tile_start=((prompt_length - 1) // 32) * 32,
             )
@@ -983,8 +985,9 @@ def test_qwen3_lane4_warms_every_runtime_q128_topk_signature_before_activation(e
         expected_execution = executor.traced_executor if enable_trace else executor.eager_executor
         assert kwargs["execution"] is expected_execution
         assert kwargs["kv_cache"] == "cache"
-        assert kwargs["sampling_params"].top_k.tolist() == [32]
-        record_signature(int(kwargs["prompt_lens"][0]))
+        sampling = kwargs["sampling_params"]
+        assert sampling.top_k.tolist() == [32]
+        record_signature(int(kwargs["prompt_lens"][0]), bool(torch.as_tensor(sampling.presence_penalty).any()))
 
     executor.compile_prefill = compile_prefill
 
@@ -996,8 +999,10 @@ def test_qwen3_lane4_warms_every_runtime_q128_topk_signature_before_activation(e
             return
         default_warmed = True
         order.append("default")
-        # The coordinator's ordinary Q128 top-k case covers the final tile.
-        record_signature(128)
+        # The coordinator's ordinary Q128 top-k cases, plain and penalised,
+        # cover the final tile.
+        record_signature(128, False)
+        record_signature(128, True)
 
     for _ in range(2):
         qwen3_32b_executor._warmup_q128_around_prefill(
@@ -1012,7 +1017,11 @@ def test_qwen3_lane4_warms_every_runtime_q128_topk_signature_before_activation(e
     assert tuple(order) == expected_order
     assert {signature.last_token_tile_start for signature in compiled} == {0, 32, 64, 96}
     compiled_keys = {ProgramKey.from_signature(signature) for signature in compiled}
-    runtime_signatures = {replace(compiled[0], last_token_tile_start=tile_start) for tile_start in (0, 32, 64, 96)}
+    runtime_signatures = {
+        replace(compiled[0], last_token_tile_start=tile_start, penalties_enabled=penalties)
+        for tile_start in (0, 32, 64, 96)
+        for penalties in (False, True)
+    }
     assert {ProgramKey.from_signature(signature) for signature in runtime_signatures} == compiled_keys
     assert executor._q128_topk_tile_ends_warmed == {enable_trace}
 

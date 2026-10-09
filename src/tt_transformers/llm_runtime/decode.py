@@ -168,6 +168,8 @@ class DecodeCapturePlan:
     prepare_inputs: Any
     capture: Any
     refresh_policy: DecodeRefreshPolicy = DecodeRefreshPolicy()
+    prime: Any = None
+    release_prime_output: Any = None
 
 
 @dataclass(frozen=True)
@@ -542,12 +544,15 @@ class DecodeRuntime:
 
         self._require_prepared(prepared)
 
-        def prepare_inputs() -> DecodePersistentInputs:
+        def reset_sampling_state() -> None:
             if self._sampling_state_controller is not None and prepared.prepared_sampling is not None:
                 self._sampling_state_controller.reset(
                     self._sampling_state,
                     dataclasses.replace(prepared.prepared_sampling, slot_remap=None),
                 )
+
+        def prepare_inputs() -> DecodePersistentInputs:
+            reset_sampling_state()
             host_inputs = self._prepare_inputs_host(prepared)
             device_inputs, kpt = self._stage_inputs_and_kpt(host_inputs, prepared)
             sampling = prepared.prepared_sampling
@@ -569,7 +574,42 @@ class DecodeRuntime:
                 advance_seeds=False,
             )
 
-        return DecodeCapturePlan(prepare_inputs=prepare_inputs, capture=capture)
+        def prime(persistent: Any) -> Any:
+            # The trace compiler prepares every trace's inputs before the first
+            # capture, and each preparation resets the one sampling state to its
+            # own static identity. Reset it again for this trace just before its
+            # capture begins, outside the capture: the reset writes to the device.
+            reset_sampling_state()
+            sampling = prepared.prepared_sampling
+            if sampling is None or not sampling.penalties_enabled or self._sampling_state_controller is None:
+                return None
+            # Compile-only warmup does not count the sampled token, so the ops
+            # that update the penalty history have never run. Run the body once
+            # outside the capture so none of them is first launched inside it,
+            # then reset the state to drop the token that run counted.
+            values = _persistent_values(persistent)
+            try:
+                return self._run_body(
+                    values.device_inputs,
+                    prepared,
+                    values.kpt,
+                    # Feedback would write the sampled token into the persistent
+                    # inputs the capture is about to record.
+                    device_feedback=False,
+                    count_tokens=True,
+                    advance_seeds=False,
+                )
+            finally:
+                reset_sampling_state()
+
+        return DecodeCapturePlan(
+            prepare_inputs=prepare_inputs,
+            capture=capture,
+            prime=prime,
+            release_prime_output=lambda output: (
+                self._release_or_retain_transient((output,)) if output is not None else []
+            ),
+        )
 
     def refresh_trace(
         self,
