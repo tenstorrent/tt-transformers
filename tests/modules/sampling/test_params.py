@@ -502,3 +502,16 @@ def test_generators_decline_device_logprobs(relative_path, class_name):
     # Warmup builds no logprobs program variants, so a logprobs request must
     # take host sampling; the plugin would otherwise assume device support.
     assert _capabilities_from_source(relative_path, class_name)["supports_device_logprobs"] is False
+
+
+_EXECUTORS_WITH_DEVICE_PENALTY_STATE = {"Llama3Generator", "Llama33_70BGenerator", "Qwen3_32BGenerator"}
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(("relative_path", "class_name"), _TARGET_GENERATORS)
+def test_generators_without_penalty_state_decline_device_penalties(relative_path, class_name):
+    # Only these executors build a SamplingState1D, which holds the penalty
+    # buffers; elsewhere a penalised device program would apply no penalty.
+    capabilities = _capabilities_from_source(relative_path, class_name)
+    expected = class_name in _EXECUTORS_WITH_DEVICE_PENALTY_STATE
+    assert capabilities.get("supports_device_penalties", True) is expected

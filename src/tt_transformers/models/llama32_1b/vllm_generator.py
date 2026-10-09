@@ -83,6 +83,8 @@ class Llama32_1BGenerator:
         "supports_async_decode": True,
         "supports_sample_on_device": True,
         "max_device_top_k": 32,
+        # The executor owns no device penalty state, so a penalised request samples on host.
+        "supports_device_penalties": False,
         "accepts_trace_mode": True,
         "supports_chunked_prefill": True,
         "supports_device_logprobs": False,

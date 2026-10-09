@@ -124,7 +124,8 @@ _CAPABILITY_KEYS: tuple[CapabilityKey, ...] = (
         doc=(
             "Whether the device applies repetition/presence penalties. THE exception "
             "to 'absent means not supported': the plugin reads this key with a default "
-            "of True, so an absent key means supported. No generator declares it today."
+            "of True, so an absent key means supported. Generators whose executor owns no "
+            "device penalty state (SamplingState1D) declare False."
         ),
     ),
     CapabilityKey(
