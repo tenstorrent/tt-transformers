@@ -26,6 +26,7 @@ from tt_transformers.llm_runtime.warmup import (
     WarmupCoordinatorConfig,
     _resolve_coverage_manifest,
     resolve_prefill_warmup_seq_lens,
+    topk_warmup_sampling_variants,
 )
 from tt_transformers.modules.sampling.params import prepare_sampling_params
 
@@ -200,6 +201,7 @@ def make_coordinator(
     eager_execution=None,
     max_prefill_chunk_size=2048,
     can_enable_trace=None,
+    penalty_state=True,
 ):
     events = events if events is not None else []
     execution = execution or RecordingExecution(events)
@@ -230,6 +232,10 @@ def make_coordinator(
         max_prefill_chunk_size=max_prefill_chunk_size,
         can_enable_trace=can_enable_trace,
     )
+    if sampling and penalty_state:
+        # A runtime that owns device penalty state, as the executors with a SamplingState1D do.
+        controller = SimpleNamespace(sampling=prefill_config.model.sampling, admit=lambda *args, **kwargs: None)
+        prefill_config = replace(prefill_config, sampling_state_controller=controller, sampling_state=object())
     eager = eager_execution or execution
     eager.prefill = SimpleNamespace(config=prefill_config)
     eager.decode = SimpleNamespace(config=decode_config)
@@ -673,6 +679,22 @@ def test_device_sampling_warms_a_penalised_twin_of_every_sampled_case(allow_forc
     assert penalised == {case for case in cases if not case.penalties and case.sampling_path != "logits"}
     eager = coordinator.config.eager_plan
     assert not any(case.penalties for case in (*eager.prefill, *eager.decode))
+
+
+@pytest.mark.host
+def test_runtime_without_penalty_state_warms_no_penalised_twin():
+    """Without device penalty state a penalised request samples on host, so no twin is warmed."""
+
+    config = WarmupConfig(prefill_seq_lens=LADDER, prefill_batch_sizes=(1, 2))
+    coordinator, *_ = make_coordinator(
+        warmup_config=config, sequence_lengths=LADDER, lane_capacity=2, penalty_state=False
+    )
+    sampled = coordinator.config.sampled_plan
+
+    assert coordinator.config.penalty_variants is False
+    assert not any(case.penalties for case in (*sampled.prefill, *sampled.decode))
+    assert any(case.sampling_path != "logits" for case in sampled.prefill)
+    assert len(topk_warmup_sampling_variants(1, penalties=False)) == 1
 
 
 @pytest.mark.host

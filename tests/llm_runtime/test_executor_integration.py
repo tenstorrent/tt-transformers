@@ -887,6 +887,7 @@ def test_llama32_1b_warms_every_q128_topk_tile_start_once_per_execution_mode():
             prefill_sequence_lengths=(128,),
             prefill_trace_sequence_lengths=(128,),
             prime_q128_tile_ends=False,
+            penalty_variants=True,
         )
     )
     executor.compile_prefill = MagicMock()
@@ -925,6 +926,7 @@ def test_q128_tile_warmup_primes_eagerly_when_q128_has_no_trace_family():
             prefill_sequence_lengths=(128, 1024, 2048),
             prefill_trace_sequence_lengths=(),
             prime_q128_tile_ends=False,
+            penalty_variants=True,
         )
     )
     executor.compile_prefill = MagicMock()
@@ -957,6 +959,7 @@ def test_qwen3_lane4_warms_every_runtime_q128_topk_signature_before_activation(e
                 prefill_sequence_lengths=(128, 1024),
                 prefill_trace_sequence_lengths=(128, 1024),
                 prime_q128_tile_ends=False,
+                penalty_variants=True,
             )
         ),
     )
