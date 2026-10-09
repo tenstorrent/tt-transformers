@@ -69,6 +69,7 @@ class Qwen25_72BGenerator:
         "supports_sample_on_device": True,
         "accepts_trace_mode": True,
         "supports_chunked_prefill": True,
+        "supports_device_logprobs": False,
         # The only supported geometry (T3K) needs a ring fabric. The vLLM plugin
         # (vllm-tt-plugin #116) otherwise defaults a mesh it is not told about to
         # FABRIC_1D.

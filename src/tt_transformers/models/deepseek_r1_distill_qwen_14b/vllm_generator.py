@@ -86,6 +86,7 @@ class DeepSeekR1Qwen14BGenerator:
         "supports_sample_on_device": True,
         "accepts_trace_mode": True,
         "supports_chunked_prefill": True,
+        "supports_device_logprobs": False,
     }
     requires_prefill_trace_warmup = True
 

@@ -407,14 +407,15 @@ def test_capability_schema_parametrization_covers_every_serving_generator():
 def test_capability_schema_records_the_non_uniform_reader_defaults():
     """The schema records a per-key reader default, not one blanket rule.
 
-    ``supports_device_penalties`` defaults to True when absent (the plugin reads
-    it that way); every other key follows the contract's "absent means not
-    supported"."""
-    assert CAPABILITY_SCHEMA["supports_device_penalties"].reader_default is True
+    ``supports_device_penalties`` and ``supports_device_logprobs`` default to True
+    when absent (the plugin reads them that way); every other key follows the
+    contract's "absent means not supported"."""
+    default_true = {"supports_device_penalties", "supports_device_logprobs"}
+    assert all(CAPABILITY_SCHEMA[name].reader_default is True for name in default_true)
     assert all(
         key.reader_default is False
         for name, key in CAPABILITY_SCHEMA.items()
-        if key.value_type == "bool" and name != "supports_device_penalties"
+        if key.value_type == "bool" and name not in default_true
     )
     # max_device_top_k is a TTTv2-only key, not part of the tt-metal contract.
     assert "max_device_top_k" in KNOWN_CAPABILITY_KEYS
@@ -500,3 +501,11 @@ if loaded:
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(("relative_path", "class_name"), _TARGET_GENERATORS)
+def test_generators_decline_device_logprobs(relative_path, class_name):
+    # Warmup builds no logprobs program variants, so a logprobs request must
+    # take host sampling; the plugin would otherwise assume device support.
+    assert _capabilities_from_source(relative_path, class_name)["supports_device_logprobs"] is False

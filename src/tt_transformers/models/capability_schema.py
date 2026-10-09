@@ -10,8 +10,8 @@ dict — never a property or an instance field.
 
 The contract is deliberately terse: a subclass dict *replaces* the inherited one
 rather than merging, so an **absent key means "not supported"** and no reader
-assumes otherwise — with one documented exception, ``supports_device_penalties``,
-which the plugin reads with a default of ``True``. Because absence is meaningful,
+assumes otherwise — with two documented exceptions, ``supports_device_penalties``
+and ``supports_device_logprobs``, which the plugin reads with a default of ``True``. Because absence is meaningful,
 a key that upstream starts requiring after the split is silently "declined" here
 until someone notices. This schema exists so that "someone" is a test: it names
 every capability key this repo owns, records its type and its reader-side default,
@@ -36,8 +36,8 @@ class CapabilityKey:
     ``reader_default`` is the value a plugin reader assumes when the key is
     **absent** from a generator's ``model_capabilities`` dict. For every key that
     means "not supported" (``False`` for the boolean flags, ``None`` for the
-    advertised limits) except ``supports_device_penalties``, whose reader default
-    is ``True``. ``required`` marks the keys every serving generator in this repo
+    advertised limits) except ``supports_device_penalties`` and
+    ``supports_device_logprobs``, whose reader default is ``True``. ``required`` marks the keys every serving generator in this repo
     declares today; a model that dropped one would be changing the contract, and
     the schema test is meant to catch exactly that.
     """
@@ -123,6 +123,20 @@ _CAPABILITY_KEYS: tuple[CapabilityKey, ...] = (
             "Whether the device applies repetition/presence penalties. THE exception "
             "to 'absent means not supported': the plugin reads this key with a default "
             "of True, so an absent key means supported. No generator declares it today."
+        ),
+    ),
+    CapabilityKey(
+        name="supports_device_logprobs",
+        value_type="bool",
+        reader_default=True,
+        required=True,
+        doc=(
+            "Whether the device returns sampled-token logprobs, which the plugin uses "
+            "only on 8- and 32-device meshes. Read, like supports_device_penalties, "
+            "with a default of True. Every generator here declares False: warmup does "
+            "not build the logprobs program variants, so after trace activation a "
+            "logprobs request could not be served on device. The plugin samples such "
+            "a request on host instead."
         ),
     ),
 )
