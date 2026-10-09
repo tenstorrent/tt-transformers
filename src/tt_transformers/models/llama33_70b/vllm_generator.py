@@ -165,7 +165,7 @@ class Llama33_70BGenerator:
                 max_seq_len=max_seq_len,
                 n_layers=n_layers,
                 tt_data_parallel=tt_data_parallel,
-                optimizations=optimizations,
+                optimizations="performance" if optimizations is None else optimizations,
                 trace_mode=trace_mode,
                 device_sampling_enabled=device_sampling_enabled,
             )

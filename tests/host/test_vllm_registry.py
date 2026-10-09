@@ -13,6 +13,7 @@ has to be routed.
 from __future__ import annotations
 
 import ast
+import builtins
 import importlib
 import json
 import subprocess
@@ -365,3 +366,43 @@ def test_generator_accepts_what_the_dispatcher_passes(dispatcher, entry) -> None
 
     defaults = dict(zip(names[-len(signature.defaults) :], signature.defaults))
     assert ast.literal_eval(defaults["optimizations"]) == "performance"
+
+
+def _run_initialize(entry: GeneratorEntry, **kwargs) -> SimpleNamespace:
+    """Run the generator's ``initialize_vllm_model`` body with its builders replaced.
+
+    The generator modules import ``ttnn``, so the method is compiled from source
+    with every global it reads bound to a recorder: a config class call returns
+    its keywords, and a builder call returns the config it was given.
+    """
+
+    method = next(
+        node
+        for node in _generator_class(entry).body
+        if isinstance(node, ast.FunctionDef) and node.name == "initialize_vllm_model"
+    )
+    method.decorator_list = []
+    module = ast.Module(body=[method], type_ignores=[])
+    code = compile(ast.fix_missing_locations(module), str(_generator_source(entry)), "exec")
+
+    def record(*args, **kwargs):
+        return args[0] if args else SimpleNamespace(**kwargs)
+
+    loaded = {node.id for node in ast.walk(method) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)}
+    namespace: dict[str, object] = {name: record for name in loaded if not hasattr(builtins, name)}
+    exec(code, namespace)
+    hf_config = SimpleNamespace(_name_or_path=entry.hf_id)
+    return namespace["initialize_vllm_model"](None, hf_config, object(), 32, 4096, **kwargs)
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(("dispatcher", "entry"), _all_entries(), ids=lambda value: getattr(value, "package", None))
+@pytest.mark.parametrize(
+    ("optimizations", "expected"),
+    [(None, "performance"), ("performance", "performance"), ("accuracy", "accuracy")],
+)
+def test_unspecified_precision_builds_the_generator_default(dispatcher, entry, optimizations, expected) -> None:
+    """A direct generator override that names no precision gets performance, as the dispatcher path does."""
+
+    config = _run_initialize(entry, optimizations=optimizations)
+    assert config.optimizations == expected
