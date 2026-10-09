@@ -79,6 +79,7 @@ class Qwen2Generator:
         "supports_prefix_caching": True,
         "supports_async_decode": True,
         "supports_sample_on_device": True,
+        "max_device_top_k": 32,
         "accepts_trace_mode": True,
         "supports_chunked_prefill": True,
         "supports_device_logprobs": False,

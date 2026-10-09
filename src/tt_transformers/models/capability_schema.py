@@ -93,11 +93,13 @@ _CAPABILITY_KEYS: tuple[CapabilityKey, ...] = (
         name="max_device_top_k",
         value_type="int",
         reader_default=None,
-        required=False,
+        required=True,
         doc=(
             "Largest top-k the device sampler supports. A TTTv2-only key: it is not "
             "part of the tt-metal capability contract, so the schema describes what "
-            "this repo owns. Only meaningful alongside supports_sample_on_device."
+            "this repo owns. Only meaningful alongside supports_sample_on_device. "
+            "Absent, the plugin sends an unbounded or larger top-k to the device, "
+            "which rejects it."
         ),
     ),
     CapabilityKey(

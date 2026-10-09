@@ -351,14 +351,7 @@ _TARGET_GENERATORS = [
 
 
 @pytest.mark.host
-@pytest.mark.parametrize(
-    ("relative_path", "class_name"),
-    [
-        ("src/tt_transformers/models/llama3_8b/vllm_generator.py", "Llama3Generator"),
-        ("src/tt_transformers/models/llama33_70b/vllm_generator.py", "Llama33_70BGenerator"),
-        ("src/tt_transformers/models/qwen3_32b/vllm_generator.py", "Qwen3_32BGenerator"),
-    ],
-)
+@pytest.mark.parametrize(("relative_path", "class_name"), _TARGET_GENERATORS)
 def test_target_generator_capabilities_advertise_exact_device_top_k(relative_path, class_name):
     capabilities = _capabilities_from_source(relative_path, class_name)
 
