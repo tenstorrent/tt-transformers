@@ -69,6 +69,7 @@ class Qwen3_32BGenerator:
         "supports_sample_on_device": True,
         "max_device_top_k": 32,
         "accepts_trace_mode": True,
+        "supports_chunked_prefill": True,
         # Every supported multi-device geometry (T3K, P150x4) needs a ring
         # fabric. The vLLM plugin (vllm-tt-plugin #116) otherwise defaults a
         # mesh it is not told about to FABRIC_1D.

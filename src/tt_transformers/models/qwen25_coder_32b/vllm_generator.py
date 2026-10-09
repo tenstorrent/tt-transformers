@@ -68,6 +68,7 @@ class Qwen25Coder32BGenerator:
         "supports_async_decode": True,
         "supports_sample_on_device": True,
         "accepts_trace_mode": True,
+        "supports_chunked_prefill": True,
         # The only supported geometry (T3K) needs a ring fabric. The vLLM plugin
         # (vllm-tt-plugin #116) otherwise defaults a mesh it is not told about to
         # FABRIC_1D.

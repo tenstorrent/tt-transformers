@@ -79,6 +79,17 @@ _CAPABILITY_KEYS: tuple[CapabilityKey, ...] = (
         doc="Generator accepts a caller-chosen trace mode (none / decode_only / all).",
     ),
     CapabilityKey(
+        name="supports_chunked_prefill",
+        value_type="bool",
+        reader_default=False,
+        required=True,
+        doc=(
+            "Generator can prefill a prompt over several steps, each starting at a "
+            "block-aligned offset into the paged KV cache. Absent, the plugin turns "
+            "chunked prefill off and raises max_num_batched_tokens to max_model_len."
+        ),
+    ),
+    CapabilityKey(
         name="max_device_top_k",
         value_type="int",
         reader_default=None,

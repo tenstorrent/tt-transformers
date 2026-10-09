@@ -80,6 +80,7 @@ class Llama3Generator:
         "supports_sample_on_device": True,
         "max_device_top_k": 32,
         "accepts_trace_mode": True,
+        "supports_chunked_prefill": True,
     }
     requires_prefill_trace_warmup = True
 

@@ -83,6 +83,7 @@ class Llama32_3BGenerator:
         "supports_async_decode": True,
         "supports_sample_on_device": True,
         "accepts_trace_mode": True,
+        "supports_chunked_prefill": True,
     }
     requires_prefill_trace_warmup = True
 

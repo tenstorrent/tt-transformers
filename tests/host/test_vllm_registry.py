@@ -61,7 +61,7 @@ PLUGIN_CAPABILITY_KEYS = {
     "fabric_config": "absent: generators of one architecture need different fabrics",
     "max_device_top_k": "absent: read from the generator instance",
     "supports_device_penalties": "absent: read from the generator instance; absent means supported",
-    "supports_chunked_prefill": "absent: no generator declares it",
+    "supports_chunked_prefill": "declared",
     "output_tokens_per_step": "absent: every generator emits one token per step",
     "tt_adaptive_block_output": "absent: block-output only",
     "tt_adaptive_block_max_prompt_tokens": "absent: block-output only",

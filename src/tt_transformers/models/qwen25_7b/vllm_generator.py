@@ -80,6 +80,7 @@ class Qwen25Generator:
         "supports_async_decode": True,
         "supports_sample_on_device": True,
         "accepts_trace_mode": True,
+        "supports_chunked_prefill": True,
         # The only supported multi-device geometry is N300, which the vLLM plugin
         # (vllm-tt-plugin #116) already defaults to FABRIC_1D. Declared explicitly
         # so the choice is a visible one-liner rather than an inherited default.
