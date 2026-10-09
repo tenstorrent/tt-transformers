@@ -346,6 +346,7 @@ class Llama32_3BExecutor:
 
 
 @_with_executor_facade
+@_with_q128_warmup_surface
 class Llama3Executor:
     """Llama 3.1-8B facade over one family-neutral executor."""
 
@@ -372,7 +373,9 @@ class Llama3Executor:
             sampling_state=sampling_state,
             sampling_type=Sampling1D,
             request_state_fields=("prompt_tokens", "output_tokens", "slot_remap"),
+            prefill_warmup=_warmup_q128_around_prefill,
         )
+        self._model_executor._q128_topk_tile_ends_warmed = set()
 
 
 @_with_executor_facade

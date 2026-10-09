@@ -170,6 +170,22 @@ def test_executor_resolves_batched_prefill_policy(
 
 
 @pytest.mark.host
+def test_executor_installs_q128_topk_tile_warmup(monkeypatch):
+    # A 32-row sampler selects one Q128 top-k program per last-token tile even
+    # when the lane batch is below 32, where the coordinator primes only the
+    # final tile; the executor must prime the other three before activation.
+    core = SimpleNamespace()
+    model_executor = create_autospec(llama3_family_executor.ModelExecutor, return_value=core)
+    monkeypatch.setattr(llama3_family_executor, "ModelExecutor", model_executor)
+
+    executor = llama_executor.Llama3Executor(_model(), _runtime_config(), _config("all"))
+
+    assert core._q128_topk_tile_ends_warmed == set()
+    assert model_executor.call_args.kwargs["prefill_warmup"] is llama3_family_executor._warmup_q128_around_prefill
+    assert callable(executor._warmup_q128_topk_tile_ends)
+
+
+@pytest.mark.host
 def test_executor_rejects_batched_prefill_diagnostic_override_without_device_sampling(expect_error):
     base_config = _config()
 
