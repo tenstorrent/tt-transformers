@@ -438,6 +438,7 @@ def build_mistral_7b_generator(config: Mistral7BGeneratorConfig) -> Mistral7BGen
                     dtype=model_kv_cache_dtypes[0],
                 ),
                 device_sampling_enabled=config.device_sampling_enabled,
+                sequential_prefill=True,
             )
             lanes.append(build_mistral_7b_executor(llm, executor_config))
 

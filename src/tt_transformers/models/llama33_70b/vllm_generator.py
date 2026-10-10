@@ -460,6 +460,7 @@ def build_llama33_70b_generator(config: Llama33_70BGeneratorConfig) -> Llama33_7
                     dtype=model_kv_cache_dtypes[0],
                 ),
                 device_sampling_enabled=config.device_sampling_enabled,
+                sequential_prefill=True,
             )
             lanes.append(build_llama33_70b_executor(llm, executor_config))
 

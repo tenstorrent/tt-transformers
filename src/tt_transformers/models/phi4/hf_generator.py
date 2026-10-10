@@ -417,6 +417,8 @@ class Phi4ExecutorConfig:
     warmup: WarmupConfig
     paged_kv_cache: PagedKVCacheConfig
     device_sampling_enabled: bool
+    # Prefill one sequence per pass (see ``ModelExecutorConfig.sequential_prefill``).
+    sequential_prefill: bool = False
 
     def __post_init__(self) -> None:
         nested_configs = (
@@ -429,6 +431,8 @@ class Phi4ExecutorConfig:
                 raise TypeError(f"{name} must be exactly {expected_type.__name__}")
         if not isinstance(self.device_sampling_enabled, bool):
             raise TypeError("device_sampling_enabled must be bool")
+        if not isinstance(self.sequential_prefill, bool):
+            raise TypeError("sequential_prefill must be bool")
 
 
 class Phi4Executor:
@@ -495,7 +499,7 @@ class Phi4Executor:
                 device_sampling_enabled=config.device_sampling_enabled,
                 can_enable_trace=runtime_config.can_enable_trace,
                 supports_batched_prefill=bool(runtime_config.supports_batched_prefill),
-                disable_batched_prefill=bool(runtime_config.disable_batched_prefill),
+                disable_batched_prefill=bool(runtime_config.disable_batched_prefill) or config.sequential_prefill,
                 max_prefill_batch_size=int(runtime_config.max_prefill_batch_size),
                 batched_prefill_batched_extract=bool(runtime_config.batched_prefill_batched_extract),
             )

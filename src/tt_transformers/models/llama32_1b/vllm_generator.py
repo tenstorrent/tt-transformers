@@ -434,6 +434,7 @@ def build_llama32_1b_generator(config: Llama32_1BGeneratorConfig) -> Llama32_1BG
                     dtype=model_kv_cache_dtypes[0],
                 ),
                 device_sampling_enabled=config.device_sampling_enabled,
+                sequential_prefill=True,
             )
             lanes.append(build_llama32_1b_executor(llm, executor_config))
 

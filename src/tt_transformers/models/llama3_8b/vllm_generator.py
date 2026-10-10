@@ -425,6 +425,7 @@ def build_llama3_generator(config: Llama3GeneratorConfig) -> Llama3Generator:
                     dtype=model_kv_cache_dtypes[0],
                 ),
                 device_sampling_enabled=config.device_sampling_enabled,
+                sequential_prefill=True,
             )
             lanes.append(build_llama3_executor(llm, executor_config))
 

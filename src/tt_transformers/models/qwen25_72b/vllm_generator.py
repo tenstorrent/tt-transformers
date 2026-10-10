@@ -321,6 +321,7 @@ def build_qwen25_72b_generator(config: Qwen25_72BGeneratorConfig) -> Qwen25_72BG
                     dtype=model_kv_cache_dtypes[0],
                 ),
                 device_sampling_enabled=config.device_sampling_enabled,
+                sequential_prefill=True,
             )
             lanes.append(build_qwen25_72b_executor(llm, executor_config))
         adapter = _build_vllm_adapter(lanes[0])

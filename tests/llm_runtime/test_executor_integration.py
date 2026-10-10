@@ -787,7 +787,7 @@ def test_model_owned_executor_has_exact_composition_and_owner_counts(binding, mo
         assert executor.traced_decode_execution is executor.traced_executor
 
 
-def _device_sampling_executor(binding, monkeypatch, *, runtime_disable: bool):
+def _device_sampling_executor(binding, monkeypatch, *, runtime_disable: bool, sequential_prefill: bool = False):
     class FakeSampling1D:
         config = SimpleNamespace(
             is_resolved=lambda: True,
@@ -828,25 +828,28 @@ def _device_sampling_executor(binding, monkeypatch, *, runtime_disable: bool):
     config = replace(
         binding.make_executor_config("none"),
         device_sampling_enabled=True,
+        sequential_prefill=sequential_prefill,
     )
     return binding.executor_class(model, runtime_config, config)
 
 
 @pytest.mark.host
 @pytest.mark.parametrize(
-    ("runtime_disable", "environment_disable", "expected_kinds"),
+    ("runtime_disable", "environment_disable", "sequential_prefill", "expected_kinds"),
     [
-        (False, False, ("batched",)),
-        (True, False, ("single", "single")),
-        (False, True, ("single", "single")),
+        (False, False, False, ("batched",)),
+        (True, False, False, ("single", "single")),
+        (False, True, False, ("single", "single")),
+        (False, False, True, ("single", "single")),
     ],
-    ids=("device-sampled-batched", "runtime-disabled", "environment-disabled"),
+    ids=("device-sampled-batched", "runtime-disabled", "environment-disabled", "sequential-prefill"),
 )
 def test_device_sampling_prefill_batch_policy_is_model_owned(
     binding,
     monkeypatch,
     runtime_disable,
     environment_disable,
+    sequential_prefill,
     expected_kinds,
 ):
     if environment_disable:
@@ -857,6 +860,7 @@ def test_device_sampling_prefill_batch_policy_is_model_owned(
         binding,
         monkeypatch,
         runtime_disable=runtime_disable,
+        sequential_prefill=sequential_prefill,
     )
 
     prepared = executor.prefill_runtime.prepare(
@@ -1771,6 +1775,7 @@ def test_generator_constructs_data_parallel_lane_group(binding, monkeypatch):
         assert [lane.mesh_device for lane in generator.target.lanes] == submeshes
         assert len({id(lane) for lane in generator.target.lanes}) == 2
         assert all(isinstance(config, binding.executor_config_class) for _, config in executor_calls)
+        assert all(config.sequential_prefill for _, config in executor_calls)
         assert all(llm.model.config.max_batch_size == 2 for llm, _ in executor_calls)
         assert generator._adapter.config.trace.mode == "all"
         assert generator._adapter.config.expected_num_layers == 1
