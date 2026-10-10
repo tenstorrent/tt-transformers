@@ -29,7 +29,7 @@ from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, 
 from tt_transformers.llm_runtime.tensor_resources import attach_cleanup_failures
 from tt_transformers.models.llama3_8b.model import Llama31_8BPagedAttentionConfig
 from tt_transformers.models.llama3_executor import Llama3Executor, Llama3ExecutorConfig
-from tt_transformers.tensor_utils import nearest_multiple
+from tt_transformers.tensor_utils import nearest_multiple, single_threaded_torch
 
 DEFAULT_HF_MODEL = "meta-llama/Llama-3.1-8B-Instruct"
 DEFAULT_HF_REVISION = "0e9e39f249a16976918f6564b8830bc894c89659"
@@ -115,7 +115,8 @@ def compute_gather_cos_sin(
 
     t = torch.arange(seq_len * 2.0)
     freqs = torch.outer(t, inv_freq).float()
-    cos, sin = torch.cos(freqs), torch.sin(freqs)
+    with single_threaded_torch():
+        cos, sin = torch.cos(freqs), torch.sin(freqs)
     return _gather_cos_sin(torch.arange(seq_len), cos, sin)
 
 

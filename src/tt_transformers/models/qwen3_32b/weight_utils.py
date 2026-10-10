@@ -26,6 +26,7 @@ import torch
 import ttnn
 
 from tt_transformers.modules.lazy_weight import LazyWeight
+from tt_transformers.tensor_utils import single_threaded_torch
 
 
 def reverse_permute(tensor: torch.Tensor, n_heads: int, dim1: int, dim2: int) -> torch.Tensor:
@@ -64,7 +65,7 @@ def build_rope_cos_sin_torch(
     """Build ``[1, 1, table_len, head_dim]`` cos/sin tensors (Meta layout) from HF rotary module."""
     x = torch.zeros(1, 1, table_len, head_dim, dtype=dtype)
     position_ids = torch.arange(table_len, dtype=torch.long).unsqueeze(0)
-    with torch.no_grad():
+    with torch.no_grad(), single_threaded_torch():
         cos_hf, sin_hf = rotary_emb(x, position_ids)
     cos_m, sin_m = permute_hf_rope_to_meta_tables(cos_hf.float(), sin_hf.float())
     return cos_m.to(dtype), sin_m.to(dtype)
