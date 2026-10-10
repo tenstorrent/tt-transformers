@@ -129,6 +129,20 @@ _CAPABILITY_KEYS: tuple[CapabilityKey, ...] = (
         ),
     ),
     CapabilityKey(
+        name="supports_stochastic_device_prefill",
+        value_type="bool",
+        reader_default=True,
+        required=False,
+        doc=(
+            "Whether a nonzero-temperature prefill row may be sampled on device. Read, "
+            "like supports_device_penalties, with a default of True. Generators whose "
+            "executor owns no SamplingState1D declare False: their prefill sampler seeds "
+            "from a fixed per-slot buffer, so the first token would depend on the slot "
+            "rather than the request and would ignore its seed. The plugin samples such "
+            "a prefill on host; greedy prefill and decode stay on device."
+        ),
+    ),
+    CapabilityKey(
         name="supports_device_logprobs",
         value_type="bool",
         reader_default=True,

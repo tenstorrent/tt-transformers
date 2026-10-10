@@ -86,6 +86,9 @@ class Mistral7BGenerator:
         "max_device_top_k": 32,
         # The executor owns no device penalty state, so a penalised request samples on host.
         "supports_device_penalties": False,
+        # Prefill samples from a fixed per-slot seed, so a sampled first token would
+        # depend on the slot, not the request or its seed: sample it on host.
+        "supports_stochastic_device_prefill": False,
         "accepts_trace_mode": True,
         "supports_chunked_prefill": True,
         "supports_device_logprobs": False,
