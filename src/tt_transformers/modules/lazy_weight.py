@@ -16,6 +16,7 @@ Design principles:
 """
 
 import hashlib
+import os
 import pathlib
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -339,12 +340,29 @@ def _from_torch_and_dump(
 
     assert cache_file_name is not None, "cache_file_name must be provided for caching"
     logger.debug(f"\033[33m[cache miss]\033[0m Generating cache for {cache_file_name}")
-    pathlib.Path(cache_file_name).parent.mkdir(parents=True, exist_ok=True)
-    ttnn._ttnn.tensor.dump_tensor_flatbuffer(str(cache_file_name), tensor)
+    _dump_cache_file_atomically(pathlib.Path(cache_file_name), tensor)
 
     if device is not None:
         tensor = tensor.to(device, memory_config)
     return tensor
+
+
+def _dump_cache_file_atomically(cache_file: pathlib.Path, tensor: ttnn.Tensor) -> None:
+    """Publish a cache file only once it is complete.
+
+    Several processes can share one cache directory (one per data-parallel rank)
+    and fill it at the same time. A reader treats an existing file as a cache hit,
+    so the tensor is written to a process-unique temporary name in the same
+    directory and renamed into place, which is atomic on POSIX filesystems.
+    """
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    temporary = cache_file.with_name(f"{cache_file.name}.{os.getpid()}.tmp")
+    try:
+        ttnn._ttnn.tensor.dump_tensor_flatbuffer(str(temporary), tensor)
+        os.replace(temporary, cache_file)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
 
 
 def resolve_lazy_weight(weight: LazyWeight, **kwargs) -> LazyWeight:
