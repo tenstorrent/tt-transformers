@@ -389,6 +389,18 @@ def test_model_capabilities_declare_every_required_schema_key(relative_path, cla
 
 
 @pytest.mark.host
+def test_speculative_decode_capability_is_optional_and_defaults_to_unsupported():
+    capability = CAPABILITY_SCHEMA["supports_spec_decode"]
+
+    assert capability.value_type == "bool"
+    assert capability.reader_default is False
+    assert capability.required is False
+    assert "supports_spec_decode" not in REQUIRED_CAPABILITY_KEYS
+    llama = _capabilities_from_source("src/tt_transformers/models/llama32_1b/vllm_generator.py", "Llama32_1BGenerator")
+    assert llama["supports_spec_decode"] is True
+
+
+@pytest.mark.host
 def test_capability_schema_parametrization_covers_every_serving_generator():
     """The schema test is exhaustive: adding a model forces adding it here.
 

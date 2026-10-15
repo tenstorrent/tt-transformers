@@ -10,6 +10,7 @@ include SECURITY.md
 include SUPPORT.md
 include pyproject.toml
 recursive-include .github/workflows *.yml
+recursive-include .github/scripts *.py
 recursive-include constraints *.md *.txt
 recursive-include docs *.csv *.md
 recursive-include examples *.json *.md *.py *.yaml

@@ -7,11 +7,13 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import torch
 import ttnn
 
+from tt_transformers.cache_environment import environment_value
 from tt_transformers.llm_runtime.config import (
     PagedKVCacheConfig,
     TraceConfig,
@@ -27,6 +29,12 @@ from tt_transformers.models.llama32_1b.hf_generator import (
     build_llama32_1b_executor,
 )
 from tt_transformers.models.llama32_1b.model import Llama32_1BPagedAttentionConfig
+from tt_transformers.models.llama32_1b.speculation import (
+    SUPPORTED_BATCHES,
+    SUPPORTED_CHECKPOINT,
+    SUPPORTED_DRAFT_LENGTHS,
+    verify_logits,
+)
 
 _PROVISIONAL_BLOCK_SIZE = 32
 
@@ -83,6 +91,7 @@ class Llama32_1BGenerator:
         "supports_async_decode": True,
         "supports_sample_on_device": True,
         "accepts_trace_mode": True,
+        "supports_spec_decode": True,
     }
     requires_prefill_trace_warmup = True
 
@@ -128,6 +137,67 @@ class Llama32_1BGenerator:
         """Return the unpadded per-submesh KV token budget for vLLM sizing."""
 
         return int(max_model_len)
+
+    @classmethod
+    def spec_plan(cls, vllm_config, max_num_seqs: int, requested_k: int):
+        """Admit only synchronous, eager, host-logits CPU n-gram serving."""
+
+        from vllm_tt_plugin.spec_decode import SpecPlan, SpecReject
+        from vllm_tt_plugin.utils.dp_discovery import parse_mesh_grid
+
+        if type(max_num_seqs) is not int or max_num_seqs not in SUPPORTED_BATCHES:
+            return SpecReject(f"max_num_seqs must be one of {SUPPORTED_BATCHES}")
+        if type(requested_k) is not int or requested_k not in SUPPORTED_DRAFT_LENGTHS:
+            return SpecReject("sequential verification supports K=1, 2, or 3", SUPPORTED_DRAFT_LENGTHS)
+        mesh_device = environment_value("MESH_DEVICE")
+        try:
+            mesh_grid = parse_mesh_grid(mesh_device, 0, tg_mesh_grid=(4, 8))
+        except ValueError:
+            return SpecReject(f"sequential verification requires an explicit 1x1 MESH_DEVICE, got {mesh_device!r}")
+        if mesh_grid != (1, 1):
+            return SpecReject(f"sequential verification requires an explicit 1x1 MESH_DEVICE, got {mesh_device!r}")
+        model_config = vllm_config.model_config
+        model_name = getattr(model_config, "model", "")
+        hf_model_name = getattr(getattr(model_config, "hf_config", None), "_name_or_path", "")
+        model_names = (model_name, hf_model_name)
+        base_checkpoint = SUPPORTED_CHECKPOINT in model_names
+        if not base_checkpoint:
+            from huggingface_hub import try_to_load_from_cache
+
+            cached_config = try_to_load_from_cache(
+                SUPPORTED_CHECKPOINT, "config.json", revision=getattr(model_config, "revision", None) or "main"
+            )
+            base_checkpoint = isinstance(cached_config, str) and any(
+                name and Path(name).resolve() == Path(cached_config).parent.resolve() for name in model_names
+            )
+        if not base_checkpoint or any("Instruct" in str(name) for name in model_names):
+            return SpecReject(f"sequential verification requires the base checkpoint {SUPPORTED_CHECKPOINT}")
+        if getattr(vllm_config.speculative_config, "method", None) != "ngram":
+            return SpecReject("sequential verification supports only CPU ngram proposals")
+        if getattr(vllm_config.scheduler_config, "async_scheduling", False):
+            return SpecReject("sequential verification requires synchronous scheduling")
+        if getattr(vllm_config.cache_config, "enable_prefix_caching", False):
+            return SpecReject("sequential verification requires prefix caching disabled")
+        additional = vllm_config.additional_config or {}
+        tt_config = additional.get("tt", {})
+        if tt_config.get("trace_mode", "all") != "none":
+            return SpecReject("sequential verification requires tt.trace_mode='none'")
+        if tt_config.get("optimizations") != "performance":
+            return SpecReject("sequential verification requires tt.optimizations='performance'")
+        if tt_config.get("sample_on_device_mode") is not None:
+            return SpecReject("sequential verification requires host sampling")
+        parallel = vllm_config.parallel_config
+        if getattr(parallel, "data_parallel_size", 1) != 1 or additional.get("_tt_resolved_lane_count", 1) != 1:
+            return SpecReject("sequential verification requires one model instance without lane-DP")
+        return SpecPlan(
+            effective_k=requested_k,
+            lanes_per_request=1,
+            extra_bytes_per_seq=0,
+            extra_bytes_per_token=0,
+            accept_modes=("logits",),
+            drafter_state="internal",
+            supports_narrow_decode=False,
+        )
 
     @classmethod
     def initialize_vllm_model(
@@ -266,9 +336,30 @@ class Llama32_1BGenerator:
         sampling_params: Any = None,  # ↓ Sampling
         reset_batch: bool = False,  # ↓ State transition
         read_from_device: bool = True,  # ↓ Output policy
+        spec_mode: str | None = None,
+        num_valid_drafts: torch.Tensor | None = None,
+        accepted_counts: torch.Tensor | None = None,
         **compatibility_kwargs: Any,  # ↓ Compatibility
     ) -> Any:
         """Normalize and dispatch one vLLM decode call."""
+
+        if spec_mode is not None:
+            return self._verify(
+                tokens=tokens,
+                start_pos=start_pos,
+                page_table=page_table,
+                enable_trace=enable_trace,
+                kv_cache=kv_cache,
+                sampling_params=sampling_params,
+                read_from_device=read_from_device,
+                reset_batch=reset_batch,
+                spec_mode=spec_mode,
+                num_valid_drafts=num_valid_drafts,
+                accepted_counts=accepted_counts,
+                compatibility_kwargs=compatibility_kwargs,
+            )
+        if num_valid_drafts is not None or accepted_counts is not None:
+            raise ValueError("num_valid_drafts and accepted_counts require spec_mode='logits'")
 
         normalized, trace_requested = self._adapter.normalize_decode(
             tokens,
@@ -343,6 +434,70 @@ class Llama32_1BGenerator:
         return self.target.cleanup()
 
     # Private implementation
+
+    def _verify(
+        self,
+        *,
+        tokens,
+        start_pos,
+        page_table,
+        enable_trace,
+        kv_cache,
+        sampling_params,
+        read_from_device,
+        reset_batch,
+        spec_mode,
+        num_valid_drafts,
+        accepted_counts,
+        compatibility_kwargs,
+    ):
+        from vllm_tt_plugin.spec_decode import VerifyOutput
+
+        if spec_mode != "logits":
+            raise ValueError(f"sequential verification requires spec_mode='logits', got {spec_mode!r}")
+        if enable_trace is not False or sampling_params is not None:
+            raise ValueError("sequential verification requires eager execution and host logits")
+        if not isinstance(read_from_device, bool):
+            raise TypeError("read_from_device must be bool")
+        if isinstance(self.target, LaneGroupExecutor):
+            raise ValueError("sequential verification does not support lane-DP")
+        compatibility_kwargs = dict(compatibility_kwargs)
+        slot_remap = compatibility_kwargs.pop("slot_remap", None)
+        self._adapter._validate_compatibility_kwargs(compatibility_kwargs, operation="decode")
+        model_config = self.model.config
+        if model_config.num_devices != 1:
+            raise ValueError("sequential verification requires a single-device target")
+        cache_config = self.target.config.paged_kv_cache
+
+        def decode(**column):
+            return self.decode_forward(
+                **column,
+                enable_trace=False,
+                kv_cache=kv_cache,
+                sampling_params=None,
+                reset_batch=reset_batch,
+                read_from_device=True,
+                **compatibility_kwargs,
+            )
+
+        # Host logits use no request-owned sampler state. KV ownership follows
+        # page_table and authoritative start_pos, independent of slot_remap and
+        # the previous accepted_counts, including after a rejected suffix.
+        logits = verify_logits(
+            tokens=tokens,
+            start_pos=start_pos,
+            page_table=page_table,
+            num_valid_drafts=num_valid_drafts,
+            accepted_counts=accepted_counts,
+            slot_remap=slot_remap,
+            batch_size=model_config.max_batch_size,
+            vocab_size=model_config.vocab_size,
+            max_seq_len=model_config.max_seq_len,
+            block_size=cache_config.block_size,
+            num_blocks=cache_config.num_blocks or cache_config.max_num_blocks,
+            decode=decode,
+        )
+        return VerifyOutput(spec_mode="logits", logits=logits)
 
     def _select_prefill_execution(
         self,

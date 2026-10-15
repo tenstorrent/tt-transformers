@@ -72,6 +72,13 @@ _CAPABILITY_KEYS: tuple[CapabilityKey, ...] = (
         doc="Generator can sample tokens on the device rather than on the host.",
     ),
     CapabilityKey(
+        name="supports_spec_decode",
+        value_type="bool",
+        reader_default=False,
+        required=False,
+        doc="Generator verifies speculative candidate blocks under an admitted spec_plan.",
+    ),
+    CapabilityKey(
         name="accepts_trace_mode",
         value_type="bool",
         reader_default=False,

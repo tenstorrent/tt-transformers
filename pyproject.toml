@@ -29,6 +29,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+vllm = [
+  "vllm-tt-plugin>=0.1.0",
+  "huggingface-hub>=0.30.0",
+]
 examples = [
   "PyYAML>=6.0,<7",
   "pytz>=2024.1",

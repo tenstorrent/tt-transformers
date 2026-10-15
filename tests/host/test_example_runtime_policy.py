@@ -30,7 +30,20 @@ def test_benchmark_helper_does_not_require_private_tt_metal_infra_in_generic_ci(
         [
             sys.executable,
             "-c",
-            "from examples.common import benchmarking_utils as helper; assert helper.IS_CI_ENV is False",
+            """
+import importlib.abc
+import sys
+
+class MissingInfra(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split(".", 1)[0] == "infra":
+            raise ModuleNotFoundError("optional infra package is unavailable", name="infra")
+        return None
+
+sys.meta_path.insert(0, MissingInfra())
+from examples.common import benchmarking_utils as helper
+assert helper.IS_CI_ENV is False
+""",
         ],
         cwd=ROOT,
         env=environment,

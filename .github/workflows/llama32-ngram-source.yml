@@ -1,0 +1,282 @@
+name: Llama 3.2 1B ngram on prepared source runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner_label:
+        description: Dedicated, prepared self-hosted Linux x64 runner label
+        default: tt-llama32-prepared
+        required: true
+        type: string
+      environment_script:
+        description: Absolute path to the trusted environment activation script
+        required: true
+        type: string
+      environment_name:
+        description: Applied environment profile passed to the activation script
+        default: llama-ngram
+        required: true
+        type: string
+      plugin_checkout:
+        description: Absolute path to the prepared vllm-tt-plugin checkout
+        required: true
+        type: string
+      plugin_revision:
+        description: Exact prepared vllm-tt-plugin commit
+        default: 61c40e6334bf28467693ca530ced66beabd96998
+        required: true
+        type: string
+      tt_metal_revision:
+        description: Exact prepared tt-metal source commit
+        default: de546d3b146758714d900f11b218c8f9c805f410
+        required: true
+        type: string
+      checkpoint_revision:
+        description: Exact cached meta-llama/Llama-3.2-1B commit
+        default: 4e20de362430cd3b72f300e6b0f18e50e7166e08
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: llama32-ngram-source-${{ inputs.runner_label }}
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    name: Prepared source ordinary, device, and ngram qualification
+    runs-on: [self-hosted, Linux, X64, "${{ inputs.runner_label }}"]
+    timeout-minutes: 240
+    env:
+      ENVIRONMENT_SCRIPT: ${{ inputs.environment_script }}
+      ENVIRONMENT_NAME: ${{ inputs.environment_name }}
+      PLUGIN_CHECKOUT: ${{ inputs.plugin_checkout }}
+      PLUGIN_REVISION: ${{ inputs.plugin_revision }}
+      TT_METAL_REVISION: ${{ inputs.tt_metal_revision }}
+      CHECKPOINT_REVISION: ${{ inputs.checkpoint_revision }}
+      EXPECTED_CHECKOUT_REVISION: ${{ github.sha }}
+      EVIDENCE_DIR: ${{ github.workspace }}/generated/llama32-ngram-source
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - name: Activate once, verify exact source, and run all qualification gates
+        shell: bash
+        timeout-minutes: 225
+        run: |
+          set -euo pipefail
+          set +x
+          mkdir -p "$EVIDENCE_DIR"
+          if [[ "$ENVIRONMENT_SCRIPT" != /* || ! -f "$ENVIRONMENT_SCRIPT" || "$PLUGIN_CHECKOUT" != /* ]]; then
+            echo "environment_script and plugin_checkout must name existing absolute paths" >&2
+            exit 2
+          fi
+          if [[ ! "$ENVIRONMENT_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]; then
+            echo "environment_name contains unsupported characters" >&2
+            exit 2
+          fi
+          unset TT_ENV_FILE
+          source "$ENVIRONMENT_SCRIPT" "$ENVIRONMENT_NAME"
+          if [[ "${TT_ENV_NAME:-}" != "$ENVIRONMENT_NAME" ]]; then
+            echo "The activation script selected a different TT_ENV_NAME" >&2
+            exit 2
+          fi
+          : "${TT_METAL_HOME:?The prepared environment must select TT_METAL_HOME}"
+          export PYTHONPATH="$GITHUB_WORKSPACE/src:$GITHUB_WORKSPACE:$TT_METAL_HOME/ttnn:$TT_METAL_HOME:$TT_METAL_HOME/tools:$PLUGIN_CHECKOUT/src"
+          export MESH_DEVICE=N150 HF_MODEL=meta-llama/Llama-3.2-1B
+          export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 TT_TRANSFORMERS_OFFLINE=1
+          export LLAMA_CHECKPOINT_REVISION="$CHECKPOINT_REVISION"
+          QUALIFICATION_PYTHON="$(command -v python)"
+          TT_SMI_EXECUTABLE="$(command -v tt-smi)"
+          printf 'QUALIFICATION_PYTHON=%s\nTT_SMI_EXECUTABLE=%s\n' \
+            "$QUALIFICATION_PYTHON" "$TT_SMI_EXECUTABLE" >> "$GITHUB_ENV"
+          python - <<'PY'
+          import hashlib
+          import importlib
+          import importlib.metadata
+          import json
+          import os
+          import re
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          root = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
+          evidence = Path(os.environ["EVIDENCE_DIR"])
+          sys.path.insert(0, str(root / ".github/scripts"))
+          from qualify_llama32_ngram import engine_processes, require_cached_checkpoint
+
+          selected = {
+              "tt_transformers": (root, os.environ["EXPECTED_CHECKOUT_REVISION"]),
+              "vllm_tt_plugin": (Path(os.environ["PLUGIN_CHECKOUT"]).resolve(), os.environ["PLUGIN_REVISION"]),
+              "tt_metal": (Path(os.environ["TT_METAL_HOME"]).resolve(), os.environ["TT_METAL_REVISION"]),
+          }
+          repositories = {}
+          for name, (checkout, expected) in selected.items():
+              if re.fullmatch(r"[0-9a-f]{40}", expected) is None:
+                  raise ValueError(f"{name} requires a full commit SHA")
+              actual = subprocess.check_output(["git", "-C", str(checkout), "rev-parse", "HEAD"], text=True).strip()
+              changes = subprocess.check_output(
+                  ["git", "-C", str(checkout), "status", "--porcelain", "--untracked-files=no"], text=True
+              )
+              if actual != expected or changes:
+                  raise ValueError(f"{name} must have HEAD={expected} and no tracked changes; actual={actual}, changes={changes!r}")
+              repositories[name] = {"checkout": str(checkout), "revision": actual, "tracked_changes": changes}
+          if active := engine_processes():
+              raise RuntimeError(f"The prepared runner already has active engines: {active}")
+          modules = {
+              name: importlib.import_module(name)
+              for name in ("tt_transformers", "vllm_tt_plugin", "ttnn", "ttnn.device", "ttnn._ttnn", "vllm")
+          }
+          metal = selected["tt_metal"][0]
+          expected_origins = {
+              "tt_transformers": root / "src/tt_transformers",
+              "vllm_tt_plugin": selected["vllm_tt_plugin"][0] / "src/vllm_tt_plugin",
+              "ttnn": metal / "ttnn/ttnn",
+              "ttnn.device": metal,
+              "ttnn._ttnn": metal,
+          }
+          origins = {}
+          for name, module in modules.items():
+              origin = Path(module.__file__).resolve()
+              if name in expected_origins and not origin.is_relative_to(expected_origins[name].resolve()):
+                  raise ValueError(f"{name} resolved outside the selected source: {origin}")
+              origins[name] = str(origin)
+          runtime_root = Path(os.environ.get("TT_METAL_RUNTIME_ROOT", str(metal))).resolve()
+          if runtime_root != metal:
+              raise ValueError("The prepared source workflow requires TT_METAL_RUNTIME_ROOT=TT_METAL_HOME")
+          from huggingface_hub import try_to_load_from_cache
+          from vllm.platforms import current_platform
+          checkpoint = require_cached_checkpoint(os.environ["CHECKPOINT_REVISION"], try_to_load_from_cache)
+          if current_platform.device_type != "tt":
+              raise ValueError(f"The selected Python environment did not activate TT: {current_platform}")
+          native = Path(origins["ttnn._ttnn"])
+          report = {
+              "repositories": repositories,
+              "environment_script": os.environ["ENVIRONMENT_SCRIPT"],
+              "environment_name": os.environ["ENVIRONMENT_NAME"],
+              "python": sys.version,
+              "python_executable": sys.executable,
+              "pythonpath": os.environ["PYTHONPATH"],
+              "module_origins": origins,
+              "packages": {d.metadata["Name"]: d.version for d in importlib.metadata.distributions()},
+              "checkpoint": "meta-llama/Llama-3.2-1B",
+              "checkpoint_revision": os.environ["CHECKPOINT_REVISION"],
+              "checkpoint_config": checkpoint,
+              "mesh": os.environ["MESH_DEVICE"],
+              "tt_metal_runtime_root": str(runtime_root),
+              "native_module_sha256": hashlib.sha256(native.read_bytes()).hexdigest(),
+          }
+          (evidence / "prepared-source.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+          print("Prepared source revisions, module origins, TT activation, and checkpoint passed")
+          PY
+          tt-smi -s > "$EVIDENCE_DIR/hardware-before.json"
+          dependency_status=0
+          if python -c 'import pip' >/dev/null 2>&1; then
+            python -m pip check > "$EVIDENCE_DIR/pip-check.txt" 2>&1 || dependency_status=$?
+          else
+            command -v uv >/dev/null
+            uv pip check --python "$QUALIFICATION_PYTHON" > "$EVIDENCE_DIR/pip-check.txt" 2>&1 || dependency_status=$?
+          fi
+          printf '{"exit_status":%s,"role":"diagnostic"}\n' "$dependency_status" \
+            > "$EVIDENCE_DIR/dependency-check-status.json"
+          echo "Package metadata diagnostic exit status: $dependency_status (see pip-check.txt)"
+          python -m pytest -q tests/host/test_llama_ngram_speculation.py \
+            tests/host/test_llama_ngram_qualification.py \
+            tests/host/test_llama_ngram_pressure_reference.py \
+            --junitxml="$EVIDENCE_DIR/host-contracts.xml" 2>&1 | tee "$EVIDENCE_DIR/host-contracts.log"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from runpy import run_path
+          from xml.etree import ElementTree
+          canonicalize = run_path(".github/scripts/qualify_llama32_ngram.py")["canonicalize_junit_report"]
+          report = ElementTree.parse(canonicalize(Path(os.environ["EVIDENCE_DIR"]) / "host-contracts.xml"))
+          cases = list(report.iter("testcase"))
+          if not cases or any(case.find(tag) is not None for case in cases for tag in ("skipped", "error", "failure")):
+              raise AssertionError("Source adapter host contracts require executed, passing tests without skips")
+          PY
+          python -m pytest -q -m host --junitxml="$EVIDENCE_DIR/full-host.xml" \
+            2>&1 | tee "$EVIDENCE_DIR/full-host.log"
+          python - <<'PY'
+          import json
+          import os
+          import signal
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          evidence = Path(os.environ["EVIDENCE_DIR"])
+          command = [
+              sys.executable, ".github/scripts/qualify_llama32_ngram.py",
+              "--plugin-root", os.environ["PLUGIN_CHECKOUT"],
+              "--plugin-revision", os.environ["PLUGIN_REVISION"],
+              "--checkpoint-revision", os.environ["CHECKPOINT_REVISION"],
+              "--output", str(evidence / "qualification"),
+          ]
+          (evidence / "qualification-command.json").write_text(json.dumps(command, indent=2) + "\n")
+          def interrupted(signum, frame):
+              raise KeyboardInterrupt(f"Qualification received signal {signum}")
+          signal.signal(signal.SIGTERM, interrupted)
+          print("Full qualification should take 45 to 165 minutes; success requires all host, device, and HTTP gates", flush=True)
+          with (evidence / "qualification.log").open("w") as log:
+              process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+              try:
+                  returncode = process.wait()
+              finally:
+                  if process.poll() is None:
+                      os.killpg(process.pid, signal.SIGINT)
+                      try:
+                          process.wait(timeout=60)
+                      except subprocess.TimeoutExpired:
+                          os.killpg(process.pid, signal.SIGTERM)
+                          try:
+                              process.wait(timeout=15)
+                          except subprocess.TimeoutExpired:
+                              os.killpg(process.pid, signal.SIGKILL)
+                              process.wait(timeout=15)
+                  (evidence / "qualification-process.json").write_text(
+                      json.dumps({"pid": process.pid, "returncode": process.returncode}, indent=2) + "\n"
+                  )
+          if returncode:
+              raise SystemExit(returncode)
+          if not (evidence / "qualification/success.json").is_file():
+              raise AssertionError("The complete qualifier did not write success.json")
+          print("Full prepared-source qualification passed", flush=True)
+          PY
+      - name: Record teardown even after a failed gate
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          TEARDOWN_PYTHON="${QUALIFICATION_PYTHON:-python3}"
+          "$TEARDOWN_PYTHON" - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+          evidence = Path(os.environ["EVIDENCE_DIR"])
+          process = subprocess.run(["pgrep", "-f", "VLLM::EngineCore"], capture_output=True, text=True, check=False)
+          report = {"remaining_engine_pids": process.stdout.split(), "inspection_exit_status": process.returncode}
+          executable = os.environ.get("TT_SMI_EXECUTABLE")
+          if executable:
+              hardware = subprocess.run([executable, "-s"], capture_output=True, text=True, check=False)
+              (evidence / "hardware-after.json").write_text(hardware.stdout)
+              (evidence / "hardware-after.stderr.txt").write_text(hardware.stderr)
+              report["hardware_inspection_exit_status"] = hardware.returncode
+          (evidence / "teardown.json").write_text(json.dumps(report, indent=2) + "\n")
+          if process.returncode not in (0, 1) or report["remaining_engine_pids"]:
+              raise RuntimeError(f"Prepared-source teardown did not establish an idle engine state: {report}")
+          PY
+      - name: Upload prepared source and full qualification evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: llama32-ngram-source-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.EVIDENCE_DIR }}/
+          retention-days: 14
+          if-no-files-found: error
