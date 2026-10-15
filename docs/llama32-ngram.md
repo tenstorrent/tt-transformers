@@ -180,6 +180,15 @@ The prepared candidate uses source commit
 `de546d3b146758714d900f11b218c8f9c805f410` from tt-metal tag `v0.79.0`.
 The prepared candidate reports TTNN distribution version `0.79.0rc2`; the
 qualification records that actual version without rewriting package metadata.
+The prepared source profile also retains NumPy 1.26.4 and OpenCV 4.11.0.86.
+The tt-metal source environment requires NumPy below 2, while vLLM's declared
+OpenCV minimum selects a release that requires NumPy 2. The prepared profile's
+FiftyOne 0.25.2 also declares an SSE dependency that conflicts with vLLM's
+installed SSE package. `llama32-ngram-source.yml` records the complete package
+metadata check and its exit status as diagnostics. Exact import origins,
+ordinary serving, and every host, device, and HTTP correctness gate remain
+mandatory. The Llama text qualification does not qualify computer vision or
+FiftyOne benchmarking in this source environment.
 For the prepared `llama-ngram` profile, dispatch with:
 
 ```bash

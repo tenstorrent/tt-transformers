@@ -174,11 +174,16 @@ jobs:
           print("Prepared source revisions, module origins, TT activation, and checkpoint passed")
           PY
           tt-smi -s > "$EVIDENCE_DIR/hardware-before.json"
+          dependency_status=0
           if python -c 'import pip' >/dev/null 2>&1; then
-            python -m pip check > "$EVIDENCE_DIR/pip-check.txt" 2>&1
+            python -m pip check > "$EVIDENCE_DIR/pip-check.txt" 2>&1 || dependency_status=$?
           else
-            uv pip check --python "$QUALIFICATION_PYTHON" > "$EVIDENCE_DIR/pip-check.txt" 2>&1
+            command -v uv >/dev/null
+            uv pip check --python "$QUALIFICATION_PYTHON" > "$EVIDENCE_DIR/pip-check.txt" 2>&1 || dependency_status=$?
           fi
+          printf '{"exit_status":%s,"role":"diagnostic"}\n' "$dependency_status" \
+            > "$EVIDENCE_DIR/dependency-check-status.json"
+          echo "Package metadata diagnostic exit status: $dependency_status (see pip-check.txt)"
           python -m pytest -q tests/host/test_llama_ngram_speculation.py \
             tests/host/test_llama_ngram_qualification.py \
             --junitxml="$EVIDENCE_DIR/host-contracts.xml" 2>&1 | tee "$EVIDENCE_DIR/host-contracts.log"
