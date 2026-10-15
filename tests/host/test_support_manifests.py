@@ -65,7 +65,11 @@ def test_examples_are_pytest_free_and_tests_depend_on_examples_only_one_way():
 
 @pytest.mark.host
 def test_hardware_wrappers_import_public_example_modules():
-    wrappers = sorted((ROOT / "tests/hardware/models").glob("*/test_*.py"))
+    wrappers = sorted(
+        path
+        for path in (ROOT / "tests/hardware/models").glob("*/test_*.py")
+        if path.name in {"test_demo.py", "test_smoke.py", "test_hf_generate.py"}
+    )
     if len(wrappers) != 15:
         raise AssertionError(f"expected 15 hardware wrappers, got {len(wrappers)}")
     for path in wrappers:

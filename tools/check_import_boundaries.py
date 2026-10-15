@@ -16,12 +16,13 @@ from pathlib import Path
 # Import roots corresponding to the production dependency declarations in
 # pyproject.toml. Distribution/import spelling differs for no entry here.
 DECLARED_BASE_THIRD_PARTY_ROOTS = frozenset({"loguru", "torch", "ttnn", "transformers"})
-DECLARED_OPTIONAL_THIRD_PARTY_ROOTS = frozenset({"tqdm", "yaml"})
+DECLARED_OPTIONAL_THIRD_PARTY_ROOTS = frozenset({"tqdm", "yaml", "vllm_tt_plugin"})
 # Installation requirements do not relax the import-layer or lazy-import policy.
 RESTRICTED_ROOT_LAYERS = {
     "tqdm": frozenset({"models"}),
     "transformers": frozenset({"models"}),
     "yaml": frozenset({"root"}),
+    "vllm_tt_plugin": frozenset({"models"}),
 }
 DEPENDENCY_POLICY_LAYERS = frozenset({"root", "modules", "sampling", "llm_runtime", "models"})
 STDLIB_ROOTS = frozenset(sys.stdlib_module_names) | {"__future__"}

@@ -1,5 +1,12 @@
 # Llama 3.2 1B with TTTv2
 
+`Llama32_1BGenerator` also supplies sequential host-logits verification for the
+base `meta-llama/Llama-3.2-1B` checkpoint with CPU n-gram proposals. Read
+[Llama n-gram launch and qualification](../../docs/llama32-ngram.md) for the
+admitted speculative scope, explicit adapter selection, real-model tests, and
+device CI. Real-device qualification of that speculative scope remains
+unverified until the complete CI command succeeds.
+
 ## Generate text
 
 [`demo.py`](demo.py) loads the public model with `hf_generator.from_pretrained`,

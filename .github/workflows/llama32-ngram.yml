@@ -1,0 +1,186 @@
+name: Llama 3.2 1B sampled ngram qualification
+
+on:
+  workflow_dispatch:
+    inputs:
+      checkpoint_revision:
+        description: Exact meta-llama/Llama-3.2-1B Hugging Face commit
+        required: true
+        type: string
+      plugin_revision:
+        description: Exact vllm-tt-plugin commit containing logits acceptance
+        default: 61c40e6334bf28467693ca530ced66beabd96998
+        required: true
+        type: string
+      tt_metal_revision:
+        description: Exact tt-metal source commit matching the selected runtime
+        required: true
+        type: string
+      runtime_run_id:
+        description: Completed TTNN development runtime run with matching ttnn-runtime bundle
+        required: true
+        type: string
+      runner:
+        description: Physical runner pool (the tests use one logical device)
+        required: true
+        default: tt-ubuntu-2204-N150-viommu-stable
+        type: choice
+        options:
+          - tt-ubuntu-2204-N150-viommu-stable
+          - tt-ubuntu-2204-N300-viommu-stable
+
+permissions:
+  contents: read
+  packages: read
+  actions: read
+
+concurrency:
+  group: llama32-ngram-${{ inputs.runner }}
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    name: Single-device ordinary and sampled ngram B1-2-4 K1-2-3
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 240
+    container:
+      image: ghcr.io/tenstorrent/tt-metal/tt-metalium/ubuntu-22.04-dev-amd64@sha256:8920406917d04f92ecc147d9e9a307c667551e21694945f4652dcd0beb4eb0c6
+      options: "--device /dev/tenstorrent -e TT_GH_CI_INFRA"
+    env:
+      MESH_DEVICE: N150
+      HF_MODEL: meta-llama/Llama-3.2-1B
+      PYTHONUNBUFFERED: "1"
+      PIP_INDEX_URL: https://pypi.org/simple
+      PIP_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.10.19"
+      - name: Set isolated environment paths
+        shell: bash
+        run: |
+          echo "HF_HOME=${RUNNER_TEMP}/llama32-hf" >> "$GITHUB_ENV"
+          echo "TT_CACHE_PATH=${RUNNER_TEMP}/llama32-tt" >> "$GITHUB_ENV"
+          echo "TT_METAL_CACHE=${RUNNER_TEMP}/llama32-kernels" >> "$GITHUB_ENV"
+          echo "TT_METAL_HOME=${RUNNER_TEMP}/tt-metal" >> "$GITHUB_ENV"
+          echo "PLUGIN_ROOT=${RUNNER_TEMP}/vllm-tt-plugin" >> "$GITHUB_ENV"
+          echo "UV_CACHE_DIR=${RUNNER_TEMP}/uv-cache" >> "$GITHUB_ENV"
+          mkdir -p generated
+      - name: Inspect the assigned N150 device
+        shell: bash
+        run: tt-smi -s | tee generated/hardware-before.json
+      - name: Download matching TTNN runtime bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ttnn-runtime
+          path: ${{ runner.temp }}/ttnn-bundle
+          run-id: ${{ inputs.runtime_run_id }}
+          github-token: ${{ github.token }}
+      - name: Fetch exact integration dependencies
+        shell: bash
+        env:
+          PLUGIN_REVISION: ${{ inputs.plugin_revision }}
+          TT_METAL_REVISION: ${{ inputs.tt_metal_revision }}
+        run: |
+          git init "$PLUGIN_ROOT"
+          git -C "$PLUGIN_ROOT" remote add origin https://github.com/tenstorrent/vllm-tt-plugin.git
+          git -C "$PLUGIN_ROOT" fetch --depth 1 origin "$PLUGIN_REVISION"
+          git -C "$PLUGIN_ROOT" checkout --detach FETCH_HEAD
+          git init "$TT_METAL_HOME"
+          git -C "$TT_METAL_HOME" remote add origin https://github.com/tenstorrent/tt-metal.git
+          git -C "$TT_METAL_HOME" fetch --depth 1 origin "$TT_METAL_REVISION"
+          git -C "$TT_METAL_HOME" checkout --detach FETCH_HEAD
+      - name: Prepare verified TTNN runtime assets
+        shell: bash
+        env:
+          TT_METAL_REVISION: ${{ inputs.tt_metal_revision }}
+        run: |
+          python -m venv "${RUNNER_TEMP}/ttnn-launcher"
+          "${RUNNER_TEMP}/ttnn-launcher/bin/python" -m pip install packaging tomli
+          "${RUNNER_TEMP}/ttnn-launcher/bin/python" tools/ttnn_dev.py env \
+            --runtime "${RUNNER_TEMP}/ttnn-bundle/runtime.json" --output "${RUNNER_TEMP}/llama32-runtime"
+          "${RUNNER_TEMP}/ttnn-launcher/bin/python" tools/ttnn_dev.py doctor \
+            --environment "${RUNNER_TEMP}/llama32-runtime/environment.json" --output generated/runtime-doctor.json
+          "${RUNNER_TEMP}/ttnn-launcher/bin/python" tools/ttnn_dev.py run \
+            --environment "${RUNNER_TEMP}/llama32-runtime/environment.json" -- \
+            python -m tools.ttnn_dev_support.smoke
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          bundle = json.loads((Path(os.environ["RUNNER_TEMP"]) / "ttnn-bundle/runtime.json").read_text())
+          if bundle["metal"]["sha"] != os.environ["TT_METAL_REVISION"]:
+              raise ValueError("The TTNN bundle does not match tt_metal_revision")
+          environment = json.loads((Path(os.environ["RUNNER_TEMP"]) / "llama32-runtime/environment.json").read_text())
+          with open(os.environ["GITHUB_ENV"], "a") as stream:
+              stream.write(f"TT_METAL_RUNTIME_ROOT={environment['runtime_root']}\n")
+              stream.write(f"VIRTUAL_ENV={environment['venv']}\n")
+          PY
+      - name: Expose standalone source and install documented plugin environment
+        shell: bash
+        timeout-minutes: 60
+        run: |
+          source "$VIRTUAL_ENV/bin/activate"
+          export PYTHONPATH="$GITHUB_WORKSPACE/src:$GITHUB_WORKSPACE"
+          echo "PYTHONPATH=$PYTHONPATH" >> "$GITHUB_ENV"
+          cat "$PLUGIN_ROOT/README.md" > generated/plugin-install-instructions.md
+          cd "$PLUGIN_ROOT"
+          source docs/install-vllm-tt.sh
+          python -m pip check
+          python -m pip freeze > "$GITHUB_WORKSPACE/generated/python-packages.txt"
+          echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
+      - name: Run adapter and qualification host contracts with real TTNN
+        shell: bash
+        run: |
+          python -m pytest -q tests/host/test_llama_ngram_speculation.py \
+            tests/host/test_llama_ngram_qualification.py --junitxml=generated/host-contracts.xml
+          python - <<'PY'
+          from xml.etree import ElementTree
+          report = ElementTree.parse("generated/host-contracts.xml")
+          cases = report.findall(".//testcase")
+          if not cases or any(case.find(tag) is not None for case in cases for tag in ("skipped", "error", "failure")):
+              raise AssertionError("Adapter host contracts require executed, passing tests without skips")
+          PY
+      - name: Cache the exact authorized base checkpoint
+        shell: bash
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          CHECKPOINT_REVISION: ${{ inputs.checkpoint_revision }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from huggingface_hub import snapshot_download
+          revision = os.environ["CHECKPOINT_REVISION"]
+          if len(revision) != 40 or any(c not in "0123456789abcdef" for c in revision):
+              raise ValueError("checkpoint_revision must be a full commit SHA")
+          snapshot = Path(snapshot_download("meta-llama/Llama-3.2-1B", revision=revision))
+          references = snapshot.parents[1] / "refs"
+          references.mkdir(exist_ok=True)
+          (references / "main").write_text(revision)
+          print(f"Authorized base checkpoint ready: {snapshot}")
+          PY
+      - name: Qualify ordinary serving, target logits, committed KV, and sampled ngram
+        shell: bash
+        timeout-minutes: 165
+        env:
+          PLUGIN_REVISION: ${{ inputs.plugin_revision }}
+          CHECKPOINT_REVISION: ${{ inputs.checkpoint_revision }}
+        run: |
+          python .github/scripts/qualify_llama32_ngram.py \
+            --plugin-root "$PLUGIN_ROOT" --plugin-revision "$PLUGIN_REVISION" \
+            --checkpoint-revision "$CHECKPOINT_REVISION" --output generated/llama32-ngram \
+            2>&1 | tee generated/qualification.log
+      - name: Inspect device teardown
+        if: ${{ always() }}
+        shell: bash
+        run: tt-smi -s | tee generated/hardware-after.json
+      - name: Upload exact revision and device evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: llama32-ngram-evidence
+          path: generated/
+          retention-days: 14
+          if-no-files-found: error
