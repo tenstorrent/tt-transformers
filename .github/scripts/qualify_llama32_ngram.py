@@ -4,7 +4,7 @@
 """Qualify ordinary serving, real target verification, and CPU n-gram serving.
 
 Each server inherits a private Scheduler.finish_requests observer. The observer
-calls the original method unchanged and records the returned request's status
+calls the original Scheduler.finish_requests unchanged and records the returned request's status
 and scheduler ownership. Backend cancellation requires FINISHED_ABORTED before
 the requested output length and released scheduler ownership. Frontend abort
 logs and counters alone do not establish backend cancellation in vLLM 0.30.
