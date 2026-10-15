@@ -27,6 +27,7 @@ _SPEC.loader.exec_module(qualification)
 def test_launch_selects_standalone_eager_sync_host_model(monkeypatch, batch, k):
     monkeypatch.setenv("TT_MODEL_CLASS_OVERRIDES", "TTLlamaForCausalLM=wrong.module:WrongModel")
     monkeypatch.setenv("MESH_DEVICE", "wrong")
+    monkeypatch.delenv("DISABLE_BATCHED_PREFILL", raising=False)
     args = SimpleNamespace(plugin_root=Path("/plugin"), checkpoint_revision="a" * 40, port=8123)
     command, environment = qualification.launch_settings(args, batch, k)
     assert command[1] == "/plugin/examples/server_example_tt.py"
@@ -38,6 +39,8 @@ def test_launch_selects_standalone_eager_sync_host_model(monkeypatch, batch, k):
     tt = json.loads(command[command.index("--additional-config") + 1])["tt"]
     assert tt == {"trace_mode": "none", "optimizations": "performance"}
     assert environment["MESH_DEVICE"] == "(1, 1)"
+    assert environment["DISABLE_BATCHED_PREFILL"] == "1"
+    assert qualification.os.environ.get("DISABLE_BATCHED_PREFILL") is None
     assert environment["TT_MODEL_CLASS_OVERRIDES"] == f"TTLlamaForCausalLM={qualification.ADAPTER}"
     if k:
         speculation = json.loads(command[command.index("--speculative-config") + 1])
@@ -384,6 +387,64 @@ def test_reference_comparison_rejects_token_length_and_nan_errors(actual, expect
 
 
 @pytest.mark.host
+def test_comparison_artifacts_sanitize_labels_and_reject_duplicate_ownership(tmp_path):
+    record = qualification.completion_record(_completion())
+    qualification.record_reference_comparison(record, record, "../abort/reuse replacement", tmp_path)
+    artifact = tmp_path / "abort-reuse-replacement.json"
+    original = artifact.read_text()
+    assert json.loads(original)["max_abs_difference"] == 0
+    with pytest.raises(FileExistsError):
+        qualification.record_reference_comparison(record, record, "abort reuse replacement", tmp_path)
+    assert artifact.read_text() == original
+    assert list(tmp_path.iterdir()) == [artifact]
+
+
+@pytest.mark.host
+def test_server_clears_owned_comparisons_before_a_failed_startup(tmp_path, monkeypatch):
+    directory = tmp_path / "B2-K1"
+    comparisons = directory / "comparisons"
+    comparisons.mkdir(parents=True)
+    (comparisons / "concurrent-request-0.json").write_text('{"max_abs_difference":0}')
+    retained = directory / "retained-diagnostic.txt"
+    retained.write_text("diagnostics")
+
+    @contextmanager
+    def unavailable_socket():
+        yield SimpleNamespace(bind=Mock(side_effect=OSError("port is occupied")))
+
+    monkeypatch.setattr(qualification, "engine_processes", lambda: [])
+    monkeypatch.setattr(qualification.socket, "socket", unavailable_socket)
+    with (
+        pytest.raises(OSError, match="port is occupied"),
+        qualification.server(SimpleNamespace(output=tmp_path, port=8123), 2, 1),
+    ):
+        pytest.fail("An occupied port must prevent server startup")
+    assert list(comparisons.iterdir()) == []
+    assert retained.read_text() == "diagnostics"
+
+
+@pytest.mark.host
+def test_control_comparison_preserves_actual_expected_and_differences_before_failure(tmp_path):
+    expected = qualification.completion_record(_completion())
+    result = _completion(logprobs=[-4.0, -3.25, -2.0])
+    tokenizer = SimpleNamespace(encode=lambda text, **kwargs: [19] if text == " red" else [20])
+    client = SimpleNamespace(complete=Mock(return_value=result))
+    with pytest.raises(AssertionError, match="raw logprobs differ"):
+        qualification.exercise_controls(
+            client,
+            tokenizer,
+            [19] * 96,
+            {"penalties": expected},
+            comparison_directory=tmp_path,
+        )
+    artifact = json.loads((tmp_path / "penalties.json").read_text())
+    assert artifact["actual"] == qualification.completion_record(result)
+    assert artifact["expected"] == expected
+    assert artifact["differences"] == [0.0, 0.25, 0.0]
+    assert artifact["max_abs_difference"] == 0.25
+
+
+@pytest.mark.host
 def test_pressure_workload_has_distinct_histories_matching_lengths_and_logprobs():
     tokenizer = SimpleNamespace(encode=lambda text, **kwargs: [ord(character) for character in text])
     requests = qualification.pressure_requests(tokenizer, 700)
@@ -519,8 +580,12 @@ def http_qualification(tmp_path, monkeypatch):
     def running_server(args, batch, k):
         state["k"] = k
         state["batch"] = batch
+        state["first_request_calls"] = 0
+        state["preemptions"] = 0
         directory = args.output / f"B{batch}-K{k}"
-        directory.mkdir(exist_ok=True)
+        directory.mkdir(parents=True, exist_ok=True)
+        qualification.reset_reference_comparisons(directory)
+        (directory / "backend-preempt.jsonl").unlink(missing_ok=True)
         log = directory / "server.log"
         log.write_text(f"{state['initial_verifications']} verify in logits mode\n")
         yield directory, log
@@ -537,8 +602,11 @@ def http_qualification(tmp_path, monkeypatch):
                     "128 verify in logits mode\n"
                 )
             token = controls.get("allowed_token_ids", [123])[0]
-            values = [-1.0 - sum(prompt) * 1e-6 - index * 1e-7 for index in range(count)]
-            if controls.get("seed") == 102:
+            values = [-1.0 - (sum(prompt) + index * token) * 1e-6 for index in range(count)]
+            if controls.get("seed") == 101:
+                state["first_request_calls"] += 1
+                phase = "replay" if state["first_request_calls"] > 1 else None
+            elif controls.get("seed") == 102:
                 phase = "concurrent"
             elif controls.get("seed") == 902:
                 phase = "pressure"
@@ -546,15 +614,37 @@ def http_qualification(tmp_path, monkeypatch):
                 phase = "abort_reuse"
             else:
                 phase = None
-            if phase is not None and state["corrupt"] == phase:
+            if phase is not None and state["corrupt"] == phase and (phase != "pressure" or state["k"] == 3):
                 values[-1] -= 0.5
             result = _completion([token] * count, values)
+            result.body["id"] = f"cmpl-fixture-{controls.get('seed', 0)}"
+            if controls.get("seed") == 901 and count == 160:
+                state["preemptions"] += 1
+                history = prompt + [token] * 8
+                event = {
+                    "request_id": result.body["id"] + "-0",
+                    "all_token_ids": history,
+                    "post_all_token_ids": history,
+                    "num_prompt_tokens": len(prompt),
+                    "num_output_tokens": 8,
+                    "num_computed_tokens": len(history) - 1,
+                    "num_preemptions": 0,
+                    "num_in_flight_tokens": 0,
+                    "num_output_placeholders": 0,
+                    "num_stale_output_tokens": 0,
+                    "drop_stale_output": False,
+                    "post_status": "PREEMPTED",
+                    "post_num_computed_tokens": 0,
+                    "post_num_preemptions": 1,
+                }
+                with (args.output / f"B{state['batch']}-K{state['k']}" / "backend-preempt.jsonl").open("a") as output:
+                    output.write(json.dumps(event) + "\n")
             result.completion_tokens = count
             result.finish_reason = "stop" if token == 999 else "length"
             return result
 
         def metrics(self):
-            return SimpleNamespace(raw="metrics\n", probe_calls=state["probe_calls"])
+            return SimpleNamespace(raw="metrics\n", probe_calls=state["probe_calls"], preemptions=state["preemptions"])
 
         def stream_and_abandon(self, *args, **kwargs):
             return 2
@@ -564,12 +654,17 @@ def http_qualification(tmp_path, monkeypatch):
             drafts=1 if state["k"] else 0,
             draft_tokens=3 if state["k"] else 0,
             accepted=3 if state["k"] else 0,
-            preemptions=1,
-            as_dict=lambda: {"preemptions": 1, "probe_requests": after.probe_calls - before.probe_calls},
+            preemptions=after.preemptions - before.preemptions,
+            as_dict=lambda: {
+                "preemptions": after.preemptions - before.preemptions,
+                "probe_requests": after.probe_calls - before.probe_calls,
+            },
         )
 
     monkeypatch.setattr(qualification, "server", running_server)
-    monkeypatch.setattr(qualification, "exercise_controls", lambda *args: {"serial_controls": "checked separately"})
+    monkeypatch.setattr(
+        qualification, "exercise_controls", lambda *args, **kwargs: {"serial_controls": "checked separately"}
+    )
     monkeypatch.setattr(qualification, "exercise_abort", lambda *args: {"backend": "checked by observer contracts"})
     helpers = HTTPClient, acceptance_delta, _assert_full_length_completion, lambda log: 4
     return args, tokenizer, helpers, state
@@ -581,7 +676,7 @@ def test_http_qualification_preserves_same_batch_references_for_all_lifecycle_wo
     ordinary = qualification.exercise_http(args, 4, 0, tokenizer, helpers)
     speculative = qualification.exercise_http(args, 4, 3, tokenizer, helpers, ordinary)
     assert len(ordinary["concurrent"]) == len(speculative["concurrent"]) == 20
-    assert len(ordinary["pressure"]) == len(speculative["pressure"]) == 4
+    assert len(ordinary["pressure"]["records"]) == len(speculative["pressure"]["records"]) == 4
     assert ordinary["abort_reuse"]["token_ids"] == speculative["abort_reuse"]["token_ids"]
     assert ordinary["abort_reuse"]["logprobs"] == speculative["abort_reuse"]["logprobs"]
 
@@ -604,13 +699,56 @@ def test_http_qualification_records_probe_and_includes_probe_metrics_without_cha
 
 
 @pytest.mark.host
-@pytest.mark.parametrize("phase", ["concurrent", "pressure", "abort_reuse"])
+@pytest.mark.parametrize("phase", ["concurrent", "pressure", "abort_reuse", "replay"])
 def test_http_qualification_rejects_corrupt_state_despite_identical_constrained_tokens(http_qualification, phase):
     args, tokenizer, helpers, state = http_qualification
     ordinary = qualification.exercise_http(args, 4, 0, tokenizer, helpers)
     state["corrupt"] = phase
     with pytest.raises(AssertionError, match="raw logprobs differ"):
+        qualification.qualify_http(args, 4, 3, tokenizer, helpers, ordinary)
+    filenames = {
+        "concurrent": "concurrent-request-1.json",
+        "pressure": "pressure-request-1-outputs-0-to-160.json",
+        "abort_reuse": "abort-reuse-replacement.json",
+        "replay": "replay-request-0.json",
+    }
+    directory = args.output / "B4-K3-pressure-reference" / "B4-K0" if phase == "pressure" else args.output / "B4-K3"
+    artifact = json.loads((directory / "comparisons" / filenames[phase]).read_text())
+    assert artifact["actual"]["token_ids"] == artifact["expected"]["token_ids"]
+    assert artifact["actual"]["logprobs"] != artifact["expected"]["logprobs"]
+    assert artifact["differences"][:-1] == [0.0] * (len(artifact["differences"]) - 1)
+    assert artifact["differences"][-1] == pytest.approx(0.5)
+    assert artifact["max_abs_difference"] == pytest.approx(0.5)
+
+
+@pytest.mark.host
+def test_ordinary_http_replay_checks_raw_logprobs_and_preserves_failure(http_qualification):
+    args, tokenizer, helpers, state = http_qualification
+    state["corrupt"] = "replay"
+    with pytest.raises(AssertionError, match="raw logprobs differ"):
+        qualification.exercise_http(args, 2, 0, tokenizer, helpers)
+    artifact = json.loads((args.output / "B2-K0" / "comparisons" / "replay-request-0.json").read_text())
+    assert artifact["actual"]["token_ids"] == artifact["expected"]["token_ids"]
+    assert artifact["max_abs_difference"] == pytest.approx(0.5)
+    assert not (args.output / "B2-K0" / "results.json").exists()
+
+
+@pytest.mark.host
+def test_http_rerun_removes_old_comparisons_before_recording_a_new_failure(http_qualification):
+    args, tokenizer, helpers, state = http_qualification
+    ordinary = qualification.exercise_http(args, 4, 0, tokenizer, helpers)
+    qualification.exercise_http(args, 4, 3, tokenizer, helpers, ordinary)
+    comparisons = args.output / "B4-K3" / "comparisons"
+    assert (comparisons / "replay-request-0.json").exists()
+    state["corrupt"] = "concurrent"
+    with pytest.raises(AssertionError, match="raw logprobs differ"):
         qualification.exercise_http(args, 4, 3, tokenizer, helpers, ordinary)
+    assert {artifact.name for artifact in comparisons.iterdir()} == {
+        "concurrent-request-0.json",
+        "concurrent-request-1.json",
+    }
+    artifact = json.loads((comparisons / "concurrent-request-1.json").read_text())
+    assert artifact["max_abs_difference"] == pytest.approx(0.5)
 
 
 def _observed_request():
@@ -700,6 +838,163 @@ def test_finish_observer_io_failure_does_not_change_original_return(tmp_path, mo
     assert "LLAMA_ABORT_OBSERVER_ERROR" in capsys.readouterr().err
 
 
+def _preemptible_request():
+    return SimpleNamespace(
+        request_id="cmpl-preempt-0",
+        all_token_ids=[11, 12, 19, 20],
+        num_prompt_tokens=2,
+        num_output_tokens=2,
+        num_computed_tokens=3,
+        num_preemptions=1,
+        num_in_flight_tokens=2,
+        num_output_placeholders=1,
+        num_stale_output_tokens=1,
+        status=SimpleNamespace(name="RUNNING"),
+        spec_token_ids=[999],
+    )
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("call_style", ["positional", "keyword", "default", "positional_drop"])
+def test_preempt_observer_preserves_call_and_snapshots_committed_history_before_mutation(tmp_path, call_style):
+    request = _preemptible_request()
+    event_path = tmp_path / "backend-preempt.jsonl"
+    returned = object()
+    calls = []
+
+    class Scheduler:
+        def _preempt_request(self, *args, **kwargs):
+            assert not event_path.exists()
+            calls.append((args, kwargs))
+            request.all_token_ids.append(21)
+            request.num_output_tokens += 1
+            request.spec_token_ids.clear()
+            request.num_computed_tokens = 0
+            request.num_preemptions += 1
+            request.num_in_flight_tokens = 0
+            request.num_output_placeholders = 0
+            request.num_stale_output_tokens = 0
+            request.status.name = "PREEMPTED"
+            return returned
+
+    qualification.install_preempt_observer(event_path, Scheduler)
+    installed = Scheduler._preempt_request
+    qualification.install_preempt_observer(event_path, Scheduler)
+    assert Scheduler._preempt_request is installed
+    scheduler = Scheduler()
+    args = () if call_style == "keyword" else (request, 12.5)
+    kwargs = {"drop_stale_output": False}
+    if call_style == "keyword":
+        kwargs.update(request=request, timestamp=12.5)
+    elif call_style == "default":
+        kwargs = {}
+    elif call_style == "positional_drop":
+        args = (request, 12.5, True)
+        kwargs = {}
+    assert scheduler._preempt_request(*args, **kwargs) is returned
+    assert len(calls) == 1
+    assert len(calls[0][0]) == len(args)
+    assert all(actual is expected for actual, expected in zip(calls[0][0], args))
+    assert calls[0][1].keys() == kwargs.keys()
+    assert all(calls[0][1][name] is value for name, value in kwargs.items())
+    events = event_path.read_text().splitlines()
+    assert len(events) == 1
+    event = json.loads(events[0])
+    assert event == {
+        "request_id": request.request_id,
+        "all_token_ids": [11, 12, 19, 20],
+        "num_prompt_tokens": 2,
+        "num_output_tokens": 2,
+        "num_computed_tokens": 3,
+        "num_preemptions": 1,
+        "num_in_flight_tokens": 2,
+        "num_output_placeholders": 1,
+        "num_stale_output_tokens": 1,
+        "drop_stale_output": call_style == "positional_drop",
+        "post_all_token_ids": [11, 12, 19, 20, 21],
+        "post_status": "PREEMPTED",
+        "post_num_computed_tokens": 0,
+        "post_num_preemptions": 2,
+    }
+
+
+@pytest.mark.host
+def test_preempt_observer_preserves_original_exception_and_emits_no_completed_event(tmp_path):
+    failure = RuntimeError("original preemption failure")
+    original = Mock(side_effect=failure)
+
+    class Scheduler:
+        def _preempt_request(self, *args, **kwargs):
+            return original(self, *args, **kwargs)
+
+    event_path = tmp_path / "backend-preempt.jsonl"
+    qualification.install_preempt_observer(event_path, Scheduler)
+    scheduler = Scheduler()
+    request = _preemptible_request()
+    with pytest.raises(RuntimeError) as raised:
+        scheduler._preempt_request(request, 12.5, drop_stale_output=True)
+    assert raised.value is failure
+    original.assert_called_once_with(scheduler, request, 12.5, drop_stale_output=True)
+    assert not event_path.exists()
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("broken_error_log", [False, True])
+def test_preempt_observer_snapshot_failure_always_calls_original(tmp_path, monkeypatch, capsys, broken_error_log):
+    returned = object()
+    original = Mock(return_value=returned)
+
+    class Scheduler:
+        def _preempt_request(self, *args, **kwargs):
+            return original(self, *args, **kwargs)
+
+    event_path = tmp_path / "backend-preempt.jsonl"
+    qualification.install_preempt_observer(event_path, Scheduler)
+    monkeypatch.setattr(qualification, "backend_preempt_event", Mock(side_effect=RuntimeError("cannot snapshot")))
+    if broken_error_log:
+        monkeypatch.setattr(qualification, "print", Mock(side_effect=OSError("cannot report")), raising=False)
+    scheduler = Scheduler()
+    request = _preemptible_request()
+    assert scheduler._preempt_request(request, timestamp=12.5) is returned
+    original.assert_called_once_with(scheduler, request, timestamp=12.5)
+    assert not event_path.exists()
+    if not broken_error_log:
+        assert "LLAMA_PREEMPT_OBSERVER_ERROR" in capsys.readouterr().err
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("operation", ["open", "write"])
+def test_preempt_observer_io_failure_preserves_original_return_and_call(tmp_path, monkeypatch, capsys, operation):
+    returned = object()
+    original = Mock(return_value=returned)
+
+    class Scheduler:
+        def _preempt_request(self, request, *args, **kwargs):
+            request.status.name = "PREEMPTED"
+            request.num_computed_tokens = 0
+            request.num_preemptions += 1
+            return original(self, request, *args, **kwargs)
+
+    event_path = tmp_path / "backend-preempt.jsonl"
+    qualification.install_preempt_observer(event_path, Scheduler)
+    monkeypatch.setattr(qualification.os, operation, Mock(side_effect=OSError("cannot record evidence")))
+    scheduler = Scheduler()
+    request = _preemptible_request()
+    assert scheduler._preempt_request(request, 12.5) is returned
+    original.assert_called_once_with(scheduler, request, 12.5)
+    assert not event_path.exists() or event_path.read_text() == ""
+    assert "LLAMA_PREEMPT_OBSERVER_ERROR" in capsys.readouterr().err
+
+
+@pytest.mark.host
+def test_preempt_observer_snapshot_defaults_absent_async_state_to_zero():
+    request = _preemptible_request()
+    for name in ("num_in_flight_tokens", "num_output_placeholders", "num_stale_output_tokens"):
+        delattr(request, name)
+    event = qualification.backend_preempt_event(request)
+    assert event["num_in_flight_tokens"] == event["num_output_placeholders"] == event["num_stale_output_tokens"] == 0
+
+
 @pytest.mark.host
 @pytest.mark.parametrize("status", ["FINISHED_LENGTH_CAPPED", "FINISHED_STOPPED"])
 def test_backend_cancellation_oracle_rejects_normal_completion_after_disconnect(tmp_path, status):
@@ -757,14 +1052,18 @@ def test_backend_cancellation_uses_complete_event_and_ignores_partial_append(tmp
 def test_child_observer_environment_is_private_and_resets_backend_evidence(tmp_path):
     original = {"PYTHONPATH": "/existing/source", "OTHER_SETTING": "preserved"}
     (tmp_path / "backend-finish.jsonl").write_text("stale backend event\n")
+    (tmp_path / "backend-preempt.jsonl").write_text("stale preemption event\n")
     environment = qualification.observer_environment(tmp_path, original)
     assert original["PYTHONPATH"] == "/existing/source"
     assert environment["PYTHONPATH"] == str(tmp_path / "observer") + qualification.os.pathsep + "/existing/source"
     assert environment["OTHER_SETTING"] == "preserved"
     assert not (tmp_path / "backend-finish.jsonl").exists()
+    assert not (tmp_path / "backend-preempt.jsonl").exists()
     observer = tmp_path / "observer/sitecustomize.py"
     compile(observer.read_text(), str(observer), "exec")
     assert str(tmp_path / "backend-finish.jsonl") in observer.read_text()
+    assert str(tmp_path / "backend-preempt.jsonl") in observer.read_text()
+    assert "_observer.install_preempt_observer" in observer.read_text()
     assert str(_SCRIPT) in observer.read_text()
 
 

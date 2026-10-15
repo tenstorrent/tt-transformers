@@ -13,12 +13,17 @@ If the concurrent workload has not reached the plugin's 128-submission log
 interval, one constrained 512-token request supplies at least 128 target
 verifications for K <= 3. Qualification still requires a positive executed
 logits-verification count from the plugin log.
+
+HTTP servers use DISABLE_BATCHED_PREFILL=1 so request arrival timing cannot
+change Llama's prefill matmul selection between ordinary and speculative
+references. Concurrent decode retains the requested physical batch capacity.
 """
 
 from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import copy
 import importlib.metadata
 import json
 import math
@@ -34,12 +39,14 @@ import uuid
 import xml.etree.ElementTree as ET
 from contextlib import contextmanager
 from datetime import datetime
+from itertools import zip_longest
 from pathlib import Path
 
 import httpx
 
 MODEL = "meta-llama/Llama-3.2-1B"
 ADAPTER = "tt_transformers.models.llama32_1b.vllm_generator:Llama32_1BGenerator"
+HTTP_MODEL_ENVIRONMENT = {"DISABLE_BATCHED_PREFILL": "1"}
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -136,6 +143,7 @@ def launch_settings(args, batch, k):
         TT_MODEL_CLASS_OVERRIDES=f"TTLlamaForCausalLM={ADAPTER}",
         MESH_DEVICE="(1, 1)",
         PYTHONUNBUFFERED="1",
+        **HTTP_MODEL_ENVIRONMENT,
     )
     return command, environment
 
@@ -273,11 +281,73 @@ def install_abort_observer(event_path, scheduler_class=None):
     scheduler_class.finish_requests = observed_finish_requests
 
 
+def backend_preempt_event(request):
+    return {
+        "request_id": request.request_id,
+        "all_token_ids": list(request.all_token_ids),
+        "num_prompt_tokens": request.num_prompt_tokens,
+        "num_output_tokens": request.num_output_tokens,
+        "num_computed_tokens": request.num_computed_tokens,
+        "num_preemptions": request.num_preemptions,
+        "num_in_flight_tokens": getattr(request, "num_in_flight_tokens", 0),
+        "num_output_placeholders": getattr(request, "num_output_placeholders", 0),
+        "num_stale_output_tokens": getattr(request, "num_stale_output_tokens", 0),
+    }
+
+
+def _report_preempt_observer_error(error):
+    try:
+        print(f"LLAMA_PREEMPT_OBSERVER_ERROR: {error!r}", file=sys.stderr, flush=True)
+    except Exception:
+        pass
+
+
+def install_preempt_observer(event_path, scheduler_class=None):
+    if scheduler_class is None:
+        from vllm.v1.core.sched.scheduler import Scheduler
+
+        scheduler_class = Scheduler
+    original = scheduler_class._preempt_request
+    if getattr(original, "_llama_ngram_preempt_observer", False):
+        return
+
+    def observed_preempt_request(scheduler, *args, **kwargs):
+        event = None
+        try:
+            request = args[0] if args else kwargs["request"]
+            event = backend_preempt_event(request)
+            event["drop_stale_output"] = kwargs.get("drop_stale_output", args[2] if len(args) > 2 else False)
+        except Exception as error:
+            _report_preempt_observer_error(error)
+        result = original(scheduler, *args, **kwargs)
+        if event is not None:
+            try:
+                event.update(
+                    post_all_token_ids=list(request.all_token_ids),
+                    post_status=request.status.name,
+                    post_num_computed_tokens=request.num_computed_tokens,
+                    post_num_preemptions=request.num_preemptions,
+                )
+                descriptor = os.open(event_path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+                try:
+                    os.write(descriptor, (json.dumps(event, sort_keys=True) + "\n").encode())
+                finally:
+                    os.close(descriptor)
+            except Exception as error:
+                _report_preempt_observer_error(error)
+        return result
+
+    observed_preempt_request._llama_ngram_preempt_observer = True
+    scheduler_class._preempt_request = observed_preempt_request
+
+
 def observer_environment(directory, environment):
     observer_directory = directory / "observer"
     observer_directory.mkdir(exist_ok=True)
     event_path = directory / "backend-finish.jsonl"
     event_path.unlink(missing_ok=True)
+    preempt_path = directory / "backend-preempt.jsonl"
+    preempt_path.unlink(missing_ok=True)
     (observer_directory / "sitecustomize.py").write_text(
         "import importlib.util\n"
         "from pathlib import Path\n"
@@ -285,6 +355,7 @@ def observer_environment(directory, environment):
         "_observer = importlib.util.module_from_spec(_spec)\n"
         "_spec.loader.exec_module(_observer)\n"
         f"_observer.install_abort_observer(Path({str(event_path.resolve())!r}))\n"
+        f"_observer.install_preempt_observer(Path({str(preempt_path.resolve())!r}))\n"
     )
     return {
         **environment,
@@ -299,11 +370,23 @@ def server(args, batch, k):
     directory.mkdir(parents=True, exist_ok=True)
     if active := engine_processes():
         raise RuntimeError(f"Refusing {label}: another engine is running: {active}")
+    (directory / "results.json").unlink(missing_ok=True)
+    (directory / "metrics.txt").unlink(missing_ok=True)
+    reset_reference_comparisons(directory)
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", args.port))
     command, environment = launch_settings(args, batch, k)
     environment = observer_environment(directory, environment)
-    write_json(directory / "launch.json", {"argv": command, "adapter": ADAPTER, "batch": batch, "k": k})
+    write_json(
+        directory / "launch.json",
+        {
+            "argv": command,
+            "adapter": ADAPTER,
+            "batch": batch,
+            "k": k,
+            "model_environment": {name: environment[name] for name in HTTP_MODEL_ENVIRONMENT},
+        },
+    )
     log_path = directory / "server.log"
     with log_path.open("w") as log:
         process = subprocess.Popen(
@@ -406,6 +489,41 @@ def assert_reference_record(actual, expected, label):
         raise AssertionError(f"{label}: raw logprobs differ from ordinary target execution")
 
 
+def reset_reference_comparisons(directory):
+    comparisons = directory / "comparisons"
+    if comparisons.exists():
+        shutil.rmtree(comparisons)
+    comparisons.mkdir(parents=True)
+    return comparisons
+
+
+def record_reference_comparison(actual, expected, label, directory):
+    filename = re.sub(r"[^a-zA-Z0-9_-]+", "-", label).strip("-")
+    if not filename:
+        raise ValueError("Reference comparison labels must contain letters or digits")
+    differences = [
+        abs(value - target)
+        if all(type(item) in (int, float) and math.isfinite(item) for item in (value, target))
+        else None
+        for value, target in zip_longest(actual["logprobs"], expected["logprobs"])
+    ]
+    with (directory / f"{filename}.json").open("x") as output:
+        json.dump(
+            {
+                "label": label,
+                "actual": actual,
+                "expected": expected,
+                "differences": differences,
+                "max_abs_difference": max((value for value in differences if value is not None), default=None),
+            },
+            output,
+            indent=2,
+            sort_keys=True,
+        )
+        output.write("\n")
+    assert_reference_record(actual, expected, label)
+
+
 def pressure_requests(tokenizer, token):
     subjects = (
         "A river crosses a forest. Fish move beneath the trees. ",
@@ -435,6 +553,109 @@ def pressure_requests(tokenizer, token):
     if len({tuple(prompt) for prompt, _ in requests}) != 4:
         raise AssertionError("The pressure workload requires four distinct request histories")
     return requests
+
+
+def read_preemption_events(path):
+    return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+
+def pressure_segments(records, events, preemption_count, k):
+    if type(preemption_count) not in (int, float) or preemption_count <= 0 or len(events) != preemption_count:
+        raise AssertionError("Every measured pressure preemption requires one backend event")
+    boundaries = [set([0, len(record["token_ids"])]) for record in records]
+    previous = {}
+    resumed_after_output = False
+    for event in events:
+        for name in (
+            "num_prompt_tokens",
+            "num_output_tokens",
+            "num_computed_tokens",
+            "num_preemptions",
+            "num_in_flight_tokens",
+            "num_output_placeholders",
+            "num_stale_output_tokens",
+            "post_num_computed_tokens",
+            "post_num_preemptions",
+        ):
+            if type(event[name]) is not int or event[name] < 0:
+                raise AssertionError("Preemption counters must be nonnegative integers")
+        matches = [
+            index
+            for index, record in enumerate(records)
+            if re.fullmatch(re.escape(record["response"]["id"]) + r"-0(?:-[0-9a-f]{8})?", event["request_id"])
+        ]
+        if len(matches) != 1:
+            raise AssertionError("A pressure preemption must identify exactly one HTTP request")
+        index = matches[0]
+        record = records[index]
+        count = event["num_output_tokens"]
+        prior_count, prior_preemptions = previous.get(index, (0, 0))
+        if count < prior_count or event["num_preemptions"] != prior_preemptions:
+            raise AssertionError("Preemption history and counters must advance in scheduler order")
+        previous[index] = count, event["post_num_preemptions"]
+        if type(count) is not int or not 0 <= count < len(record["token_ids"]):
+            raise AssertionError("The preemption must precede pressure completion")
+        if event["num_prompt_tokens"] != len(record["prompt"]):
+            raise AssertionError("The preemption prompt length differs from the submitted prompt")
+        if event["all_token_ids"] != record["prompt"] + record["token_ids"][:count]:
+            raise AssertionError("The preemption history differs from committed pressure tokens")
+        if event["post_all_token_ids"] != event["all_token_ids"] or event["drop_stale_output"] is not False:
+            raise AssertionError("The preemption cannot change or discard committed history")
+        if any(
+            event[name] != 0 for name in ("num_in_flight_tokens", "num_output_placeholders", "num_stale_output_tokens")
+        ):
+            raise AssertionError("A synchronous preemption cannot retain in-flight or stale output")
+        if (
+            event["post_status"] != "PREEMPTED"
+            or event["post_num_computed_tokens"] != 0
+            or event["post_num_preemptions"] != event["num_preemptions"] + 1
+        ):
+            raise AssertionError("The backend event does not establish completed preemption")
+        boundaries[index].add(count)
+        resumed_after_output |= count > 0
+    if not resumed_after_output:
+        raise AssertionError("Pressure must preempt and resume a request after committed output")
+    segments = [
+        {"request_index": index, "start": start, "stop": stop}
+        for index, counts in enumerate(boundaries)
+        for start, stop in zip(sorted(counts), sorted(counts)[1:])
+    ]
+    if not any(segment["start"] > 0 and segment["stop"] - segment["start"] >= 1 + 3 * (k + 1) for segment in segments):
+        raise AssertionError("Pressure resume must exercise prefill and at least three subsequent model submissions")
+    return segments
+
+
+def exercise_pressure_reference(args, batch, k, pressure, helpers):
+    SpecServer, acceptance_delta, assert_full_length_completion, _ = helpers
+    segments = pressure_segments(pressure["records"], pressure["events"], pressure["preemptions"], k)
+    reference_args = copy.copy(args)
+    reference_args.output = args.output / f"B{batch}-K{k}-pressure-reference"
+    with server(reference_args, batch, 0) as (directory, _):
+        client = SpecServer(f"http://127.0.0.1:{args.port}", MODEL)
+        before = client.metrics()
+        for segment in segments:
+            index, start, stop = segment["request_index"], segment["start"], segment["stop"]
+            record = pressure["records"][index]
+            prompt = record["prompt"] + record["token_ids"][:start]
+            controls = {**record["controls"], "max_tokens": stop - start}
+            result = client.complete(prompt, **controls)
+            assert_full_length_completion(result, stop - start)
+            actual = {"token_ids": record["token_ids"][start:stop], "logprobs": record["logprobs"][start:stop]}
+            expected = {"prompt": prompt, "controls": controls, **completion_record(result)}
+            record_reference_comparison(
+                actual, expected, f"pressure request {index} outputs {start} to {stop}", directory / "comparisons"
+            )
+        if acceptance_delta(before, client.metrics(), 1).preemptions != 0:
+            raise AssertionError("An ordinary pressure reference cannot itself preempt")
+        write_json(directory / "results.json", {"segments": segments, "pressure": pressure})
+    print(f"LLAMA_PRESSURE_REFERENCE_PASS: B={batch} K={k} segments={len(segments)}", flush=True)
+
+
+def qualify_http(args, batch, k, tokenizer, helpers, ordinary_reference=None):
+    result = exercise_http(args, batch, k, tokenizer, helpers, ordinary_reference)
+    if result["pressure"] is not None:
+        exercise_pressure_reference(args, batch, k, result["pressure"], helpers)
+    return result
 
 
 def disconnect_named_stream(client, prompt, max_tokens):
@@ -517,7 +738,7 @@ def exercise_abort(client, prompt, event_path):
     return {"stream": stream, "backend": backend}
 
 
-def exercise_controls(client, tokenizer, repeated, ordinary_reference=None):
+def exercise_controls(client, tokenizer, repeated, ordinary_reference=None, *, comparison_directory):
     red = tokenizer.encode(" red", add_special_tokens=False)
     blue = tokenizer.encode(" blue", add_special_tokens=False)
     if len(red) != 1 or len(blue) != 1:
@@ -545,7 +766,7 @@ def exercise_controls(client, tokenizer, repeated, ordinary_reference=None):
             assert result.completion_tokens >= 5 and red[0] not in result.token_ids[:5], result.body
         records[name] = completion_record(result)
         if ordinary_reference is not None:
-            assert_reference_record(records[name], ordinary_reference[name], name)
+            record_reference_comparison(records[name], ordinary_reference[name], name, comparison_directory)
     sampled_settings = {
         "temperature": 0.7,
         "top_k": 2,
@@ -576,6 +797,7 @@ def exercise_controls(client, tokenizer, repeated, ordinary_reference=None):
 def exercise_http(args, batch, k, tokenizer, helpers, ordinary_reference=None):
     SpecServer, acceptance_delta, assert_full_length_completion, widest_decode_batch_size = helpers
     with server(args, batch, k) as (directory, server_log):
+        comparison_directory = directory / "comparisons"
         client = SpecServer(f"http://127.0.0.1:{args.port}", MODEL)
         token = tokenizer.encode(" red", add_special_tokens=False)[0]
         repeated = [token] * 96
@@ -603,7 +825,7 @@ def exercise_http(args, batch, k, tokenizer, helpers, ordinary_reference=None):
             if ordinary_reference is not None:
                 expected = ordinary_reference["concurrent"][index]
                 assert record["prompt"] == expected["prompt"] and record["controls"] == expected["controls"]
-                assert_reference_record(record, expected, f"concurrent request {index}")
+                record_reference_comparison(record, expected, f"concurrent request {index}", comparison_directory)
             records.append(record)
         delta = acceptance_delta(before, client.metrics(), max(k, 1))
         verification_probe = None
@@ -623,8 +845,13 @@ def exercise_http(args, batch, k, tokenizer, helpers, ordinary_reference=None):
             )
         replay = client.complete(requests[0][0], **requests[0][1])
         assert replay.status == 200 and replay.token_ids == results[0].token_ids
+        record_reference_comparison(completion_record(replay), records[0], "replay request 0", comparison_directory)
         controls = exercise_controls(
-            client, tokenizer, repeated, None if ordinary_reference is None else ordinary_reference["controls"]
+            client,
+            tokenizer,
+            repeated,
+            None if ordinary_reference is None else ordinary_reference["controls"],
+            comparison_directory=comparison_directory,
         )
         abort_observation = exercise_abort(client, repeated, directory / "backend-finish.jsonl")
         reused = client.complete(
@@ -638,13 +865,18 @@ def exercise_http(args, batch, k, tokenizer, helpers, ordinary_reference=None):
         assert_full_length_completion(reused, 3)
         reused_record = completion_record(reused)
         if ordinary_reference is not None:
-            assert_reference_record(reused_record, ordinary_reference["abort_reuse"], "abort/reuse replacement")
+            record_reference_comparison(
+                reused_record, ordinary_reference["abort_reuse"], "abort/reuse replacement", comparison_directory
+            )
         eos = tokenizer.eos_token_id
         ended = client.complete(repeated, max_tokens=8, temperature=0.7, allowed_token_ids=[eos], ignore_eos=False)
         assert ended.status == 200 and ended.finish_reason == "stop", ended.body
         preemption = None
         pressure_records = None
+        pressure_evidence = None
         if batch == 4 and k in (0, 3):
+            preempt_path = directory / "backend-preempt.jsonl"
+            prior_events = len(read_preemption_events(preempt_path))
             before_preemption = client.metrics()
             pressure = pressure_requests(tokenizer, token)
             pressured = complete_batch(client, pressure, 4)
@@ -654,12 +886,17 @@ def exercise_http(args, batch, k, tokenizer, helpers, ordinary_reference=None):
                 assert result.token_ids == [token] * 160
                 record = {"prompt": prompt, "controls": request_controls, **completion_record(result)}
                 if ordinary_reference is not None:
-                    expected = ordinary_reference["pressure"][index]
+                    expected = ordinary_reference["pressure"]["records"][index]
                     assert record["prompt"] == expected["prompt"] and record["controls"] == expected["controls"]
-                    assert_reference_record(record, expected, f"preemption/resume request {index}")
                 pressure_records.append(record)
             preemption = acceptance_delta(before_preemption, client.metrics(), max(k, 1))
             assert preemption.preemptions > 0, "The KV-pressure workload did not exercise preemption/resume"
+            pressure_evidence = {
+                "records": pressure_records,
+                "events": read_preemption_events(preempt_path)[prior_events:],
+                "preemptions": preemption.preemptions,
+            }
+            pressure_segments(pressure_records, pressure_evidence["events"], preemption.preemptions, k)
         write_json(
             directory / "results.json",
             {
@@ -671,12 +908,17 @@ def exercise_http(args, batch, k, tokenizer, helpers, ordinary_reference=None):
                 "abort_observation": abort_observation,
                 "eos": ended.body,
                 "preemption": None if preemption is None else preemption.as_dict(),
-                "pressure": pressure_records,
+                "pressure": pressure_evidence,
             },
         )
         (directory / "metrics.txt").write_text(client.metrics().raw)
         print(f"LLAMA_HTTP_PASS: B={batch} K={k} drafts={delta.draft_tokens} accepted={delta.accepted}", flush=True)
-        return {"controls": controls, "concurrent": records, "abort_reuse": reused_record, "pressure": pressure_records}
+        return {
+            "controls": controls,
+            "concurrent": records,
+            "abort_reuse": reused_record,
+            "pressure": pressure_evidence,
+        }
 
 
 def main():
@@ -730,6 +972,8 @@ def main():
         "ttnn_source": package_source("ttnn"),
         "module_origins": {name: module.__file__ for name, module in runtime_modules.items()},
         "trace_mode": "none",
+        "http_model_environment": HTTP_MODEL_ENVIRONMENT,
+        "device_matrix_disable_batched_prefill": os.environ.get("DISABLE_BATCHED_PREFILL"),
         "mesh": os.environ.get("MESH_DEVICE"),
         "tt_metal_runtime_root": os.environ.get("TT_METAL_RUNTIME_ROOT"),
         "ttnn_runtime": runtime_provenance(
@@ -749,7 +993,7 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(MODEL, revision=args.checkpoint_revision, local_files_only=True)
     ordinary = {}
     for batch in (1, 2, 4):
-        ordinary[batch] = exercise_http(args, batch, 0, tokenizer, helpers)
+        ordinary[batch] = qualify_http(args, batch, 0, tokenizer, helpers)
     if not args.skip_device_matrix:
         subprocess.run(
             [
@@ -767,7 +1011,7 @@ def main():
         require_device_matrix(canonicalize_junit_report(args.output / "device-matrix.xml"))
     for batch in (1, 2, 4):
         for k in (1, 2, 3):
-            exercise_http(args, batch, k, tokenizer, helpers, ordinary[batch])
+            qualify_http(args, batch, k, tokenizer, helpers, ordinary[batch])
     write_json(
         args.output / ("partial.json" if args.skip_device_matrix else "success.json"),
         {

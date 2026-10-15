@@ -134,7 +134,8 @@ jobs:
         shell: bash
         run: |
           python -m pytest -q tests/host/test_llama_ngram_speculation.py \
-            tests/host/test_llama_ngram_qualification.py --junitxml=generated/host-contracts.xml
+            tests/host/test_llama_ngram_qualification.py \
+            tests/host/test_llama_ngram_pressure_reference.py --junitxml=generated/host-contracts.xml
           python - <<'PY'
           from runpy import run_path
           from xml.etree import ElementTree

@@ -10,9 +10,9 @@ The initial speculative scope is the base checkpoint
 `meta-llama/Llama-3.2-1B`, synchronous scheduling, physical batch 1, 2, or 4,
 one logical 1x1 mesh and one execution lane, requested draft width 1, 2, or 3, host sampling, disabled
 prefix caching, `trace_mode="none"`, and `optimizations="performance"`.
-Device qualification remains unverified until the complete device command in
-`llama32-ngram.yml` or `llama32-ngram-source.yml` succeeds at the exact
-published revisions.
+Qualify each published revision with the complete device command in
+`llama32-ngram.yml` or `llama32-ngram-source.yml` at the recorded dependency
+revisions.
 
 ## Launch
 
@@ -35,6 +35,7 @@ architecture override for every server process:
 export PYTHONPATH="$PWD/src:$PWD"
 export TT_MODEL_CLASS_OVERRIDES='TTLlamaForCausalLM=tt_transformers.models.llama32_1b.vllm_generator:Llama32_1BGenerator'
 export MESH_DEVICE='(1, 1)'
+export DISABLE_BATCHED_PREFILL=1
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 TT_TRANSFORMERS_OFFLINE=1
 python "$PLUGIN_ROOT/examples/server_example_tt.py" \
   --model meta-llama/Llama-3.2-1B --revision "$CHECKPOINT_REVISION" \
@@ -48,6 +49,15 @@ Omit `sample_on_device_mode` to select host sampling. Do not pass an explicit
 null value because the plugin validates supplied `sample_on_device_mode` values.
 The startup log must show `TTLlamaForCausalLM` registered to
 `tt_transformers.models.llama32_1b.vllm_generator:Llama32_1BGenerator`.
+
+The example uses the HTTP reference profile's `DISABLE_BATCHED_PREFILL=1`.
+Llama can select different prefill matmul implementations and output dtypes
+when concurrent prompts form different groups. The HTTP qualifier therefore
+disables grouped prefill for both ordinary and speculative servers before
+comparing raw logprobs. Concurrent HTTP arrivals and physical decode batches
+1, 2, and 4 remain enabled. `Llama32_1BGenerator.spec_plan` does not require
+this reference setting; raw-logprob equivalence across different prefill
+groups remains unverified.
 
 ## Durable device qualification
 
@@ -95,16 +105,48 @@ qualification sequence:
    tokens, bad words, minimum tokens, structured output, logprobs, EOS, stream
    cancellation, and immediate request reuse. Greedy
    controlled outputs and raw logprobs must match the ordinary HTTP baseline.
+   Every ordinary and speculative launch also replays the first concurrent
+   request and compares its raw logprobs. The HTTP comparison permits an
+   absolute `1e-3` difference for host logprob publication while preserving
+   identical prompts, controls, precision, decode capacity, and prefill policy.
+   A larger difference fails qualification and requires investigation.
    An identical sampled request schedule must reproduce its token IDs.
 7. `.github/scripts/qualify_llama32_ngram.py` starts four requests whose combined
    KV use exceeds the shared 1024-token pool. The ordinary batch-4 launch and the
    speculative batch-4/draft-3 launch must report a positive preemption
    counter delta and return the full constrained token sequences after resume.
+   A private `Scheduler._preempt_request` observer records each request's
+   committed tokens before preemption and the completed reset afterward.
+   Every measured preemption needs a matching backend event with no in-flight,
+   placeholder, stale, or discarded output.
+8. `exercise_pressure_reference` starts a separate ordinary server at the same
+   physical batch and precision after each pressure server stops. For each
+   uninterrupted pressure segment, `exercise_pressure_reference` prefills the
+   original prompt plus all output committed before that segment, including
+   the pending anchor. `exercise_pressure_reference` compares every segment's
+   token IDs and raw logprobs at the same `1e-3` tolerance and requires zero
+   reference preemptions. At least one resumed segment must include prefill
+   and three subsequent model submissions. The complete qualification requires
+   this reference check for both ordinary and speculative pressure workloads.
+
+Preemption frees KV and makes the resumed request recompute its committed
+prefix. Different preemption positions can therefore select different prefill
+computations. The segmented ordinary reference follows the backend's actual
+committed history at every reset. This pressure reference applies to the
+single-allowed-token workload without history-dependent penalties. Other
+request controls have separate HTTP and host checks.
 
 `test_candidate_logits_and_inactive_kv` requires exact logits, exact softmax distributions,
 and exact committed KV because both executions use the same eager graph,
 precision, physical batch, and token prefix. An exact comparison failure needs
 investigation before any tolerance changes.
+
+`launch.json` records the effective HTTP model environment, and
+`provenance.json` separates the HTTP prefill policy from the direct device
+matrix's inherited environment. The HTTP qualifier writes actual and expected
+records, per-token absolute differences, and the maximum difference before
+each reference assertion, including assertions that fail. A new server launch
+clears only that server directory's owned comparison records.
 
 `.github/scripts/qualify_llama32_ngram.py` installs a private, child-process
 observer for `Scheduler.finish_requests` during HTTP qualification. The observer
@@ -113,7 +155,7 @@ scheduler ownership. The cancellation check requires a named request to reach
 `FINISHED_ABORTED` before its output limit and to leave `Scheduler.requests`,
 `Scheduler.running`, and the waiting queues before replacement admission.
 Frontend disconnect logs alone do not prove backend cancellation in vLLM 0.30.
-The observer does not change the installed vLLM package or normal server launches.
+The observers do not change the installed vLLM package or normal server launches.
 
 Run `.github/scripts/qualify_llama32_ngram.py` on a reserved, provisioned
 N150-compatible device:
