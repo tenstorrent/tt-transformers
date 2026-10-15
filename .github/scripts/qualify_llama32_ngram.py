@@ -1,7 +1,19 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 # SPDX-License-Identifier: Apache-2.0
 
-"""Qualify ordinary serving, real target verification, and CPU n-gram serving."""
+"""Qualify ordinary serving, real target verification, and CPU n-gram serving.
+
+Each server inherits a private Scheduler.finish_requests observer. The observer
+calls the original method unchanged and records the returned request's status
+and scheduler ownership. Backend cancellation requires FINISHED_ABORTED before
+the requested output length and released scheduler ownership. Frontend abort
+logs and counters alone do not establish backend cancellation in vLLM 0.30.
+
+If the concurrent workload has not reached the plugin's 128-submission log
+interval, one constrained 512-token request supplies at least 128 target
+verifications for K <= 3. Qualification still requires a positive executed
+logits-verification count from the plugin log.
+"""
 
 from __future__ import annotations
 
@@ -17,6 +29,7 @@ import socket
 import subprocess
 import sys
 import time
+import uuid
 import xml.etree.ElementTree as ET
 from contextlib import contextmanager
 from pathlib import Path
@@ -185,6 +198,68 @@ def engine_processes():
     return result.stdout.split()
 
 
+def backend_finish_event(scheduler, request):
+    request_id = request.request_id
+    waiting = (*scheduler.waiting, *scheduler.skipped_waiting)
+    return {
+        "request_id": request_id,
+        "finished_status": request.status.name,
+        "generated_tokens": request.num_output_tokens,
+        "max_tokens": request.max_tokens,
+        "owned_by_requests": request_id in scheduler.requests,
+        "owned_by_running": any(item.request_id == request_id for item in scheduler.running),
+        "owned_by_waiting": any(item.request_id == request_id for item in waiting),
+        "num_running": len(scheduler.running),
+        "num_waiting": len(waiting),
+    }
+
+
+def install_abort_observer(event_path, scheduler_class=None):
+    if scheduler_class is None:
+        from vllm.v1.core.sched.scheduler import Scheduler
+
+        scheduler_class = Scheduler
+    original = scheduler_class.finish_requests
+    if getattr(original, "_llama_ngram_observer", False):
+        return
+
+    def observed_finish_requests(scheduler, *args, **kwargs):
+        finished = original(scheduler, *args, **kwargs)
+        try:
+            for request in finished:
+                event = backend_finish_event(scheduler, request)
+                descriptor = os.open(event_path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+                try:
+                    os.write(descriptor, (json.dumps(event, sort_keys=True) + "\n").encode())
+                finally:
+                    os.close(descriptor)
+        except Exception as error:
+            print(f"LLAMA_ABORT_OBSERVER_ERROR: {error!r}", file=sys.stderr, flush=True)
+        return finished
+
+    observed_finish_requests._llama_ngram_observer = True
+    scheduler_class.finish_requests = observed_finish_requests
+
+
+def observer_environment(directory, environment):
+    observer_directory = directory / "observer"
+    observer_directory.mkdir(exist_ok=True)
+    event_path = directory / "backend-finish.jsonl"
+    event_path.unlink(missing_ok=True)
+    (observer_directory / "sitecustomize.py").write_text(
+        "import importlib.util\n"
+        "from pathlib import Path\n"
+        f"_spec = importlib.util.spec_from_file_location('llama_ngram_qualification_observer', {str(Path(__file__).resolve())!r})\n"
+        "_observer = importlib.util.module_from_spec(_spec)\n"
+        "_spec.loader.exec_module(_observer)\n"
+        f"_observer.install_abort_observer(Path({str(event_path.resolve())!r}))\n"
+    )
+    return {
+        **environment,
+        "PYTHONPATH": str(observer_directory.resolve()) + os.pathsep + environment.get("PYTHONPATH", ""),
+    }
+
+
 @contextmanager
 def server(args, batch, k):
     label = f"B{batch}-K{k}"
@@ -195,6 +270,7 @@ def server(args, batch, k):
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", args.port))
     command, environment = launch_settings(args, batch, k)
+    environment = observer_environment(directory, environment)
     write_json(directory / "launch.json", {"argv": command, "adapter": ADAPTER, "batch": batch, "k": k})
     log_path = directory / "server.log"
     with log_path.open("w") as log:
@@ -255,6 +331,35 @@ def completion_record(result):
     return {"token_ids": token_ids, "logprobs": logprobs, "response": result.body}
 
 
+def ensure_logged_logits_verification(client, prompt, token, server_log, assert_full_length_completion):
+    def executed_count():
+        submits = re.findall(r"(\d+) verify in logits mode", server_log.read_text(errors="replace"))
+        return max(map(int, submits), default=0)
+
+    if executed_count() > 0:
+        return None
+    # After prefill, 511 tokens require at least 128 verifications at K <= 3,
+    # reaching the pinned plugin's _SUBMISSION_LOG_INTERVAL = 128.
+    controls = {
+        "max_tokens": 512,
+        "temperature": 0.7,
+        "seed": 1171,
+        "top_k": 8,
+        "top_p": 0.8,
+        "allowed_token_ids": [token],
+        "ignore_eos": True,
+        "logprobs": 1,
+        "return_tokens_as_token_ids": True,
+    }
+    result = client.complete(prompt, **controls)
+    record = completion_record(result)
+    assert_full_length_completion(result, controls["max_tokens"])
+    assert record["token_ids"] == [token] * controls["max_tokens"], "Logits-verification probe returned wrong tokens"
+    count = executed_count()
+    assert count > 0, "server reported no executed logits verification after the 512-token probe"
+    return {"prompt": prompt, "controls": controls, **record, "executed_logits_verifications": count}
+
+
 def assert_reference_record(actual, expected, label):
     if actual["token_ids"] != expected["token_ids"]:
         raise AssertionError(f"{label}: token IDs differ from ordinary target execution")
@@ -298,6 +403,86 @@ def pressure_requests(tokenizer, token):
     if len({tuple(prompt) for prompt, _ in requests}) != 4:
         raise AssertionError("The pressure workload requires four distinct request histories")
     return requests
+
+
+def disconnect_named_stream(client, prompt, max_tokens):
+    request_id = f"llama-ngram-abort-{uuid.uuid4().hex}"
+    body = client.request_body(
+        prompt,
+        stream=True,
+        request_id=request_id,
+        max_tokens=max_tokens,
+        temperature=0.7,
+        seed=811,
+        ignore_eos=True,
+        stop=[],
+        stop_token_ids=[],
+    )
+    response_id = f"cmpl-{request_id}"
+    chunks = 0
+    tokens_seen = 0
+    with httpx.stream("POST", f"{client.base_url}/v1/completions", json=body, timeout=600) as response:
+        response.raise_for_status()
+        for line in response.iter_lines():
+            if not line.startswith("data:"):
+                continue
+            payload = line[len("data:") :].strip()
+            if payload == "[DONE]":
+                raise AssertionError("The named stream finished before client cancellation")
+            event = json.loads(payload)
+            if event["id"] != response_id:
+                raise AssertionError("The named stream returned an unexpected request ID")
+            choice = event["choices"][0]
+            if choice.get("finish_reason") is not None:
+                raise AssertionError("The named stream finished before client cancellation")
+            token_ids = choice.get("token_ids") or []
+            if not token_ids:
+                continue
+            chunks += 1
+            tokens_seen += len(token_ids)
+            if chunks == 2:
+                break
+    if chunks != 2 or not 0 < tokens_seen < max_tokens:
+        raise AssertionError("Client cancellation requires two unfinished token chunks")
+    return {"response_id": response_id, "token_chunks": chunks, "tokens_seen": tokens_seen, "max_tokens": max_tokens}
+
+
+def assert_backend_abort(event, response_id, max_tokens):
+    expected_id = re.escape(response_id) + r"-0(?:-[0-9a-f]{8})?"
+    if re.fullmatch(expected_id, event.get("request_id", "")) is None:
+        raise AssertionError("Backend cancellation evidence names a different stream request")
+    if event.get("finished_status") != "FINISHED_ABORTED":
+        raise AssertionError("The backend request finished normally instead of being aborted")
+    generated = event.get("generated_tokens")
+    if event.get("max_tokens") != max_tokens or type(generated) is not int or not 0 < generated < max_tokens:
+        raise AssertionError("The backend request did not stop before its requested output length")
+    for field in ("owned_by_requests", "owned_by_running", "owned_by_waiting"):
+        if event.get(field) is not False:
+            raise AssertionError(f"The aborted backend request retains scheduler ownership: {field}")
+    if event.get("num_running") != 0 or event.get("num_waiting") != 0:
+        raise AssertionError("The scheduler has live requests before replacement admission")
+
+
+def wait_for_backend_abort(event_path, response_id, max_tokens, timeout=60):
+    deadline = time.monotonic() + timeout
+    while True:
+        if event_path.is_file():
+            text = event_path.read_text()
+            lines = text.splitlines() if text.endswith("\n") else text.splitlines()[:-1]
+            for line in lines:
+                event = json.loads(line)
+                if event.get("request_id", "").startswith(response_id + "-0"):
+                    assert_backend_abort(event, response_id, max_tokens)
+                    return event
+        if time.monotonic() >= deadline:
+            raise AssertionError("No matching backend cancellation and scheduler release event was recorded")
+        time.sleep(0.1)
+
+
+def exercise_abort(client, prompt, event_path):
+    stream = disconnect_named_stream(client, prompt, max_tokens=512)
+    backend = wait_for_backend_abort(event_path, stream["response_id"], stream["max_tokens"])
+    return {"stream": stream, "backend": backend}
 
 
 def exercise_controls(client, tokenizer, repeated, ordinary_reference=None):
@@ -389,11 +574,15 @@ def exercise_http(args, batch, k, tokenizer, helpers, ordinary_reference=None):
                 assert_reference_record(record, expected, f"concurrent request {index}")
             records.append(record)
         delta = acceptance_delta(before, client.metrics(), max(k, 1))
+        verification_probe = None
         if k:
             assert delta.drafts > 0 and delta.draft_tokens > 0, "CPU n-gram produced no measured proposals"
             assert delta.accepted > 0, "real Llama accepted no n-gram draft"
-            submits = re.findall(r"(\d+) verify in logits mode", server_log.read_text(errors="replace"))
-            assert submits and max(map(int, submits)) > 0, "server reported no executed logits verification"
+            verification_probe = ensure_logged_logits_verification(
+                client, repeated, token, server_log, assert_full_length_completion
+            )
+            if verification_probe is not None:
+                delta = acceptance_delta(before, client.metrics(), max(k, 1))
         else:
             assert delta.drafts == 0 and delta.accepted == 0
         if batch > 1:
@@ -405,7 +594,7 @@ def exercise_http(args, batch, k, tokenizer, helpers, ordinary_reference=None):
         controls = exercise_controls(
             client, tokenizer, repeated, None if ordinary_reference is None else ordinary_reference["controls"]
         )
-        assert client.stream_and_abandon(repeated, after=2, max_tokens=64, temperature=0.7, seed=811) == 2
+        abort_observation = exercise_abort(client, repeated, directory / "backend-finish.jsonl")
         reused = client.complete(
             list(range(300, 331)),
             max_tokens=3,
@@ -443,9 +632,11 @@ def exercise_http(args, batch, k, tokenizer, helpers, ordinary_reference=None):
             directory / "results.json",
             {
                 "acceptance": delta.as_dict(),
+                "verification_probe": verification_probe,
                 "completions": records,
                 "controls": controls,
                 "abort_reuse": reused_record,
+                "abort_observation": abort_observation,
                 "eos": ended.body,
                 "preemption": None if preemption is None else preemption.as_dict(),
                 "pressure": pressure_records,

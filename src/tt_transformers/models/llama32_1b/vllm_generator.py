@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import torch
@@ -158,9 +159,18 @@ class Llama32_1BGenerator:
         model_config = vllm_config.model_config
         model_name = getattr(model_config, "model", "")
         hf_model_name = getattr(getattr(model_config, "hf_config", None), "_name_or_path", "")
-        if SUPPORTED_CHECKPOINT not in (model_name, hf_model_name) or any(
-            "Instruct" in str(name) for name in (model_name, hf_model_name)
-        ):
+        model_names = (model_name, hf_model_name)
+        base_checkpoint = SUPPORTED_CHECKPOINT in model_names
+        if not base_checkpoint:
+            from huggingface_hub import try_to_load_from_cache
+
+            cached_config = try_to_load_from_cache(
+                SUPPORTED_CHECKPOINT, "config.json", revision=getattr(model_config, "revision", None) or "main"
+            )
+            base_checkpoint = isinstance(cached_config, str) and any(
+                name and Path(name).resolve() == Path(cached_config).parent.resolve() for name in model_names
+            )
+        if not base_checkpoint or any("Instruct" in str(name) for name in model_names):
             return SpecReject(f"sequential verification requires the base checkpoint {SUPPORTED_CHECKPOINT}")
         if getattr(vllm_config.speculative_config, "method", None) != "ngram":
             return SpecReject("sequential verification supports only CPU ngram proposals")
@@ -445,8 +455,10 @@ class Llama32_1BGenerator:
 
         if spec_mode != "logits":
             raise ValueError(f"sequential verification requires spec_mode='logits', got {spec_mode!r}")
-        if enable_trace is not False or sampling_params is not None or read_from_device is not True:
-            raise ValueError("sequential verification requires eager execution and synchronous host logits")
+        if enable_trace is not False or sampling_params is not None:
+            raise ValueError("sequential verification requires eager execution and host logits")
+        if not isinstance(read_from_device, bool):
+            raise TypeError("read_from_device must be bool")
         if isinstance(self.target, LaneGroupExecutor):
             raise ValueError("sequential verification does not support lane-DP")
         compatibility_kwargs = dict(compatibility_kwargs)

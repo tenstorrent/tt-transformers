@@ -167,6 +167,107 @@ def test_completion_record_rejects_missing_or_nonfinite_raw_logprobs(logprobs):
         qualification.completion_record(_completion(logprobs=logprobs))
 
 
+def _assert_full_length_completion(result, count):
+    assert result.status == 200
+    assert len(result.token_ids) == result.completion_tokens == count
+    assert result.finish_reason == "length"
+
+
+@pytest.fixture
+def verification_probe(tmp_path):
+    server_log = tmp_path / "server.log"
+    server_log.write_text("")
+    prompt = [700] * 96
+    result = _completion([700] * 512, [-1.5] * 512)
+    result.completion_tokens = 512
+    result.finish_reason = "length"
+
+    def complete(*args, **kwargs):
+        server_log.write_text("128 verify in logits mode\n")
+        return result
+
+    client = SimpleNamespace(complete=Mock(side_effect=complete))
+    return client, prompt, server_log, result
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("initial_log", ["", "0 verify in logits mode\n", "128 ordinary decode, 0 verify\n"])
+def test_missing_positive_logits_count_runs_bounded_probe_and_requires_executed_verification(
+    verification_probe, initial_log
+):
+    client, prompt, server_log, result = verification_probe
+    server_log.write_text(initial_log)
+    record = qualification.ensure_logged_logits_verification(
+        client, prompt, 700, server_log, _assert_full_length_completion
+    )
+    client.complete.assert_called_once_with(
+        prompt,
+        max_tokens=512,
+        temperature=0.7,
+        seed=1171,
+        top_k=8,
+        top_p=0.8,
+        allowed_token_ids=[700],
+        ignore_eos=True,
+        logprobs=1,
+        return_tokens_as_token_ids=True,
+    )
+    assert len(record["prompt"]) + record["controls"]["max_tokens"] < 1024
+    assert record["token_ids"] == [700] * 512
+    assert record["logprobs"] == [-1.5] * 512
+    assert record["response"] is result.body
+    assert record["executed_logits_verifications"] == 128
+
+
+@pytest.mark.host
+def test_existing_positive_logits_count_avoids_probe(verification_probe):
+    client, prompt, server_log, _ = verification_probe
+    server_log.write_text("17 verify in logits mode\n0 verify in logits mode\n")
+    assert (
+        qualification.ensure_logged_logits_verification(client, prompt, 700, server_log, _assert_full_length_completion)
+        is None
+    )
+    client.complete.assert_not_called()
+
+
+@pytest.mark.host
+def test_logits_probe_rejects_http_failure(verification_probe):
+    client, prompt, server_log, result = verification_probe
+    result.status = 400
+    result.body = {"error": "probe rejected"}
+    with pytest.raises(AssertionError, match="Completion failed"):
+        qualification.ensure_logged_logits_verification(client, prompt, 700, server_log, _assert_full_length_completion)
+
+
+@pytest.mark.host
+def test_logits_probe_completion_without_executed_count_fails(verification_probe):
+    client, prompt, server_log, result = verification_probe
+    client.complete.side_effect = None
+    client.complete.return_value = result
+    with pytest.raises(AssertionError, match="no executed logits verification after the 512-token probe"):
+        qualification.ensure_logged_logits_verification(client, prompt, 700, server_log, _assert_full_length_completion)
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("failure", ["short", "usage", "stopped", "token", "nonfinite"])
+def test_logits_probe_requires_full_length_correct_tokens_and_finite_raw_logprobs(verification_probe, failure):
+    client, prompt, server_log, result = verification_probe
+    if failure == "short":
+        result.token_ids.pop()
+        result.body["choices"][0]["logprobs"]["token_logprobs"].pop()
+        result.completion_tokens = 511
+    elif failure == "usage":
+        result.completion_tokens = 511
+    elif failure == "stopped":
+        result.finish_reason = "stop"
+    elif failure == "token":
+        result.token_ids[-1] = 701
+    else:
+        result.body["choices"][0]["logprobs"]["token_logprobs"][-1] = float("nan")
+    with pytest.raises(AssertionError):
+        qualification.ensure_logged_logits_verification(client, prompt, 700, server_log, _assert_full_length_completion)
+
+
 @pytest.mark.host
 def test_reference_comparison_accepts_numerical_tolerance():
     expected = qualification.completion_record(_completion())
@@ -332,7 +433,7 @@ def test_runtime_provenance_rejects_mismatched_manifest_and_source_checkout(tmp_
 
 @pytest.fixture
 def http_qualification(tmp_path, monkeypatch):
-    state = {"k": 0, "corrupt": None}
+    state = {"k": 0, "corrupt": None, "initial_verifications": 128, "probe_calls": 0}
     args = SimpleNamespace(output=tmp_path, port=8123)
     tokenizer = SimpleNamespace(
         encode=lambda text, **kwargs: [700] if text == " red" else [ord(character) for character in text],
@@ -342,10 +443,11 @@ def http_qualification(tmp_path, monkeypatch):
     @contextmanager
     def running_server(args, batch, k):
         state["k"] = k
+        state["batch"] = batch
         directory = args.output / f"B{batch}-K{k}"
         directory.mkdir(exist_ok=True)
         log = directory / "server.log"
-        log.write_text("128 verify in logits mode\n")
+        log.write_text(f"{state['initial_verifications']} verify in logits mode\n")
         yield directory, log
 
     class HTTPClient:
@@ -354,6 +456,11 @@ def http_qualification(tmp_path, monkeypatch):
 
         def complete(self, prompt, **controls):
             count = controls["max_tokens"]
+            if controls.get("seed") == 1171:
+                state["probe_calls"] += 1
+                (args.output / f"B{state['batch']}-K{state['k']}" / "server.log").write_text(
+                    "128 verify in logits mode\n"
+                )
             token = controls.get("allowed_token_ids", [123])[0]
             values = [-1.0 - sum(prompt) * 1e-6 - index * 1e-7 for index in range(count)]
             if controls.get("seed") == 102:
@@ -372,26 +479,24 @@ def http_qualification(tmp_path, monkeypatch):
             return result
 
         def metrics(self):
-            return SimpleNamespace(raw="metrics\n")
+            return SimpleNamespace(raw="metrics\n", probe_calls=state["probe_calls"])
 
         def stream_and_abandon(self, *args, **kwargs):
             return 2
 
-    def acceptance_delta(*args):
+    def acceptance_delta(before, after, *args):
         return SimpleNamespace(
             drafts=1 if state["k"] else 0,
             draft_tokens=3 if state["k"] else 0,
             accepted=3 if state["k"] else 0,
             preemptions=1,
-            as_dict=lambda: {"preemptions": 1},
+            as_dict=lambda: {"preemptions": 1, "probe_requests": after.probe_calls - before.probe_calls},
         )
-
-    def assert_full_length_completion(result, count):
-        assert result.status == 200 and len(result.token_ids) == result.completion_tokens == count
 
     monkeypatch.setattr(qualification, "server", running_server)
     monkeypatch.setattr(qualification, "exercise_controls", lambda *args: {"serial_controls": "checked separately"})
-    helpers = HTTPClient, acceptance_delta, assert_full_length_completion, lambda log: 4
+    monkeypatch.setattr(qualification, "exercise_abort", lambda *args: {"backend": "checked by observer contracts"})
+    helpers = HTTPClient, acceptance_delta, _assert_full_length_completion, lambda log: 4
     return args, tokenizer, helpers, state
 
 
@@ -407,6 +512,23 @@ def test_http_qualification_preserves_same_batch_references_for_all_lifecycle_wo
 
 
 @pytest.mark.host
+def test_http_qualification_records_probe_and_includes_probe_metrics_without_changing_references(http_qualification):
+    args, tokenizer, helpers, state = http_qualification
+    ordinary = qualification.exercise_http(args, 2, 0, tokenizer, helpers)
+    state["initial_verifications"] = 0
+    speculative = qualification.exercise_http(args, 2, 2, tokenizer, helpers, ordinary)
+    saved = json.loads((args.output / "B2-K2" / "results.json").read_text())
+    assert state["probe_calls"] == 1
+    assert saved["verification_probe"]["prompt"] == [700] * 96
+    assert saved["verification_probe"]["token_ids"] == [700] * 512
+    assert saved["verification_probe"]["executed_logits_verifications"] == 128
+    assert saved["acceptance"]["probe_requests"] == 1
+    assert saved["completions"] == ordinary["concurrent"] == speculative["concurrent"]
+    assert len(speculative["concurrent"]) == 20
+    assert json.loads((args.output / "B2-K0" / "results.json").read_text())["verification_probe"] is None
+
+
+@pytest.mark.host
 @pytest.mark.parametrize("phase", ["concurrent", "pressure", "abort_reuse"])
 def test_http_qualification_rejects_corrupt_state_despite_identical_constrained_tokens(http_qualification, phase):
     args, tokenizer, helpers, state = http_qualification
@@ -414,3 +536,214 @@ def test_http_qualification_rejects_corrupt_state_despite_identical_constrained_
     state["corrupt"] = phase
     with pytest.raises(AssertionError, match="raw logprobs differ"):
         qualification.exercise_http(args, 4, 3, tokenizer, helpers, ordinary)
+
+
+def _observed_request():
+    return SimpleNamespace(
+        request_id="cmpl-llama-ngram-abort-abc-0-1234abcd",
+        status=SimpleNamespace(name="FINISHED_ABORTED"),
+        num_output_tokens=4,
+        max_tokens=512,
+    )
+
+
+def _released_scheduler():
+    return SimpleNamespace(requests={}, running=[], waiting=[], skipped_waiting=[])
+
+
+@pytest.mark.host
+def test_finish_observer_preserves_original_arguments_return_value_and_backend_status(tmp_path):
+    event_path = tmp_path / "backend-finish.jsonl"
+    request = _observed_request()
+
+    class Scheduler:
+        def __init__(self):
+            self.requests = {request.request_id: request}
+            self.running = [request]
+            self.waiting = []
+            self.skipped_waiting = []
+            self.returned = [request]
+
+        def finish_requests(self, request_ids, status, *, marker):
+            self.received = request_ids, status, marker
+            request.status = status
+            self.requests.pop(request.request_id)
+            self.running.remove(request)
+            return self.returned
+
+    qualification.install_abort_observer(event_path, Scheduler)
+    scheduler = Scheduler()
+    request_ids = [request.request_id]
+    status = request.status
+    marker = object()
+
+    result = scheduler.finish_requests(request_ids, status, marker=marker)
+
+    assert result is scheduler.returned
+    assert scheduler.received[0] is request_ids
+    assert scheduler.received[1] is status
+    assert scheduler.received[2] is marker
+    event = json.loads(event_path.read_text())
+    qualification.assert_backend_abort(event, "cmpl-llama-ngram-abort-abc", 512)
+    assert event["generated_tokens"] == 4
+    assert event["owned_by_requests"] is event["owned_by_running"] is event["owned_by_waiting"] is False
+
+
+@pytest.mark.host
+def test_finish_observer_does_not_hide_original_failure(tmp_path):
+    failure = RuntimeError("original scheduler failure")
+
+    class Scheduler:
+        def finish_requests(self, *args, **kwargs):
+            raise failure
+
+    event_path = tmp_path / "backend-finish.jsonl"
+    qualification.install_abort_observer(event_path, Scheduler)
+    with pytest.raises(RuntimeError) as raised:
+        Scheduler().finish_requests(["request"], marker=4)
+    assert raised.value is failure
+    assert not event_path.exists()
+
+
+@pytest.mark.host
+def test_finish_observer_io_failure_does_not_change_original_return(tmp_path, monkeypatch, capsys):
+    request = _observed_request()
+    returned = [request]
+
+    class Scheduler:
+        requests = {}
+        running = []
+        waiting = []
+        skipped_waiting = []
+
+        def finish_requests(self):
+            return returned
+
+    qualification.install_abort_observer(tmp_path / "backend-finish.jsonl", Scheduler)
+    monkeypatch.setattr(qualification.os, "open", Mock(side_effect=OSError("cannot record evidence")))
+    assert Scheduler().finish_requests() is returned
+    assert "LLAMA_ABORT_OBSERVER_ERROR" in capsys.readouterr().err
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("status", ["FINISHED_LENGTH_CAPPED", "FINISHED_STOPPED"])
+def test_backend_cancellation_oracle_rejects_normal_completion_after_disconnect(tmp_path, status):
+    request = _observed_request()
+    request.status.name = status
+    event = qualification.backend_finish_event(_released_scheduler(), request)
+    event_path = tmp_path / "backend-finish.jsonl"
+    event_path.write_text(json.dumps(event) + "\n")
+    with pytest.raises(AssertionError, match="finished normally"):
+        qualification.wait_for_backend_abort(event_path, "cmpl-llama-ngram-abort-abc", 512, timeout=0)
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("owner", ["requests", "running", "waiting", "skipped_waiting"])
+def test_backend_cancellation_oracle_rejects_retained_request_ownership(owner):
+    request = _observed_request()
+    scheduler = _released_scheduler()
+    setattr(scheduler, owner, {request.request_id: request} if owner == "requests" else [request])
+    event = qualification.backend_finish_event(scheduler, request)
+    with pytest.raises(AssertionError, match="retains scheduler ownership"):
+        qualification.assert_backend_abort(event, "cmpl-llama-ngram-abort-abc", 512)
+
+
+@pytest.mark.host
+def test_backend_cancellation_oracle_rejects_request_that_reached_output_limit():
+    request = _observed_request()
+    request.num_output_tokens = 512
+    event = qualification.backend_finish_event(_released_scheduler(), request)
+    with pytest.raises(AssertionError, match="before its requested output length"):
+        qualification.assert_backend_abort(event, "cmpl-llama-ngram-abort-abc", 512)
+
+
+@pytest.mark.host
+def test_backend_cancellation_oracle_rejects_unrelated_request_id():
+    event = qualification.backend_finish_event(_released_scheduler(), _observed_request())
+    with pytest.raises(AssertionError, match="different stream request"):
+        qualification.assert_backend_abort(event, "cmpl-another-request", 512)
+
+
+@pytest.mark.host
+def test_backend_cancellation_requires_an_actual_matching_event(tmp_path):
+    with pytest.raises(AssertionError, match="No matching backend cancellation"):
+        qualification.wait_for_backend_abort(tmp_path / "missing.jsonl", "cmpl-llama-ngram-abort-abc", 512, timeout=0)
+
+
+@pytest.mark.host
+def test_backend_cancellation_uses_complete_event_and_ignores_partial_append(tmp_path):
+    event = qualification.backend_finish_event(_released_scheduler(), _observed_request())
+    event_path = tmp_path / "backend-finish.jsonl"
+    event_path.write_text(json.dumps(event) + '\n{"request_id":')
+    assert qualification.wait_for_backend_abort(event_path, "cmpl-llama-ngram-abort-abc", 512, timeout=0) == event
+
+
+@pytest.mark.host
+def test_child_observer_environment_is_private_and_resets_backend_evidence(tmp_path):
+    original = {"PYTHONPATH": "/existing/source", "OTHER_SETTING": "preserved"}
+    (tmp_path / "backend-finish.jsonl").write_text("stale backend event\n")
+    environment = qualification.observer_environment(tmp_path, original)
+    assert original["PYTHONPATH"] == "/existing/source"
+    assert environment["PYTHONPATH"] == str(tmp_path / "observer") + qualification.os.pathsep + "/existing/source"
+    assert environment["OTHER_SETTING"] == "preserved"
+    assert not (tmp_path / "backend-finish.jsonl").exists()
+    observer = tmp_path / "observer/sitecustomize.py"
+    compile(observer.read_text(), str(observer), "exec")
+    assert str(tmp_path / "backend-finish.jsonl") in observer.read_text()
+    assert str(_SCRIPT) in observer.read_text()
+
+
+@pytest.fixture
+def named_stream(monkeypatch):
+    monkeypatch.setattr(qualification.uuid, "uuid4", lambda: SimpleNamespace(hex="abc"))
+    response_id = "cmpl-llama-ngram-abort-abc"
+    events = [
+        {"id": response_id, "choices": [{"token_ids": [19], "finish_reason": None}]},
+        {"id": response_id, "choices": [{"token_ids": [20, 21], "finish_reason": None}]},
+    ]
+    sent = {}
+
+    @contextmanager
+    def stream(method, url, *, json, timeout):
+        sent.update(json)
+        response = SimpleNamespace(
+            raise_for_status=lambda: None,
+            iter_lines=lambda: iter(
+                "data: " + (event if isinstance(event, str) else qualification.json.dumps(event)) for event in events
+            ),
+        )
+        yield response
+
+    monkeypatch.setattr(qualification.httpx, "stream", stream)
+    client = SimpleNamespace(
+        base_url="http://127.0.0.1:8123",
+        request_body=lambda prompt, **controls: {"prompt": prompt, "return_token_ids": True, **controls},
+    )
+    return client, events, sent
+
+
+@pytest.mark.host
+def test_named_stream_disconnects_after_two_unfinished_token_chunks(named_stream):
+    client, _, sent = named_stream
+    result = qualification.disconnect_named_stream(client, [1, 2, 3], 512)
+    assert result == {
+        "response_id": "cmpl-llama-ngram-abort-abc",
+        "token_chunks": 2,
+        "tokens_seen": 3,
+        "max_tokens": 512,
+    }
+    assert sent["request_id"] == "llama-ngram-abort-abc"
+    assert sent["ignore_eos"] is True
+    assert sent["stop"] == sent["stop_token_ids"] == []
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("terminal", ["done", "length", "stop"])
+def test_named_stream_rejects_completion_before_client_disconnect(named_stream, terminal):
+    client, events, _ = named_stream
+    if terminal == "done":
+        events[1] = "[DONE]"
+    else:
+        events[1]["choices"][0]["finish_reason"] = terminal
+    with pytest.raises(AssertionError, match="finished before client cancellation"):
+        qualification.disconnect_named_stream(client, [1, 2, 3], 512)

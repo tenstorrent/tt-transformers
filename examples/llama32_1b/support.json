@@ -78,7 +78,7 @@
     "Current regression evidence does not qualify the complete declared model contract",
     "TP4 lanes",
     "N150 batch-32-ci sequence 2048",
-    "Base Llama-3.2-1B synchronous ngram logits verification at B1/2/4 and K1/2/3 has source tests and CI wiring; real-device qualification remains unverified",
+    "Base Llama-3.2-1B synchronous ngram qualification is limited to the separate one-device B1/2/4 K1/2/3 workflow; the ordinary Instruct support declaration does not cover that path",
     "any geometry not declared in support.json"
   ],
   "validation": {

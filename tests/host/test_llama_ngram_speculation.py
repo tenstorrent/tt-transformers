@@ -438,6 +438,42 @@ def test_generator_admission_accepts_local_checkpoint_with_explicit_base_identit
 
 
 @pytest.mark.host
+def test_generator_admission_accepts_offline_resolved_base_snapshot(generator_runtime, monkeypatch, tmp_path):
+    configuration = _launch_configuration()
+    revision = "4e20de362430cd3b72f300e6b0f18e50e7166e08"
+    snapshot = tmp_path / "models--meta-llama--Llama-3.2-1B" / "snapshots" / revision
+    configuration.model_config.model = str(snapshot)
+    configuration.model_config.hf_config._name_or_path = str(snapshot)
+    configuration.model_config.revision = revision
+    lookups = []
+
+    def cached_config(model, filename, *, revision):
+        lookups.append((model, filename, revision))
+        return str(snapshot / "config.json")
+
+    monkeypatch.setattr("huggingface_hub.try_to_load_from_cache", cached_config)
+
+    outcome = generator_runtime.Llama32_1BGenerator.spec_plan(configuration, 2, 3)
+
+    assert isinstance(outcome, generator_runtime.contract.SpecPlan)
+    assert lookups == [("meta-llama/Llama-3.2-1B", "config.json", revision)]
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("cached", (None, "/cache/base/snapshots/revision/config.json"))
+def test_generator_admission_rejects_snapshot_without_matching_base_cache(generator_runtime, monkeypatch, cached):
+    configuration = _launch_configuration()
+    configuration.model_config.model = "/models/unknown/snapshots/revision"
+    configuration.model_config.hf_config._name_or_path = configuration.model_config.model
+    monkeypatch.setattr("huggingface_hub.try_to_load_from_cache", lambda *args, **kwargs: cached)
+
+    outcome = generator_runtime.Llama32_1BGenerator.spec_plan(configuration, 2, 3)
+
+    assert isinstance(outcome, generator_runtime.contract.SpecReject)
+    assert "base checkpoint" in outcome.reason
+
+
+@pytest.mark.host
 @pytest.mark.parametrize("mesh_device", (None, "N300", "T3K", "(1, 2)", "invalid"))
 def test_generator_admission_rejects_unqualified_mesh(generator_runtime, monkeypatch, mesh_device):
     if mesh_device is None:
@@ -528,9 +564,11 @@ def test_generator_admission_rejects_resolved_multiple_lanes(generator_runtime):
 
 
 @pytest.mark.host
-def test_generator_decode_dispatches_real_helper_and_real_verify_output(generator_runtime):
+@pytest.mark.parametrize("read_from_device", (False, True))
+def test_generator_decode_dispatches_real_helper_and_real_verify_output(generator_runtime, read_from_device):
     generator, target = _generator_with_real_adapter(generator_runtime)
     arguments = _generator_verify_arguments()
+    arguments["read_from_device"] = read_from_device
     arguments["slot_remap"] = torch.tensor([1, 0], dtype=torch.int32)
     kv_cache = object()
 
@@ -605,8 +643,8 @@ def test_generator_ordinary_decode_retains_normalization_delegation_and_output_i
         ({"spec_mode": "argmax_ids"}, ValueError, "spec_mode"),
         ({"spec_mode": "fused_sample"}, ValueError, "spec_mode"),
         ({"enable_trace": True}, ValueError, "eager execution"),
-        ({"sampling_params": object()}, ValueError, "synchronous host logits"),
-        ({"read_from_device": False}, ValueError, "synchronous host logits"),
+        ({"sampling_params": object()}, ValueError, "host logits"),
+        ({"read_from_device": "false"}, TypeError, "read_from_device"),
         ({"num_valid_drafts": None}, TypeError, "num_valid_drafts"),
         ({"accepted_counts": None}, TypeError, "accepted_counts"),
         ({"num_valid_drafts": None, "accepted_counts": None}, TypeError, "num_valid_drafts"),

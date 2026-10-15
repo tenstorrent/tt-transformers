@@ -10,8 +10,9 @@ The initial speculative scope is the base checkpoint
 `meta-llama/Llama-3.2-1B`, synchronous scheduling, physical batch 1, 2, or 4,
 one logical 1x1 mesh and one execution lane, requested draft width 1, 2, or 3, host sampling, disabled
 prefix caching, `trace_mode="none"`, and `optimizations="performance"`.
-Device qualification remains unverified until `.github/workflows/llama32-ngram.yml`
-succeeds at the exact published revisions.
+Device qualification remains unverified until the complete device command in
+`llama32-ngram.yml` or `llama32-ngram-source.yml` succeeds at the exact
+published revisions.
 
 ## Launch
 
@@ -64,7 +65,8 @@ supply an authorized `HF_TOKEN` secret for the gated base checkpoint.
 `llama32-ngram.yml` uses an isolated model cache and permits only one
 qualification job per runner pool at a time.
 
-`llama32-ngram.yml` performs the following sequence:
+`llama32-ngram.yml` and `llama32-ngram-source.yml` run the same complete
+qualification sequence:
 
 1. `.github/scripts/qualify_llama32_ngram.py` imports TTNN, `ttnn.device`, and vLLM in one
    interpreter and requires TT platform activation.
@@ -104,6 +106,15 @@ and exact committed KV because both executions use the same eager graph,
 precision, physical batch, and token prefix. An exact comparison failure needs
 investigation before any tolerance changes.
 
+`.github/scripts/qualify_llama32_ngram.py` installs a private, child-process
+observer for `Scheduler.finish_requests` during HTTP qualification. The observer
+calls `Scheduler.finish_requests` unchanged, then records request status and
+scheduler ownership. The cancellation check requires a named request to reach
+`FINISHED_ABORTED` before its output limit and to leave `Scheduler.requests`,
+`Scheduler.running`, and the waiting queues before replacement admission.
+Frontend disconnect logs alone do not prove backend cancellation in vLLM 0.30.
+The observer does not change the installed vLLM package or normal server launches.
+
 Run `.github/scripts/qualify_llama32_ngram.py` on a reserved, provisioned
 N150-compatible device:
 
@@ -121,6 +132,87 @@ package versions, exact Git revisions, launch arguments, server logs, final
 metrics, HTTP responses, hardware inventory, and teardown status. Installed
 package metadata can lack a VCS commit. `provenance.json` labels that package's
 source revision as unverified when installed VCS metadata is absent.
+
+## Prepared source runner
+
+`.github/workflows/llama32-ngram-source.yml` runs the complete qualification
+against an already prepared source environment. `llama32-ngram-source.yml`
+uses shell steps and pinned checkout/upload actions. `llama32-ngram-source.yml`
+does not install packages, rebuild TTNN, reserve devices, or start a container.
+
+`workflow_dispatch` is for an explicitly authorized, trusted workflow revision
+on a dedicated self-hosted Linux x64 runner. The operator selects a reviewed
+tt-transformers revision and a trusted environment activation script.
+`llama32-ngram-source.yml` has no pull-request, push, or schedule trigger.
+The operator reserves and provisions hardware, registers a temporary runner,
+and removes the temporary runner outside `llama32-ngram-source.yml`. The
+operator starts the temporary runner after any existing device job finishes.
+
+The prepared runner must have:
+
+- Exclusive access to the reserved physical device and no other TT device job.
+  The `runner_label` input must identify that dedicated runner.
+- A source-built TTNN environment, vLLM, vllm-tt-plugin, and the repository's
+  host-test dependencies. One `source "$ENVIRONMENT_SCRIPT" "$ENVIRONMENT_NAME"`
+  command must select the complete environment and its `TT_METAL_HOME`.
+- A clean vllm-tt-plugin checkout at `plugin_revision` and a clean tt-metal
+  checkout at `tt_metal_revision`. The source-built `ttnn` package and native
+  extension must resolve inside that tt-metal checkout.
+- Read access to the complete cached base checkpoint at `checkpoint_revision`.
+  The Hugging Face cache's `refs/main` must select `checkpoint_revision`.
+  Converted-weight, TTNN, and TT-Metal kernel caches must be writable.
+- `python`, `tt-smi`, `git`, and `pgrep` available after environment activation.
+  GitHub Actions checkout and artifact upload must work from the runner.
+
+`llama32-ngram-source.yml` accepts seven inputs: `runner_label`,
+`environment_script`, `environment_name`, `plugin_checkout`, `plugin_revision`,
+`tt_metal_revision`, and `checkpoint_revision`. GitHub Actions passes each
+input through an environment variable. `llama32-ngram-source.yml` sources the
+quoted `environment_script` once and supplies the quoted `environment_name`
+as one argument. `llama32-ngram-source.yml` then sets `PYTHONPATH` to the fresh
+Actions checkout's `src` and repository root, the selected tt-metal checkout's
+real `ttnn` package before the tt-metal repository root, and the selected
+vllm-tt-plugin checkout's `src`. Import-origin checks reject stale standalone
+or plugin packages before host contracts start.
+
+The prepared candidate uses source commit
+`de546d3b146758714d900f11b218c8f9c805f410` from tt-metal tag `v0.79.0`.
+The prepared candidate reports TTNN distribution version `0.79.0rc2`; the
+qualification records that actual version without rewriting package metadata.
+For the prepared `llama-ngram` profile, dispatch with:
+
+```bash
+gh workflow run llama32-ngram-source.yml \
+  --repo "$QUALIFICATION_REPOSITORY" --ref "$REVIEWED_SOURCE_REF" \
+  -f runner_label=tt-llama32-prepared \
+  -f environment_script=/localdev/viktorpus/dotfiles/tt/tt-env.sh \
+  -f environment_name=llama-ngram \
+  -f plugin_checkout=/localdev/viktorpus/llama-ngram-qualification/vllm-tt-plugin \
+  -f plugin_revision=61c40e6334bf28467693ca530ced66beabd96998 \
+  -f tt_metal_revision=de546d3b146758714d900f11b218c8f9c805f410 \
+  -f checkpoint_revision=4e20de362430cd3b72f300e6b0f18e50e7166e08
+```
+
+`llama32-ngram-source.yml` requires the checked-out tt-transformers SHA to match
+the dispatched GitHub SHA. `llama32-ngram-source.yml` also checks the exact
+plugin and tt-metal SHAs, tracked-file cleanliness, source import origins,
+TT platform activation, and the base checkpoint revision. The focused host
+contracts must execute without skips. `llama32-ngram-source.yml` also runs the
+complete host selector and records its skips in `full-host.xml`.
+`.github/scripts/qualify_llama32_ngram.py`
+then runs ordinary serving at B=1/2/4, all 18 real-model device tests, and all
+nine sampled n-gram B/K combinations. The prepared-source path does not pass
+`--skip-device-matrix`.
+
+Plan for 45 to 165 minutes after preflight. The success signal is a green
+workflow with non-skipped host contracts, all 18 device cases, and
+`generated/llama32-ngram-source/qualification/success.json`.
+`llama32-ngram-source.yml` uploads `prepared-source.json`, package versions,
+module origins, the native extension checksum, host and device JUnit reports,
+the exact qualifier command, server logs, HTTP results, metrics, hardware
+inventory, and teardown state even after a failed gate. A teardown check
+reports any remaining engine process and fails `llama32-ngram-source.yml`
+without resetting hardware or terminating an unrelated process.
 
 The real-model HTTP suite compares deterministic request controls with
 ordinary target execution. The plugin's host and synthetic device suites
