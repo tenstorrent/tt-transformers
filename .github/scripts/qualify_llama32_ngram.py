@@ -24,6 +24,7 @@ import json
 import math
 import os
 import re
+import shutil
 import signal
 import socket
 import subprocess
@@ -32,6 +33,7 @@ import time
 import uuid
 import xml.etree.ElementTree as ET
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 
 import httpx
@@ -49,10 +51,40 @@ def write_json(path, payload):
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
+def _timestamped_junit_reports(expected):
+    pattern = re.compile(rf"{re.escape(expected.stem)}_(\d{{8}}_\d{{6}}){re.escape(expected.suffix)}")
+    reports = []
+    for candidate in expected.parent.glob(f"{expected.stem}_*{expected.suffix}"):
+        match = pattern.fullmatch(candidate.name)
+        if not candidate.is_file() or match is None:
+            continue
+        try:
+            datetime.strptime(match[1], "%Y%m%d_%H%M%S")
+        except ValueError:
+            continue
+        reports.append(candidate)
+    return sorted(reports)
+
+
+def canonicalize_junit_report(expected):
+    expected = Path(expected)
+    candidates = ([expected] if expected.is_file() else []) + _timestamped_junit_reports(expected)
+    if not candidates:
+        raise FileNotFoundError(f"No JUnit report for {expected}")
+    if len(candidates) != 1:
+        raise ValueError(f"Ambiguous JUnit reports for {expected}: {candidates}")
+    ET.parse(candidates[0])
+    if candidates[0] != expected:
+        shutil.copyfile(candidates[0], expected)
+    return expected
+
+
 def reset_completion_markers(directory):
     directory.mkdir(parents=True, exist_ok=True)
     for filename in ("success.json", "partial.json", "device-matrix.xml"):
         (directory / filename).unlink(missing_ok=True)
+    for report in _timestamped_junit_reports(directory / "device-matrix.xml"):
+        report.unlink()
 
 
 def require_commit_sha(name, value):
@@ -732,7 +764,7 @@ def main():
             cwd=ROOT,
             check=True,
         )
-        require_device_matrix(args.output / "device-matrix.xml")
+        require_device_matrix(canonicalize_junit_report(args.output / "device-matrix.xml"))
     for batch in (1, 2, 4):
         for k in (1, 2, 3):
             exercise_http(args, batch, k, tokenizer, helpers, ordinary[batch])

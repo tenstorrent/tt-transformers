@@ -190,8 +190,10 @@ jobs:
           python - <<'PY'
           import os
           from pathlib import Path
+          from runpy import run_path
           from xml.etree import ElementTree
-          report = ElementTree.parse(Path(os.environ["EVIDENCE_DIR"]) / "host-contracts.xml")
+          canonicalize = run_path(".github/scripts/qualify_llama32_ngram.py")["canonicalize_junit_report"]
+          report = ElementTree.parse(canonicalize(Path(os.environ["EVIDENCE_DIR"]) / "host-contracts.xml"))
           cases = list(report.iter("testcase"))
           if not cases or any(case.find(tag) is not None for case in cases for tag in ("skipped", "error", "failure")):
               raise AssertionError("Source adapter host contracts require executed, passing tests without skips")

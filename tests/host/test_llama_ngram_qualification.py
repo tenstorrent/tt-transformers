@@ -123,6 +123,81 @@ def test_device_matrix_accepts_all_18_executed_cases(tmp_path):
 
 
 @pytest.mark.host
+@pytest.mark.parametrize("filename", ["device-matrix.xml", "device-matrix_20261015_012345.xml"])
+def test_junit_report_resolves_exact_or_ci_timestamp_and_preserves_artifact(tmp_path, filename):
+    original = tmp_path / filename
+    content = "<testsuite>" + "<testcase/>" * 18 + "</testsuite>"
+    original.write_text(content)
+    expected = tmp_path / "device-matrix.xml"
+    resolved = qualification.canonicalize_junit_report(expected)
+    assert resolved == expected
+    assert resolved.read_text() == original.read_text() == content
+    qualification.require_device_matrix(resolved)
+
+
+@pytest.mark.host
+def test_junit_report_rejects_missing_report_and_ignores_unrelated_or_invalid_timestamps(tmp_path):
+    for filename in (
+        "host-contracts_20261015_012345.xml",
+        "device-matrix_backup.xml",
+        "device-matrix_20260230_012345.xml",
+        "device-matrix_20261015_252345.xml",
+    ):
+        (tmp_path / filename).write_text("<testsuite/>")
+    with pytest.raises(FileNotFoundError, match="No JUnit report"):
+        qualification.canonicalize_junit_report(tmp_path / "device-matrix.xml")
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("first", ["device-matrix.xml", "device-matrix_20261015_012345.xml"])
+def test_junit_report_rejects_ambiguous_exact_or_timestamped_candidates(tmp_path, first):
+    (tmp_path / first).write_text("<testsuite/>")
+    (tmp_path / "device-matrix_20261015_012346.xml").write_text("<testsuite/>")
+    with pytest.raises(ValueError, match="Ambiguous JUnit reports"):
+        qualification.canonicalize_junit_report(tmp_path / "device-matrix.xml")
+
+
+@pytest.mark.host
+def test_junit_report_rejects_malformed_xml_without_creating_canonical_artifact(tmp_path):
+    (tmp_path / "device-matrix_20261015_012345.xml").write_text("<testsuite>")
+    expected = tmp_path / "device-matrix.xml"
+    with pytest.raises(qualification.ET.ParseError):
+        qualification.canonicalize_junit_report(expected)
+    assert not expected.exists()
+
+
+@pytest.mark.host
+def test_rerun_removes_only_owned_reports_and_cannot_reuse_old_device_success(tmp_path):
+    for filename in ("device-matrix.xml", "device-matrix_20261015_012345.xml"):
+        (tmp_path / filename).write_text("<testsuite>" + "<testcase/>" * 18 + "</testsuite>")
+    preserved = [
+        tmp_path / "host-contracts_20261015_012345.xml",
+        tmp_path / "device-matrix_backup.xml",
+        tmp_path / "device-matrix_20260230_012345.xml",
+    ]
+    for path in preserved:
+        path.write_text("retained diagnostics")
+    qualification.reset_completion_markers(tmp_path)
+    assert all(path.read_text() == "retained diagnostics" for path in preserved)
+    with pytest.raises(FileNotFoundError, match="No JUnit report"):
+        qualification.canonicalize_junit_report(tmp_path / "device-matrix.xml")
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("child", ["skipped", "failure", "error"])
+def test_fresh_timestamped_device_failure_cannot_inherit_old_18_case_success(tmp_path, child):
+    (tmp_path / "device-matrix_20261015_012345.xml").write_text("<testsuite>" + "<testcase/>" * 18 + "</testsuite>")
+    qualification.reset_completion_markers(tmp_path)
+    fresh = tmp_path / "device-matrix_20261015_012346.xml"
+    content = "<testsuite>" + f"<testcase><{child}/></testcase>" * 18 + "</testsuite>"
+    fresh.write_text(content)
+    expected = qualification.canonicalize_junit_report(tmp_path / "device-matrix.xml")
+    assert expected.read_text() == content
+    with pytest.raises(AssertionError, match="18 B/K device tests"):
+        qualification.require_device_matrix(expected)
+
+
+@pytest.mark.host
 def test_partial_rerun_cannot_retain_full_qualification_success(tmp_path):
     (tmp_path / "success.json").write_text('{"device_matrix_executed":true}')
     (tmp_path / "device-matrix.xml").write_text("<testsuite>" + "<testcase/>" * 18 + "</testsuite>")

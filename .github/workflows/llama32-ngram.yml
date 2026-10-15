@@ -136,8 +136,10 @@ jobs:
           python -m pytest -q tests/host/test_llama_ngram_speculation.py \
             tests/host/test_llama_ngram_qualification.py --junitxml=generated/host-contracts.xml
           python - <<'PY'
+          from runpy import run_path
           from xml.etree import ElementTree
-          report = ElementTree.parse("generated/host-contracts.xml")
+          canonicalize = run_path(".github/scripts/qualify_llama32_ngram.py")["canonicalize_junit_report"]
+          report = ElementTree.parse(canonicalize("generated/host-contracts.xml"))
           cases = report.findall(".//testcase")
           if not cases or any(case.find(tag) is not None for case in cases for tag in ("skipped", "error", "failure")):
               raise AssertionError("Adapter host contracts require executed, passing tests without skips")
