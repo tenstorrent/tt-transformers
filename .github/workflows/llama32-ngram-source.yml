@@ -174,7 +174,11 @@ jobs:
           print("Prepared source revisions, module origins, TT activation, and checkpoint passed")
           PY
           tt-smi -s > "$EVIDENCE_DIR/hardware-before.json"
-          python -m pip check > "$EVIDENCE_DIR/pip-check.txt"
+          if python -c 'import pip' >/dev/null 2>&1; then
+            python -m pip check > "$EVIDENCE_DIR/pip-check.txt" 2>&1
+          else
+            uv pip check --python "$QUALIFICATION_PYTHON" > "$EVIDENCE_DIR/pip-check.txt" 2>&1
+          fi
           python -m pytest -q tests/host/test_llama_ngram_speculation.py \
             tests/host/test_llama_ngram_qualification.py \
             --junitxml="$EVIDENCE_DIR/host-contracts.xml" 2>&1 | tee "$EVIDENCE_DIR/host-contracts.log"

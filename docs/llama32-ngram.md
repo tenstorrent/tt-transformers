@@ -162,6 +162,7 @@ The prepared runner must have:
   The Hugging Face cache's `refs/main` must select `checkpoint_revision`.
   Converted-weight, TTNN, and TT-Metal kernel caches must be writable.
 - `python`, `tt-smi`, `git`, and `pgrep` available after environment activation.
+  The prepared environment must provide `pip` or `uv` for dependency checks.
   GitHub Actions checkout and artifact upload must work from the runner.
 
 `llama32-ngram-source.yml` accepts seven inputs: `runner_label`,
