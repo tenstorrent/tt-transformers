@@ -21,8 +21,6 @@ _SPEC = importlib.util.spec_from_file_location("llama_ngram_pressure_qualificati
 qualification = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(qualification)
 
-pytestmark = pytest.mark.host
-
 
 def _event(record, count, ordinal=0):
     history = record["prompt"] + record["token_ids"][:count]
@@ -83,6 +81,7 @@ def pressure():
     }
 
 
+@pytest.mark.host
 def test_pressure_segments_cover_every_output_once_and_retain_repeated_preemptions(pressure):
     original = copy.deepcopy(pressure)
     segments = qualification.pressure_segments(pressure["records"], pressure["events"], 4, 3)
@@ -105,6 +104,7 @@ def test_pressure_segments_cover_every_output_once_and_retain_repeated_preemptio
 
 
 @pytest.mark.parametrize("count", [0, -1, True, 3, 4.5, float("nan"), float("inf")])
+@pytest.mark.host
 def test_pressure_segments_require_one_event_for_each_measured_preemption(pressure, count):
     with pytest.raises(AssertionError):
         qualification.pressure_segments(pressure["records"], pressure["events"], count, 3)
@@ -133,6 +133,7 @@ def test_pressure_segments_require_one_event_for_each_measured_preemption(pressu
         ("drop_stale_output", 0),
     ],
 )
+@pytest.mark.host
 def test_pressure_segments_reject_invalid_or_async_backend_metadata(pressure, field, value):
     pressure["events"][0][field] = value
     with pytest.raises(AssertionError):
@@ -140,6 +141,7 @@ def test_pressure_segments_reject_invalid_or_async_backend_metadata(pressure, fi
 
 
 @pytest.mark.parametrize("failure", ["missing_anchor", "wrong_token", "post_history", "unrelated_id", "partial_id"])
+@pytest.mark.host
 def test_pressure_segments_require_exact_committed_history_and_request_identity(pressure, failure):
     event = pressure["events"][0]
     if failure == "missing_anchor":
@@ -156,6 +158,7 @@ def test_pressure_segments_require_exact_committed_history_and_request_identity(
         qualification.pressure_segments(pressure["records"], pressure["events"], 4, 3)
 
 
+@pytest.mark.host
 def test_pressure_segments_reject_ambiguous_http_response_ids(pressure):
     pressure["records"][1]["response"]["id"] = pressure["records"][0]["response"]["id"]
     with pytest.raises(AssertionError):
@@ -163,6 +166,7 @@ def test_pressure_segments_reject_ambiguous_http_response_ids(pressure):
 
 
 @pytest.mark.parametrize("failure", ["decreasing_history", "counter_gap", "duplicate_counter"])
+@pytest.mark.host
 def test_pressure_segments_require_per_request_scheduler_order(pressure, failure):
     if failure == "decreasing_history":
         pressure["events"][1] = _event(pressure["records"][0], 39, 1)
@@ -176,6 +180,7 @@ def test_pressure_segments_require_per_request_scheduler_order(pressure, failure
         qualification.pressure_segments(pressure["records"], pressure["events"], 4, 3)
 
 
+@pytest.mark.host
 def test_pressure_segments_reject_preemption_before_any_output(pressure):
     events = [_event(pressure["records"][0], 0)]
     with pytest.raises(AssertionError):
@@ -183,12 +188,14 @@ def test_pressure_segments_reject_preemption_before_any_output(pressure):
 
 
 @pytest.mark.parametrize("k,start", [(0, 157), (3, 148)])
+@pytest.mark.host
 def test_pressure_resume_must_cover_prefill_and_three_later_submissions(pressure, k, start):
     with pytest.raises(AssertionError):
         qualification.pressure_segments(pressure["records"], [_event(pressure["records"][0], start)], 1, k)
 
 
 @pytest.mark.parametrize("k,start", [(0, 156), (3, 147)])
+@pytest.mark.host
 def test_pressure_resume_accepts_exact_minimum_post_resume_coverage(pressure, k, start):
     segments = qualification.pressure_segments(pressure["records"], [_event(pressure["records"][0], start)], 1, k)
     assert {"request_index": 0, "start": start, "stop": 160} in segments
@@ -261,6 +268,7 @@ def reference_harness(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("k", [0, 3])
+@pytest.mark.host
 def test_pressure_reference_replays_entire_prefix_including_anchor_on_ordinary_same_batch(
     pressure, reference_harness, k
 ):
@@ -283,6 +291,7 @@ def test_pressure_reference_replays_entire_prefix_including_anchor_on_ordinary_s
     assert state["closed"]
 
 
+@pytest.mark.host
 def test_pressure_reference_rejects_any_reference_preemption(pressure, reference_harness):
     args, helpers, state = reference_harness
     state["reference_preemptions"] = 1
@@ -293,6 +302,7 @@ def test_pressure_reference_rejects_any_reference_preemption(pressure, reference
     assert state["closed"]
 
 
+@pytest.mark.host
 def test_corrupt_resumed_logprob_fails_strict_comparison_and_preserves_evidence(pressure, reference_harness):
     args, helpers, state = reference_harness
     pressure["records"][0]["logprobs"][40] = -2.503
@@ -309,6 +319,7 @@ def test_corrupt_resumed_logprob_fails_strict_comparison_and_preserves_evidence(
     assert state["closed"]
 
 
+@pytest.mark.host
 def test_qualify_http_cannot_return_pressure_success_before_reference_validation(pressure, monkeypatch):
     args, tokenizer, helpers, ordinary = object(), object(), object(), object()
     response = {"pressure": pressure}
@@ -324,6 +335,7 @@ def test_qualify_http_cannot_return_pressure_success_before_reference_validation
     validate.assert_called_once_with(args, 4, 3, pressure, helpers)
 
 
+@pytest.mark.host
 def test_qualify_http_returns_after_reference_gate_and_skips_absent_pressure(pressure, monkeypatch):
     args, tokenizer, helpers = object(), object(), object()
     response = {"pressure": pressure}
@@ -338,6 +350,7 @@ def test_qualify_http_returns_after_reference_gate_and_skips_absent_pressure(pre
     validate.assert_not_called()
 
 
+@pytest.mark.host
 def test_main_cannot_write_full_success_when_pressure_reference_gate_fails(tmp_path, pressure, monkeypatch):
     modules = {}
     for name in ("ttnn", "ttnn.device", "vllm", "tt_transformers", "vllm_tt_plugin"):
