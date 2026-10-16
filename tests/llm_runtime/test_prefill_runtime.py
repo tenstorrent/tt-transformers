@@ -2905,6 +2905,34 @@ def test_opt_in_trace_capture_prime_uses_padded_body_and_releases_output(monkeyp
 
 
 @pytest.mark.host
+def test_fixed_prefill_primes_the_capture_of_a_lone_row_wave(monkeypatch):
+    monkeypatch.delenv("DISABLE_BATCHED_PREFILL", raising=False)
+    runtime = _runtime(fixed_prefill_batch_sizes=((128, 4),))
+    tokens, page_table, prompt_lens, start_pos = _inputs(prompt_length=80, rows=1)
+    prepared = runtime.prepare(
+        tokens=tokens,
+        page_table=page_table,
+        prompt_lens=prompt_lens,
+        empty_slots=[0],
+        start_pos=start_pos,
+    )[0]
+    seen = []
+    monkeypatch.setattr(
+        runtime,
+        "_run_hidden_body",
+        lambda request, device_inputs, **kwargs: seen.append(kwargs) or "hidden",
+    )
+    monkeypatch.setattr(runtime, "_release_or_retain_transient", lambda value: [])
+
+    plan = runtime.capture_plan(prepared)
+
+    assert prepared.request.source_rows == (0,)
+    assert plan.prime is not None
+    plan.prime(PrefillHiddenPersistentInputs(device_inputs="device-inputs"))
+    assert seen == [{"fill_rows": 4}]
+
+
+@pytest.mark.host
 def test_opt_in_trace_capture_prime_does_not_expand_single_request_warmup():
     runtime = _runtime(trace_capture_prime_sequence_lengths=(128, 1024))
     tokens, page_table, prompt_lens, start_pos = _inputs(prompt_length=80, rows=1)
