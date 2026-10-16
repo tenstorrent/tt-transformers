@@ -115,8 +115,16 @@ def _plan_prefill_requests(
     max_prefill_batch_size: int = 8,
     max_actual_page_table_width: int | None = None,
     canonical_page_table_width: int | None = None,
+    fixed_prefill_batch_sizes: tuple[tuple[int, int], ...] = (),
 ) -> tuple[PrefillRequest, ...]:
-    """Plan prefix-caching and chunked-prefill semantics exactly once."""
+    """Plan prefix-caching and chunked-prefill semantics exactly once.
+
+    With ``fixed_prefill_batch_sizes`` non-empty, dynamic batching is off: the
+    uncached rows of a bucket with a fixed batch ``F`` run in waves of exactly
+    ``F`` padded rows, a lone row included, so a row's numerics never depend
+    on how many neighbours it arrived with. Cached rows and every other bucket
+    run one sequence per pass. ``disable_batched_prefill`` still wins.
+    """
 
     if not isinstance(tokens, torch.Tensor) or tokens.ndim != 2:
         raise ValueError("prefill tokens must be a rank-2 torch.Tensor")
@@ -168,6 +176,32 @@ def _plan_prefill_requests(
         if uncached_length > 0:
             buckets.setdefault(padded_lengths[source_row], []).append(source_row)
     legacy_implicit_batching = supports_batched_prefill is None
+    if fixed_prefill_batch_sizes and not disable_batched_prefill and supports_batched_prefill:
+        fixed_batches = dict(fixed_prefill_batch_sizes)
+        for sequence_length, source_rows in buckets.items():
+            fixed_batch = fixed_batches.get(sequence_length)
+            if fixed_batch is None:
+                sequential_rows.extend(source_rows)
+                continue
+            fixed_rows = [row for row in source_rows if cached[row] == 0]
+            sequential_rows.extend(row for row in source_rows if cached[row] != 0)
+            for start in range(0, len(fixed_rows), fixed_batch):
+                batched_requests.append(
+                    _make_batched_request(
+                        tokens=tokens,
+                        page_table=page_table,
+                        lengths=lengths,
+                        cached=cached,
+                        slots=slots,
+                        source_rows=fixed_rows[start : start + fixed_batch],
+                        padded_batch=fixed_batch,
+                        sequence_length=sequence_length,
+                        block_size=block_size,
+                        max_actual_page_table_width=max_actual_page_table_width,
+                        canonical_page_table_width=canonical_page_table_width,
+                    )
+                )
+        buckets = {}
     for sequence_length, source_rows in buckets.items():
         if legacy_implicit_batching:
             padded_batch = _legacy_batched_prefill_size(

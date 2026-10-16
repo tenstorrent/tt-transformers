@@ -14,6 +14,7 @@ from tt_transformers.llm_runtime.output_reader import OutputReader
 from tt_transformers.llm_runtime.prefill.sampling_helpers import _TILE_SIZE
 
 _SUPPORTED_PREFILL_BATCH_SIZES = (1, 2, 4, 8, 16, 32)
+_MAX_BATCHED_PREFILL_TOKENS = 128 * 1024
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,10 @@ class PrefillRuntimeConfig:
     static_q128_topk_supported: bool
     sampling_state_controller: Any
     sampling_state: Any
+    # ``(bucket, F)`` pairs: every uncached wave at ``bucket`` is padded to
+    # exactly ``F`` rows, a lone prompt included, and every other bucket runs
+    # one sequence per pass. Empty keeps the dynamic batching policy.
+    fixed_prefill_batch_sizes: tuple[tuple[int, int], ...] = ()
 
     @classmethod
     def resolve(
@@ -60,6 +65,7 @@ class PrefillRuntimeConfig:
         trace_capture_prime_sequence_lengths: tuple[int, ...] = (),
         sampling_state_controller: Any = None,
         sampling_state: Any = None,
+        fixed_prefill_batch_sizes: tuple[tuple[int, int], ...] = (),
     ) -> PrefillRuntimeConfig:
         """Validate construction inputs and derive every static capability."""
 
@@ -88,6 +94,13 @@ class PrefillRuntimeConfig:
         _validate_trace_capture_prime_sequence_lengths(trace_capture_prime_sequence_lengths)
         if any(length > max_prefill_chunk_size for length in trace_capture_prime_sequence_lengths):
             raise ValueError("trace capture prime sequence lengths cannot exceed max_prefill_chunk_size")
+        _validate_fixed_prefill_batch_sizes(
+            fixed_prefill_batch_sizes,
+            supports_batched_prefill=supports_batched_prefill,
+            max_batch_size=max_batch_size,
+            max_prefill_batch_size=max_prefill_batch_size,
+            max_prefill_chunk_size=max_prefill_chunk_size,
+        )
 
         if not isinstance(page_table_layout, PageTableLayout):
             raise TypeError("page_table_layout must be a PageTableLayout")
@@ -137,6 +150,7 @@ class PrefillRuntimeConfig:
             sampling_state_controller=sampling_state_controller,
             sampling_state=sampling_state,
             page_table_layout_ceiling=page_table_layout,
+            fixed_prefill_batch_sizes=fixed_prefill_batch_sizes,
         )
 
     def __post_init__(self) -> None:
@@ -169,6 +183,13 @@ class PrefillRuntimeConfig:
         if not isinstance(self.static_q128_topk_supported, bool):
             raise TypeError("static_q128_topk_supported must be bool")
         _validate_trace_capture_prime_sequence_lengths(self.trace_capture_prime_sequence_lengths)
+        _validate_fixed_prefill_batch_sizes(
+            self.fixed_prefill_batch_sizes,
+            supports_batched_prefill=self.supports_batched_prefill,
+            max_batch_size=self.max_batch_size,
+            max_prefill_batch_size=self.max_prefill_batch_size,
+            max_prefill_chunk_size=self.max_prefill_chunk_size,
+        )
         if not isinstance(self.page_table_layout_ceiling, PageTableLayout):
             raise TypeError("page_table_layout_ceiling must be a PageTableLayout")
         if self.page_table_layout.block_size != self.page_table_layout_ceiling.block_size:
@@ -241,6 +262,43 @@ class PrefillRuntimeConfig:
         return replace(self, page_table_layout=layout)
 
 
+def validate_prefill_policy(sequential_prefill: bool, fixed_prefill_batch_sizes: Any) -> None:
+    """Refuse an executor config that asks for two prefill policies at once.
+
+    The pairs themselves are validated against model capacity when the prefill
+    runtime config is resolved.
+    """
+
+    if not isinstance(fixed_prefill_batch_sizes, tuple):
+        raise TypeError("fixed_prefill_batch_sizes must be a tuple of (bucket, batch) pairs")
+    if sequential_prefill and fixed_prefill_batch_sizes:
+        raise ValueError("sequential_prefill and fixed_prefill_batch_sizes are exclusive prefill policies")
+
+
+def serving_prefill_policy(
+    fixed_batch_at_128: int | None,
+    lane_batch_size: int,
+) -> tuple[bool, tuple[tuple[int, int], ...]]:
+    """Return ``(sequential_prefill, fixed_prefill_batch_sizes)`` for a serving entry point.
+
+    ``fixed_batch_at_128`` is the model's fixed wave at the 128 bucket, or
+    ``None`` for one sequence per pass. A lane smaller than the wave halves it
+    until it fits; a lane that fits no wave of two rows prefills sequentially.
+    Longer buckets always stay sequential: padding a lone long prompt costs real
+    compute, and short same-length prompts are where batching pays.
+    """
+
+    _require_positive_int("lane_batch_size", lane_batch_size)
+    if fixed_batch_at_128 is None:
+        return True, ()
+    batch = int(fixed_batch_at_128)
+    while batch > lane_batch_size:
+        batch //= 2
+    if batch < 2:
+        return True, ()
+    return False, ((128, batch),)
+
+
 def _require_positive_int(name: str, value: Any) -> None:
     if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
         raise ValueError(f"{name} must be a positive integer")
@@ -268,3 +326,56 @@ def _validate_trace_capture_prime_sequence_lengths(values: Any) -> None:
         raise ValueError("trace_capture_prime_sequence_lengths must not contain duplicates")
     for index, value in enumerate(values):
         _require_positive_int(f"trace_capture_prime_sequence_lengths[{index}]", value)
+
+
+def _is_prefill_bucket(value: int) -> bool:
+    # The planner pads to 128, 1024, then each power of two from 2048.
+    return value in (128, 1024) or (value >= 2048 and value & (value - 1) == 0)
+
+
+def _validate_fixed_prefill_batch_sizes(
+    values: Any,
+    *,
+    supports_batched_prefill: bool | None,
+    max_batch_size: int,
+    max_prefill_batch_size: int,
+    max_prefill_chunk_size: int,
+) -> None:
+    """Refuse at load a fixed ``(bucket, F)`` pair the planner could not serve."""
+
+    if not isinstance(values, tuple):
+        raise TypeError("fixed_prefill_batch_sizes must be a tuple of (bucket, batch) pairs")
+    if not values:
+        return
+    if supports_batched_prefill is not True:
+        raise ValueError("fixed_prefill_batch_sizes requires a model that supports batched prefill")
+    buckets = set()
+    for index, pair in enumerate(values):
+        name = f"fixed_prefill_batch_sizes[{index}]"
+        if not isinstance(pair, tuple) or len(pair) != 2:
+            raise TypeError(f"{name} must be a (bucket, batch) pair")
+        bucket, batch = pair
+        _require_positive_int(f"{name} bucket", bucket)
+        _require_positive_int(f"{name} batch", batch)
+        if not _is_prefill_bucket(bucket):
+            raise ValueError(f"{name} bucket {bucket} is not a prefill bucket (128, 1024, or a power of two >= 2048)")
+        if bucket > max_prefill_chunk_size:
+            raise ValueError(f"{name} bucket {bucket} exceeds max_prefill_chunk_size {max_prefill_chunk_size}")
+        if bucket in buckets:
+            raise ValueError(f"{name} repeats bucket {bucket}")
+        buckets.add(bucket)
+        # A fixed batch of 1 is sequential prefill; say so rather than build a
+        # one-row batched program that nothing else uses.
+        if batch == 1 or batch not in _SUPPORTED_PREFILL_BATCH_SIZES:
+            raise ValueError(
+                f"{name} batch {batch} must be one of {_SUPPORTED_PREFILL_BATCH_SIZES[1:]}; "
+                "use sequential prefill for one row per pass"
+            )
+        if batch > max_prefill_batch_size:
+            raise ValueError(f"{name} batch {batch} exceeds max_prefill_batch_size {max_prefill_batch_size}")
+        if batch > max_batch_size:
+            raise ValueError(f"{name} batch {batch} exceeds max_batch_size {max_batch_size}")
+        if batch * bucket >= _MAX_BATCHED_PREFILL_TOKENS:
+            raise ValueError(
+                f"{name} folds {batch * bucket} tokens per wave; the limit is below {_MAX_BATCHED_PREFILL_TOKENS}"
+            )
