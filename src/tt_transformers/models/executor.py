@@ -22,7 +22,7 @@ from tt_transformers.llm_runtime.decode import DecodeRuntime, DecodeRuntimeConfi
 from tt_transformers.llm_runtime.execution import EagerExecutor, TracedExecutor
 from tt_transformers.llm_runtime.output_reader import OutputReader
 from tt_transformers.llm_runtime.paged_kv_cache import PagedKVCacheManager
-from tt_transformers.llm_runtime.prefill.config import PrefillRuntimeConfig
+from tt_transformers.llm_runtime.prefill.config import PrefillRuntimeConfig, validate_prefill_policy
 from tt_transformers.llm_runtime.prefill.runtime import PrefillRuntime
 from tt_transformers.llm_runtime.program_compiler import ProgramCompiler
 from tt_transformers.llm_runtime.tensor_resources import attach_cleanup_failures
@@ -49,6 +49,13 @@ class ModelExecutorConfig:
     # (https://github.com/tenstorrent/tt-metal/issues/47238). Serving entry
     # points set this so a request's output does not depend on its neighbours.
     sequential_prefill: bool = False
+    # Fixed-shape batched prefill, as ``(bucket, F)`` pairs: every uncached wave
+    # at ``bucket`` is padded to exactly ``F`` rows, a lone prompt included, and
+    # every other bucket runs one sequence per pass. A row's numerics then depend
+    # on ``F`` only, never on its neighbours, so serving keeps most of the
+    # batching throughput with outputs that do not depend on other traffic.
+    # Exclusive with ``sequential_prefill``.
+    fixed_prefill_batch_sizes: tuple[tuple[int, int], ...] = ()
 
     def __post_init__(self) -> None:
         for name, value, expected_type in (
@@ -62,6 +69,7 @@ class ModelExecutorConfig:
             raise TypeError("device_sampling_enabled must be bool")
         if not isinstance(self.sequential_prefill, bool):
             raise TypeError("sequential_prefill must be bool")
+        validate_prefill_policy(self.sequential_prefill, self.fixed_prefill_batch_sizes)
 
 
 PrefillWarmup = Callable[..., None]
@@ -185,6 +193,7 @@ class ModelExecutor:
                 trace_capture_prime_sequence_lengths=resolved_trace_prime_lengths,
                 sampling_state_controller=sampling_state_controller,
                 sampling_state=sampling_state,
+                fixed_prefill_batch_sizes=config.fixed_prefill_batch_sizes,
             )
         )
         self.decode_runtime = DecodeRuntime(
@@ -648,6 +657,7 @@ class ModelExecutor:
             trace_capture_prime_sequence_lengths=current_prefill.trace_capture_prime_sequence_lengths,
             sampling_state_controller=current_prefill.sampling_state_controller,
             sampling_state=current_prefill.sampling_state,
+            fixed_prefill_batch_sizes=current_prefill.fixed_prefill_batch_sizes,
         )
         current_decode = self.decode_runtime.config
         decode_config = DecodeRuntimeConfig.resolve(
