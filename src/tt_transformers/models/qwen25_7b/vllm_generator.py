@@ -26,9 +26,10 @@ from tt_transformers.models.qwen25_7b.hf_generator import Qwen25ExecutorConfig, 
 from tt_transformers.models.qwen25_7b.model import Qwen25PagedAttentionConfig
 
 _PROVISIONAL_BLOCK_SIZE = 32
-# Fixed prefill wave at the 128 bucket (``ModelExecutorConfig.fixed_prefill_batch_sizes``),
-# or None for one sequence per pass.
-_FIXED_PREFILL_BATCH_AT_128: int | None = None
+# Fixed prefill wave at the 128 bucket (``ModelExecutorConfig.fixed_prefill_batch_sizes``):
+# short prompts prefill in waves of exactly this many rows, so a request's output
+# does not depend on its neighbours while concurrent short prompts still share a pass.
+_FIXED_PREFILL_BATCH_AT_128: int | None = 4
 
 
 @dataclass(frozen=True)
