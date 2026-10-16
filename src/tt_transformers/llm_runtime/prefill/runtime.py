@@ -204,6 +204,7 @@ class PrefillRuntime:
             max_prefill_batch_size=self.config.max_prefill_batch_size,
             max_actual_page_table_width=layout.raw_capacity_width,
             canonical_page_table_width=layout.prefill_width,
+            fixed_prefill_batch_sizes=self.config.fixed_prefill_batch_sizes,
         )
         prepared = []
         pending_slot_remap = slot_remap

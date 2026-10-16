@@ -109,6 +109,7 @@ def _runtime(
     batched_prefill_batched_extract=True,
     trace_capture_prime_sequence_lengths=(),
     page_table_layout=None,
+    fixed_prefill_batch_sizes=(),
 ):
     mesh_device = SimpleNamespace(shape=(1, 1))
     config = PrefillRuntimeConfig.resolve(
@@ -134,6 +135,7 @@ def _runtime(
         device_sampling_enabled=device_sampling_enabled,
         can_enable_trace=lambda length, cached: cached == 0 and length in trace_lengths,
         trace_capture_prime_sequence_lengths=trace_capture_prime_sequence_lengths,
+        fixed_prefill_batch_sizes=fixed_prefill_batch_sizes,
     )
     return PrefillRuntime(config)
 
@@ -159,6 +161,7 @@ def _plan(
     disable_batched_prefill=False,
     max_batch_size=32,
     max_prefill_batch_size=8,
+    fixed_prefill_batch_sizes=(),
 ):
     tokens, page_table, prompt_lens, start_pos = _inputs(
         prompt_length=prompt_length,
@@ -181,6 +184,7 @@ def _plan(
         max_prefill_batch_size=max_prefill_batch_size,
         max_actual_page_table_width=256,
         canonical_page_table_width=264,
+        fixed_prefill_batch_sizes=fixed_prefill_batch_sizes,
     )
 
 
@@ -1063,6 +1067,179 @@ def test_batched_prefill_active_15_pads_one_whole_wave_to_16():
     assert requests[0].source_rows == tuple(range(15))
     assert torch.all(requests[0].tokens[15] == 0)
     assert torch.all(requests[0].page_table[15] == -1)
+
+
+@pytest.mark.host
+def test_fixed_prefill_pads_a_lone_row_to_the_fixed_batch():
+    requests = _plan(prompt_length=80, slots=(0,), fixed_prefill_batch_sizes=((128, 4),))
+
+    assert len(requests) == 1
+    assert requests[0].kind == "batched"
+    assert requests[0].padded_batch_size == 4
+    assert requests[0].source_rows == (0,)
+    assert torch.all(requests[0].tokens[1:] == 0)
+    assert torch.all(requests[0].page_table[1:] == -1)
+
+
+@pytest.mark.host
+def test_fixed_prefill_splits_rows_into_waves_of_exactly_the_fixed_batch():
+    requests = _plan(prompt_length=128, slots=tuple(range(5)), fixed_prefill_batch_sizes=((128, 4),))
+
+    assert [request.kind for request in requests] == ["batched", "batched"]
+    assert [request.padded_batch_size for request in requests] == [4, 4]
+    assert [request.source_rows for request in requests] == [(0, 1, 2, 3), (4,)]
+
+
+@pytest.mark.host
+def test_fixed_prefill_keeps_cached_rows_and_unfixed_buckets_sequential():
+    rows = 4
+    tokens = torch.arange(rows * 1000, dtype=torch.long).reshape(rows, 1000)
+    page_table = torch.arange(rows * 256, dtype=torch.int32).reshape(rows, 256)
+    # Rows 0 and 2 pad to 128 uncached; row 1 pads to 128 behind a cached prefix; row 3 pads to 1024.
+    prompt_lens = torch.tensor([100, 100, 90, 1000], dtype=torch.long)
+    start_pos = torch.tensor([0, 32, 0, 0], dtype=torch.long)
+
+    requests = _plan_prefill_requests(
+        tokens=tokens,
+        page_table=page_table,
+        prompt_lens=prompt_lens,
+        empty_slots=tuple(range(rows)),
+        start_pos=start_pos,
+        block_size=32,
+        max_batch_size=32,
+        max_prefill_chunk_size=2048,
+        supports_batched_prefill=True,
+        max_prefill_batch_size=8,
+        max_actual_page_table_width=256,
+        canonical_page_table_width=264,
+        fixed_prefill_batch_sizes=((128, 4),),
+    )
+
+    assert [(request.kind, request.source_rows, request.padded_batch_size) for request in requests] == [
+        ("batched", (0, 2), 4),
+        ("single", (1,), 1),
+        ("single", (3,), 1),
+    ]
+
+
+@pytest.mark.host
+def test_fixed_prefill_turns_dynamic_batching_off_at_unfixed_buckets():
+    # The dynamic planner would fold these three 1024 rows into one batch-4 wave.
+    dynamic = _plan(prompt_length=1024, slots=(0, 1, 2))
+    fixed = _plan(prompt_length=1024, slots=(0, 1, 2), fixed_prefill_batch_sizes=((128, 4),))
+
+    assert [request.kind for request in dynamic] == ["batched"]
+    assert [request.kind for request in fixed] == ["single", "single", "single"]
+
+
+@pytest.mark.host
+def test_disable_batched_prefill_wins_over_fixed_prefill():
+    requests = _plan(
+        prompt_length=128,
+        slots=(0, 1, 2),
+        disable_batched_prefill=True,
+        fixed_prefill_batch_sizes=((128, 4),),
+    )
+
+    assert [request.kind for request in requests] == ["single", "single", "single"]
+
+
+@pytest.mark.host
+def test_fixed_prefill_signatures_do_not_depend_on_active_rows(monkeypatch):
+    monkeypatch.delenv("DISABLE_BATCHED_PREFILL", raising=False)
+    runtime = _runtime(fixed_prefill_batch_sizes=((128, 4),))
+
+    def prepare(rows):
+        tokens, page_table, prompt_lens, start_pos = _inputs(prompt_length=80, rows=rows)
+        return runtime.prepare(
+            tokens=tokens,
+            page_table=page_table,
+            prompt_lens=prompt_lens,
+            start_pos=start_pos,
+            empty_slots=tuple(range(rows)),
+        )
+
+    lone, three = prepare(1), prepare(3)
+
+    assert len(lone) == len(three) == 1
+    assert runtime.config.fixed_prefill_batch_sizes == ((128, 4),)
+    assert lone[0].request.padded_batch_size == three[0].request.padded_batch_size == 4
+    assert lone[0].program_signatures == three[0].program_signatures
+    assert lone[0].trace_signature == three[0].trace_signature
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(
+    ("pairs", "overrides", "error", "message"),
+    [
+        (((100, 4),), {}, ValueError, "bucket 100 is not a prefill bucket"),
+        (((4096, 4),), {}, ValueError, "bucket 4096 exceeds max_prefill_chunk_size 2048"),
+        (((128, 4), (128, 8)), {}, ValueError, "repeats bucket 128"),
+        (((128, 1),), {}, ValueError, "use sequential prefill"),
+        (((128, 3),), {}, ValueError, "batch 3 must be one of"),
+        (((128, 16),), {}, ValueError, "batch 16 exceeds max_prefill_batch_size 8"),
+        (((128, 4),), {"supports_batched_prefill": False}, ValueError, "supports batched prefill"),
+        (((128, 4),), {"supports_batched_prefill": None}, ValueError, "supports batched prefill"),
+        ([(128, 4)], {}, TypeError, "must be a tuple"),
+        (((128,),), {}, TypeError, "must be a .bucket, batch. pair"),
+    ],
+    ids=(
+        "not-a-bucket",
+        "above-chunk-cap",
+        "duplicate-bucket",
+        "batch-one",
+        "unsupported-batch",
+        "above-model-cap",
+        "no-batched-support",
+        "legacy-batching",
+        "not-a-tuple",
+        "not-a-pair",
+    ),
+)
+def test_fixed_prefill_refuses_unservable_pairs_at_resolve(pairs, overrides, error, message, expect_error):
+    with expect_error(error, message):
+        _runtime(fixed_prefill_batch_sizes=pairs, **overrides)
+
+
+@pytest.mark.host
+def test_fixed_prefill_refuses_pairs_beyond_lane_or_token_limits(expect_error):
+    from tt_transformers.llm_runtime.prefill.config import _validate_fixed_prefill_batch_sizes
+
+    limits = dict(supports_batched_prefill=True, max_prefill_batch_size=32, max_prefill_chunk_size=8192)
+    with expect_error(ValueError, "batch 16 exceeds max_batch_size 8"):
+        _validate_fixed_prefill_batch_sizes(((128, 16),), max_batch_size=8, **limits)
+    with expect_error(ValueError, "folds 131072 tokens per wave"):
+        _validate_fixed_prefill_batch_sizes(((4096, 32),), max_batch_size=32, **limits)
+    _validate_fixed_prefill_batch_sizes(((2048, 32), (128, 16)), max_batch_size=32, **limits)
+
+
+@pytest.mark.host
+def test_fixed_prefill_survives_page_table_layout_replacement():
+    runtime = _runtime(fixed_prefill_batch_sizes=((128, 4),))
+
+    runtime.configure_page_table_layout(
+        PageTableLayout(block_size=32, raw_capacity_width=128, prefill_width=136, decode_width=128)
+    )
+
+    assert runtime.config.fixed_prefill_batch_sizes == ((128, 4),)
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(
+    ("fixed_batch", "lane", "expected"),
+    [
+        (None, 32, (True, ())),
+        (16, 32, (False, ((128, 16),))),
+        (16, 16, (False, ((128, 16),))),
+        (16, 12, (False, ((128, 8),))),
+        (16, 2, (False, ((128, 2),))),
+        (16, 1, (True, ())),
+    ],
+)
+def test_serving_prefill_policy_fits_the_wave_to_the_lane(fixed_batch, lane, expected):
+    from tt_transformers.llm_runtime.prefill.config import serving_prefill_policy
+
+    assert serving_prefill_policy(fixed_batch, lane) == expected
 
 
 @pytest.mark.host
