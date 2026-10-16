@@ -301,6 +301,7 @@ def test_layout_refresh_preserves_owner_and_sampling_state_identity(monkeypatch)
         trace_capture_prime_sequence_lengths=(128,),
         sampling_state_controller=object(),
         sampling_state=state,
+        fixed_prefill_batch_sizes=((128, 4),),
     )
     decode_config = SimpleNamespace(
         lane_capacity=4,
@@ -338,6 +339,7 @@ def test_layout_refresh_preserves_owner_and_sampling_state_identity(monkeypatch)
     assert target.prefill_runtime.config.sampling_state is state
     assert target.decode_runtime.config.sampling_state is state
     assert prefill_resolve.call_args.kwargs["trace_capture_prime_sequence_lengths"] == (128,)
+    assert prefill_resolve.call_args.kwargs["fixed_prefill_batch_sizes"] == ((128, 4),)
     assert prefill_resolve.call_args.kwargs["sampling_state_controller"] is prefill_config.sampling_state_controller
     assert prefill_resolve.call_args.kwargs["sampling_state"] is state
     assert decode_resolve.call_args.kwargs["sampling_state_controller"] is prefill_config.sampling_state_controller
