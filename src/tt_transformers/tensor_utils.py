@@ -5,6 +5,7 @@
 Tensor utility functions for TTTv2 modules.
 """
 
+import contextlib
 import json
 import math
 import re
@@ -22,6 +23,23 @@ def nearest_multiple(value: int, multiple: int) -> int:
 
 def nearest_32(value: int) -> int:
     return nearest_multiple(value, TILE_SIZE)
+
+
+@contextlib.contextmanager
+def single_threaded_torch():
+    """Run host torch ops on one intra-op thread, then restore the thread count.
+
+    The first multithreaded call of a CPU kernel such as ``torch.cos`` can give
+    one thread's chunk results that differ in the last bit, so a table built that
+    way can differ between processes. Tables that feed the device (RoPE cos/sin)
+    must be identical on every load, and one thread always gives the same values.
+    """
+    num_threads = torch.get_num_threads()
+    torch.set_num_threads(1)
+    try:
+        yield
+    finally:
+        torch.set_num_threads(num_threads)
 
 
 def num_to_core_range_set(num_cores: int):

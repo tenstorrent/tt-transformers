@@ -26,7 +26,9 @@ from tt_transformers.llm_runtime.warmup import (
     WarmupCoordinatorConfig,
     _resolve_coverage_manifest,
     resolve_prefill_warmup_seq_lens,
+    topk_warmup_sampling_variants,
 )
+from tt_transformers.modules.sampling.params import prepare_sampling_params
 
 # Every bucket up to the fixtures' 2048 chunk cap: under trace, warmup must prepare each one.
 LADDER = (128, 1024, 2048)
@@ -199,6 +201,7 @@ def make_coordinator(
     eager_execution=None,
     max_prefill_chunk_size=2048,
     can_enable_trace=None,
+    penalty_state=True,
 ):
     events = events if events is not None else []
     execution = execution or RecordingExecution(events)
@@ -229,6 +232,10 @@ def make_coordinator(
         max_prefill_chunk_size=max_prefill_chunk_size,
         can_enable_trace=can_enable_trace,
     )
+    if sampling and penalty_state:
+        # A runtime that owns device penalty state, as the executors with a SamplingState1D do.
+        controller = SimpleNamespace(sampling=prefill_config.model.sampling, admit=lambda *args, **kwargs: None)
+        prefill_config = replace(prefill_config, sampling_state_controller=controller, sampling_state=object())
     eager = eager_execution or execution
     eager.prefill = SimpleNamespace(config=prefill_config)
     eager.decode = SimpleNamespace(config=decode_config)
@@ -457,7 +464,11 @@ def test_resolved_config_is_frozen_and_owns_both_coverage_plans(expect_error):
     )
 
     assert coordinator.config.eager_plan.decode == (coordinator.config.eager_plan.decode[0],)
-    assert [case.sampling_path for case in coordinator.config.sampled_plan.decode] == ["logits", "argmax"]
+    assert [(case.sampling_path, case.penalties) for case in coordinator.config.sampled_plan.decode] == [
+        ("logits", False),
+        ("argmax", False),
+        ("argmax", True),
+    ]
     with expect_error(AttributeError, "cannot assign"):
         coordinator.config.lane_batch_size = 4
 
@@ -647,6 +658,72 @@ def test_sampling_paths_include_forced_prefill_topk_and_opt_in_true_topk_decode(
 
 
 @pytest.mark.host
+@pytest.mark.parametrize("allow_force_argmax", [True, False])
+def test_device_sampling_warms_a_penalised_twin_of_every_sampled_case(allow_force_argmax):
+    """Penalties select their own program and trace variant, which activation forbids compiling later.
+
+    A penalised request keeps its sampling path (a greedy one is argmax when
+    forced argmax is allowed), so every case that samples on device, prefill
+    cached or not and decode, needs a penalised twin. Without device sampling
+    there is nothing to warm.
+    """
+
+    config = WarmupConfig(prefill_seq_lens=LADDER, prefill_batch_sizes=(1, 2))
+    coordinator, *_ = make_coordinator(
+        warmup_config=config, sequence_lengths=LADDER, lane_capacity=2, allow_force_argmax=allow_force_argmax
+    )
+    sampled = coordinator.config.sampled_plan
+    cases = (*sampled.prefill, *sampled.decode)
+
+    penalised = {replace(case, penalties=False) for case in cases if case.penalties}
+    assert penalised == {case for case in cases if not case.penalties and case.sampling_path != "logits"}
+    eager = coordinator.config.eager_plan
+    assert not any(case.penalties for case in (*eager.prefill, *eager.decode))
+
+
+@pytest.mark.host
+def test_runtime_without_penalty_state_warms_no_penalised_twin():
+    """Without device penalty state a penalised request samples on host, so no twin is warmed."""
+
+    config = WarmupConfig(prefill_seq_lens=LADDER, prefill_batch_sizes=(1, 2))
+    coordinator, *_ = make_coordinator(
+        warmup_config=config, sequence_lengths=LADDER, lane_capacity=2, penalty_state=False
+    )
+    sampled = coordinator.config.sampled_plan
+
+    assert coordinator.config.penalty_variants is False
+    assert not any(case.penalties for case in (*sampled.prefill, *sampled.decode))
+    assert any(case.sampling_path != "logits" for case in sampled.prefill)
+    assert len(topk_warmup_sampling_variants(1, penalties=False)) == 1
+
+
+@pytest.mark.host
+def test_penalised_warmup_params_select_the_penalties_variant():
+    coordinator, execution, *_ = make_coordinator(
+        trace_mode="none",
+        warmup_config=WarmupConfig(prefill_seq_lens=(128,), prefill_batch_sizes=(1,)),
+        sequence_lengths=(128,),
+        lane_capacity=2,
+    )
+
+    coordinator.warmup_decode(
+        kv_cache="cache", enable_trace=False, max_batch_size=2, num_blocks=8, can_sample_on_device=True
+    )
+
+    prepared = [
+        prepare_sampling_params(call["sampling_params"], 2, max_device_top_k=32, allow_force_argmax=True)
+        for call in execution.decode_calls
+        if call["sampling_params"] is not None
+    ]
+    assert [(params.sampling_path, params.penalties_enabled) for params in prepared] == [
+        ("argmax", False),
+        ("argmax", True),
+    ]
+    # Decode warmup has no prompt history, which a repetition penalty needs.
+    assert all(float(value) == 1.0 for value in prepared[1].repetition_penalty)
+
+
+@pytest.mark.host
 def test_q128_single_topk_primes_all_tile_ends():
     config = WarmupConfig(prefill_seq_lens=(128,), prefill_batch_sizes=(1,))
     coordinator, execution, *_ = make_coordinator(
@@ -664,8 +741,9 @@ def test_q128_single_topk_primes_all_tile_ends():
         and float(call["sampling_params"].temperature[0]) == 1.0
         and call["start_pos"] is None
     ]
-    assert [int(call["prompt_lens"][0]) for call in topk_calls] == [32, 64, 96, 128]
-    assert [int(call["tokens"].shape[-1]) for call in topk_calls] == [32, 64, 96, 128]
+    # The plain and the penalised top-k variants each prime every tile end.
+    assert [int(call["prompt_lens"][0]) for call in topk_calls] == [32, 64, 96, 128] * 2
+    assert [int(call["tokens"].shape[-1]) for call in topk_calls] == [32, 64, 96, 128] * 2
     argmax_calls = [
         call
         for call in execution.prefill_calls
@@ -673,7 +751,7 @@ def test_q128_single_topk_primes_all_tile_ends():
         and float(call["sampling_params"].temperature[0]) == 0.0
         and call["start_pos"] is None
     ]
-    assert [int(call["prompt_lens"][0]) for call in argmax_calls] == [32, 64, 96, 128]
+    assert [int(call["prompt_lens"][0]) for call in argmax_calls] == [32, 64, 96, 128] * 2
 
 
 @pytest.mark.host
@@ -1058,7 +1136,9 @@ def test_failed_case_is_not_marked_complete_and_retry_skips_completed_case(expec
         num_blocks=8,
         can_sample_on_device=True,
     )
-    assert len(execution.decode_calls) == 2
+    # The retry skips the completed logits case and compiles the failed greedy
+    # case and the penalised top-k case.
+    assert len(execution.decode_calls) == 3
 
 
 @pytest.mark.host

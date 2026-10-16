@@ -1162,7 +1162,9 @@ class Qwen3_32B(LightweightModule):
                 chunk_start_idx_tensor=chunk_start_idx_tensor,
             )
 
-        if get_last_token == -1:
+        if last_token_index is not None and last_token_slice is None:
+            raise ValueError("last_token_index is required with a runtime last_token_slice")
+        if get_last_token == -1 and last_token_slice is None:
             return x
 
         # Slice + deallocate the full-sequence buffer before norm/LM head reduces peak L1.

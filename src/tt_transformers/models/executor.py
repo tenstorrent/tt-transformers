@@ -43,6 +43,12 @@ class ModelExecutorConfig:
     warmup: WarmupConfig
     paged_kv_cache: PagedKVCacheConfig
     device_sampling_enabled: bool
+    # Prefill one sequence per pass. Batched prefill folds several prompts into
+    # one pass whose numerics depend on the wave composition, so the same
+    # prompt can decode differently depending on what it was prefilled with
+    # (https://github.com/tenstorrent/tt-metal/issues/47238). Serving entry
+    # points set this so a request's output does not depend on its neighbours.
+    sequential_prefill: bool = False
 
     def __post_init__(self) -> None:
         for name, value, expected_type in (
@@ -54,6 +60,8 @@ class ModelExecutorConfig:
                 raise TypeError(f"{name} must be exactly {expected_type.__name__}")
         if not isinstance(self.device_sampling_enabled, bool):
             raise TypeError("device_sampling_enabled must be bool")
+        if not isinstance(self.sequential_prefill, bool):
+            raise TypeError("sequential_prefill must be bool")
 
 
 PrefillWarmup = Callable[..., None]
@@ -138,7 +146,7 @@ class ModelExecutor:
             else resolve_prefill_warmup_seq_lens(runtime_config, config.trace)
         )
         resolved_trace_prime_lengths = tuple(trace_capture_prime_sequence_lengths)
-        resolved_disable_batched_prefill = (
+        resolved_disable_batched_prefill = config.sequential_prefill or (
             bool(runtime_config.disable_batched_prefill) if disable_batched_prefill is None else disable_batched_prefill
         )
 

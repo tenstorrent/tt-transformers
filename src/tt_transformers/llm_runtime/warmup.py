@@ -32,6 +32,7 @@ class WarmupCase:
     sequence_length: int | None
     sampling_path: str
     cached_tokens: int = 0
+    penalties: bool = False
 
 
 @dataclass(frozen=True)
@@ -76,6 +77,9 @@ class WarmupCoordinatorConfig:
     eager_plan: WarmupPlan
     sampled_plan: WarmupPlan
     prefill_trace_sequence_lengths: tuple[int, ...]  # Plan lengths whose first invocation has a trace family.
+    # Whether the sampled plan carries penalised twins: only a runtime that owns
+    # device penalty state applies them; elsewhere penalised requests sample on host.
+    penalty_variants: bool = True
 
     def __post_init__(self) -> None:
         if not isinstance(self.warmup, WarmupConfig):
@@ -98,11 +102,14 @@ class WarmupCoordinatorConfig:
             "prime_q128_tile_ends",
             "prefill_trace_enabled",
             "decode_trace_enabled",
+            "penalty_variants",
         ):
             if not isinstance(getattr(self, name), bool):
                 raise TypeError(f"{name} must be bool")
         if not self.device_sampling_enabled and self.allow_force_argmax:
             raise ValueError("force-argmax capability requires device sampling")
+        if self.penalty_variants and not self.device_sampling_enabled:
+            raise ValueError("penalty variants require device sampling")
         if self.prime_q128_tile_ends is not (self.device_sampling_enabled and self.lane_batch_size >= 32):
             raise ValueError("prime_q128_tile_ends must match resolved sampling and lane capabilities")
         if not isinstance(self.page_table_layout_ceiling, PageTableLayout):
@@ -131,6 +138,7 @@ class WarmupCoordinatorConfig:
             lane_batch_size=self.lane_batch_size,
             allow_force_argmax=self.allow_force_argmax,
             can_sample_on_device=True,
+            penalty_variants=self.penalty_variants,
         )
         if self.eager_plan != expected_eager or self.sampled_plan != expected_sampled:
             raise ValueError("warmup plans must match resolved policy and geometry")
@@ -189,6 +197,7 @@ class WarmupCoordinatorConfig:
         device_sampling_enabled = prefill.device_sampling_enabled
         allow_force_argmax = prefill.allow_force_argmax
         prime_q128_tile_ends = device_sampling_enabled and lane_batch_size >= 32
+        penalty_variants = device_sampling_enabled and prefill.sampling_state_controller is not None
         eager_plan = _build_plan(
             warmup=warmup,
             layout=prefill.page_table_layout,
@@ -204,6 +213,7 @@ class WarmupCoordinatorConfig:
             lane_batch_size=lane_batch_size,
             allow_force_argmax=allow_force_argmax,
             can_sample_on_device=True,
+            penalty_variants=penalty_variants,
         )
         return cls(
             warmup=warmup,
@@ -220,6 +230,7 @@ class WarmupCoordinatorConfig:
             sampled_plan=sampled_plan,
             prefill_trace_sequence_lengths=prefill_trace_sequence_lengths,
             page_table_layout_ceiling=prefill.page_table_layout_ceiling,
+            penalty_variants=penalty_variants,
         )
 
     def with_page_table_layout(self, layout: PageTableLayout) -> WarmupCoordinatorConfig:
@@ -254,6 +265,7 @@ class WarmupCoordinatorConfig:
                 lane_batch_size=self.lane_batch_size,
                 allow_force_argmax=self.allow_force_argmax,
                 can_sample_on_device=True,
+                penalty_variants=self.penalty_variants,
             ),
         )
 
@@ -435,11 +447,7 @@ class WarmupCoordinator:
             destination = self._trace_registered if traced else self._eager
             if case in destination:
                 continue
-            sampling = None
-            if case.sampling_path == "argmax":
-                sampling = _greedy_sampling_params(case.batch_size)
-            elif case.sampling_path == "topk":
-                sampling = _topk_sampling_params(case.batch_size)
+            sampling = _warmup_sampling_params(case, case.batch_size)
             actual_uncached_lengths = (min(int(case.sequence_length), servable_length - case.cached_tokens),)
             if (
                 case.batch_size == 1
@@ -504,11 +512,7 @@ class WarmupCoordinator:
         for case in plan.decode:
             if case in destination:
                 continue
-            sampling = None
-            if case.sampling_path == "argmax":
-                sampling = _greedy_sampling_params(lane_batch)
-            elif case.sampling_path == "topk":
-                sampling = _topk_sampling_params(lane_batch)
+            sampling = _warmup_sampling_params(case, lane_batch)
             compile_target = self.execution if enable_trace else self.eager
             program = compile_target.compile_decode(
                 tokens=torch.zeros(lane_batch, dtype=torch.long),
@@ -767,6 +771,7 @@ def _build_plan(
     lane_batch_size: int,
     allow_force_argmax: bool,
     can_sample_on_device: bool,
+    penalty_variants: bool = True,
 ) -> WarmupPlan:
     sampling_paths = ["logits"]
     if can_sample_on_device:
@@ -808,8 +813,27 @@ def _build_plan(
             decode_paths.append("argmax")
         if not allow_force_argmax or warmup.include_decode_top_k:
             decode_paths.append("topk")
-    decode = tuple(WarmupCase("decode", lane_batch_size, None, sampling_path) for sampling_path in decode_paths)
-    return WarmupPlan(tuple(prefill), decode)
+    decode = [WarmupCase("decode", lane_batch_size, None, sampling_path) for sampling_path in decode_paths]
+    # A request with any presence, frequency or repetition penalty selects its
+    # own program variant, and decode trace, on whichever sampling path it takes.
+    # Activation forbids compiling one later, so warm a penalised twin of every
+    # sampled case: otherwise the first penalised request fails, and a
+    # checkpoint whose generation config sets a penalty fails every request.
+    # A runtime without device penalty state never receives a penalised request.
+    if penalty_variants:
+        prefill += [replace(case, penalties=True) for case in prefill if case.sampling_path != "logits"]
+        decode += [replace(case, penalties=True) for case in decode if case.sampling_path != "logits"]
+    return WarmupPlan(tuple(prefill), tuple(decode))
+
+
+def _warmup_sampling_params(case: WarmupCase, batch_size: int) -> SamplingParams | None:
+    if case.sampling_path == "argmax":
+        params = _greedy_sampling_params(batch_size)
+    elif case.sampling_path == "topk":
+        params = _topk_sampling_params(batch_size)
+    else:
+        return None
+    return _with_penalties(params, batch_size) if case.penalties else params
 
 
 def _greedy_sampling_params(batch_size: int) -> SamplingParams:
@@ -826,6 +850,24 @@ def _topk_sampling_params(batch_size: int) -> SamplingParams:
         top_k=torch.full((batch_size,), 32, dtype=torch.int32),
         top_p=torch.full((batch_size,), 0.08),
     )
+
+
+def _with_penalties(params: SamplingParams, batch_size: int) -> SamplingParams:
+    # The penalised program applies every penalty kind from device buffers, so
+    # any nonzero penalty builds it. Repetition stays at 1.0: setting it needs a
+    # prompt history, and warmup has none.
+    return replace(
+        params,
+        presence_penalty=torch.full((batch_size,), 1.2),
+        frequency_penalty=torch.full((batch_size,), 1.2),
+    )
+
+
+def topk_warmup_sampling_variants(batch_size: int, *, penalties: bool = True) -> tuple[SamplingParams, ...]:
+    """Return the top-k sampling variants warmup compiles: plain, then penalised if enabled."""
+
+    plain = _topk_sampling_params(batch_size)
+    return (plain, _with_penalties(plain, batch_size)) if penalties else (plain,)
 
 
 def _ceil_div(value: int, divisor: int) -> int:

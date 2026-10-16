@@ -90,6 +90,7 @@ files = [
   "src/tt_transformers/mesh_utils.py",
   "src/tt_transformers/sampling/sampling_params.py",
   "src/tt_transformers/tensor_utils.py",
+  "src/tt_transformers/vllm_registry.py",
 ]
 warn_unused_configs = true
 check_untyped_defs = true

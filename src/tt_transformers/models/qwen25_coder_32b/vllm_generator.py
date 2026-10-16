@@ -67,7 +67,15 @@ class Qwen25Coder32BGenerator:
         "supports_prefix_caching": True,
         "supports_async_decode": True,
         "supports_sample_on_device": True,
+        "max_device_top_k": 32,
+        # The executor owns no device penalty state, so a penalised request samples on host.
+        "supports_device_penalties": False,
+        # Prefill samples from a fixed per-slot seed, so a sampled first token would
+        # depend on the slot, not the request or its seed: sample it on host.
+        "supports_stochastic_device_prefill": False,
         "accepts_trace_mode": True,
+        "supports_chunked_prefill": True,
+        "supports_device_logprobs": False,
         # The only supported geometry (T3K) needs a ring fabric. The vLLM plugin
         # (vllm-tt-plugin #116) otherwise defaults a mesh it is not told about to
         # FABRIC_1D.
@@ -138,7 +146,7 @@ class Qwen25Coder32BGenerator:
                 max_seq_len=max_seq_len,
                 n_layers=n_layers,
                 tt_data_parallel=tt_data_parallel,
-                optimizations=optimizations,
+                optimizations="performance" if optimizations is None else optimizations,
                 trace_mode=trace_mode,
                 device_sampling_enabled=device_sampling_enabled,
             )
@@ -314,6 +322,7 @@ def build_qwen25_coder_32b_generator(config: Qwen25Coder32BGeneratorConfig) -> Q
                     dtype=model_kv_cache_dtypes[0],
                 ),
                 device_sampling_enabled=config.device_sampling_enabled,
+                sequential_prefill=True,
             )
             lanes.append(build_qwen25_coder_32b_executor(llm, executor_config))
         adapter = _build_vllm_adapter(lanes[0])

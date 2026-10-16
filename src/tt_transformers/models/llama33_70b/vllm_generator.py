@@ -85,6 +85,8 @@ class Llama33_70BGenerator:
         "supports_sample_on_device": True,
         "max_device_top_k": 32,
         "accepts_trace_mode": True,
+        "supports_chunked_prefill": True,
+        "supports_device_logprobs": False,
         # Every supported multi-device geometry (T3K, P150x4) needs a ring
         # fabric. The vLLM plugin (vllm-tt-plugin #116) otherwise defaults a
         # mesh it is not told about to FABRIC_1D.
@@ -165,7 +167,7 @@ class Llama33_70BGenerator:
                 max_seq_len=max_seq_len,
                 n_layers=n_layers,
                 tt_data_parallel=tt_data_parallel,
-                optimizations=optimizations,
+                optimizations="performance" if optimizations is None else optimizations,
                 trace_mode=trace_mode,
                 device_sampling_enabled=device_sampling_enabled,
             )
@@ -458,6 +460,7 @@ def build_llama33_70b_generator(config: Llama33_70BGeneratorConfig) -> Llama33_7
                     dtype=model_kv_cache_dtypes[0],
                 ),
                 device_sampling_enabled=config.device_sampling_enabled,
+                sequential_prefill=True,
             )
             lanes.append(build_llama33_70b_executor(llm, executor_config))
 

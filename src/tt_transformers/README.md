@@ -31,6 +31,16 @@ and runtime owners. See the [model guide](models/README.md#model-package-layout)
 for the common file layout and the [prefill guide](llm_runtime/prefill/README.md)
 for execution planning.
 
+The vLLM TT plugin reaches those interfaces through
+[`vllm_registry.py`](vllm_registry.py): one class per text architecture
+(`LlamaForCausalLM`, `Qwen2ForCausalLM`, `Qwen3ForCausalLM`,
+`MistralForCausalLM`, `Phi3ForCausalLM`), registered by dotted path. Each
+selects the model package by the checkpoint's exact Hugging Face id when the
+model loads and returns that package's `vllm_generator.py` instance. A
+checkpoint not listed there is rejected with the supported ids. The class
+names are a stable interface; adding a model package means adding its row to
+that module.
+
 Repository `examples/<model>/demo.py` demonstrates the public loading,
 chat-template tokenization, `.generate()`, decoding, and cleanup flow. Its
 separate `benchmark.py` contains accuracy/performance workloads and explicit

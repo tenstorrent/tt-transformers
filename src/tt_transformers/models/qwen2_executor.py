@@ -19,9 +19,9 @@ from typing import Any
 import torch
 
 from tt_transformers.llm_runtime.execution import EagerExecutor, TracedExecutor
+from tt_transformers.llm_runtime.warmup import topk_warmup_sampling_variants
 from tt_transformers.models.executor import ModelExecutor, ModelExecutorConfig
 from tt_transformers.modules.sampling.sampling_1d import Sampling1D
-from tt_transformers.sampling.sampling_params import SamplingParams
 
 
 @dataclass(frozen=True)
@@ -501,27 +501,23 @@ def _warmup_q128_topk_tile_ends(
         or executor.warmup.config.prime_q128_tile_ends
     ):
         return
-    sampling = SamplingParams(
-        temperature=torch.ones(1),
-        top_k=torch.full((1,), 32, dtype=torch.int32),
-        top_p=torch.full((1,), 0.08),
-    )
     # Without a Q128 trace family the trace pass primes these programs eagerly.
     traced = enable_trace and 128 in executor.warmup.config.prefill_trace_sequence_lengths
     execution = executor.traced_executor if traced else executor.eager_executor
-    for sequence_length in (32, 64, 96):
-        page_table_width = (
-            sequence_length + executor.page_table_layout.block_size - 1
-        ) // executor.page_table_layout.block_size
-        executor.compile_prefill(
-            tokens=torch.zeros((1, sequence_length), dtype=torch.long),
-            page_table=torch.zeros((1, page_table_width), dtype=torch.int32),
-            prompt_lens=torch.full((1,), sequence_length, dtype=torch.long),
-            empty_slots=[0],
-            kv_cache=kv_cache,
-            sampling_params=sampling,
-            execution=execution,
-        )
+    for sampling in topk_warmup_sampling_variants(1, penalties=executor.warmup.config.penalty_variants):
+        for sequence_length in (32, 64, 96):
+            page_table_width = (
+                sequence_length + executor.page_table_layout.block_size - 1
+            ) // executor.page_table_layout.block_size
+            executor.compile_prefill(
+                tokens=torch.zeros((1, sequence_length), dtype=torch.long),
+                page_table=torch.zeros((1, page_table_width), dtype=torch.int32),
+                prompt_lens=torch.full((1,), sequence_length, dtype=torch.long),
+                empty_slots=[0],
+                kv_cache=kv_cache,
+                sampling_params=sampling,
+                execution=execution,
+            )
     executor._q128_topk_tile_ends_warmed.add(enable_trace)
 
 

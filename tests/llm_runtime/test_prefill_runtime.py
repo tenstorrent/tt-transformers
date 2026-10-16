@@ -3,11 +3,13 @@
 
 from __future__ import annotations
 
+import ast
 import dataclasses
 import importlib
 import inspect
 import math
 from dataclasses import FrozenInstanceError
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -3205,3 +3207,35 @@ def test_eager_degrade_ignores_malformed_request_metadata(warnings_logged):
     runtime = _runtime()
     runtime.note_eager_degrade(tokens=torch.zeros(4, dtype=torch.long))
     assert warnings_logged == []
+
+
+def _returns_hidden_without_slice_guard(function: ast.FunctionDef) -> bool:
+    for node in ast.walk(function):
+        if not isinstance(node, ast.If) or not any(isinstance(stmt, ast.Return) for stmt in node.body):
+            continue
+        names = {child.id for child in ast.walk(node.test) if isinstance(child, ast.Name)}
+        if "get_last_token" in names and "last_token_slice" not in names:
+            return True
+    return False
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(
+    "model_path",
+    sorted((Path(__file__).parents[2] / "src/tt_transformers/models").glob("*/model.py")),
+    ids=lambda path: path.parent.name,
+)
+def test_model_prefill_honours_runtime_last_token_slice(model_path):
+    # The eager chunk body passes get_last_token=-1 with a runtime last_token_slice
+    # and expects last-token logits. A model that returns the full hidden state
+    # whenever get_last_token is -1 hands the collector a hidden-width row.
+    tree = ast.parse(model_path.read_text(encoding="utf-8"))
+    offenders = [
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "prefill_forward"
+        and "last_token_slice" in {arg.arg for arg in node.args.args + node.args.kwonlyargs}
+        and _returns_hidden_without_slice_guard(node)
+    ]
+    assert not offenders

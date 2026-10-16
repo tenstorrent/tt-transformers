@@ -141,6 +141,43 @@ def offline_mode(environ: Mapping[str, str] | None = None) -> bool:
     )
 
 
+def hf_repo_id(name_or_path: str | os.PathLike[str] | None) -> str | None:
+    """Return the Hugging Face repository id that ``name_or_path`` names, or ``None``.
+
+    Two spellings are recognised: the id itself (``org/name``), and a snapshot
+    directory of the Hugging Face cache (``.../models--org--name/snapshots/<rev>``).
+    Serving frameworks hand the snapshot directory to the model in place of the
+    id when they resolve a cached checkpoint locally. Any other path does not
+    identify a checkpoint and returns ``None``.
+    """
+
+    if not name_or_path:
+        return None
+    text = os.fspath(name_or_path)
+    parts = Path(text).parts
+    if len(parts) >= 3 and parts[-2] == "snapshots" and parts[-3].startswith("models--"):
+        repo = parts[-3][len("models--") :].split("--")
+        if len(repo) == 2 and all(repo):
+            return "/".join(repo)
+        return None
+    if text.count("/") == 1 and not text.startswith(("/", ".", "~")) and all(text.split("/")):
+        return text
+    return None
+
+
+def hf_model_name(hf_model: str | os.PathLike[str]) -> str:
+    """Return the checkpoint's model name, such as ``Llama-3.1-8B-Instruct``.
+
+    Model packages key precision and tuning choices on this name, so a cache
+    snapshot path must yield the same name as the id it was downloaded from,
+    not its revision directory. A path that names no checkpoint falls back to
+    its last component.
+    """
+
+    repo = hf_repo_id(hf_model)
+    return repo.split("/")[-1] if repo is not None else Path(os.fspath(hf_model)).name
+
+
 def _installed_version(distribution: str, fallback: str) -> str:
     try:
         return version(distribution)

@@ -413,3 +413,37 @@ def test_adaptor_default_cache_keeps_pinned_topology_suffix(
     assert resolved.name == expected_topology
     assert resolved.parent.name.startswith("identity-1-")
     assert resolved.parent.parent == tmp_path / "cache/owner/model"
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(
+    ("hf_model", "expected"),
+    [
+        ("meta-llama/Llama-3.1-8B-Instruct", "Llama-3.1-8B-Instruct"),
+        (
+            "/cache/hub/models--meta-llama--Llama-3.1-8B-Instruct/snapshots/0e9e39f249a16976918f6564b8830bc894c89659",
+            "Llama-3.1-8B-Instruct",
+        ),
+        ("/cache/hub/models--Qwen--Qwen2.5-7B-Instruct/snapshots/rev/", "Qwen2.5-7B-Instruct"),
+        (Path("/hub/models--microsoft--phi-4/snapshots/rev"), "phi-4"),
+        ("/weights/Llama-3.1-8B-Instruct", "Llama-3.1-8B-Instruct"),
+        ("Llama-3.1-8B-Instruct", "Llama-3.1-8B-Instruct"),
+    ],
+)
+def test_hf_model_name_is_the_same_for_an_id_and_its_cache_snapshot(hf_model, expected) -> None:
+    assert cache_policy.hf_model_name(hf_model) == expected
+
+
+@pytest.mark.host
+def test_hf_generators_derive_model_names_from_the_shared_policy() -> None:
+    """Precision and tuning choices are keyed on the model name. A generator that
+    takes the last path component would see a revision hash when a serving
+    framework passes a cache snapshot directory, and silently pick other choices."""
+
+    root = Path(cache_policy.__file__).parent / "models"
+    offenders = [
+        str(path.relative_to(root))
+        for path in sorted(root.glob("*/hf_generator.py"))
+        if "Path(hf_model).name" in path.read_text(encoding="utf-8")
+    ]
+    assert offenders == []

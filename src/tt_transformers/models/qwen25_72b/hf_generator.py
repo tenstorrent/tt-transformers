@@ -16,6 +16,7 @@ from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, Genera
 
 from tt_transformers.cache_environment import (
     environment_flag,
+    hf_model_name,
     offline_mode,
     report_model_preflight,
     resolve_model_cache,
@@ -391,7 +392,7 @@ def _load_model(
         tokenizer = load_tokenizer(hf_model, DEFAULT_HF_REVISION)
         stop_token_ids = _qwen_stop_token_ids(tokenizer)
         runtime_config = Qwen25_72BRuntimeConfig(
-            model_name=Path(hf_model).name,
+            model_name=hf_model_name(hf_model),
             model_cache_path=cache_path,
             max_prefill_chunk_size=2048,
             max_context_len=int(hf_config.max_position_embeddings),
