@@ -24,6 +24,7 @@ from tt_transformers.llm_runtime.warmup import (
     CoverageAlias,
     WarmupCoordinator,
     WarmupCoordinatorConfig,
+    _build_plan,
     _resolve_coverage_manifest,
     resolve_prefill_warmup_seq_lens,
     topk_warmup_sampling_variants,
@@ -203,6 +204,7 @@ def make_coordinator(
     can_enable_trace=None,
     penalty_state=True,
     sequential_prefill=False,
+    fixed_prefill_batch_sizes=(),
 ):
     events = events if events is not None else []
     execution = execution or RecordingExecution(events)
@@ -239,6 +241,13 @@ def make_coordinator(
         prefill_config = replace(prefill_config, sampling_state_controller=controller, sampling_state=object())
     if sequential_prefill:
         prefill_config = replace(prefill_config, disable_batched_prefill=True)
+    if fixed_prefill_batch_sizes:
+        prefill_config = replace(
+            prefill_config,
+            supports_batched_prefill=True,
+            max_prefill_batch_size=32,
+            fixed_prefill_batch_sizes=fixed_prefill_batch_sizes,
+        )
     eager = eager_execution or execution
     eager.prefill = SimpleNamespace(config=prefill_config)
     eager.decode = SimpleNamespace(config=decode_config)
@@ -668,6 +677,98 @@ def test_coordinator_rejects_a_runtime_with_another_prefill_batching_policy():
             execution=execution,
             ensure_sampling_buffers=lambda: None,
             validate_bound_cache=lambda value: None,
+        )
+
+
+@pytest.mark.host
+def test_fixed_prefill_ladder_is_one_and_the_fixed_batch_at_its_bucket_only():
+    # The configured ladder is not consulted once the runtime has fixed waves.
+    config = WarmupConfig(prefill_seq_lens=LADDER, prefill_batch_sizes=(1, 2, 4, 8))
+    coordinator, *_ = make_coordinator(
+        warmup_config=config,
+        sequence_lengths=LADDER,
+        lane_capacity=16,
+        fixed_prefill_batch_sizes=((128, 16),),
+    )
+
+    for plan in (coordinator.config.eager_plan, coordinator.config.sampled_plan):
+        uncached = {(case.sequence_length, case.batch_size) for case in plan.prefill if not case.cached_tokens}
+        assert uncached == {(128, 1), (128, 16), (1024, 1), (2048, 1)}
+        assert all(case.batch_size == 1 for case in plan.prefill if case.cached_tokens)
+    sampled_16 = {
+        (case.sampling_path, case.penalties)
+        for case in coordinator.config.sampled_plan.prefill
+        if case.batch_size == 16
+    }
+    assert sampled_16 == {("logits", False), ("topk", False), ("topk", True)}
+    assert coordinator.config.fixed_prefill_batch_sizes == ((128, 16),)
+
+
+@pytest.mark.host
+def test_fixed_prefill_ladder_round_trips_through_page_table_layout_replacement():
+    coordinator, *_ = make_coordinator(
+        warmup_config=WarmupConfig(prefill_seq_lens=LADDER),
+        sequence_lengths=LADDER,
+        lane_capacity=16,
+        fixed_prefill_batch_sizes=((128, 16),),
+    )
+    original = coordinator.config
+
+    coordinator.configure_page_table_layout(PageTableLayout(32, 4, 64, 8))
+
+    replaced = coordinator.config
+    assert replaced.fixed_prefill_batch_sizes == original.fixed_prefill_batch_sizes
+    assert {case.batch_size for case in replaced.eager_plan.prefill if case.sequence_length == 128} == {1, 16}
+    # Rebuilding from the stored policy reproduces the replaced plans exactly.
+    assert replace(replaced) == replaced
+
+
+@pytest.mark.host
+def test_fixed_prefill_warmup_compiles_the_fixed_wave(monkeypatch):
+    monkeypatch.delenv("DISABLE_BATCHED_PREFILL", raising=False)
+    coordinator, execution, *_ = make_coordinator(
+        trace_mode="none",
+        warmup_config=WarmupConfig(prefill_seq_lens=LADDER),
+        sequence_lengths=LADDER,
+        lane_capacity=16,
+        fixed_prefill_batch_sizes=((128, 16),),
+    )
+
+    coordinator.warmup_prefill(kv_cache="cache", enable_trace=False, can_sample_on_device=False)
+
+    regular = sorted(
+        (int(call["tokens"].shape[-1]), int(call["tokens"].shape[0]))
+        for call in execution.prefill_calls
+        if call["start_pos"] is None
+    )
+    assert regular == [(128, 1), (128, 16), (1024, 1), (2048, 1)]
+
+
+@pytest.mark.host
+def test_fixed_prefill_warmup_refuses_a_wave_wider_than_the_lane(expect_error):
+    with expect_error(ValueError, "fixed prefill batch 16 at bucket 128 exceeds lane batch size 8"):
+        _build_plan(
+            warmup=WarmupConfig(),
+            layout=PageTableLayout(32, 128, 192, 128),
+            prefill_sequence_lengths=LADDER,
+            lane_batch_size=8,
+            allow_force_argmax=False,
+            can_sample_on_device=False,
+            fixed_prefill_batch_sizes=((128, 16),),
+        )
+
+
+@pytest.mark.host
+def test_coordinator_refuses_runtimes_with_other_fixed_prefill_batches(expect_error):
+    coordinator, execution, *_ = make_coordinator(lane_capacity=16, fixed_prefill_batch_sizes=((128, 16),))
+    execution.prefill = SimpleNamespace(config=replace(execution.prefill.config, fixed_prefill_batch_sizes=()))
+
+    with expect_error(ValueError, "fixed prefill batch sizes"):
+        WarmupCoordinator(
+            config=coordinator.config,
+            execution=execution,
+            ensure_sampling_buffers=lambda: None,
+            validate_bound_cache=lambda _value: None,
         )
 
 
