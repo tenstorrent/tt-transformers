@@ -80,6 +80,9 @@ class WarmupCoordinatorConfig:
     # Whether the sampled plan carries penalised twins: only a runtime that owns
     # device penalty state applies them; elsewhere penalised requests sample on host.
     penalty_variants: bool = True
+    # The prefill runtime's fixed ``(bucket, F)`` waves. Non-empty replaces the
+    # configured batch ladder: see `_build_plan`.
+    fixed_prefill_batch_sizes: tuple[tuple[int, int], ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.warmup, WarmupConfig):
@@ -130,6 +133,7 @@ class WarmupCoordinatorConfig:
             lane_batch_size=self.lane_batch_size,
             allow_force_argmax=self.allow_force_argmax,
             can_sample_on_device=False,
+            fixed_prefill_batch_sizes=self.fixed_prefill_batch_sizes,
         )
         expected_sampled = _build_plan(
             warmup=self.warmup,
@@ -139,6 +143,7 @@ class WarmupCoordinatorConfig:
             allow_force_argmax=self.allow_force_argmax,
             can_sample_on_device=True,
             penalty_variants=self.penalty_variants,
+            fixed_prefill_batch_sizes=self.fixed_prefill_batch_sizes,
         )
         if self.eager_plan != expected_eager or self.sampled_plan != expected_sampled:
             raise ValueError("warmup plans must match resolved policy and geometry")
@@ -205,6 +210,7 @@ class WarmupCoordinatorConfig:
             lane_batch_size=lane_batch_size,
             allow_force_argmax=allow_force_argmax,
             can_sample_on_device=False,
+            fixed_prefill_batch_sizes=prefill.fixed_prefill_batch_sizes,
         )
         sampled_plan = _build_plan(
             warmup=warmup,
@@ -214,6 +220,7 @@ class WarmupCoordinatorConfig:
             allow_force_argmax=allow_force_argmax,
             can_sample_on_device=True,
             penalty_variants=penalty_variants,
+            fixed_prefill_batch_sizes=prefill.fixed_prefill_batch_sizes,
         )
         return cls(
             warmup=warmup,
@@ -231,6 +238,7 @@ class WarmupCoordinatorConfig:
             prefill_trace_sequence_lengths=prefill_trace_sequence_lengths,
             page_table_layout_ceiling=prefill.page_table_layout_ceiling,
             penalty_variants=penalty_variants,
+            fixed_prefill_batch_sizes=prefill.fixed_prefill_batch_sizes,
         )
 
     def with_page_table_layout(self, layout: PageTableLayout) -> WarmupCoordinatorConfig:
@@ -257,6 +265,7 @@ class WarmupCoordinatorConfig:
                 lane_batch_size=self.lane_batch_size,
                 allow_force_argmax=self.allow_force_argmax,
                 can_sample_on_device=False,
+                fixed_prefill_batch_sizes=self.fixed_prefill_batch_sizes,
             ),
             sampled_plan=_build_plan(
                 warmup=self.warmup,
@@ -266,6 +275,7 @@ class WarmupCoordinatorConfig:
                 allow_force_argmax=self.allow_force_argmax,
                 can_sample_on_device=True,
                 penalty_variants=self.penalty_variants,
+                fixed_prefill_batch_sizes=self.fixed_prefill_batch_sizes,
             ),
         )
 
@@ -312,6 +322,8 @@ class WarmupCoordinator:
             or decode_config.device_sampling_enabled is not config.device_sampling_enabled
         ):
             raise ValueError("execution runtimes must use the warmup config sampling policy")
+        if prefill_config.fixed_prefill_batch_sizes != config.fixed_prefill_batch_sizes:
+            raise ValueError("execution runtimes must use the warmup config fixed prefill batch sizes")
         if not callable(ensure_sampling_buffers):
             raise TypeError("ensure_sampling_buffers must be callable")
         if not callable(validate_bound_cache):
@@ -772,13 +784,23 @@ def _build_plan(
     allow_force_argmax: bool,
     can_sample_on_device: bool,
     penalty_variants: bool = True,
+    fixed_prefill_batch_sizes: tuple[tuple[int, int], ...] = (),
 ) -> WarmupPlan:
     sampling_paths = ["logits"]
     if can_sample_on_device:
         sampling_paths.append("topk")
+    fixed_batches = dict(fixed_prefill_batch_sizes)
     prefill = []
     for sequence_length in prefill_sequence_lengths:
-        batches = warmup.prefill_batch_sizes if sequence_length == 128 else (1,)
+        if fixed_batches:
+            # Fixed-shape prefill runs batch 1 or exactly F at a bucket, never
+            # another size, so this is the whole batch axis. Batch 1 stays in the
+            # ladder for the sequential escape hatches; with fixed shape active
+            # an uncached batch-1 case plans to the F wave, so it adds nothing.
+            fixed_batch = fixed_batches.get(sequence_length)
+            batches: tuple[int, ...] = (1,) if fixed_batch is None else (1, fixed_batch)
+        else:
+            batches = warmup.prefill_batch_sizes if sequence_length == 128 else (1,)
         for batch_size in batches:
             if batch_size <= lane_batch_size:
                 batch_sampling_paths = sampling_paths + (
@@ -820,6 +842,13 @@ def _build_plan(
     # sampled case: otherwise the first penalised request fails, and a
     # checkpoint whose generation config sets a penalty fails every request.
     # A runtime without device penalty state never receives a penalised request.
+    for bucket, fixed_batch in fixed_prefill_batch_sizes:
+        if bucket in prefill_sequence_lengths and not any(
+            case.sequence_length == bucket and case.batch_size == fixed_batch for case in prefill
+        ):
+            raise ValueError(
+                f"fixed prefill batch {fixed_batch} at bucket {bucket} exceeds lane batch size {lane_batch_size}"
+            )
     if penalty_variants:
         prefill += [replace(case, penalties=True) for case in prefill if case.sampling_path != "logits"]
         decode += [replace(case, penalties=True) for case in decode if case.sampling_path != "logits"]
