@@ -455,19 +455,27 @@ model_executor.decode_forward(execution=eager, ...)
 TracedExecutor.compile_decode(...)
   -> eager compile
   -> DecodeRuntime.capture_plan(...)
+       -> a sampling tail and the model body it shares with the other tails
   -> TraceCompiler.register_capture_plan(...)
 
 TracedExecutor.decode_forward(...)
   -> DecodeRuntime.prepare(...)
   -> TraceCompiler.replay(...)
        -> refresh full inputs, page table, or only replay-varying fields
-       -> non-blocking ttnn.execute_trace(...)
+       -> non-blocking ttnn.execute_trace(...) of the body, then of the tail
   -> DecodeRuntime.note_submitted(...)
   -> DecodeRuntime.consume(...)
 ```
 
-Refresh decisions depend on reset, graph switching, page-table changes, and
-whether device position feedback is compatible with the current request.
+The body runs the model into logits it retains. Each tail samples those logits
+for one combination of sampling path, penalties, logprobs and device feedback,
+and writes the fed-back token into the body's inputs. Warmup captures one body
+per lane and every tail it serves, so a sampling variant costs a tail-sized
+trace rather than another copy of the model.
+
+Refresh decisions depend on reset, graph switching (a change of body or of
+tail since the last decode step), page-table changes, and whether device
+position feedback is compatible with the current request.
 
 ### Program compilation
 

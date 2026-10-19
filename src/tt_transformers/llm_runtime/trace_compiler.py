@@ -80,14 +80,32 @@ class TraceArtifact:
 
 
 @dataclass(frozen=True)
+class TraceBodyPlan:
+    """A trace shared by every tail trace that names its signature.
+
+    A tail is captured after its body and replayed straight after it, and
+    reads the body's outputs, so those outputs live as long as the body.
+    """
+
+    signature: Any
+    prepare_inputs: Callable[[], PersistentInputs | Any]
+    capture: Callable[[PersistentInputs], Any]
+
+
+@dataclass(frozen=True)
 class TraceCapturePlan:
-    """Operation-produced specification for one trace-capable compiled program."""
+    """Operation-produced specification for one trace-capable compiled program.
+
+    With a ``body``, this plan is a tail: ``prepare_inputs`` receives the
+    body's persistent inputs and ``capture`` receives them and then the body's
+    outputs.
+    """
 
     program_key: ProgramKey
     trace_signature: Any
     operation: str
-    prepare_inputs: Callable[[], PersistentInputs | Any]
-    capture: Callable[[PersistentInputs], Any]
+    prepare_inputs: Callable[..., PersistentInputs | Any]
+    capture: Callable[..., Any]
     refresh_policy: InputRefreshPolicy = InputRefreshPolicy()
     schema_fingerprint: Any = None
     prepare_workspace: Callable[[], Any] | None = None
@@ -96,12 +114,15 @@ class TraceCapturePlan:
     release_prime_output: Callable[[Any], list[BaseException]] | None = None
     prepare_capture: Callable[[PersistentInputs], None] | None = None
     prime_workspace: Callable[[PersistentInputs, Any], None] | None = None
+    body: TraceBodyPlan | None = None
 
     def __post_init__(self) -> None:
         if self.operation not in ("prefill", "decode"):
             raise ValueError(f"Unsupported trace operation: {self.operation!r}")
         if (self.prime is None) is not (self.release_prime_output is None):
             raise ValueError("trace capture prime and output releaser must be configured together")
+        if self.body is not None and not isinstance(self.body, TraceBodyPlan):
+            raise TypeError("trace capture body must be a TraceBodyPlan")
 
 
 @dataclass
@@ -143,11 +164,19 @@ class TraceCompiler:
         self._plans: dict[TraceKey, TraceCapturePlan] = {}
         self._program_to_trace: dict[ProgramKey, TraceKey] = {}
         self._aliases: dict[ProgramKey, TraceAliasRecord] = {}
+        # Bodies are kept apart from the program-facing traces: no program
+        # replays a body on its own.
+        self._bodies: dict[TraceKey, TraceRecord] = {}
+        self._body_plans: dict[TraceKey, TraceBodyPlan] = {}
+        self._body_for_trace: dict[TraceKey, TraceKey] = {}
         self._rollback_orphans: list[TensorResourceOrphan] = []
         self._capture_in_progress = False
         self._activated = False
         self._released = False
-        self._previous_replay_key: TraceKey | None = None
+        # The last key replayed at each stage. Prefill traces and decode bodies
+        # own resident inputs and share the "body" stage; "tail" is the decode
+        # tail replayed with the last body, if any.
+        self._previous_replay_keys: dict[str, TraceKey | None] = {"body": None, "tail": None}
         self._replay_count = 0
         self._replay_counts = {"prefill": 0, "decode": 0}
         self._device_program_cache_entries: tuple[int, ...] | None = None
@@ -176,6 +205,18 @@ class TraceCompiler:
         """Return the number of semantic hidden traces in the registry."""
 
         return len(self._traces)
+
+    @property
+    def previous_replay_keys(self) -> dict[str, TraceKey | None]:
+        """Return the last key replayed at each stage: ``body`` and ``tail``."""
+
+        return dict(self._previous_replay_keys)
+
+    @property
+    def body_count(self) -> int:
+        """Return the number of shared bodies the registered tails replay after."""
+
+        return len(self._bodies)
 
     @property
     def trace_association_count(self) -> int:
@@ -227,6 +268,11 @@ class TraceCompiler:
             raise ValueError(
                 f"Program key {plan.program_key.digest} was registered with a different workspace fingerprint"
             )
+        body_key = None if plan.body is None else TraceKey.from_signature(plan.body.signature)
+        if body_key is not None and body_key in self._traces:
+            raise RuntimeError(f"Trace key collision for digest {body_key.digest}: a body matches a trace")
+        if trace_key in self._bodies:
+            raise RuntimeError(f"Trace key collision for digest {trace_key.digest}: a trace matches a body")
 
         record = self._traces.get(trace_key)
         if record is None:
@@ -245,6 +291,16 @@ class TraceCompiler:
                 raise ValueError(f"Trace key {trace_key.digest} was registered with a different refresh policy")
             if self._plans[trace_key].schema_fingerprint != plan.schema_fingerprint:
                 raise ValueError(f"Trace key {trace_key.digest} was registered with a different schema fingerprint")
+            if self._body_for_trace.get(trace_key) != body_key:
+                raise ValueError(f"Trace key {trace_key.digest} was registered with a different body")
+        if body_key is not None:
+            body = self._bodies.get(body_key)
+            if body is None:
+                self._bodies[body_key] = TraceRecord(signature=plan.body.signature, operation=plan.operation)
+                self._body_plans[body_key] = plan.body
+            elif body.signature != plan.body.signature or body.operation != plan.operation:
+                raise RuntimeError(f"Trace key collision for digest {body_key.digest}: retained body differs")
+            self._body_for_trace[trace_key] = body_key
         self._program_to_trace[plan.program_key] = trace_key
         if existing_alias is None:
             self._aliases[plan.program_key] = TraceAliasRecord(
@@ -269,14 +325,21 @@ class TraceCompiler:
             raise RuntimeError("Cannot capture while unreleased compile outputs remain")
 
         prepared: dict[TraceKey, tuple[PersistentInputs, TraceCapturePlan]] = {}
+        body_inputs: dict[TraceKey, PersistentInputs] = {}
         captured_keys: set[TraceKey] = set()
+        captured_bodies: set[TraceKey] = set()
         self._capture_in_progress = True
         try:
             for trace_key, plan in self._plans.items():
                 self.program_compiler.require_compiled(plan.program_key)
-                values = plan.prepare_inputs()
-                persistent = values if isinstance(values, PersistentInputs) else PersistentInputs(values)
-                prepared[trace_key] = (persistent, plan)
+                body_key = self._body_for_trace.get(trace_key)
+                if body_key is None:
+                    values = plan.prepare_inputs()
+                else:
+                    if body_key not in body_inputs:
+                        body_inputs[body_key] = _as_persistent(self._body_plans[body_key].prepare_inputs())
+                    values = plan.prepare_inputs(body_inputs[body_key])
+                prepared[trace_key] = (_as_persistent(values), plan)
 
             for program_key, alias in self._aliases.items():
                 if alias.prepare_workspace is not None:
@@ -321,51 +384,33 @@ class TraceCompiler:
             self._device_program_cache_entries = self.program_compiler.device_program_cache_entries()
             for trace_key in capture_order:
                 persistent, plan = prepared[trace_key]
-                record = self._traces[trace_key]
+                body_key = self._body_for_trace.get(trace_key)
+                body_outputs: tuple[Any, ...] = ()
+                if body_key is not None:
+                    body = self._bodies[body_key]
+                    if body.artifact is None:
+                        self._capture_record(
+                            body,
+                            body_inputs[body_key],
+                            InputRefreshPolicy(),
+                            lambda key=body_key: self._body_plans[key].capture(body_inputs[key]),
+                            on_artifact=lambda key=body_key: captured_bodies.add(key),
+                        )
+                    body_artifact = body.artifact
+                    if body_artifact is None:
+                        raise RuntimeError(f"Trace body {body_key.digest} was not captured")
+                    body_outputs = (body_artifact.outputs,)
                 if plan.prepare_capture is not None:
                     plan.prepare_capture(persistent)
-                self._require_unchanged_program_cache("before capture")
-                self.program_compiler.set_trace_capture_in_progress(True)
-                trace_id = ttnn.begin_trace_capture(self.mesh_device, cq_id=0)
-                outputs = None
-                capture_ended = False
-                try:
-                    outputs = plan.capture(persistent)
-                    ttnn.end_trace_capture(self.mesh_device, trace_id, cq_id=0)
-                    capture_ended = True
-                    ttnn.synchronize_device(self.mesh_device)
-                    self._require_unchanged_program_cache("during capture")
-                except BaseException as primary:
-                    # A capture that raised before ``end_trace_capture`` leaves the device
-                    # recording. Releasing the trace without closing the region first leaks it,
-                    # and every later capture records into it. Ported from
-                    # tenstorrent/tt-metal#55343.
-                    cleanup_failures = []
-                    if not capture_ended:
-                        try:
-                            ttnn.end_trace_capture(self.mesh_device, trace_id, cq_id=0)
-                        except BaseException as error:
-                            cleanup_failures.append(error)
-                    record.artifact = TraceArtifact(
-                        trace_id=trace_id,
-                        persistent_inputs=persistent,
-                        outputs=outputs,
-                        refresh_policy=plan.refresh_policy,
-                    )
-                    captured_keys.add(trace_key)
-                    cleanup_failures.extend(self._release_trace(record))
-                    attach_cleanup_failures(primary, cleanup_failures)
-                    raise
-                record.artifact = TraceArtifact(
-                    trace_id=trace_id,
-                    persistent_inputs=persistent,
-                    outputs=outputs,
-                    refresh_policy=plan.refresh_policy,
+                self._capture_record(
+                    self._traces[trace_key],
+                    persistent,
+                    plan.refresh_policy,
+                    lambda plan=plan, persistent=persistent, body_outputs=body_outputs: plan.capture(
+                        persistent, *body_outputs
+                    ),
+                    on_artifact=lambda key=trace_key: captured_keys.add(key),
                 )
-                logger.info(f"Captured {plan.operation} trace: signature={plan.trace_signature!r}")
-                captured_keys.add(trace_key)
-                _acknowledge_trace_outputs(outputs)
-                self.program_compiler.set_trace_capture_in_progress(False)
 
             ttnn.synchronize_device(self.mesh_device)
             self._capture_in_progress = False
@@ -387,10 +432,21 @@ class TraceCompiler:
                 cleanup_failures.extend(orphan_failures)
                 if orphan_failures:
                     self._rollback_orphans.append(orphan)
+            for body_key, persistent in body_inputs.items():
+                if body_key in captured_bodies:
+                    continue
+                orphan = TensorResourceOrphan(persistent.values)
+                orphan_failures = best_effort_deallocate_owned_tensors(
+                    orphan.values,
+                    orphan.deallocated_tensor_ids,
+                )
+                cleanup_failures.extend(orphan_failures)
+                if orphan_failures:
+                    self._rollback_orphans.append(orphan)
 
             self._activated = (
                 bool(self._rollback_orphans)
-                or any(record.artifact is not None for record in self._traces.values())
+                or any(record.artifact is not None for record in (*self._traces.values(), *self._bodies.values()))
                 or any(alias.workspace is not None for alias in self._aliases.values())
             )
             self._capture_in_progress = False
@@ -426,8 +482,22 @@ class TraceCompiler:
         if artifact is None:
             raise RuntimeError(f"Trace key {trace_key.digest} has not been captured")
 
+        body_key = self._body_for_trace.get(trace_key)
+        body_artifact = None
+        if body_key is not None:
+            body_artifact = self._bodies[body_key].artifact
+            if body_artifact is None:
+                raise RuntimeError(f"Trace key {trace_key.digest} has no captured body")
+        # Compare each stage with the same stage of the previous replay: a body
+        # and its tail replay every step, so comparing with the last trace run
+        # would see a switch each time. A tail switch is still a graph switch:
+        # a tail that does not feed tokens back leaves its body's inputs stale.
+        resident_key = trace_key if body_key is None else body_key
+
         policy = artifact.refresh_policy
-        switched = self._previous_replay_key != trace_key
+        switched = self._previous_replay_keys["body"] != resident_key or (
+            body_key is not None and self._previous_replay_keys["tail"] != trace_key
+        )
         if reload_inputs is None:
             full = (
                 (policy.full_on_batch_reset and reset_batch)
@@ -453,6 +523,11 @@ class TraceCompiler:
         try:
             refresh_inputs(artifact, decision)
             self._require_unchanged_program_cache("while refreshing replay inputs")
+            if body_artifact is not None:
+                # Enqueue the tail directly after its body: the tail reads the
+                # body's outputs, and another replay in between could overwrite
+                # them.
+                ttnn.execute_trace(self.mesh_device, body_artifact.trace_id, cq_id=0, blocking=False)
             ttnn.execute_trace(self.mesh_device, artifact.trace_id, cq_id=0, blocking=False)
         except BaseException:
             # Refresh can move slot state or advance RNG counters. Its partial
@@ -461,7 +536,8 @@ class TraceCompiler:
             raise
         self._replay_count += 1
         self._replay_counts[record.operation] += 1
-        self._previous_replay_key = trace_key
+        self._previous_replay_keys["body"] = resident_key
+        self._previous_replay_keys["tail"] = trace_key if body_key is not None else None
         return artifact.outputs
 
     def cleanup(self) -> None:
@@ -480,7 +556,7 @@ class TraceCompiler:
             raise error from failures[0]
         self._capture_in_progress = False
         self._activated = False
-        self._previous_replay_key = None
+        self._previous_replay_keys = {"body": None, "tail": None}
         self.program_compiler.set_trace_capture_in_progress(False)
         self.program_compiler.set_trace_active(False)
         self._released = True
@@ -492,9 +568,63 @@ class TraceCompiler:
 
     def _release_trace_resources(self) -> list[BaseException]:
         failures: list[BaseException] = []
-        for record in self._traces.values():
+        for record in (*self._traces.values(), *self._bodies.values()):
             failures.extend(self._release_trace(record))
         return failures
+
+    def _capture_record(
+        self,
+        record: TraceRecord,
+        persistent: PersistentInputs,
+        refresh_policy: InputRefreshPolicy,
+        capture: Callable[[], Any],
+        *,
+        on_artifact: Callable[[], None],
+    ) -> None:
+        """Capture one trace into ``record``; ``on_artifact`` runs once it owns ``persistent``."""
+
+        self._require_unchanged_program_cache("before capture")
+        self.program_compiler.set_trace_capture_in_progress(True)
+        trace_id = ttnn.begin_trace_capture(self.mesh_device, cq_id=0)
+        outputs = None
+        capture_ended = False
+        try:
+            outputs = capture()
+            ttnn.end_trace_capture(self.mesh_device, trace_id, cq_id=0)
+            capture_ended = True
+            ttnn.synchronize_device(self.mesh_device)
+            self._require_unchanged_program_cache("during capture")
+        except BaseException as primary:
+            # A capture that raised before ``end_trace_capture`` leaves the device
+            # recording. Releasing the trace without closing the region first leaks it,
+            # and every later capture records into it. Ported from
+            # tenstorrent/tt-metal#55343.
+            cleanup_failures = []
+            if not capture_ended:
+                try:
+                    ttnn.end_trace_capture(self.mesh_device, trace_id, cq_id=0)
+                except BaseException as error:
+                    cleanup_failures.append(error)
+            record.artifact = TraceArtifact(
+                trace_id=trace_id,
+                persistent_inputs=persistent,
+                outputs=outputs,
+                refresh_policy=refresh_policy,
+            )
+            on_artifact()
+            cleanup_failures.extend(self._release_trace(record))
+            attach_cleanup_failures(primary, cleanup_failures)
+            raise
+        record.artifact = TraceArtifact(
+            trace_id=trace_id,
+            persistent_inputs=persistent,
+            outputs=outputs,
+            refresh_policy=refresh_policy,
+        )
+        logger.info(f"Captured {record.operation} trace: signature={record.signature!r}")
+        on_artifact()
+        _acknowledge_trace_outputs(outputs)
+        self.program_compiler.set_trace_capture_in_progress(False)
 
     def _release_alias_workspaces(self) -> list[BaseException]:
         failures: list[BaseException] = []
@@ -533,6 +663,10 @@ class TraceCompiler:
     def _ensure_live(self) -> None:
         if self._released:
             raise RuntimeError("TraceCompiler has been released")
+
+
+def _as_persistent(values: Any) -> PersistentInputs:
+    return values if isinstance(values, PersistentInputs) else PersistentInputs(values)
 
 
 def _trim_host_allocator() -> None:

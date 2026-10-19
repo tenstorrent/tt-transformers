@@ -755,6 +755,7 @@ def test_prefill_replay_emits_structured_serving_evidence(monkeypatch):
         "trace_replays_by_operation": {"prefill": 0, "decode": 0},
         "strict_coverage_misses": 0,
         "semantic_trace_count": 0,
+        "decode_body_count": 0,
         "trace_association_count": 0,
     }
 

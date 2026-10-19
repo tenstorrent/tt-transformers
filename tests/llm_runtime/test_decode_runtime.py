@@ -16,6 +16,7 @@ import tt_transformers.llm_runtime.decode as decode_module
 import tt_transformers.llm_runtime.trace_compiler as trace_compiler_module
 from tt_transformers.llm_runtime.config import PageTableLayout
 from tt_transformers.llm_runtime.decode import (
+    DecodeBodySignature,
     DecodeDeviceInputs,
     DecodePersistentInputs,
     DecodeProgramSignature,
@@ -521,13 +522,11 @@ def test_runtime_trace_captures_stable_seed_handle_and_refreshes_before_replay(m
     runtime = make_runtime(seed_buffer=seed_buffer)
     prepared = prepare(runtime, positions=(12, -1), sampling_params=seeded_sampling(88), reset=True)
     monkeypatch.setattr(runtime, "_prepare_inputs_host", lambda prepared: object())
-    monkeypatch.setattr(
-        runtime,
-        "_stage_inputs_and_kpt",
-        lambda host, prepared: (DecodeDeviceInputs(None, None, None, None), None),
-    )
+    monkeypatch.setattr(runtime, "_stage_inputs", lambda host: DecodeDeviceInputs(None, None, None, None))
+    monkeypatch.setattr(runtime, "_make_device_kpt", lambda prepared: None)
 
-    persistent = runtime.capture_plan(prepared).prepare_inputs()
+    plan = runtime.capture_plan(prepared)
+    persistent = plan.prepare_inputs(plan.body.prepare_inputs())
     assert persistent.seed_buffer is seed_buffer.get_device_buffer()
     sampling = prepared.prepared_sampling
     assert sampling is not None
@@ -1147,35 +1146,46 @@ def test_submission_state_tracks_last_table_despite_stale_prepare_change_hint():
 
 
 @pytest.mark.host
-def test_capture_plan_describes_full_step_refresh_and_typed_persistent_inputs(monkeypatch):
+def test_capture_plan_splits_the_step_into_a_shared_body_and_a_sampling_tail(monkeypatch):
+    """The body runs the model into logits; the tail samples them and feeds back
+    into the body's inputs, which the body owns and the tail only borrows."""
+
     runtime = make_runtime()
     prepared = prepare(runtime, sampling_params=greedy_sampling())
     device = DecodeDeviceInputs("tokens", "positions", "rotary", "page_table")
+    calls = []
     monkeypatch.setattr(runtime, "_prepare_inputs_host", lambda request: "host")
-    monkeypatch.setattr(runtime, "_stage_inputs_and_kpt", lambda host, request: (device, "kpt"))
+    monkeypatch.setattr(runtime, "_stage_inputs", lambda host: device)
+    monkeypatch.setattr(runtime, "_make_device_kpt", lambda request: "kpt")
+    monkeypatch.setattr(runtime, "_run_model", lambda inputs: calls.append(("model", inputs)) or "logits")
 
-    def run_body(
-        inputs,
-        prepared,
-        kpt,
-        *,
-        device_feedback,
-        count_tokens=True,
-        advance_seeds=True,
-    ):
+    def run_tail(logits, inputs, prepared, kpt, *, device_feedback, count_tokens=True, advance_seeds=True):
+        calls.append(("tail", logits, inputs, kpt, device_feedback, count_tokens, advance_seeds))
         return "captured"
 
-    monkeypatch.setattr(runtime, "_run_body", run_body)
+    monkeypatch.setattr(runtime, "_run_tail", run_tail)
 
     plan = runtime.capture_plan(prepared)
-    persistent = plan.prepare_inputs()
+    body = plan.body.prepare_inputs()
+    persistent = plan.prepare_inputs(body)
 
+    program = runtime.program_signature(prepared)
+    assert plan.body.signature == DecodeBodySignature(program.batch_size, program.page_table_width)
+    assert plan.body.signature == runtime.body_signature(prepare(runtime, sampling_params=stochastic_sampling(seed=5)))
+    assert body.device_inputs is device
+    assert body.owned_tensor_values() == (device.values(), None)
     assert persistent.device_inputs is device
     assert persistent.kpt == "kpt"
+    assert persistent.owned_tensor_values() == ("kpt",)
     sampling = prepared.prepared_sampling
     assert sampling is not None
     assert persistent.kpt_signature == [(sampling.top_k, sampling.top_p, sampling.temperature)]
-    assert plan.capture(persistent) == "captured"
+    assert plan.body.capture(body) == "logits"
+    assert plan.capture(persistent, "logits") == "captured"
+    assert calls == [
+        ("model", device),
+        ("tail", "logits", device, "kpt", prepared.device_feedback, True, False),
+    ]
     assert plan.refresh_policy.every_replay == ("sampling",)
     assert plan.refresh_policy.full_on_batch_reset
     assert plan.refresh_policy.full_on_graph_switch
@@ -1193,14 +1203,16 @@ def test_capture_prime_restores_each_trace_sampling_state_after_every_plan_was_p
     greedy = prepare(runtime, sampling_params=greedy_sampling())
     stochastic = prepare(runtime, sampling_params=stochastic_sampling(seed=3))
     monkeypatch.setattr(runtime, "_prepare_inputs_host", lambda request: "host")
-    monkeypatch.setattr(runtime, "_stage_inputs_and_kpt", lambda host, request: ("device", None))
+    monkeypatch.setattr(runtime, "_stage_inputs", lambda host: "device")
+    monkeypatch.setattr(runtime, "_make_device_kpt", lambda request: None)
     resets = []
     runtime._sampling_state_controller = SimpleNamespace(
         reset=lambda state, sampling: resets.append(sampling.sampling_path)
     )
 
     plans = [runtime.capture_plan(greedy), runtime.capture_plan(stochastic)]
-    persistent = [plan.prepare_inputs() for plan in plans]
+    body = plans[0].body.prepare_inputs()
+    persistent = [plan.prepare_inputs(body) for plan in plans]
 
     assert plans[0].prime(persistent[0]) is None
     assert resets == [greedy.sampling_path, stochastic.sampling_path, greedy.sampling_path]
@@ -1219,7 +1231,8 @@ def test_penalised_capture_prime_runs_the_counting_body_once_outside_the_trace(m
     )
     assert penalised.prepared_sampling.penalties_enabled
     monkeypatch.setattr(runtime, "_prepare_inputs_host", lambda request: "host")
-    monkeypatch.setattr(runtime, "_stage_inputs_and_kpt", lambda host, request: ("device", "kpt"))
+    monkeypatch.setattr(runtime, "_stage_inputs", lambda host: "device")
+    monkeypatch.setattr(runtime, "_make_device_kpt", lambda request: "kpt")
     events = []
     runtime._sampling_state_controller = SimpleNamespace(reset=lambda state, sampling: events.append("reset"))
 
@@ -1229,7 +1242,7 @@ def test_penalised_capture_prime_runs_the_counting_body_once_outside_the_trace(m
 
     monkeypatch.setattr(runtime, "_run_body", run_body)
     plan = runtime.capture_plan(penalised)
-    persistent = plan.prepare_inputs()
+    persistent = plan.prepare_inputs(plan.body.prepare_inputs())
     events.clear()
 
     assert plan.prime(persistent) == "primed"
@@ -1833,20 +1846,20 @@ def test_decode_capture_restores_each_shared_sampling_identity_without_device_re
         reset=reset, static_identity=lambda sampling: sampling.sampling_path
     )
     monkeypatch.setattr(runtime, "_prepare_inputs_host", lambda _: None)
-    monkeypatch.setattr(
-        runtime, "_stage_inputs_and_kpt", lambda *args: (DecodeDeviceInputs(None, None, None, None), None)
-    )
+    monkeypatch.setattr(runtime, "_stage_inputs", lambda host: DecodeDeviceInputs(None, None, None, None))
+    monkeypatch.setattr(runtime, "_make_device_kpt", lambda prepared: None)
     identities = []
-    monkeypatch.setattr(runtime, "_run_body", lambda *args, **kwargs: identities.append(state.static_identity))
+    monkeypatch.setattr(runtime, "_run_tail", lambda *args, **kwargs: identities.append(state.static_identity))
     first = runtime.capture_plan(prepare(runtime, sampling_params=greedy_sampling()))
     second = runtime.capture_plan(prepare(runtime, sampling_params=stochastic_sampling()))
-    first_inputs = first.prepare_inputs()
-    second_inputs = second.prepare_inputs()
+    body = first.body.prepare_inputs()
+    first_inputs = first.prepare_inputs(body)
+    second_inputs = second.prepare_inputs(body)
     reset_count = len(resets)
     first.prepare_capture(first_inputs)
-    first.capture(first_inputs)
+    first.capture(first_inputs, "logits")
     second.prepare_capture(second_inputs)
-    second.capture(second_inputs)
+    second.capture(second_inputs, "logits")
     assert identities == ["argmax", "topk"]
     assert len(resets) == reset_count
 
