@@ -11,16 +11,15 @@ remain family-owned here.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import wraps
 from typing import Any
 
 import torch
 
-from tt_transformers.llm_runtime.execution import EagerExecutor, TracedExecutor
 from tt_transformers.llm_runtime.warmup import topk_warmup_sampling_variants
-from tt_transformers.models.executor import ModelExecutor, ModelExecutorConfig
+from tt_transformers.models.executor import ModelExecutor, ModelExecutorConfig, create_sampling_state
 from tt_transformers.modules.sampling.sampling_1d import Sampling1D
 
 
@@ -189,133 +188,6 @@ def _with_executor_facade(cls):
     return cls
 
 
-class _Qwen2RequestSurface:
-    """The pre-history request contract retained by every Qwen2 product."""
-
-    def compile_prefill(
-        self,
-        *,
-        tokens: torch.Tensor,
-        page_table: torch.Tensor,
-        prompt_lens: torch.Tensor | None = None,
-        start_pos: torch.Tensor | None = None,
-        empty_slots: Sequence[int] | None = None,
-        kv_cache: Any = None,
-        sampling_params: Any = None,
-        execution: EagerExecutor | TracedExecutor | None = None,
-    ) -> None:
-        return ModelExecutor.compile_prefill(
-            _model_executor_target(self),
-            tokens=tokens,
-            page_table=page_table,
-            prompt_lens=prompt_lens,
-            start_pos=start_pos,
-            empty_slots=empty_slots,
-            kv_cache=kv_cache,
-            sampling_params=sampling_params,
-            execution=execution,
-        )
-
-    def compile_decode(
-        self,
-        *,
-        tokens: torch.Tensor,
-        start_pos: torch.Tensor,
-        page_table: torch.Tensor,
-        kv_cache: Any = None,
-        sampling_params: Any = None,
-        slot_remap: Any = None,
-        reset_batch: bool = False,
-        reload_inputs: bool | None = None,
-        reload_page_table: bool = False,
-        reload_sampling_params: bool = False,
-        reset_sampling_state: bool = False,
-        execution: EagerExecutor | TracedExecutor | None = None,
-    ) -> None:
-        return ModelExecutor.compile_decode(
-            _model_executor_target(self),
-            tokens=tokens,
-            start_pos=start_pos,
-            page_table=page_table,
-            kv_cache=kv_cache,
-            sampling_params=sampling_params,
-            slot_remap=slot_remap,
-            reset_batch=reset_batch,
-            reload_inputs=reload_inputs,
-            reload_page_table=reload_page_table,
-            reload_sampling_params=reload_sampling_params,
-            reset_sampling_state=reset_sampling_state,
-            execution=execution,
-        )
-
-    def prefill_forward(
-        self,
-        tokens: torch.Tensor,
-        page_table: torch.Tensor,
-        *,
-        prompt_lens: torch.Tensor | None = None,
-        start_pos: torch.Tensor | None = None,
-        empty_slots: Sequence[int] | None = None,
-        kv_cache: Any = None,
-        sampling_params: Any = None,
-        execution: EagerExecutor | TracedExecutor | None = None,
-    ) -> Any:
-        return ModelExecutor.prefill_forward(
-            _model_executor_target(self),
-            tokens,
-            page_table,
-            prompt_lens=prompt_lens,
-            start_pos=start_pos,
-            empty_slots=empty_slots,
-            kv_cache=kv_cache,
-            sampling_params=sampling_params,
-            execution=execution,
-        )
-
-    def decode_forward(
-        self,
-        tokens: torch.Tensor,
-        start_pos: torch.Tensor,
-        page_table: torch.Tensor,
-        *,
-        kv_cache: Any = None,
-        sampling_params: Any = None,
-        slot_remap: Any = None,
-        reset_batch: bool = False,
-        reload_inputs: bool | None = None,
-        reload_page_table: bool = False,
-        reload_sampling_params: bool = False,
-        reset_sampling_state: bool = False,
-        read_from_device: bool = True,
-        execution: EagerExecutor | TracedExecutor | None = None,
-    ) -> Any:
-        return ModelExecutor.decode_forward(
-            _model_executor_target(self),
-            tokens,
-            start_pos,
-            page_table,
-            kv_cache=kv_cache,
-            sampling_params=sampling_params,
-            slot_remap=slot_remap,
-            reset_batch=reset_batch,
-            reload_inputs=reload_inputs,
-            reload_page_table=reload_page_table,
-            reload_sampling_params=reload_sampling_params,
-            reset_sampling_state=reset_sampling_state,
-            read_from_device=read_from_device,
-            execution=execution,
-        )
-
-
-_QWEN2_REQUEST_SURFACE = ("compile_prefill", "compile_decode", "prefill_forward", "decode_forward")
-
-
-def _with_qwen2_request_surface(cls):
-    for name in _QWEN2_REQUEST_SURFACE:
-        setattr(cls, name, _Qwen2RequestSurface.__dict__[name])
-    return cls
-
-
 def _warmup_model_prefill_q128(
     self,
     *,
@@ -365,72 +237,90 @@ def _warmup_q128_topk_tile_ends_method(
 
 
 @_with_executor_facade
-@_with_qwen2_request_surface
 class Qwen2Executor:
     """Qwen2-7B façade with explicit Q128 top-k priming."""
 
     requires_prefill_trace_warmup = True
     _owner_name = "Qwen2Executor"
+    request_state_fields = ("prompt_tokens", "output_tokens", "slot_remap")
     warmup_model_prefill = _warmup_model_prefill_q128
     _warmup_q128_topk_tile_ends = _warmup_q128_topk_tile_ends_method
 
     def __init__(self, model: Any, runtime_config: Any, config: Qwen2ExecutorConfig) -> None:
         if not isinstance(config, Qwen2ExecutorConfig):
             raise TypeError("config must be a Qwen2ExecutorConfig")
+        sampling_state_controller, sampling_state = create_sampling_state(
+            model, config.device_sampling_enabled, salt_duplicate_seeds=config.salt_duplicate_seeds
+        )
         self._model_executor = ModelExecutor(
             model,
             runtime_config,
             config,
             owner_name="Qwen2Executor",
+            sampling_state_controller=sampling_state_controller,
+            sampling_state=sampling_state,
             sampling_type=Sampling1D,
+            request_state_fields=("prompt_tokens", "output_tokens", "slot_remap"),
             prefill_warmup=_warmup_q128_around_prefill,
         )
         self._model_executor._q128_topk_tile_ends_warmed = set()
 
 
 @_with_executor_facade
-@_with_qwen2_request_surface
 class Qwen25Executor:
     """Qwen2.5-7B façade with explicit Q128 top-k priming."""
 
     requires_prefill_trace_warmup = True
     _owner_name = "Qwen25Executor"
+    request_state_fields = ("prompt_tokens", "output_tokens", "slot_remap")
     warmup_model_prefill = _warmup_model_prefill_q128
     _warmup_q128_topk_tile_ends = _warmup_q128_topk_tile_ends_method
 
     def __init__(self, model: Any, runtime_config: Any, config: Qwen25ExecutorConfig) -> None:
         if not isinstance(config, Qwen25ExecutorConfig):
             raise TypeError("config must be a Qwen25ExecutorConfig")
+        sampling_state_controller, sampling_state = create_sampling_state(
+            model, config.device_sampling_enabled, salt_duplicate_seeds=config.salt_duplicate_seeds
+        )
         self._model_executor = ModelExecutor(
             model,
             runtime_config,
             config,
             owner_name="Qwen25Executor",
+            sampling_state_controller=sampling_state_controller,
+            sampling_state=sampling_state,
             sampling_type=Sampling1D,
+            request_state_fields=("prompt_tokens", "output_tokens", "slot_remap"),
             prefill_warmup=_warmup_q128_around_prefill,
         )
         self._model_executor._q128_topk_tile_ends_warmed = set()
 
 
 @_with_executor_facade
-@_with_qwen2_request_surface
 class Qwen25_72BExecutor:
     """Qwen2.5-72B façade with explicit Q128 top-k priming."""
 
     requires_prefill_trace_warmup = True
     _owner_name = "Qwen25_72BExecutor"
+    request_state_fields = ("prompt_tokens", "output_tokens", "slot_remap")
     warmup_model_prefill = _warmup_model_prefill_q128
     _warmup_q128_topk_tile_ends = _warmup_q128_topk_tile_ends_method
 
     def __init__(self, model: Any, runtime_config: Any, config: Qwen25_72BExecutorConfig) -> None:
         if not isinstance(config, Qwen25_72BExecutorConfig):
             raise TypeError("config must be a Qwen25_72BExecutorConfig")
+        sampling_state_controller, sampling_state = create_sampling_state(
+            model, config.device_sampling_enabled, salt_duplicate_seeds=config.salt_duplicate_seeds
+        )
         self._model_executor = ModelExecutor(
             model,
             runtime_config,
             config,
             owner_name="Qwen25_72BExecutor",
+            sampling_state_controller=sampling_state_controller,
+            sampling_state=sampling_state,
             sampling_type=Sampling1D,
+            request_state_fields=("prompt_tokens", "output_tokens", "slot_remap"),
             prefill_warmup=_warmup_q128_around_prefill,
         )
         self._model_executor._q128_topk_tile_ends_warmed = set()
@@ -445,24 +335,30 @@ class Qwen25_72BExecutor:
 
 
 @_with_executor_facade
-@_with_qwen2_request_surface
 class Qwen25Coder32BExecutor:
     """Qwen2.5-Coder-32B façade with explicit Q128 top-k priming."""
 
     requires_prefill_trace_warmup = True
     _owner_name = "Qwen25Coder32BExecutor"
+    request_state_fields = ("prompt_tokens", "output_tokens", "slot_remap")
     warmup_model_prefill = _warmup_model_prefill_q128
     _warmup_q128_topk_tile_ends = _warmup_q128_topk_tile_ends_method
 
     def __init__(self, model: Any, runtime_config: Any, config: Qwen25Coder32BExecutorConfig) -> None:
         if not isinstance(config, Qwen25Coder32BExecutorConfig):
             raise TypeError("config must be a Qwen25Coder32BExecutorConfig")
+        sampling_state_controller, sampling_state = create_sampling_state(
+            model, config.device_sampling_enabled, salt_duplicate_seeds=config.salt_duplicate_seeds
+        )
         self._model_executor = ModelExecutor(
             model,
             runtime_config,
             config,
             owner_name="Qwen25Coder32BExecutor",
+            sampling_state_controller=sampling_state_controller,
+            sampling_state=sampling_state,
             sampling_type=Sampling1D,
+            request_state_fields=("prompt_tokens", "output_tokens", "slot_remap"),
             prefill_warmup=_warmup_q128_around_prefill,
         )
         self._model_executor._q128_topk_tile_ends_warmed = set()

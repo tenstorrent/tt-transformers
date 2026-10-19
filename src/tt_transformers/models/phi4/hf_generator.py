@@ -45,6 +45,7 @@ from tt_transformers.llm_runtime.warmup import (
     resolve_prefill_warmup_seq_lens,
     topk_warmup_sampling_variants,
 )
+from tt_transformers.models.executor import create_sampling_state
 from tt_transformers.models.phi4 import weight_utils
 from tt_transformers.models.phi4.model import (
     PHI4_ACCURACY,
@@ -458,6 +459,7 @@ class Phi4Executor:
     """
 
     requires_prefill_trace_warmup = True
+    request_state_fields = ("prompt_tokens", "output_tokens", "slot_remap")
 
     def __init__(self, model: Any, runtime_config: Any, config: Phi4ExecutorConfig) -> None:
         if not isinstance(config, Phi4ExecutorConfig):
@@ -493,6 +495,11 @@ class Phi4Executor:
             if not callable(is_resolved) or not is_resolved():
                 raise ValueError("model.sampling must have a resolved Sampling1DConfig")
 
+        self.sampling_state_controller, self.sampling_state = create_sampling_state(
+            model, config.device_sampling_enabled, salt_duplicate_seeds=config.salt_duplicate_seeds
+        )
+        self._request_state_fields = ("prompt_tokens", "output_tokens", "slot_remap")
+
         self.kv_cache_manager = PagedKVCacheManager(model, config.paged_kv_cache)
         self.page_table_layout = self._resolve_page_table_layout()
         self.output_reader = OutputReader(mesh_device)
@@ -510,6 +517,8 @@ class Phi4Executor:
                 max_prefill_batch_size=int(runtime_config.max_prefill_batch_size),
                 batched_prefill_batched_extract=bool(runtime_config.batched_prefill_batched_extract),
                 fixed_prefill_batch_sizes=config.fixed_prefill_batch_sizes,
+                sampling_state_controller=self.sampling_state_controller,
+                sampling_state=self.sampling_state,
             )
         )
         self.decode_runtime = DecodeRuntime(
@@ -521,6 +530,8 @@ class Phi4Executor:
                 device_sampling_enabled=config.device_sampling_enabled,
                 force_greedy_top_k=config.warmup.include_decode_top_k,
                 salt_duplicate_seeds=config.salt_duplicate_seeds,
+                sampling_state_controller=self.sampling_state_controller,
+                sampling_state=self.sampling_state,
             )
         )
         self.program_compiler = ProgramCompiler(mesh_device, lambda: self.kv_cache_manager.bound_context)
@@ -664,6 +675,9 @@ class Phi4Executor:
         empty_slots: Sequence[int] | None = None,  # ↓ Lane routing
         kv_cache: Any = None,  # ↓ Borrowed resources
         sampling_params: Any = None,  # ↓ Sampling
+        prompt_tokens: Any = None,  # ↓ Request-owned sampling state
+        output_tokens: Any = None,
+        slot_remap: Any = None,
         execution: EagerExecutor | TracedExecutor | None = None,  # ↓ Internal dispatch
     ) -> None:
         """Compile prefill on the supplied eager or traced execution target."""
@@ -682,6 +696,9 @@ class Phi4Executor:
             start_pos=start_pos,
             empty_slots=empty_slots,
             sampling_params=sampling_params,
+            prompt_tokens=prompt_tokens,
+            output_tokens=output_tokens,
+            slot_remap=slot_remap,
         )
 
     def compile_decode(
@@ -692,6 +709,8 @@ class Phi4Executor:
         page_table: torch.Tensor,
         kv_cache: Any = None,  # ↓ Borrowed resources
         sampling_params: Any = None,  # ↓ Sampling
+        prompt_tokens: Any = None,  # ↓ Request-owned sampling state
+        output_tokens: Any = None,
         slot_remap: Any = None,
         reset_batch: bool = False,  # ↓ State transition
         reload_inputs: bool | None = None,
@@ -710,6 +729,8 @@ class Phi4Executor:
             start_pos=start_pos,
             page_table=page_table,
             sampling_params=sampling_params,
+            prompt_tokens=prompt_tokens,
+            output_tokens=output_tokens,
             slot_remap=slot_remap,
             reset_batch=reset_batch,
             reload_inputs=reload_inputs,
@@ -728,6 +749,9 @@ class Phi4Executor:
         empty_slots: Sequence[int] | None = None,  # ↓ Lane routing
         kv_cache: Any = None,  # ↓ Borrowed resources
         sampling_params: Any = None,  # ↓ Sampling
+        prompt_tokens: Any = None,  # ↓ Request-owned sampling state
+        output_tokens: Any = None,
+        slot_remap: Any = None,
         execution: EagerExecutor | TracedExecutor | None = None,  # ↓ Internal dispatch
     ) -> Any:
         """Validate ownership and execute one prefill call."""
@@ -746,6 +770,9 @@ class Phi4Executor:
             start_pos=start_pos,
             empty_slots=empty_slots,
             sampling_params=sampling_params,
+            prompt_tokens=prompt_tokens,
+            output_tokens=output_tokens,
+            slot_remap=slot_remap,
         )
 
     def _resolve_prefill_execution(self, *, tokens, prompt_lens, start_pos, empty_slots):
@@ -776,6 +803,8 @@ class Phi4Executor:
         *,
         kv_cache: Any = None,  # ↓ Borrowed resources
         sampling_params: Any = None,  # ↓ Sampling
+        prompt_tokens: Any = None,  # ↓ Request-owned sampling state
+        output_tokens: Any = None,
         slot_remap: Any = None,
         reset_batch: bool = False,  # ↓ State transition
         reload_inputs: bool | None = None,
@@ -795,6 +824,8 @@ class Phi4Executor:
             start_pos=start_pos,
             page_table=page_table,
             sampling_params=sampling_params,
+            prompt_tokens=prompt_tokens,
+            output_tokens=output_tokens,
             slot_remap=slot_remap,
             reset_batch=reset_batch,
             reload_inputs=reload_inputs,
@@ -999,6 +1030,8 @@ class Phi4Executor:
             max_prefill_batch_size=current_prefill.max_prefill_batch_size,
             batched_prefill_batched_extract=current_prefill.batched_prefill_batched_extract,
             fixed_prefill_batch_sizes=current_prefill.fixed_prefill_batch_sizes,
+            sampling_state_controller=current_prefill.sampling_state_controller,
+            sampling_state=current_prefill.sampling_state,
         )
         current_decode = self.decode_runtime.config
         decode_config = DecodeRuntimeConfig.resolve(
@@ -1009,6 +1042,8 @@ class Phi4Executor:
             device_sampling_enabled=current_decode.device_sampling_enabled,
             force_greedy_top_k=current_decode.force_greedy_top_k,
             salt_duplicate_seeds=current_decode.salt_duplicate_seeds,
+            sampling_state_controller=current_decode.sampling_state_controller,
+            sampling_state=current_decode.sampling_state,
         )
         warmup_config = WarmupCoordinatorConfig.resolve(
             warmup=self.warmup.config.warmup,
