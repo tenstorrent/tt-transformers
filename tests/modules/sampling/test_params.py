@@ -506,14 +506,98 @@ def test_generators_decline_device_logprobs(relative_path, class_name):
     assert _capabilities_from_source(relative_path, class_name)["supports_device_logprobs"] is False
 
 
-_EXECUTORS_WITH_DEVICE_PENALTY_STATE = {"Llama3Generator", "Llama33_70BGenerator", "Qwen3_32BGenerator"}
+def _module_path(module_name):
+    return _REPOSITORY_ROOT / "src" / Path(*module_name.split(".")).with_suffix(".py")
+
+
+def _parsed_module(module_name):
+    path = _module_path(module_name)
+    return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+
+
+def _called_names(node):
+    return {call.func.id for call in ast.walk(node) if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)}
+
+
+def _function_builds_sampling_state(module_name, function_name, seen):
+    """Whether ``module_name.function_name`` constructs a ``SamplingState1D``,
+    directly or through a function it calls that is defined in its own module
+    or imported from another tt_transformers module."""
+    if (module_name, function_name) in seen or not _module_path(module_name).is_file():
+        return False
+    seen.add((module_name, function_name))
+    tree = _parsed_module(module_name)
+    function = next(
+        (node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == function_name), None
+    )
+    return function is not None and _body_builds_sampling_state(module_name, tree, function, seen)
+
+
+def _body_builds_sampling_state(module_name, tree, body, seen):
+    called = _called_names(body)
+    if "SamplingState1D" in called:
+        return True
+    imported = {
+        alias.asname or alias.name: node.module
+        for node in tree.body
+        if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("tt_transformers.")
+        for alias in node.names
+    }
+    return any(_function_builds_sampling_state(imported.get(name, module_name), name, seen) for name in called)
+
+
+def _executor_builds_sampling_state(generator_path):
+    """Whether the executor a vLLM generator builds owns a ``SamplingState1D``.
+
+    The executor class is the return annotation of the ``build_*_executor`` the
+    generator imports; it owns the controller when its ``__init__`` constructs
+    one. Read from source, so a change to which executors build the controller
+    changes the expected declarations without editing this test."""
+    generator_tree = ast.parse((_REPOSITORY_ROOT / generator_path).read_text(encoding="utf-8"))
+    builder_module, builder_name = next(
+        (node.module, alias.name)
+        for node in generator_tree.body
+        if isinstance(node, ast.ImportFrom) and node.module and node.module.endswith(".hf_generator")
+        for alias in node.names
+        if alias.name.startswith("build_") and alias.name.endswith("_executor")
+    )
+    builder_tree = _parsed_module(builder_module)
+    builder = next(
+        node for node in builder_tree.body if isinstance(node, ast.FunctionDef) and node.name == builder_name
+    )
+    executor_name = ast.unparse(builder.returns)
+    imported = {
+        alias.asname or alias.name: node.module
+        for node in builder_tree.body
+        if isinstance(node, ast.ImportFrom) and node.module
+        for alias in node.names
+    }
+    executor_module = imported.get(executor_name, builder_module)
+    executor_tree = _parsed_module(executor_module)
+    executor = next(
+        node for node in executor_tree.body if isinstance(node, ast.ClassDef) and node.name == executor_name
+    )
+    init = next(node for node in executor.body if isinstance(node, ast.FunctionDef) and node.name == "__init__")
+    return _body_builds_sampling_state(executor_module, executor_tree, init, set())
+
+
+_EXECUTORS_WITH_DEVICE_PENALTY_STATE = {
+    class_name for relative_path, class_name in _TARGET_GENERATORS if _executor_builds_sampling_state(relative_path)
+}
+
+
+@pytest.mark.host
+def test_penalty_state_derivation_finds_the_controller_executors():
+    # The scan must find the executors that do build the controller, or the two
+    # declaration tests below would pass vacuously by expecting False everywhere.
+    assert {"Llama3Generator", "Llama33_70BGenerator", "Qwen3_32BGenerator"} <= _EXECUTORS_WITH_DEVICE_PENALTY_STATE
 
 
 @pytest.mark.host
 @pytest.mark.parametrize(("relative_path", "class_name"), _TARGET_GENERATORS)
 def test_generators_without_penalty_state_decline_device_penalties(relative_path, class_name):
-    # Only these executors build a SamplingState1D, which holds the penalty
-    # buffers; elsewhere a penalised device program would apply no penalty.
+    # Only executors that build a SamplingState1D hold the penalty buffers;
+    # elsewhere a penalised device program would apply no penalty.
     capabilities = _capabilities_from_source(relative_path, class_name)
     expected = class_name in _EXECUTORS_WITH_DEVICE_PENALTY_STATE
     assert capabilities.get("supports_device_penalties", True) is expected
