@@ -293,7 +293,11 @@ class SamplingState1D:
 
         self._require_idle(state)
         self._validate_prepared(prepared)
+        unpenalized = {}
         if prepared.penalties_enabled:
+            if _wants_log_probs(prepared):
+                unpenalized = {"log_prob_logits": logits}
+                logits = ttnn.clone(logits)
             logits = self.penalties.decode_forward(logits, state.penalty_params, state.penalty_accumulator)
         output = self.sampling.decode_forward(
             logits,
@@ -303,6 +307,7 @@ class SamplingState1D:
             seeds=self.seed_manager.get_seed_device_buffer() if prepared.sampling_path == "topk" else None,
             tt_out_tok=tt_out_tok,
             enable_log_probs=list(prepared.enable_log_probs),
+            **unpenalized,
         )
         if prepared.penalties_enabled and count_tokens:
             self.penalties.update_output_tokens(state.penalty_accumulator, output[0])
@@ -675,8 +680,10 @@ class SamplingState1D:
             if state.static_identity != identity:
                 raise RuntimeError("sampling body state does not match its static trace/program identity")
         if prepared.penalties_enabled:
+            # Penalties rewrite the logits they are given. Logprobs come from the
+            # unpenalised logits, so a step that returns them penalises a copy.
             logits = self.penalties.decode_forward(
-                logits,
+                ttnn.clone(logits) if _wants_log_probs(prepared) else logits,
                 state.penalty_params,
                 state.penalty_accumulator,
             )
@@ -746,6 +753,7 @@ class SamplingState1D:
             positions=positions,
             advance_seeds=advance_seeds,
         )
+        unpenalized = {"log_prob_logits": logits} if prepared.penalties_enabled and _wants_log_probs(prepared) else {}
         try:
             output = self.sampling.decode_forward(
                 penalized_logits,
@@ -755,6 +763,7 @@ class SamplingState1D:
                 seeds=(self.seed_manager.get_seed_device_buffer() if prepared.sampling_path == "topk" else None),
                 tt_out_tok=tt_out_tok,
                 enable_log_probs=list(prepared.enable_log_probs),
+                **unpenalized,
             )
         except BaseException:
             self.cancel_sampling(state, sample_id=sample_id)
@@ -1078,3 +1087,9 @@ def _pad_history(tokens: torch.Tensor, width: int, *, name: str) -> torch.Tensor
     padded = torch.full((int(tokens.shape[0]), width), -1, dtype=torch.int64)
     padded[:, :length] = tokens.to(torch.int64)
     return padded
+
+
+def _wants_log_probs(prepared: PreparedSamplingParams) -> bool:
+    """Whether any row of this step returns logprobs."""
+
+    return any(bool(enabled) for enabled in prepared.enable_log_probs)
