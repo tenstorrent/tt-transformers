@@ -11,6 +11,7 @@ Llama 3 products.  The facades deliberately do not subclass ``ModelExecutor``.
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import wraps
@@ -24,6 +25,7 @@ from tt_transformers.llm_runtime.warmup import topk_warmup_sampling_variants
 from tt_transformers.models.executor import ModelExecutor, ModelExecutorConfig
 from tt_transformers.modules.sampling.sampling_1d import Sampling1D
 from tt_transformers.modules.sampling.sampling_state_1d import SamplingState1D
+from tt_transformers.modules.sampling.seed_manager_1d import SeedManager1D
 
 
 @dataclass(frozen=True)
@@ -377,7 +379,9 @@ class Llama3Executor:
     def __init__(self, model: Any, runtime_config: Any, config: Llama3ExecutorConfig) -> None:
         if not isinstance(config, Llama3ExecutorConfig):
             raise TypeError("config must be a Llama3ExecutorConfig")
-        sampling_state_controller, sampling_state = _create_sampling_state(model, config.device_sampling_enabled)
+        sampling_state_controller, sampling_state = _create_sampling_state(
+            model, config.device_sampling_enabled, salt_duplicate_seeds=config.salt_duplicate_seeds
+        )
         disable_batched_prefill = (
             False
             if config.allow_batched_prefill_with_device_sampling_for_diagnostics
@@ -410,7 +414,9 @@ class Llama33_70BExecutor:
     def __init__(self, model: Any, runtime_config: Any, config: Llama33_70BExecutorConfig) -> None:
         if not isinstance(config, Llama33_70BExecutorConfig):
             raise TypeError("config must be a Llama33_70BExecutorConfig")
-        sampling_state_controller, sampling_state = _create_sampling_state(model, config.device_sampling_enabled)
+        sampling_state_controller, sampling_state = _create_sampling_state(
+            model, config.device_sampling_enabled, salt_duplicate_seeds=config.salt_duplicate_seeds
+        )
         self._model_executor = ModelExecutor(
             model,
             runtime_config,
@@ -426,7 +432,7 @@ class Llama33_70BExecutor:
         self._model_executor._q128_topk_tile_ends_warmed = set()
 
 
-def _create_sampling_state(model: Any, enabled: bool) -> tuple[Any, Any]:
+def _create_sampling_state(model: Any, enabled: bool, *, salt_duplicate_seeds: bool) -> tuple[Any, Any]:
     if not enabled:
         return None, None
     sampling = getattr(model, "sampling", None)
@@ -435,7 +441,10 @@ def _create_sampling_state(model: Any, enabled: bool) -> tuple[Any, Any]:
     is_resolved = getattr(getattr(sampling, "config", None), "is_resolved", None)
     if not callable(is_resolved) or not is_resolved():
         raise ValueError("model.sampling must have a resolved Sampling1DConfig")
-    controller = SamplingState1D(sampling)
+    controller = SamplingState1D(
+        sampling,
+        seed_manager_factory=functools.partial(SeedManager1D, salt_duplicate_seeds=salt_duplicate_seeds),
+    )
     return controller, controller.create_state()
 
 

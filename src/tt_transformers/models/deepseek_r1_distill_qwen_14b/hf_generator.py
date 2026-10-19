@@ -437,6 +437,8 @@ class DeepSeekR1Qwen14BExecutorConfig:
     sequential_prefill: bool = False
     # Fixed-shape batched prefill (see ``ModelExecutorConfig.fixed_prefill_batch_sizes``).
     fixed_prefill_batch_sizes: tuple[tuple[int, int], ...] = ()
+    # Distinct streams for equal explicit seeds (see ``ModelExecutorConfig.salt_duplicate_seeds``).
+    salt_duplicate_seeds: bool = True
 
     def __post_init__(self) -> None:
         nested_configs = (
@@ -451,6 +453,8 @@ class DeepSeekR1Qwen14BExecutorConfig:
             raise TypeError("device_sampling_enabled must be bool")
         if not isinstance(self.sequential_prefill, bool):
             raise TypeError("sequential_prefill must be bool")
+        if not isinstance(self.salt_duplicate_seeds, bool):
+            raise TypeError("salt_duplicate_seeds must be bool")
         validate_prefill_policy(self.sequential_prefill, self.fixed_prefill_batch_sizes)
 
 
@@ -532,6 +536,7 @@ class DeepSeekR1Qwen14BExecutor:
                 page_table_layout=self.page_table_layout,
                 device_sampling_enabled=config.device_sampling_enabled,
                 force_greedy_top_k=config.warmup.include_decode_top_k,
+                salt_duplicate_seeds=config.salt_duplicate_seeds,
             )
         )
         self.program_compiler = ProgramCompiler(mesh_device, lambda: self.kv_cache_manager.bound_context)
@@ -1015,6 +1020,7 @@ class DeepSeekR1Qwen14BExecutor:
             page_table_layout=layout,
             device_sampling_enabled=current_decode.device_sampling_enabled,
             force_greedy_top_k=current_decode.force_greedy_top_k,
+            salt_duplicate_seeds=current_decode.salt_duplicate_seeds,
         )
         warmup_config = WarmupCoordinatorConfig.resolve(
             warmup=self.warmup.config.warmup,

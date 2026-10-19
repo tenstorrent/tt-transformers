@@ -440,6 +440,7 @@ def build_llama3_generator(config: Llama3GeneratorConfig) -> Llama3Generator:
                 ),
                 device_sampling_enabled=config.device_sampling_enabled,
                 sequential_prefill=True,
+                salt_duplicate_seeds=False,
             )
             lanes.append(build_llama3_executor(llm, executor_config))
 

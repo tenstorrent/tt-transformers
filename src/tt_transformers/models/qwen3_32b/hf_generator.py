@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import functools
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
@@ -39,6 +40,7 @@ from tt_transformers.models.qwen3_32b.model import (
 )
 from tt_transformers.modules.sampling.sampling_1d import Sampling1D
 from tt_transformers.modules.sampling.sampling_state_1d import SamplingState1D
+from tt_transformers.modules.sampling.seed_manager_1d import SeedManager1D
 
 DEFAULT_HF_MODEL = "Qwen/Qwen3-32B"
 
@@ -500,7 +502,9 @@ class Qwen3_32BExecutor:
         if not isinstance(config, Qwen3_32BExecutorConfig):
             raise TypeError("config must be a Qwen3_32BExecutorConfig")
 
-        sampling_state_controller, sampling_state = _create_sampling_state(model, config.device_sampling_enabled)
+        sampling_state_controller, sampling_state = _create_sampling_state(
+            model, config.device_sampling_enabled, salt_duplicate_seeds=config.salt_duplicate_seeds
+        )
         trace_capture_prime_sequence_lengths = _resolve_trace_capture_prime_sequence_lengths(
             runtime_config,
             num_devices=int(model.config.mesh_device.get_num_devices()),
@@ -521,7 +525,7 @@ class Qwen3_32BExecutor:
         self._model_executor._q128_topk_tile_ends_warmed = set()
 
 
-def _create_sampling_state(model: Any, enabled: bool) -> tuple[Any, Any]:
+def _create_sampling_state(model: Any, enabled: bool, *, salt_duplicate_seeds: bool) -> tuple[Any, Any]:
     if not enabled:
         return None, None
     sampling = getattr(model, "sampling", None)
@@ -530,7 +534,10 @@ def _create_sampling_state(model: Any, enabled: bool) -> tuple[Any, Any]:
     is_resolved = getattr(getattr(sampling, "config", None), "is_resolved", None)
     if not callable(is_resolved) or not is_resolved():
         raise ValueError("model.sampling must have a resolved Sampling1DConfig")
-    controller = SamplingState1D(sampling)
+    controller = SamplingState1D(
+        sampling,
+        seed_manager_factory=functools.partial(SeedManager1D, salt_duplicate_seeds=salt_duplicate_seeds),
+    )
     return controller, controller.create_state()
 
 

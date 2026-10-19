@@ -455,6 +455,7 @@ def build_llama32_3b_generator(config: Llama32_3BGeneratorConfig) -> Llama32_3BG
                 ),
                 device_sampling_enabled=config.device_sampling_enabled,
                 sequential_prefill=True,
+                salt_duplicate_seeds=False,
             )
             lanes.append(build_llama32_3b_executor(llm, executor_config))
 

@@ -91,7 +91,7 @@ class FakeLazySeedBuffer:
         return self._value
 
 
-def make_runtime(*, sampling=True, force_greedy_top_k=False, seed_buffer=None):
+def make_runtime(*, sampling=True, force_greedy_top_k=False, seed_buffer=None, salt_duplicate_seeds=True):
     mesh = FakeMesh()
     model = FakeModel(seed_buffer)
     config = DecodeRuntimeConfig.resolve(
@@ -101,6 +101,7 @@ def make_runtime(*, sampling=True, force_greedy_top_k=False, seed_buffer=None):
         page_table_layout=page_table_layout(),
         device_sampling_enabled=sampling,
         force_greedy_top_k=force_greedy_top_k,
+        salt_duplicate_seeds=salt_duplicate_seeds,
     )
     return DecodeRuntime(config)
 
@@ -1768,8 +1769,9 @@ def test_live_eager_decode_buffers_block_trace_until_read_completes(monkeypatch,
 
 
 @pytest.mark.host
-def test_v1_remap_and_reset_preserve_continuing_equal_seed_salt():
-    runtime = make_runtime(seed_buffer=FakeLazySeedBuffer())
+@pytest.mark.parametrize("salt_duplicate_seeds", (True, False))
+def test_v1_remap_and_reset_preserve_continuing_equal_seed_salt(salt_duplicate_seeds):
+    runtime = make_runtime(seed_buffer=FakeLazySeedBuffer(), salt_duplicate_seeds=salt_duplicate_seeds)
     initial = prepare_v1(
         runtime,
         positions=(7, 7),
@@ -1780,7 +1782,10 @@ def test_v1_remap_and_reset_preserve_continuing_equal_seed_salt():
     runtime._refresh_sampling_seeds(initial)
     runtime.note_submitted(initial)
     salt = runtime._seed_state.salts[1]
-    assert salt != runtime._seed_state.salts[0]
+    # Salting separates the two equal-seed requests; without it both keep salt 0,
+    # so each one's stream depends on its seed alone.
+    assert (salt != runtime._seed_state.salts[0]) is salt_duplicate_seeds
+    assert runtime._seed_manager.salt_duplicate_seeds is salt_duplicate_seeds
     moved = prepare_v1(
         runtime,
         positions=(8, -1),

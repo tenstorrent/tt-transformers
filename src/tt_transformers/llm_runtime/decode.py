@@ -220,6 +220,8 @@ class DecodeRuntimeConfig:
     position_feedback_capable: bool
     sampling_state_controller: Any
     sampling_state: Any
+    # Distinct salts for simultaneous equal explicit seeds (see SeedManager1D).
+    salt_duplicate_seeds: bool = True
 
     def __post_init__(self) -> None:
         _validate_resolved_decode_config(self)
@@ -236,6 +238,7 @@ class DecodeRuntimeConfig:
         force_greedy_top_k: bool = False,
         sampling_state_controller: Any = None,
         sampling_state: Any = None,
+        salt_duplicate_seeds: bool = True,
     ) -> DecodeRuntimeConfig:
         if not isinstance(output_reader, OutputReader):
             raise TypeError("output_reader must be an OutputReader")
@@ -251,6 +254,11 @@ class DecodeRuntimeConfig:
             raise TypeError("device_sampling_enabled must be bool")
         if not isinstance(force_greedy_top_k, bool):
             raise TypeError("force_greedy_top_k must be bool")
+        if not isinstance(salt_duplicate_seeds, bool):
+            raise TypeError("salt_duplicate_seeds must be bool")
+        seed_manager = getattr(sampling_state_controller, "seed_manager", None)
+        if seed_manager is not None and seed_manager.salt_duplicate_seeds is not salt_duplicate_seeds:
+            raise ValueError("the sampling state controller's seed manager must use the decode salting policy")
         _validate_page_table_layout(page_table_layout)
 
         try:
@@ -312,6 +320,7 @@ class DecodeRuntimeConfig:
             sampling_state_controller=sampling_state_controller,
             sampling_state=sampling_state,
             page_table_layout_ceiling=page_table_layout,
+            salt_duplicate_seeds=salt_duplicate_seeds,
         )
 
     def with_page_table_layout(self, layout: PageTableLayout) -> DecodeRuntimeConfig:
@@ -372,7 +381,7 @@ class DecodeRuntime:
         self._seed_manager = (
             self._sampling_state_controller.seed_manager
             if self._sampling_state_controller is not None
-            else SeedManager1D(sampling_config)
+            else SeedManager1D(sampling_config, salt_duplicate_seeds=config.salt_duplicate_seeds)
             if config.device_sampling_enabled and has_mutable_seed_buffer
             else None
         )

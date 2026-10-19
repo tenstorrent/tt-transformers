@@ -461,6 +461,7 @@ def build_qwen25_7b_generator(config: Qwen25GeneratorConfig) -> Qwen25Generator:
                 ),
                 device_sampling_enabled=config.device_sampling_enabled,
                 sequential_prefill=sequential_prefill,
+                salt_duplicate_seeds=False,
                 fixed_prefill_batch_sizes=fixed_prefill_batch_sizes,
             )
             lanes.append(build_qwen25_7b_executor(llm, executor_config))

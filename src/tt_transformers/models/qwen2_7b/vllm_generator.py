@@ -453,6 +453,7 @@ def build_qwen2_7b_generator(config: Qwen2GeneratorConfig) -> Qwen2Generator:
                 ),
                 device_sampling_enabled=config.device_sampling_enabled,
                 sequential_prefill=True,
+                salt_duplicate_seeds=False,
             )
             lanes.append(build_qwen2_7b_executor(llm, executor_config))
 
