@@ -681,9 +681,10 @@ class Sampling1D(LightweightModule):
                 calculator_logits = self._mask_invalid_vocab_logits(
                     ttnn.typecast(log_prob_logits, dtype=ttnn.bfloat16, sub_core_grids=cfg.sub_core_grids)
                 )
+            # No explicit deallocate: with bf16 logits and an unpadded vocabulary the
+            # typecast and mask may return the caller's logits, which a traced decode
+            # body retains for its tails.
             log_probs = self._log_probs_calculator.calculate_log_probs(calculator_logits, tt_out_tok)
-            if calculator_logits is not x_bf16:
-                ttnn.deallocate(calculator_logits)
         else:
             log_probs = None
         return tt_out_tok, log_probs

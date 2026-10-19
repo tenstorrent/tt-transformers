@@ -62,8 +62,27 @@ class DecodeProgramSignature:
 
 
 @dataclass(frozen=True)
+class DecodeBodySignature:
+    """Material identity of the decode model body that sampling tails follow.
+
+    The body runs embedding, layers and LM head into retained logits. Sampling
+    paths, penalties, logprobs and device feedback only change the tail.
+    """
+
+    batch_size: int
+    page_table_width: int
+
+    def key_material(self) -> tuple[tuple[str, Any], ...]:
+        return (
+            ("operation", "decode-body"),
+            ("batch_size", self.batch_size),
+            ("page_table_width", self.page_table_width),
+        )
+
+
+@dataclass(frozen=True)
 class DecodeTraceSignature:
-    """Material identity of one full-step decode trace."""
+    """Material identity of one decode tail trace, which replays after its body."""
 
     batch_size: int
     page_table_width: int
@@ -167,11 +186,25 @@ class DecodeRefreshPolicy:
 
 
 @dataclass(frozen=True)
+class DecodeBodyPlan:
+    """Callbacks for the shared body trace of a `DecodeCapturePlan`."""
+
+    signature: DecodeBodySignature
+    prepare_inputs: Any
+    capture: Any
+
+
+@dataclass(frozen=True)
 class DecodeCapturePlan:
-    """Operation callbacks consumed by the trace compiler by duck typing."""
+    """Operation callbacks consumed by the trace compiler by duck typing.
+
+    The plan is a sampling tail: ``prepare_inputs`` takes its body's persistent
+    inputs and ``capture`` takes those and the body's logits.
+    """
 
     prepare_inputs: Any
     capture: Any
+    body: DecodeBodyPlan
     refresh_policy: DecodeRefreshPolicy = DecodeRefreshPolicy()
     prepare_capture: Any = None
     prime: Any = None
@@ -184,8 +217,12 @@ class DecodePersistentInputs:
     kpt: tuple[Any, Any, Any] | None
     kpt_signature: list[Any] | None = None
     seed_buffer: Any | None = None
+    # A tail refreshes and feeds back into its body's inputs, which the body owns.
+    owns_device_inputs: bool = True
 
     def owned_tensor_values(self) -> tuple[Any, ...]:
+        if not self.owns_device_inputs:
+            return (self.kpt,)
         return self.device_inputs.values(), self.kpt
 
 
@@ -560,6 +597,13 @@ class DecodeRuntime:
             device_feedback=program.device_feedback,
         )
 
+    def body_signature(self, prepared: PreparedDecode) -> DecodeBodySignature:
+        """Return the identity of the body trace a prepared request's tail follows."""
+
+        self._require_prepared(prepared)
+        program = self._program_signature(prepared)
+        return DecodeBodySignature(batch_size=program.batch_size, page_table_width=program.page_table_width)
+
     def invoke(
         self,
         prepared: PreparedDecode,
@@ -638,7 +682,13 @@ class DecodeRuntime:
         )
 
     def capture_plan(self, prepared: PreparedDecode) -> DecodeCapturePlan:
-        """Describe persistent inputs and capture work for one decode trace."""
+        """Describe persistent inputs and capture work for one decode tail and its body.
+
+        The body trace runs the model into logits it retains; the tail trace
+        samples from them and writes device feedback into the body's inputs.
+        Every tail of one body shares those inputs, so a tail switch keeps the
+        resident tokens and positions.
+        """
 
         self._require_prepared(prepared)
 
@@ -649,17 +699,24 @@ class DecodeRuntime:
                     dataclasses.replace(prepared.prepared_sampling, slot_remap=None),
                 )
 
-        def prepare_inputs() -> DecodePersistentInputs:
+        def prepare_body_inputs() -> DecodePersistentInputs:
+            device_inputs = self._stage_inputs(self._prepare_inputs_host(prepared))
+            return DecodePersistentInputs(device_inputs=device_inputs, kpt=None)
+
+        def capture_body(persistent: Any) -> Any:
+            return self._run_model(_persistent_values(persistent).device_inputs)
+
+        def prepare_inputs(body: Any) -> DecodePersistentInputs:
             reset_sampling_state()
-            host_inputs = self._prepare_inputs_host(prepared)
-            device_inputs, kpt = self._stage_inputs_and_kpt(host_inputs, prepared)
+            kpt = self._make_device_kpt(prepared)
             sampling = prepared.prepared_sampling
             signature = [(sampling.top_k, sampling.top_p, sampling.temperature)] if kpt is not None else None
             return DecodePersistentInputs(
-                device_inputs=device_inputs,
+                device_inputs=_persistent_values(body).device_inputs,
                 kpt=kpt,
                 kpt_signature=signature,
                 seed_buffer=self._seed_device_handle(),
+                owns_device_inputs=False,
             )
 
         def prepare_capture(_persistent: Any) -> None:
@@ -668,9 +725,12 @@ class DecodeRuntime:
                 self._sampling_state.static_identity = self._sampling_state_controller.static_identity(sampling)
                 self._sampling_state.active_mask = sampling.active_mask
 
-        def capture(persistent: Any) -> Any:
+        def capture(persistent: Any, logits: Any) -> Any:
             values = _persistent_values(persistent)
-            return self._run_body(
+            # The penalty-count update stays inside the tail, so every replay
+            # counts the token it samples.
+            return self._run_tail(
+                logits,
                 values.device_inputs,
                 prepared,
                 values.kpt,
@@ -710,6 +770,11 @@ class DecodeRuntime:
             prepare_inputs=prepare_inputs,
             prepare_capture=prepare_capture,
             capture=capture,
+            body=DecodeBodyPlan(
+                signature=self.body_signature(prepared),
+                prepare_inputs=prepare_body_inputs,
+                capture=capture_body,
+            ),
             prime=prime,
             release_prime_output=lambda output: (
                 self._release_or_retain_transient((output,)) if output is not None else []
@@ -994,11 +1059,13 @@ class DecodeRuntime:
         page_table = ttnn.from_torch(prepared.page_table, device=None, dtype=ttnn.int32, mesh_mapper=mapper)
         return DecodeHostInputs(tokens_tt, positions, rotary, page_table)
 
+    def _stage_inputs(self, host_inputs) -> DecodeDeviceInputs:
+        return DecodeDeviceInputs(*_copy_host_to_device(host_inputs.values(), mesh_device=self.config.mesh_device))
+
     def _stage_inputs_and_kpt(self, host_inputs, prepared):
         device_inputs = None
         try:
-            raw = _copy_host_to_device(host_inputs.values(), mesh_device=self.config.mesh_device)
-            device_inputs = DecodeDeviceInputs(*raw)
+            device_inputs = self._stage_inputs(host_inputs)
             kpt = self._make_device_kpt(prepared)
         except BaseException as primary:
             failures = self._release_or_retain_transient(device_inputs)
@@ -1016,14 +1083,38 @@ class DecodeRuntime:
         count_tokens=True,
         advance_seeds=True,
     ):
+        return self._run_tail(
+            self._run_model(inputs),
+            inputs,
+            prepared,
+            kpt,
+            device_feedback=device_feedback,
+            count_tokens=count_tokens,
+            advance_seeds=advance_seeds,
+        )
+
+    def _run_model(self, inputs):
         model = self.config.model
         rot_mats = model.rope_setup.decode_forward(inputs.rotary_indices)
-        logits = model.decode_forward(
+        return model.decode_forward(
             model.embed_decode(inputs.tokens),
             inputs.positions,
             rot_mats,
             page_table=inputs.page_table,
         )
+
+    def _run_tail(
+        self,
+        logits,
+        inputs,
+        prepared,
+        kpt,
+        *,
+        device_feedback,
+        count_tokens=True,
+        advance_seeds=True,
+    ):
+        model = self.config.model
         sampling = prepared.prepared_sampling
         if sampling is None:
             return model.gather_and_untilize_logits(logits), None
