@@ -136,8 +136,10 @@ def test_executor_resolves_batched_prefill_policy(
         class _SamplingState:
             def __init__(self, sampling, *, seed_manager_factory=None):
                 self.sampling = sampling
-                self.seed_manager = SimpleNamespace()
-                self.seed_manager_factory = seed_manager_factory
+                # Report the salting policy the executor asked its seed manager for.
+                self.seed_manager = SimpleNamespace(
+                    salt_duplicate_seeds=getattr(seed_manager_factory, "keywords", {}).get("salt_duplicate_seeds", True)
+                )
 
             def create_state(self):
                 return SimpleNamespace(seed_state=SimpleNamespace(capacity=32))
