@@ -869,11 +869,14 @@ def _build_plan(
         decode += [replace(case, penalties=True) for case in decode if case.sampling_path != "logits"]
     # Prefill samples eagerly after its hidden trace replays, so each logprobs
     # variant is one more eager program, warmed here so that activation does not
-    # meet it later. A logprobs request always samples on the top-k path, so
-    # argmax has no logprobs variant; with penalties that bounds a sampled case
-    # at six variants. Decode logprobs need their own sampling traces.
+    # meet it later. Decode replays one sampling tail after its shared model
+    # body, so each decode logprobs variant is one more tail trace, not another
+    # body. A logprobs request always samples on the top-k path, so argmax has
+    # no logprobs variant; with penalties that bounds a sampled case at six
+    # variants.
     if logprobs_variants:
         prefill += [replace(case, logprobs=True) for case in prefill if case.sampling_path == "topk"]
+        decode += [replace(case, logprobs=True) for case in decode if case.sampling_path == "topk"]
     return WarmupPlan(tuple(prefill), tuple(decode))
 
 

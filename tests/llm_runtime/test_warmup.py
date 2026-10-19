@@ -839,12 +839,12 @@ def test_device_sampling_warms_a_penalised_twin_of_every_sampled_case(allow_forc
 
 @pytest.mark.host
 @pytest.mark.parametrize(("num_devices", "penalty_state"), [(1, True), (8, False), (8, True)])
-def test_prefill_warms_top_k_logprobs_variants_where_logprobs_run_on_device(num_devices, penalty_state):
+def test_sampled_cases_warm_top_k_logprobs_variants_where_logprobs_run_on_device(num_devices, penalty_state):
     """Only 8- and 32-chip meshes compute logprobs on device. There, every sampled
-    prefill case on the top-k path also warms its logprobs variant, crossed with
-    the penalty variants; argmax never takes logprobs, and decode is unchanged."""
+    prefill and decode case on the top-k path also warms its logprobs variant,
+    crossed with the penalty variants; argmax never takes logprobs."""
 
-    config = WarmupConfig(prefill_seq_lens=LADDER, prefill_batch_sizes=(1,))
+    config = WarmupConfig(prefill_seq_lens=LADDER, prefill_batch_sizes=(1,), include_decode_top_k=True)
     coordinator, *_ = make_coordinator(
         warmup_config=config,
         sequence_lengths=LADDER,
@@ -856,20 +856,23 @@ def test_prefill_warms_top_k_logprobs_variants_where_logprobs_run_on_device(num_
     on_device = num_devices in (8, 32)
 
     assert coordinator.config.logprobs_variants is on_device
-    assert not any(case.logprobs for case in sampled.decode)
-    assert not any(case.logprobs and case.sampling_path != "topk" for case in sampled.prefill)
-    variants = {}
-    for case in sampled.prefill:
-        if case.sampling_path == "topk":
-            key = (case.batch_size, case.sequence_length, case.cached_tokens)
-            variants.setdefault(key, set()).add((case.penalties, case.logprobs))
     expected = {
         (penalties, logprobs)
         for penalties in ((False, True) if penalty_state else (False,))
         for logprobs in ((False, True) if on_device else (False,))
     }
-    assert variants and all(found == expected for found in variants.values())
-    logprobs_case = next((case for case in sampled.prefill if case.logprobs), None)
+    for cases in (sampled.prefill, sampled.decode):
+        assert not any(case.logprobs and case.sampling_path != "topk" for case in cases)
+        variants = {}
+        for case in cases:
+            if case.sampling_path == "topk":
+                key = (case.batch_size, case.sequence_length, case.cached_tokens)
+                variants.setdefault(key, set()).add((case.penalties, case.logprobs))
+        assert variants and all(found == expected for found in variants.values())
+    sampled_decode = [case for case in sampled.decode if case.sampling_path != "logits"]
+    assert len(sampled_decode) == len(expected) + (2 if penalty_state else 1)
+    assert len(sampled_decode) <= 6
+    logprobs_case = next((case for case in sampled.decode if case.logprobs), None)
     if logprobs_case is not None:
         assert _warmup_sampling_params(logprobs_case, 2).enable_log_probs is True
 
