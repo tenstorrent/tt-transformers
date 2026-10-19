@@ -175,15 +175,27 @@ def build_trace_signature(
     )
 
 
-def capture_schema_fingerprint(prepared: PreparedPrefill) -> tuple[Any, ...]:
-    """Describe the sampling-free hidden trace allocation."""
+def hidden_trace_signature(prepared: PreparedPrefill) -> PrefillTraceSignature:
+    """Return the sampling-free identity of the prefill hidden body.
 
-    hidden_signature = replace(
+    Sampling runs after the hidden trace replays, so the sampling variants of
+    one body capture the same commands. Keying the trace on this signature
+    captures each body once; each program alias keeps its own postprocess
+    workspace (see `workspace_fingerprint`).
+    """
+
+    return replace(
         prepared.trace_signature,
         sampling_path="logits",
         penalties_enabled=False,
         logprobs_enabled=False,
     )
+
+
+def capture_schema_fingerprint(prepared: PreparedPrefill) -> tuple[Any, ...]:
+    """Describe the sampling-free hidden trace allocation."""
+
+    hidden_signature = hidden_trace_signature(prepared)
     return (
         "prefill-hidden-v2",
         hidden_signature,
