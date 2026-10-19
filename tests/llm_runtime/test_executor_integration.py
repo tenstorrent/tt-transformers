@@ -814,9 +814,12 @@ def _device_sampling_executor(
     if binding.executor_module in (llama33_70b_executor, qwen3_32b_executor):
 
         class FakeSamplingState1D:
-            def __init__(self, sampling):
+            def __init__(self, sampling, *, seed_manager_factory=None, history_width=None):
                 self.sampling = sampling
-                self.seed_manager = SimpleNamespace()
+                # Report the salting policy the executor asked its seed manager for.
+                self.seed_manager = SimpleNamespace(
+                    salt_duplicate_seeds=getattr(seed_manager_factory, "keywords", {}).get("salt_duplicate_seeds", True)
+                )
 
             def create_state(self):
                 return SimpleNamespace(seed_state=SimpleNamespace(capacity=32))
@@ -1176,6 +1179,10 @@ def test_qwen3_generator_sampling_policy_controls_decode_topk_warmup(monkeypatch
                 "output_tokens",
                 "slot_remap",
                 "reset_batch",
+                "reload_inputs",
+                "reload_page_table",
+                "reload_sampling_params",
+                "reset_sampling_state",
                 "execution",
             ],
         ),
@@ -1204,6 +1211,10 @@ def test_qwen3_generator_sampling_policy_controls_decode_topk_warmup(monkeypatch
                 "output_tokens",
                 "slot_remap",
                 "reset_batch",
+                "reload_inputs",
+                "reload_page_table",
+                "reload_sampling_params",
+                "reset_sampling_state",
                 "read_from_device",
                 "execution",
             ],
@@ -1222,7 +1233,10 @@ def test_qwen3_generator_sampling_policy_controls_decode_topk_warmup(monkeypatch
 )
 def test_executor_call_contract(binding, method, positional, keyword_only):
     if binding.executor_module not in (llama33_70b_executor, qwen3_32b_executor):
-        keyword_only = [name for name in keyword_only if name not in {"prompt_tokens", "output_tokens", "slot_remap"}]
+        excluded = {"prompt_tokens", "output_tokens"}
+        if method not in ("decode_forward", "compile_decode"):
+            excluded.add("slot_remap")
+        keyword_only = [name for name in keyword_only if name not in excluded]
     signature = inspect.signature(getattr(binding.executor_class, method))
     parameters = signature.parameters
     required = {
@@ -1243,7 +1257,15 @@ def test_executor_call_contract(binding, method, positional, keyword_only):
             "enable_trace",
         },
     }[method]
-    non_none_defaults = {"reset_batch": False, "read_from_device": True, "async_read": False, "is_tokens": False}
+    non_none_defaults = {
+        "reset_batch": False,
+        "reload_page_table": False,
+        "reload_sampling_params": False,
+        "reset_sampling_state": False,
+        "read_from_device": True,
+        "async_read": False,
+        "is_tokens": False,
+    }
 
     assert list(parameters) == positional + keyword_only
     assert all(parameters[name].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for name in positional)
@@ -1458,6 +1480,7 @@ def test_executor_validates_borrowed_cache_then_omits_it_from_execution(binding)
         if "prompt_tokens" in inspect.signature(binding.executor_class.compile_prefill).parameters
         else ()
     )
+    decode_request_state_names = request_state_names or ("slot_remap",)
     for target, expected_names in (
         (
             execution.compile_prefill,
@@ -1473,7 +1496,18 @@ def test_executor_validates_borrowed_cache_then_omits_it_from_execution(binding)
         ),
         (
             execution.compile_decode,
-            ("tokens", "start_pos", "page_table", "sampling_params", *request_state_names, "reset_batch"),
+            (
+                "tokens",
+                "start_pos",
+                "page_table",
+                "sampling_params",
+                *decode_request_state_names,
+                "reset_batch",
+                "reload_inputs",
+                "reload_page_table",
+                "reload_sampling_params",
+                "reset_sampling_state",
+            ),
         ),
         (
             execution.prefill_forward,
@@ -1494,8 +1528,12 @@ def test_executor_validates_borrowed_cache_then_omits_it_from_execution(binding)
                 "start_pos",
                 "page_table",
                 "sampling_params",
-                *request_state_names,
+                *decode_request_state_names,
                 "reset_batch",
+                "reload_inputs",
+                "reload_page_table",
+                "reload_sampling_params",
+                "reset_sampling_state",
                 "read_from_device",
             ),
         ),
@@ -1845,6 +1883,8 @@ def test_generator_constructs_data_parallel_lane_group(binding, monkeypatch):
             (config.sequential_prefill, config.fixed_prefill_batch_sizes) == expected_policy
             for _, config in executor_calls
         )
+        # vLLM requests are independent: equal explicit seeds must not be salted apart.
+        assert not any(config.salt_duplicate_seeds for _, config in executor_calls)
         assert all(llm.model.config.max_batch_size == 2 for llm, _ in executor_calls)
         assert generator._adapter.config.trace.mode == "all"
         assert generator._adapter.config.expected_num_layers == 1
@@ -1964,3 +2004,29 @@ def test_llama33_generator_emits_serving_ready_and_idempotent_shutdown_summaries
     generator.cleanup()
 
     assert phases == ["serving_ready", "shutdown"]
+
+
+@pytest.mark.host
+def test_every_executor_forwards_host_decode_remap_and_v1_commands(binding):
+    execution = create_autospec(EagerExecutor, instance=True)
+    executor = object.__new__(binding.executor_class)
+    executor._decode_execution = execution
+    executor._ensure_active = lambda: None
+    executor._validate_bound_cache = lambda cache: None
+    executor._ensure_sampling_for = lambda params: None
+    remap = [1, 0]
+    commands = dict(
+        reload_inputs=True, reload_page_table=False, reload_sampling_params=False, reset_sampling_state=False
+    )
+    executor.decode_forward(
+        torch.tensor([1, 2]),
+        torch.tensor([4, 5]),
+        torch.tensor([[0], [1]]),
+        sampling_params=None,
+        slot_remap=remap,
+        **commands,
+    )
+    actual = execution.decode_forward.call_args.kwargs
+    assert actual["slot_remap"] is remap
+    assert actual["sampling_params"] is None
+    assert {key: actual[key] for key in commands} == commands
