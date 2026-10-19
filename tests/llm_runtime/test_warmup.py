@@ -202,6 +202,7 @@ def make_coordinator(
     max_prefill_chunk_size=2048,
     can_enable_trace=None,
     penalty_state=True,
+    sequential_prefill=False,
 ):
     events = events if events is not None else []
     execution = execution or RecordingExecution(events)
@@ -236,6 +237,8 @@ def make_coordinator(
         # A runtime that owns device penalty state, as the executors with a SamplingState1D do.
         controller = SimpleNamespace(sampling=prefill_config.model.sampling, admit=lambda *args, **kwargs: None)
         prefill_config = replace(prefill_config, sampling_state_controller=controller, sampling_state=object())
+    if sequential_prefill:
+        prefill_config = replace(prefill_config, disable_batched_prefill=True)
     eager = eager_execution or execution
     eager.prefill = SimpleNamespace(config=prefill_config)
     eager.decode = SimpleNamespace(config=decode_config)
@@ -632,6 +635,40 @@ def test_q128_batches_are_capped_by_lane_and_non128_is_batch_one():
     ]
     assert regular_q128 == [1, 2, 4, 8]
     assert regular_q1024 == [1]
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("sampling", [False, True])
+def test_sequential_prefill_warms_only_batch_one(sampling):
+    """A runtime that never folds prompts runs every prefill at batch 1, so the
+    128 bucket's batch ladder would compile programs nothing invokes."""
+    config = WarmupConfig(prefill_batch_sizes=(1, 2, 4, 8, 16, 32))
+    coordinator, execution, *_ = make_coordinator(
+        warmup_config=config, lane_capacity=8, sampling=sampling, sequential_prefill=True
+    )
+
+    assert coordinator.config.sequential_prefill is True
+    for plan in (coordinator.config.eager_plan, coordinator.config.sampled_plan):
+        assert plan.prefill
+        assert {case.batch_size for case in plan.prefill} == {1}
+    coordinator.warmup_prefill(kv_cache="cache", enable_trace=False, can_sample_on_device=sampling)
+    assert {int(call["tokens"].shape[0]) for call in execution.prefill_calls} == {1}
+
+
+@pytest.mark.host
+def test_coordinator_rejects_a_runtime_with_another_prefill_batching_policy():
+    coordinator, execution, *_ = make_coordinator(sequential_prefill=True)
+    execution.eager_executor.prefill = SimpleNamespace(
+        config=replace(execution.eager_executor.prefill.config, disable_batched_prefill=False)
+    )
+
+    with pytest.raises(ValueError, match="prefill batching policy"):
+        WarmupCoordinator(
+            config=coordinator.config,
+            execution=execution,
+            ensure_sampling_buffers=lambda: None,
+            validate_bound_cache=lambda value: None,
+        )
 
 
 @pytest.mark.host
