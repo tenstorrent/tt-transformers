@@ -456,6 +456,7 @@ def build_deepseek_r1_distill_qwen_14b_generator(
                 ),
                 device_sampling_enabled=config.device_sampling_enabled,
                 sequential_prefill=True,
+                salt_duplicate_seeds=False,
             )
             lanes.append(build_deepseek_r1_distill_qwen_14b_executor(llm, executor_config))
 

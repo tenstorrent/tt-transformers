@@ -327,6 +327,7 @@ def build_qwen3_32b_generator(config: Qwen3_32BGeneratorConfig) -> Qwen3_32BGene
                 ),
                 device_sampling_enabled=config.device_sampling_enabled,
                 sequential_prefill=True,
+                salt_duplicate_seeds=False,
             )
             lanes.append(build_qwen3_32b_executor(llm, executor_config))
         adapter = _build_vllm_adapter(lanes[0])

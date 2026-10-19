@@ -339,6 +339,7 @@ def build_qwen25_72b_generator(config: Qwen25_72BGeneratorConfig) -> Qwen25_72BG
                 ),
                 device_sampling_enabled=config.device_sampling_enabled,
                 sequential_prefill=sequential_prefill,
+                salt_duplicate_seeds=False,
                 fixed_prefill_batch_sizes=fixed_prefill_batch_sizes,
             )
             lanes.append(build_qwen25_72b_executor(llm, executor_config))

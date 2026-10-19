@@ -1868,6 +1868,8 @@ def test_generator_constructs_data_parallel_lane_group(binding, monkeypatch):
             (config.sequential_prefill, config.fixed_prefill_batch_sizes) == expected_policy
             for _, config in executor_calls
         )
+        # vLLM requests are independent: equal explicit seeds must not be salted apart.
+        assert not any(config.salt_duplicate_seeds for _, config in executor_calls)
         assert all(llm.model.config.max_batch_size == 2 for llm, _ in executor_calls)
         assert generator._adapter.config.trace.mode == "all"
         assert generator._adapter.config.expected_num_layers == 1

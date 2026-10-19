@@ -41,9 +41,11 @@ def test_executor_config_has_exact_static_policy_owners_and_is_frozen(expect_err
         "device_sampling_enabled",
         "sequential_prefill",
         "fixed_prefill_batch_sizes",
+        "salt_duplicate_seeds",
         "allow_batched_prefill_with_device_sampling_for_diagnostics",
     ]
     assert not config.sequential_prefill
+    assert config.salt_duplicate_seeds
     assert config.fixed_prefill_batch_sizes == ()
     assert not config.allow_batched_prefill_with_device_sampling_for_diagnostics
     forbidden = {

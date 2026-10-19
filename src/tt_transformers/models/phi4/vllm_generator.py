@@ -458,6 +458,7 @@ def build_phi4_generator(config: Phi4GeneratorConfig) -> Phi4Generator:
                 ),
                 device_sampling_enabled=config.device_sampling_enabled,
                 sequential_prefill=True,
+                salt_duplicate_seeds=False,
             )
             lanes.append(build_phi4_executor(llm, executor_config))
 

@@ -332,6 +332,7 @@ def build_qwen25_coder_32b_generator(config: Qwen25Coder32BGeneratorConfig) -> Q
                 ),
                 device_sampling_enabled=config.device_sampling_enabled,
                 sequential_prefill=True,
+                salt_duplicate_seeds=False,
             )
             lanes.append(build_qwen25_coder_32b_executor(llm, executor_config))
         adapter = _build_vllm_adapter(lanes[0])

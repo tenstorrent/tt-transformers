@@ -177,7 +177,16 @@ class SeedManager1D:
         sampling_config: Sampling1DConfig,
         *,
         entropy_factory: Callable[[int], int] = secrets.randbits,
+        salt_duplicate_seeds: bool = True,
     ) -> None:
+        """``salt_duplicate_seeds`` gives simultaneous requests that carry the same
+        explicit seed distinct salts, so a batch generated with one seed does not
+        repeat one stream in every row. A server of independent requests turns it
+        off: each request's stream must then depend only on its own seed, never
+        on whether an equal-seed request happens to run beside it.
+        """
+        if not isinstance(salt_duplicate_seeds, bool):
+            raise TypeError("salt_duplicate_seeds must be bool")
         seed_buffer = getattr(sampling_config, "seeds", None)
         if (
             seed_buffer is None
@@ -203,10 +212,15 @@ class SeedManager1D:
         self._default_values = tuple(int(value) for value in self._default_source.reshape(-1).tolist())
         self._capacity = capacity
         self._entropy_factory = entropy_factory
+        self._salt_duplicate_seeds = salt_duplicate_seeds
 
     @property
     def max_batch_size(self) -> int:
         return self._capacity
+
+    @property
+    def salt_duplicate_seeds(self) -> bool:
+        return self._salt_duplicate_seeds
 
     @property
     def default_values(self) -> tuple[int, ...]:
@@ -592,6 +606,8 @@ class SeedManager1D:
         return int(positions)
 
     def _next_free_salt(self, state: SeedState, slot: int, seed: int) -> int:
+        if not self._salt_duplicate_seeds:
+            return 0
         taken = {
             state.salts[other]
             for other in range(self._capacity)
