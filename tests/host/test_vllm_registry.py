@@ -61,7 +61,6 @@ PLUGIN_CAPABILITY_KEYS = {
     "fabric_config": "absent: the plugin's per-mesh default, FABRIC_1D, is what every declaring generator declares",
     "max_device_top_k": "absent: read from the generator instance",
     "supports_device_penalties": "absent: read from the generator instance; absent means supported",
-    "supports_device_logprobs": "absent: read from the generator instance; absent means supported",
     "supports_stochastic_device_prefill": "absent: read from the generator instance; absent means supported",
     "supports_chunked_prefill": "declared",
     "output_tokens_per_step": "absent: every generator emits one token per step",
