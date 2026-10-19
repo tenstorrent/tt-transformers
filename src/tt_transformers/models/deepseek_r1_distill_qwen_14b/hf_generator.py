@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import functools
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
@@ -58,6 +59,8 @@ from tt_transformers.models.deepseek_r1_distill_qwen_14b.model import (
     build_deepseek_r1_distill_qwen_14b_transformer_config,
 )
 from tt_transformers.modules.sampling.sampling_1d import Sampling1D
+from tt_transformers.modules.sampling.sampling_state_1d import SamplingState1D
+from tt_transformers.modules.sampling.seed_manager_1d import SeedManager1D
 
 DEFAULT_HF_MODEL = "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B"
 DEFAULT_HF_REVISION = "1df8507178afcc1bef68cd8c393f61a886323761"
@@ -474,6 +477,7 @@ class DeepSeekR1Qwen14BExecutor:
     """
 
     requires_prefill_trace_warmup = True
+    request_state_fields = ("prompt_tokens", "output_tokens", "slot_remap")
 
     def __init__(self, model: Any, runtime_config: Any, config: DeepSeekR1Qwen14BExecutorConfig) -> None:
         if not isinstance(config, DeepSeekR1Qwen14BExecutorConfig):
@@ -509,6 +513,22 @@ class DeepSeekR1Qwen14BExecutor:
             if not callable(is_resolved) or not is_resolved():
                 raise ValueError("model.sampling must have a resolved Sampling1DConfig")
 
+        # The controller owns request-scoped sampling state: per-request seeds for
+        # prefill and decode sampling, and the penalty history.
+        self.sampling_state_controller = (
+            SamplingState1D(
+                sampling,
+                seed_manager_factory=functools.partial(SeedManager1D, salt_duplicate_seeds=config.salt_duplicate_seeds),
+                history_width=int(model.config.max_seq_len),
+            )
+            if config.device_sampling_enabled
+            else None
+        )
+        self.sampling_state = (
+            self.sampling_state_controller.create_state() if self.sampling_state_controller is not None else None
+        )
+        self._request_state_fields = ("prompt_tokens", "output_tokens", "slot_remap")
+
         self.kv_cache_manager = PagedKVCacheManager(model, config.paged_kv_cache)
         self.page_table_layout = self._resolve_page_table_layout()
         self.output_reader = OutputReader(mesh_device)
@@ -526,6 +546,8 @@ class DeepSeekR1Qwen14BExecutor:
                 max_prefill_batch_size=int(runtime_config.max_prefill_batch_size),
                 batched_prefill_batched_extract=bool(runtime_config.batched_prefill_batched_extract),
                 fixed_prefill_batch_sizes=config.fixed_prefill_batch_sizes,
+                sampling_state_controller=self.sampling_state_controller,
+                sampling_state=self.sampling_state,
             )
         )
         self.decode_runtime = DecodeRuntime(
@@ -537,6 +559,8 @@ class DeepSeekR1Qwen14BExecutor:
                 device_sampling_enabled=config.device_sampling_enabled,
                 force_greedy_top_k=config.warmup.include_decode_top_k,
                 salt_duplicate_seeds=config.salt_duplicate_seeds,
+                sampling_state_controller=self.sampling_state_controller,
+                sampling_state=self.sampling_state,
             )
         )
         self.program_compiler = ProgramCompiler(mesh_device, lambda: self.kv_cache_manager.bound_context)
@@ -680,6 +704,9 @@ class DeepSeekR1Qwen14BExecutor:
         empty_slots: Sequence[int] | None = None,  # ↓ Lane routing
         kv_cache: Any = None,  # ↓ Borrowed resources
         sampling_params: Any = None,  # ↓ Sampling
+        prompt_tokens: Any = None,  # ↓ Request-owned sampling state
+        output_tokens: Any = None,
+        slot_remap: Any = None,
         execution: EagerExecutor | TracedExecutor | None = None,  # ↓ Internal dispatch
     ) -> None:
         """Compile prefill on the supplied eager or traced execution target."""
@@ -698,6 +725,9 @@ class DeepSeekR1Qwen14BExecutor:
             start_pos=start_pos,
             empty_slots=empty_slots,
             sampling_params=sampling_params,
+            prompt_tokens=prompt_tokens,
+            output_tokens=output_tokens,
+            slot_remap=slot_remap,
         )
 
     def compile_decode(
@@ -708,6 +738,8 @@ class DeepSeekR1Qwen14BExecutor:
         page_table: torch.Tensor,
         kv_cache: Any = None,  # ↓ Borrowed resources
         sampling_params: Any = None,  # ↓ Sampling
+        prompt_tokens: Any = None,  # ↓ Request-owned sampling state
+        output_tokens: Any = None,
         slot_remap: Any = None,
         reset_batch: bool = False,  # ↓ State transition
         reload_inputs: bool | None = None,
@@ -726,6 +758,8 @@ class DeepSeekR1Qwen14BExecutor:
             start_pos=start_pos,
             page_table=page_table,
             sampling_params=sampling_params,
+            prompt_tokens=prompt_tokens,
+            output_tokens=output_tokens,
             slot_remap=slot_remap,
             reset_batch=reset_batch,
             reload_inputs=reload_inputs,
@@ -744,6 +778,9 @@ class DeepSeekR1Qwen14BExecutor:
         empty_slots: Sequence[int] | None = None,  # ↓ Lane routing
         kv_cache: Any = None,  # ↓ Borrowed resources
         sampling_params: Any = None,  # ↓ Sampling
+        prompt_tokens: Any = None,  # ↓ Request-owned sampling state
+        output_tokens: Any = None,
+        slot_remap: Any = None,
         execution: EagerExecutor | TracedExecutor | None = None,  # ↓ Internal dispatch
     ) -> Any:
         """Validate ownership and execute one prefill call."""
@@ -762,6 +799,9 @@ class DeepSeekR1Qwen14BExecutor:
             start_pos=start_pos,
             empty_slots=empty_slots,
             sampling_params=sampling_params,
+            prompt_tokens=prompt_tokens,
+            output_tokens=output_tokens,
+            slot_remap=slot_remap,
         )
 
     def _resolve_prefill_execution(self, *, tokens, prompt_lens, start_pos, empty_slots):
@@ -792,6 +832,8 @@ class DeepSeekR1Qwen14BExecutor:
         *,
         kv_cache: Any = None,  # ↓ Borrowed resources
         sampling_params: Any = None,  # ↓ Sampling
+        prompt_tokens: Any = None,  # ↓ Request-owned sampling state
+        output_tokens: Any = None,
         slot_remap: Any = None,
         reset_batch: bool = False,  # ↓ State transition
         reload_inputs: bool | None = None,
@@ -811,6 +853,8 @@ class DeepSeekR1Qwen14BExecutor:
             start_pos=start_pos,
             page_table=page_table,
             sampling_params=sampling_params,
+            prompt_tokens=prompt_tokens,
+            output_tokens=output_tokens,
             slot_remap=slot_remap,
             reset_batch=reset_batch,
             reload_inputs=reload_inputs,
@@ -1015,6 +1059,8 @@ class DeepSeekR1Qwen14BExecutor:
             max_prefill_batch_size=current_prefill.max_prefill_batch_size,
             batched_prefill_batched_extract=current_prefill.batched_prefill_batched_extract,
             fixed_prefill_batch_sizes=current_prefill.fixed_prefill_batch_sizes,
+            sampling_state_controller=current_prefill.sampling_state_controller,
+            sampling_state=current_prefill.sampling_state,
         )
         current_decode = self.decode_runtime.config
         decode_config = DecodeRuntimeConfig.resolve(
@@ -1025,6 +1071,8 @@ class DeepSeekR1Qwen14BExecutor:
             device_sampling_enabled=current_decode.device_sampling_enabled,
             force_greedy_top_k=current_decode.force_greedy_top_k,
             salt_duplicate_seeds=current_decode.salt_duplicate_seeds,
+            sampling_state_controller=current_decode.sampling_state_controller,
+            sampling_state=current_decode.sampling_state,
         )
         warmup_config = WarmupCoordinatorConfig.resolve(
             warmup=self.warmup.config.warmup,
