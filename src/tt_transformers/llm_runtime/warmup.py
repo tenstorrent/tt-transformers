@@ -918,11 +918,20 @@ def _with_penalties(params: SamplingParams, batch_size: int) -> SamplingParams:
     )
 
 
-def topk_warmup_sampling_variants(batch_size: int, *, penalties: bool = True) -> tuple[SamplingParams, ...]:
-    """Return the top-k sampling variants warmup compiles: plain, then penalised if enabled."""
+def topk_warmup_sampling_variants(
+    batch_size: int, *, penalties: bool = True, logprobs: bool = False
+) -> tuple[SamplingParams, ...]:
+    """Return the top-k sampling variants warmup compiles.
+
+    Plain, then penalised if enabled, then the logprobs variant of each if
+    logprobs run on device: the same cross `_build_plan` warms.
+    """
 
     plain = _topk_sampling_params(batch_size)
-    return (plain, _with_penalties(plain, batch_size)) if penalties else (plain,)
+    variants = (plain, _with_penalties(plain, batch_size)) if penalties else (plain,)
+    if logprobs:
+        variants += tuple(replace(params, enable_log_probs=True) for params in variants)
+    return variants
 
 
 def _ceil_div(value: int, divisor: int) -> int:

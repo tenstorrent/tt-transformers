@@ -894,6 +894,24 @@ def test_runtime_without_penalty_state_warms_no_penalised_twin():
 
 
 @pytest.mark.host
+@pytest.mark.parametrize("penalties", (False, True))
+def test_topk_warmup_variants_add_a_logprobs_variant_of_each_where_logprobs_run_on_device(penalties):
+    """The executors prime the Q128 single-user top-k programs for every tile start
+    with these variants, so where logprobs run on device each needs its logprobs
+    twin too: a short prompt with logprobs runs one of those programs."""
+
+    def penalised(params):
+        return params.presence_penalty is not None and bool(torch.as_tensor(params.presence_penalty).any())
+
+    plain = topk_warmup_sampling_variants(1, penalties=penalties)
+    variants = topk_warmup_sampling_variants(1, penalties=penalties, logprobs=True)
+
+    assert len(variants) == 2 * len(plain)
+    assert [bool(params.enable_log_probs) for params in variants] == [False] * len(plain) + [True] * len(plain)
+    assert [penalised(params) for params in variants] == [penalised(params) for params in plain] * 2
+
+
+@pytest.mark.host
 def test_penalised_warmup_params_select_the_penalties_variant():
     coordinator, execution, *_ = make_coordinator(
         trace_mode="none",

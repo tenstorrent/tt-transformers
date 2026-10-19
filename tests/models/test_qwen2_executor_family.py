@@ -51,6 +51,7 @@ def test_qwen2_family_warms_every_q128_topk_tile_end_once_per_execution_mode(exe
             prefill_trace_sequence_lengths=(128,),
             prime_q128_tile_ends=False,
             penalty_variants=True,
+            logprobs_variants=False,
         )
     )
     executor.compile_prefill = MagicMock()
