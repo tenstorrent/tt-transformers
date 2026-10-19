@@ -94,7 +94,6 @@ class Phi4Generator:
         "supports_stochastic_device_prefill": False,
         "accepts_trace_mode": True,
         "supports_chunked_prefill": True,
-        "supports_device_logprobs": False,
         # The only supported multi-device geometry is N300, which the vLLM plugin
         # (vllm-tt-plugin #116) already defaults to FABRIC_1D. Declared explicitly
         # so the choice is a visible one-liner rather than an inherited default.
