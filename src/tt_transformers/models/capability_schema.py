@@ -10,8 +10,8 @@ dict — never a property or an instance field.
 
 The contract is deliberately terse: a subclass dict *replaces* the inherited one
 rather than merging, so an **absent key means "not supported"** and no reader
-assumes otherwise — with two documented exceptions, ``supports_device_penalties``
-and ``supports_device_logprobs``, which the plugin reads with a default of ``True``. Because absence is meaningful,
+assumes otherwise — except the keys whose ``reader_default`` is ``True``, where an
+absent key means supported. Because absence is meaningful,
 a key that upstream starts requiring after the split is silently "declined" here
 until someone notices. This schema exists so that "someone" is a test: it names
 every capability key this repo owns, records its type and its reader-side default,
@@ -34,10 +34,10 @@ class CapabilityKey:
     """One declared capability key: its type, reader-side default, and meaning.
 
     ``reader_default`` is the value a plugin reader assumes when the key is
-    **absent** from a generator's ``model_capabilities`` dict. For every key that
+    **absent** from a generator's ``model_capabilities`` dict. For most keys that
     means "not supported" (``False`` for the boolean flags, ``None`` for the
-    advertised limits) except ``supports_device_penalties`` and
-    ``supports_device_logprobs``, whose reader default is ``True``. ``required`` marks the keys every serving generator in this repo
+    advertised limits); the keys whose ``reader_default`` is ``True`` are the
+    exceptions. ``required`` marks the keys every serving generator in this repo
     declares today; a model that dropped one would be changing the contract, and
     the schema test is meant to catch exactly that.
     """
@@ -122,7 +122,7 @@ _CAPABILITY_KEYS: tuple[CapabilityKey, ...] = (
         reader_default=True,
         required=False,
         doc=(
-            "Whether the device applies repetition/presence penalties. THE exception "
+            "Whether the device applies repetition/presence penalties. An exception "
             "to 'absent means not supported': the plugin reads this key with a default "
             "of True, so an absent key means supported. Generators whose executor owns no "
             "device penalty state (SamplingState1D) declare False."
@@ -134,12 +134,12 @@ _CAPABILITY_KEYS: tuple[CapabilityKey, ...] = (
         reader_default=True,
         required=False,
         doc=(
-            "Whether a nonzero-temperature prefill row may be sampled on device. Read, "
-            "like supports_device_penalties, with a default of True. Generators whose "
-            "executor owns no SamplingState1D declare False: their prefill sampler seeds "
-            "from a fixed per-slot buffer, so the first token would depend on the slot "
-            "rather than the request and would ignore its seed. The plugin samples such "
-            "a prefill on host; greedy prefill and decode stay on device."
+            "Whether a nonzero-temperature prefill row may be sampled on device. "
+            "Generators whose executor owns no SamplingState1D declare False: their "
+            "prefill sampler seeds from a fixed per-slot buffer, so the first token "
+            "would depend on the slot rather than the request and would ignore its "
+            "seed. The plugin does not currently read this key, so the declaration "
+            "records the limit without changing where such a prefill is sampled."
         ),
     ),
     CapabilityKey(
@@ -149,11 +149,11 @@ _CAPABILITY_KEYS: tuple[CapabilityKey, ...] = (
         required=True,
         doc=(
             "Whether the device returns sampled-token logprobs, which the plugin uses "
-            "only on 8- and 32-device meshes. Read, like supports_device_penalties, "
-            "with a default of True. Every generator here declares False: warmup does "
-            "not build the logprobs program variants, so after trace activation a "
-            "logprobs request could not be served on device. The plugin samples such "
-            "a request on host instead."
+            "only on 8- and 32-device meshes. Every generator here declares False: "
+            "warmup does not build the logprobs program variants, so after trace "
+            "activation a logprobs request could not be served on device. The plugin "
+            "does not currently read this key, so the declaration records the limit "
+            "without routing such a request to host sampling."
         ),
     ),
 )

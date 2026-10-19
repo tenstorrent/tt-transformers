@@ -402,8 +402,9 @@ def test_capability_schema_records_the_non_uniform_reader_defaults():
 
     ``supports_device_penalties``, ``supports_device_logprobs`` and
     ``supports_stochastic_device_prefill`` default to True when absent (the plugin
-    reads them that way); every other key follows the contract's "absent means
-    not supported"."""
+    reads ``supports_device_penalties`` that way; the other two follow the same
+    convention but are not read today); every other key follows the contract's
+    "absent means not supported"."""
     default_true = {"supports_device_penalties", "supports_device_logprobs", "supports_stochastic_device_prefill"}
     assert all(CAPABILITY_SCHEMA[name].reader_default is True for name in default_true)
     assert all(
