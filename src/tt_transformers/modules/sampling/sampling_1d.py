@@ -437,6 +437,7 @@ class Sampling1D(LightweightModule):
         seeds: ttnn.Tensor | None = None,
         tt_out_tok: ttnn.Tensor | None = None,
         enable_log_probs: bool | list[bool] = False,
+        log_prob_logits: ttnn.Tensor | None = None,
     ):
         """Sample tokens from logits.
 
@@ -452,6 +453,10 @@ class Sampling1D(LightweightModule):
                 (sampled-token logprob); the argmax path never does (see ``_sample_argmax``). The
                 calculator additionally requires a multi-device shard (T3K 1×8) — it returns ``None``
                 on 1×1/1×2 even when enabled.
+            log_prob_logits: Logits the logprobs are taken from when they differ from the
+                sampled ones. A caller that applies penalties to a copy of the logits passes
+                the unpenalised logits here, since logprobs describe the model's distribution
+                before any logits processor. Defaults to ``logits``.
 
         Returns:
             (token_ids, log_probs_or_none)
@@ -472,7 +477,7 @@ class Sampling1D(LightweightModule):
         if k is None or p is None or temp is None:
             raise ValueError("k, p, temp must all be provided, or all be None (for argmax)")
 
-        tokens, log_probs = self._sample_topk(logits, k, p, temp, seeds, tt_out_tok)
+        tokens, log_probs = self._sample_topk(logits, k, p, temp, seeds, tt_out_tok, log_prob_logits)
         # The calculator reuses its output buffer. Runtime outputs are owned
         # by the caller and are released after warmup, readback, or trace cleanup.
         if log_probs is not None:
@@ -595,7 +600,7 @@ class Sampling1D(LightweightModule):
 
     # -- Top-k sampling (port of the top-k branch of TTSampling.forward) ------
 
-    def _sample_topk(self, logits, k, p, temp, seeds, tt_out_tok):
+    def _sample_topk(self, logits, k, p, temp, seeds, tt_out_tok, log_prob_logits=None):
         cfg = self.config
 
         x_bf16 = ttnn.typecast(logits, dtype=ttnn.bfloat16, sub_core_grids=cfg.sub_core_grids)
@@ -668,7 +673,17 @@ class Sampling1D(LightweightModule):
         # disabled case incurs zero extra ops. The calculator itself returns None unless the mesh
         # is multi-device with num_devices ∈ {8, 32} (T3K 1×8).
         if self._log_probs_calculator.enable_log_probs:
-            log_probs = self._log_probs_calculator.calculate_log_probs(logits, tt_out_tok)
+            # The calculator normalises over every column it is given, so it takes logits
+            # masked to the real vocabulary: padded columns would otherwise join the sum.
+            if log_prob_logits is None:
+                calculator_logits = x_bf16
+            else:
+                calculator_logits = self._mask_invalid_vocab_logits(
+                    ttnn.typecast(log_prob_logits, dtype=ttnn.bfloat16, sub_core_grids=cfg.sub_core_grids)
+                )
+            log_probs = self._log_probs_calculator.calculate_log_probs(calculator_logits, tt_out_tok)
+            if calculator_logits is not x_bf16:
+                ttnn.deallocate(calculator_logits)
         else:
             log_probs = None
         return tt_out_tok, log_probs
