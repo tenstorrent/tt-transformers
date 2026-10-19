@@ -729,13 +729,11 @@ class TracedExecutor:
                     ),
                     prime=(
                         (lambda persistent, plan=operation_plan: plan.prime(persistent.values))
-                        if getattr(operation_plan, "prime", None) is not None
+                        if operation_plan.prime is not None
                         else None
                     ),
                     release_prime_output=(
-                        operation_plan.release_prime_output
-                        if getattr(operation_plan, "prime", None) is not None
-                        else None
+                        operation_plan.release_prime_output if operation_plan.prime is not None else None
                     ),
                 )
             )
