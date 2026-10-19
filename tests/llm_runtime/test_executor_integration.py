@@ -814,9 +814,10 @@ def _device_sampling_executor(
     if binding.executor_module in (llama33_70b_executor, qwen3_32b_executor):
 
         class FakeSamplingState1D:
-            def __init__(self, sampling):
+            def __init__(self, sampling, *, seed_manager_factory=None):
                 self.sampling = sampling
                 self.seed_manager = SimpleNamespace()
+                self.seed_manager_factory = seed_manager_factory
 
             def create_state(self):
                 return SimpleNamespace(seed_state=SimpleNamespace(capacity=32))
