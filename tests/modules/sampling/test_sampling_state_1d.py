@@ -17,6 +17,7 @@ import torch
 
 from tt_transformers.modules.lazy_buffer import LazyBuffer
 from tt_transformers.modules.sampling import penalties_1d as penalties_module
+from tt_transformers.modules.sampling import sampling_state_1d as sampling_state_module
 from tt_transformers.modules.sampling.params import PreparedSamplingParams, place_prepared_sampling_params
 from tt_transformers.modules.sampling.penalties_1d import Penalties1D
 from tt_transformers.modules.sampling.sampling_state_1d import SamplingState1D
@@ -959,13 +960,14 @@ def test_before_after_sampling_enforces_penalty_order_and_exactly_once_update(ex
 
 
 @pytest.mark.host
-def test_atomic_decode_composes_penalties_sampling_seeds_and_history():
+def test_atomic_decode_composes_penalties_sampling_seeds_and_history(monkeypatch):
     controller, sampling, _, events = _make_controller()
     state = controller.create_state()
     prepared = _prepared(log_probs=True)
     controller.admit(state, prepared)
     events.clear()
     k, p, temp = object(), object(), object()
+    monkeypatch.setattr(sampling_state_module.ttnn, "clone", lambda tensor: f"copy-of-{tensor}")
 
     output = controller.decode_forward(
         "logits",
@@ -990,7 +992,52 @@ def test_atomic_decode_composes_penalties_sampling_seeds_and_history():
     assert kwargs["k"] is k and kwargs["p"] is p and kwargs["temp"] is temp
     assert kwargs["seeds"] is sampling.config.seeds.handle
     assert kwargs["enable_log_probs"] == [True, False, False, False]
+    # Penalties rewrite what they are given, and logprobs come from the logits
+    # before any penalty, so this step penalises a copy and samples from it.
+    assert events[2] == ("penalty.decode", "copy-of-logits")
+    assert events[-2][1] == "penalized:copy-of-logits"
+    assert kwargs["log_prob_logits"] == "logits"
     assert state.pending_sample_id is None
+
+
+@pytest.mark.host
+def test_penalised_decode_without_logprobs_penalises_in_place(monkeypatch):
+    controller, _, _, events = _make_controller()
+    state = controller.create_state()
+    prepared = _prepared()
+    controller.admit(state, prepared)
+    events.clear()
+
+    def unexpected_clone(tensor):
+        raise AssertionError("no logprobs: penalties may rewrite the logits in place")
+
+    monkeypatch.setattr(sampling_state_module.ttnn, "clone", unexpected_clone)
+
+    controller.decode_forward(
+        "logits", state, prepared, k=object(), p=object(), temp=object(), positions=(2, 2, -1, -1)
+    )
+
+    assert ("penalty.decode", "logits") in events
+    sampling_call = next(event for event in events if event[0] == "sampling.decode")
+    assert sampling_call[1] == "penalized:logits"
+    assert "log_prob_logits" not in sampling_call[2]
+
+
+@pytest.mark.host
+def test_penalised_prefill_with_logprobs_samples_a_penalised_copy(monkeypatch):
+    controller, _, _, events = _make_controller()
+    state = controller.create_state()
+    prepared = _prepared(log_probs=True)
+    controller.admit_prefill(state, prepared, slots=(0, 1), positions=(5, 7))
+    events.clear()
+    monkeypatch.setattr(sampling_state_module.ttnn, "clone", lambda tensor: f"copy-of-{tensor}")
+
+    controller.prefill_forward("logits", state, prepared, k=object(), p=object(), temp=object())
+
+    assert ("penalty.decode", "copy-of-logits") in events
+    sampling_call = next(event for event in events if event[0] == "sampling.decode")
+    assert sampling_call[1] == "penalized:copy-of-logits"
+    assert sampling_call[2]["log_prob_logits"] == "logits"
 
 
 @pytest.mark.host
