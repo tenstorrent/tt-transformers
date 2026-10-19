@@ -125,9 +125,13 @@ def test_qwen2_large_executor_installs_q128_prefill_hook_and_per_mode_state(
     model_executor = MagicMock(return_value=core)
     monkeypatch.setattr(qwen2_executor, "ModelExecutor", model_executor)
 
-    executor = executor_class(object(), object(), object.__new__(config_class))
+    config = object.__new__(config_class)
+    object.__setattr__(config, "device_sampling_enabled", False)
+    object.__setattr__(config, "salt_duplicate_seeds", False)
+    executor = executor_class(object(), object(), config)
 
     assert executor._model_executor is core
+    assert model_executor.call_args.kwargs["request_state_fields"] == ("prompt_tokens", "output_tokens", "slot_remap")
     assert core._q128_topk_tile_ends_warmed == set()
     assert model_executor.call_args.kwargs["owner_name"] == owner_name
     assert model_executor.call_args.kwargs["prefill_warmup"] is qwen2_executor._warmup_q128_around_prefill

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import functools
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
@@ -45,7 +46,6 @@ from tt_transformers.llm_runtime.warmup import (
     resolve_prefill_warmup_seq_lens,
     topk_warmup_sampling_variants,
 )
-from tt_transformers.models.executor import create_sampling_state
 from tt_transformers.models.mistral_7b import weight_utils
 from tt_transformers.models.mistral_7b.model import (
     MISTRAL_ACCURACY,
@@ -59,6 +59,8 @@ from tt_transformers.models.mistral_7b.model import (
     build_mistral_7b_transformer_config,
 )
 from tt_transformers.modules.sampling.sampling_1d import Sampling1D
+from tt_transformers.modules.sampling.sampling_state_1d import SamplingState1D
+from tt_transformers.modules.sampling.seed_manager_1d import SeedManager1D
 
 DEFAULT_HF_MODEL = "mistralai/Mistral-7B-Instruct-v0.3"
 DEFAULT_HF_REVISION = "c170c708c41dac9275d15a8fff4eca08d52bab71"
@@ -517,8 +519,19 @@ class Mistral7BExecutor:
             if not callable(is_resolved) or not is_resolved():
                 raise ValueError("model.sampling must have a resolved Sampling1DConfig")
 
-        self.sampling_state_controller, self.sampling_state = create_sampling_state(
-            model, config.device_sampling_enabled, salt_duplicate_seeds=config.salt_duplicate_seeds
+        # The controller owns request-scoped sampling state: per-request seeds for
+        # prefill and decode sampling, and the penalty history.
+        self.sampling_state_controller = (
+            SamplingState1D(
+                sampling,
+                seed_manager_factory=functools.partial(SeedManager1D, salt_duplicate_seeds=config.salt_duplicate_seeds),
+                history_width=int(model.config.max_seq_len),
+            )
+            if config.device_sampling_enabled
+            else None
+        )
+        self.sampling_state = (
+            self.sampling_state_controller.create_state() if self.sampling_state_controller is not None else None
         )
         self._request_state_fields = ("prompt_tokens", "output_tokens", "slot_remap")
 

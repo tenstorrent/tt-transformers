@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import functools
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
@@ -57,8 +58,9 @@ from tt_transformers.models.deepseek_r1_distill_qwen_14b.model import (
     DeepSeekR1Qwen14BWeights,
     build_deepseek_r1_distill_qwen_14b_transformer_config,
 )
-from tt_transformers.models.executor import create_sampling_state
 from tt_transformers.modules.sampling.sampling_1d import Sampling1D
+from tt_transformers.modules.sampling.sampling_state_1d import SamplingState1D
+from tt_transformers.modules.sampling.seed_manager_1d import SeedManager1D
 
 DEFAULT_HF_MODEL = "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B"
 DEFAULT_HF_REVISION = "1df8507178afcc1bef68cd8c393f61a886323761"
@@ -511,8 +513,19 @@ class DeepSeekR1Qwen14BExecutor:
             if not callable(is_resolved) or not is_resolved():
                 raise ValueError("model.sampling must have a resolved Sampling1DConfig")
 
-        self.sampling_state_controller, self.sampling_state = create_sampling_state(
-            model, config.device_sampling_enabled, salt_duplicate_seeds=config.salt_duplicate_seeds
+        # The controller owns request-scoped sampling state: per-request seeds for
+        # prefill and decode sampling, and the penalty history.
+        self.sampling_state_controller = (
+            SamplingState1D(
+                sampling,
+                seed_manager_factory=functools.partial(SeedManager1D, salt_duplicate_seeds=config.salt_duplicate_seeds),
+                history_width=int(model.config.max_seq_len),
+            )
+            if config.device_sampling_enabled
+            else None
+        )
+        self.sampling_state = (
+            self.sampling_state_controller.create_state() if self.sampling_state_controller is not None else None
         )
         self._request_state_fields = ("prompt_tokens", "output_tokens", "slot_remap")
 
