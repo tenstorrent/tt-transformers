@@ -94,7 +94,6 @@ class DeepSeekR1Qwen14BGenerator:
         "supports_stochastic_device_prefill": False,
         "accepts_trace_mode": True,
         "supports_chunked_prefill": True,
-        "supports_device_logprobs": False,
     }
     requires_prefill_trace_warmup = True
 

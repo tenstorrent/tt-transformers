@@ -88,7 +88,6 @@ class Llama33_70BGenerator:
         "max_device_top_k": 32,
         "accepts_trace_mode": True,
         "supports_chunked_prefill": True,
-        "supports_device_logprobs": False,
         # Every supported multi-device geometry (T3K, P150x4) serves on FABRIC_1D,
         # the vLLM plugin's default for these meshes (vllm-tt-plugin #116); the
         # model's Ring collectives run on it, as TTTv1's do. Declared explicitly so
