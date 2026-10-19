@@ -18,6 +18,7 @@ Design principles:
 import hashlib
 import os
 import pathlib
+import socket
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -350,15 +351,20 @@ def _from_torch_and_dump(
 def _dump_cache_file_atomically(cache_file: pathlib.Path, tensor: ttnn.Tensor) -> None:
     """Publish a cache file only once it is complete.
 
-    Several processes can share one cache directory (one per data-parallel rank)
-    and fill it at the same time. A reader treats an existing file as a cache hit,
-    so the tensor is written to a process-unique temporary name in the same
-    directory and renamed into place, which is atomic on POSIX filesystems.
+    Several processes can share one cache directory (one per data-parallel rank,
+    on one host or on several hosts sharing a filesystem) and fill it at the same
+    time. A reader treats an existing file as a cache hit, so the tensor is written
+    to a temporary name in the same directory and renamed into place, which is
+    atomic on POSIX filesystems. The name carries the hostname as well as the
+    process id, because process ids repeat across hosts: two writers sharing one
+    temporary file could publish each other's partial writes.
     """
     cache_file.parent.mkdir(parents=True, exist_ok=True)
-    temporary = cache_file.with_name(f"{cache_file.name}.{os.getpid()}.tmp")
+    temporary = cache_file.with_name(f"{cache_file.name}.{socket.gethostname()}.{os.getpid()}.tmp")
     try:
         ttnn._ttnn.tensor.dump_tensor_flatbuffer(str(temporary), tensor)
+        if not temporary.exists():
+            raise FileNotFoundError(f"writing cache file {cache_file} left no temporary file at {temporary}")
         os.replace(temporary, cache_file)
     except BaseException:
         temporary.unlink(missing_ok=True)

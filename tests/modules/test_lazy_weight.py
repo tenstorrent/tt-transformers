@@ -5,6 +5,7 @@
 Unit tests for LazyWeight module.
 """
 
+import os
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -1069,6 +1070,38 @@ def test_failed_cache_write_leaves_no_file(tmp_path):
 
     with patch.object(ttnn._ttnn.tensor, "dump_tensor_flatbuffer", side_effect=dump):
         with pytest.raises(RuntimeError, match="disk full"):
+            _dump_cache_file_atomically(cache_file, object())
+
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.host
+def test_cache_write_temporary_name_is_unique_per_host_and_process(tmp_path):
+    """Process ids repeat across hosts that share a cache directory, so the
+    temporary name must carry the hostname too."""
+    cache_file = tmp_path / "weight.tensorbin"
+    written = []
+
+    def dump(path, tensor):
+        written.append(Path(path).name)
+        Path(path).write_bytes(b"complete")
+
+    with (
+        patch("tt_transformers.modules.lazy_weight.socket.gethostname", return_value="host-a"),
+        patch.object(ttnn._ttnn.tensor, "dump_tensor_flatbuffer", side_effect=dump),
+    ):
+        _dump_cache_file_atomically(cache_file, object())
+
+    assert written == [f"weight.tensorbin.host-a.{os.getpid()}.tmp"]
+    assert cache_file.read_bytes() == b"complete"
+
+
+@pytest.mark.host
+def test_cache_write_that_leaves_no_temporary_file_fails_loudly(tmp_path):
+    cache_file = tmp_path / "weight.tensorbin"
+
+    with patch.object(ttnn._ttnn.tensor, "dump_tensor_flatbuffer", return_value=None):
+        with pytest.raises(FileNotFoundError, match="left no temporary file"):
             _dump_cache_file_atomically(cache_file, object())
 
     assert list(tmp_path.iterdir()) == []
