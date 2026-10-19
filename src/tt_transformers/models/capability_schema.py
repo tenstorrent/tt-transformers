@@ -128,20 +128,6 @@ _CAPABILITY_KEYS: tuple[CapabilityKey, ...] = (
             "device penalty state (SamplingState1D) declare False."
         ),
     ),
-    CapabilityKey(
-        name="supports_stochastic_device_prefill",
-        value_type="bool",
-        reader_default=True,
-        required=False,
-        doc=(
-            "Whether a nonzero-temperature prefill row may be sampled on device. "
-            "Generators whose executor owns no SamplingState1D declare False: their "
-            "prefill sampler seeds from a fixed per-slot buffer, so the first token "
-            "would depend on the slot rather than the request and would ignore its "
-            "seed. The plugin does not currently read this key, so the declaration "
-            "records the limit without changing where such a prefill is sampled."
-        ),
-    ),
 )
 
 
