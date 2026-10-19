@@ -1731,7 +1731,9 @@ def test_prefill_and_decode_warmup_register_every_sampling_variant_once(penalty_
                 continue
             positions = None if call["start_pos"] is None else tuple(call["start_pos"].tolist())
             key = tuple(call["tokens"].shape), positions, bool(torch.all(sampling.temperature == 0))
-            variants_by_request.setdefault(key, set()).add((sampling.presence_penalty != 0, sampling.enable_log_probs))
+            penalised = bool(torch.as_tensor(sampling.presence_penalty).ne(0).any())
+            logprobs = bool(torch.as_tensor(sampling.enable_log_probs).any())
+            variants_by_request.setdefault(key, set()).add((penalised, logprobs))
         assert variants_by_request
         assert all(variants == expected for variants in variants_by_request.values())
     counts = len(execution.prefill_calls), len(execution.decode_calls)

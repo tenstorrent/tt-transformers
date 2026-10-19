@@ -134,9 +134,10 @@ def test_executor_resolves_batched_prefill_policy(
                 raise AssertionError("construction-policy test must not execute sampling")
 
         class _SamplingState:
-            def __init__(self, sampling):
+            def __init__(self, sampling, *, seed_manager_factory=None):
                 self.sampling = sampling
                 self.seed_manager = SimpleNamespace()
+                self.seed_manager_factory = seed_manager_factory
 
             def create_state(self):
                 return SimpleNamespace(seed_state=SimpleNamespace(capacity=32))
