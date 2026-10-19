@@ -939,7 +939,11 @@ class Phi4Executor:
         # Without a Q128 trace family the trace pass primes these programs eagerly.
         traced = enable_trace and 128 in self.warmup.config.prefill_trace_sequence_lengths
         execution = self.traced_executor if traced else self.eager_executor
-        for sampling in topk_warmup_sampling_variants(1, penalties=self.warmup.config.penalty_variants):
+        for sampling in topk_warmup_sampling_variants(
+            1,
+            penalties=self.warmup.config.penalty_variants,
+            logprobs=self.warmup.config.logprobs_variants,
+        ):
             for sequence_length in (32, 64, 96):
                 page_table_width = (
                     sequence_length + self.page_table_layout.block_size - 1

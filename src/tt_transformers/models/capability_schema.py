@@ -142,20 +142,6 @@ _CAPABILITY_KEYS: tuple[CapabilityKey, ...] = (
             "records the limit without changing where such a prefill is sampled."
         ),
     ),
-    CapabilityKey(
-        name="supports_device_logprobs",
-        value_type="bool",
-        reader_default=True,
-        required=True,
-        doc=(
-            "Whether the device returns sampled-token logprobs, which the plugin uses "
-            "only on 8- and 32-device meshes. Every generator here declares False: "
-            "warmup does not build the logprobs program variants, so after trace "
-            "activation a logprobs request could not be served on device. The plugin "
-            "does not currently read this key, so the declaration records the limit "
-            "without routing such a request to host sampling."
-        ),
-    ),
 )
 
 
