@@ -1677,7 +1677,10 @@ def test_q128_single_topk_tile_is_program_material_but_not_trace_material():
 
 
 @pytest.mark.host
-def test_hidden_capture_schema_is_sampling_independent_with_distinct_trace_and_alias_identities():
+def test_sampling_variants_of_one_body_share_a_trace_with_distinct_alias_workspaces():
+    """Sampling runs after the hidden trace replays, so the logits, argmax and
+    top-k variants of one prefill capture the same body. They register one
+    trace identity, and each program alias keeps its own postprocess workspace."""
     runtime = _runtime(allow_force_argmax=True)
     tokens, page_table, prompt_lens, start_pos = _inputs(prompt_length=80)
 
@@ -1701,6 +1704,8 @@ def test_hidden_capture_schema_is_sampling_independent_with_distinct_trace_and_a
         "topk",
     }
     assert len({prepared.trace_signature for prepared in (logits, argmax, topk)}) == 3
+    assert len({plan.signature for plan in plans}) == 1
+    assert plans[0].signature.sampling_path == "logits"
     assert len({plan.schema_fingerprint for plan in plans}) == 1
     assert len({plan.workspace_fingerprint for plan in plans}) == 3
     assert all("topk" not in repr(plan.schema_fingerprint) for plan in plans)
