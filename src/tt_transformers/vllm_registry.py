@@ -68,8 +68,9 @@ resolve_hf_id = hf_repo_id
 # model exists. Each architecture class declares the keys that every one of its
 # generators declares True; the generator instance carries its exact set at
 # runtime. Value-typed keys stay on the generators: ``max_device_top_k`` is read
-# from the instance, and ``fabric_config`` differs between the generators of one
-# architecture, so serving configuration supplies it per deployment.
+# from the instance, and ``fabric_config``, which differs between the generators
+# of one architecture and must be known before the mesh opens, is resolved per
+# checkpoint by ``fabric_config_for``.
 _SHARED_CAPABILITIES: dict[str, Any] = {
     "supports_prefix_caching": True,
     "supports_async_decode": True,
@@ -108,6 +109,22 @@ class _ArchitectureDispatcher:
             f"Supported checkpoints: {supported}. Pass one of these ids as the model, "
             "or a Hugging Face cache snapshot of one."
         )
+
+    @classmethod
+    def fabric_config_for(cls, model_name: str | None) -> dict[str, Any] | None:
+        """Return the ``fabric_config`` capability of the generator serving ``model_name``.
+
+        The plugin sets the fabric before it opens the mesh, which is before any
+        model exists, so it cannot read the capability off the instance; and the
+        generators of one architecture need different fabrics (the T3K ring
+        models and the single-card models share architectures), so no
+        class-level declaration here is right for all of them. Selecting the
+        generator imports its module, and with it ``ttnn``, which the caller
+        already has.
+        """
+
+        generator = cls.select(model_name).load()
+        return (getattr(generator, "model_capabilities", None) or {}).get("fabric_config")
 
     @classmethod
     def get_max_tokens_all_users(

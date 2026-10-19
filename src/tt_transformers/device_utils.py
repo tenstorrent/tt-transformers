@@ -16,6 +16,28 @@ def is_blackhole() -> bool:
     return "blackhole" in ttnn.get_arch_name()
 
 
+def require_fabric_config(mesh_device: ttnn.MeshDevice, expected: ttnn.FabricConfig, *, model: str) -> None:
+    """Raise unless a multi-device mesh was opened with the fabric ``model`` needs.
+
+    The fabric is set before the mesh opens, by whoever opens it: the vLLM plugin
+    takes it from its per-mesh default, the model's declared ``fabric_config`` or
+    the operator's ``fabric_config`` setting. A model whose collectives are built
+    for one fabric checks what it was given, so a mismatch fails at load with
+    both fabrics named instead of inside the first collective.
+    """
+
+    num_devices = mesh_device.get_num_devices()
+    if num_devices <= 1:
+        return
+    active = ttnn.get_fabric_config()
+    if active != expected:
+        raise RuntimeError(
+            f"{model} needs fabric {expected.name} on its {num_devices}-device mesh, but the mesh was opened "
+            f"with {getattr(active, 'name', active)}. Open the mesh with the fabric the model declares in "
+            f"model_capabilities['fabric_config'], or serve with tt.fabric_config={expected.name}."
+        )
+
+
 def get_device_name(mesh_device: ttnn.MeshDevice, num_devices: int | None = None) -> str:
     """Return the product/topology name for a TT mesh device.
 

@@ -394,7 +394,8 @@ def _run_initialize(entry: GeneratorEntry, **kwargs) -> SimpleNamespace:
     namespace: dict[str, object] = {name: record for name in loaded if not hasattr(builtins, name)}
     exec(code, namespace)
     hf_config = SimpleNamespace(_name_or_path=entry.hf_id)
-    return namespace["initialize_vllm_model"](None, hf_config, object(), 32, 4096, **kwargs)
+    cls = SimpleNamespace(model_capabilities={"fabric_config": {"config": None}})
+    return namespace["initialize_vllm_model"](cls, hf_config, object(), 32, 4096, **kwargs)
 
 
 @pytest.mark.host
@@ -408,3 +409,73 @@ def test_unspecified_precision_builds_the_generator_default(dispatcher, entry, o
 
     config = _run_initialize(entry, optimizations=optimizations)
     assert config.optimizations == expected
+
+
+def _declared_fabric_source(entry: GeneratorEntry) -> str | None:
+    """The source text of a generator's declared ``fabric_config``, which names a
+    ttnn enum member and so cannot be evaluated without ttnn."""
+
+    for node in _generator_class(entry).body:
+        if (
+            isinstance(node, ast.Assign)
+            and [getattr(target, "id", None) for target in node.targets] == ["model_capabilities"]
+            and isinstance(node.value, ast.Dict)
+        ):
+            for key, value in zip(node.value.keys, node.value.values):
+                if isinstance(key, ast.Constant) and key.value == "fabric_config":
+                    return ast.unparse(value)
+    return None
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(("dispatcher", "entry"), _all_entries(), ids=lambda value: getattr(value, "package", None))
+def test_fabric_config_for_returns_the_selected_generators_declaration(monkeypatch, dispatcher, entry) -> None:
+    """The plugin opens the mesh before the model exists, so the dispatcher answers
+    per checkpoint with the declaration of the generator that will serve it."""
+
+    def load(selected: GeneratorEntry) -> type:
+        return type("Generator", (), {"model_capabilities": {"fabric_config": {"config": selected.hf_id}}})
+
+    monkeypatch.setattr(GeneratorEntry, "load", load)
+
+    assert dispatcher.fabric_config_for(entry.hf_id) == {"config": entry.hf_id}
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("dispatcher", DISPATCHERS, ids=lambda d: d.architecture)
+def test_fabric_config_for_is_none_without_a_declaration_and_rejects_unknown_models(monkeypatch, dispatcher) -> None:
+    loaded: list[str] = []
+
+    def load(selected: GeneratorEntry) -> type:
+        loaded.append(selected.hf_id)
+        return type("Generator", (), {"model_capabilities": {"supports_prefix_caching": True}})
+
+    monkeypatch.setattr(GeneratorEntry, "load", load)
+
+    entry = dispatcher.generators[0]
+    assert dispatcher.fabric_config_for(entry.hf_id) is None
+    with pytest.raises(UnsupportedModelError):
+        dispatcher.fabric_config_for("org/unknown")
+    assert loaded == [entry.hf_id]
+
+
+@pytest.mark.host
+def test_ring_generators_check_their_fabric_before_building() -> None:
+    """Every generator that declares a ring fabric checks, at load, that the mesh
+    was opened with it, so a mesh opened on another fabric fails loudly."""
+
+    ring = [entry for _, entry in _all_entries() if "FABRIC_1D_RING" in (_declared_fabric_source(entry) or "")]
+    assert ring, "no generator declares a ring fabric; the check below would pass vacuously"
+    for entry in ring:
+        method = next(
+            node
+            for node in _generator_class(entry).body
+            if isinstance(node, ast.FunctionDef) and node.name == "initialize_vllm_model"
+        )
+        called = [
+            node.func.id for node in ast.walk(method) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        ]
+        assert "require_fabric_config" in called, f"{entry.generator} does not check its ring fabric at load"
+        assert called.index("require_fabric_config") < next(
+            index for index, name in enumerate(called) if name.startswith("build_")
+        ), f"{entry.generator} builds before checking its fabric"

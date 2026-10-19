@@ -13,6 +13,7 @@ from typing import Any
 import torch
 import ttnn
 
+from tt_transformers.device_utils import require_fabric_config
 from tt_transformers.llm_runtime.config import (
     PagedKVCacheConfig,
     TraceConfig,
@@ -159,6 +160,7 @@ class Llama33_70BGenerator:
         hf_model = getattr(hf_config, "_name_or_path", None)
         if not hf_model:
             raise ValueError("hf_config must provide a non-empty _name_or_path")
+        require_fabric_config(mesh_device, cls.model_capabilities["fabric_config"]["config"], model=str(hf_model))
         return build_llama33_70b_generator(
             Llama33_70BGeneratorConfig(
                 hf_model=str(hf_model),
