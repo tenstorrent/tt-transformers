@@ -18,6 +18,7 @@ from tt_transformers.llm_runtime.config import PagedKVCacheConfig, PageTableLayo
 from tt_transformers.llm_runtime.execution import EagerExecutor, TracedExecutor
 from tt_transformers.llm_runtime.lane_group import LaneGroupExecutor
 from tt_transformers.llm_runtime.warmup import _build_plan
+from tt_transformers.models import executor as shared_model_executor
 from tt_transformers.models import llama3_executor as llama3_family_executor
 from tt_transformers.models.llama3_8b import hf_generator as llama_executor
 from tt_transformers.models.llama3_8b import model as llama_model
@@ -154,7 +155,9 @@ def test_executor_resolves_batched_prefill_policy(
                 return None
 
         monkeypatch.setattr(llama3_family_executor, "Sampling1D", _Sampling)
-        monkeypatch.setattr(llama3_family_executor, "SamplingState1D", _SamplingState)
+        # The executor builds its controller through the shared helper.
+        monkeypatch.setattr(shared_model_executor, "Sampling1D", _Sampling)
+        monkeypatch.setattr(shared_model_executor, "SamplingState1D", _SamplingState)
         sampler = _Sampling()
         sampler.config = SimpleNamespace(
             is_resolved=lambda: True,
