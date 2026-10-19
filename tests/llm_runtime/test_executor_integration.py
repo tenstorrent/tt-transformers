@@ -814,7 +814,7 @@ def _device_sampling_executor(
     if binding.executor_module in (llama33_70b_executor, qwen3_32b_executor):
 
         class FakeSamplingState1D:
-            def __init__(self, sampling, *, seed_manager_factory=None):
+            def __init__(self, sampling, *, seed_manager_factory=None, history_width=None):
                 self.sampling = sampling
                 # Report the salting policy the executor asked its seed manager for.
                 self.seed_manager = SimpleNamespace(

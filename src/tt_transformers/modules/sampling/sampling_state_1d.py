@@ -76,7 +76,19 @@ class SamplingState1D:
         *,
         penalties_factory: Callable[[Penalties1DConfig], Penalties1D] | None = None,
         seed_manager_factory: Callable[[Any], SeedManager1D] | None = None,
+        history_width: int | None = None,
     ) -> None:
+        """``history_width`` pads every token history the penalty state is rebuilt
+        from to one width. The device programs that build the penalty masks are
+        shaped by that width, so with it they have one shape, which warmup
+        compiles; without it, each new prompt or output length compiles a program
+        when its request is admitted, which a traced runtime must not do after
+        capture. Executors pass the model's maximum sequence length.
+        """
+        if history_width is not None and (
+            not isinstance(history_width, int) or isinstance(history_width, bool) or history_width <= 0
+        ):
+            raise ValueError("history_width must be a positive integer")
         sampling_config = getattr(sampling, "config", None)
         if sampling_config is None:
             raise TypeError("sampling must expose a resolved Sampling1D config")
@@ -92,6 +104,7 @@ class SamplingState1D:
         make_seed_manager = seed_manager_factory or SeedManager1D
 
         self.sampling = sampling
+        self._history_width = history_width
         self.penalties = make_penalties(penalties_config)
         try:
             self.seed_manager = make_seed_manager(sampling_config)
@@ -943,6 +956,11 @@ class SamplingState1D:
             capacity=capacity,
             active_mask=active_mask,
         )
+        if self._history_width is not None:
+            prompt = _pad_history(prompt, self._history_width, name="prompt_tokens")
+            if output is None:
+                output = torch.full((capacity, 1), -1, dtype=torch.int64)
+            output = _pad_history(output, self._history_width, name="output_tokens")
         self.penalties.init_prompt_penalties(
             state.penalty_params,
             state.penalty_accumulator,
@@ -1049,3 +1067,14 @@ def _normalize_prefill_positions(positions: Sequence[int] | None, count: int) ->
     if any(position < 0 for position in values):
         raise ValueError("prefill positions must be nonnegative")
     return values
+
+
+def _pad_history(tokens: torch.Tensor, width: int, *, name: str) -> torch.Tensor:
+    """Right-pad a token history with -1, the penalty ops' empty marker, to ``width``."""
+
+    length = int(tokens.shape[-1])
+    if length > width:
+        raise ValueError(f"{name} holds {length} tokens per row, more than the history width {width}")
+    padded = torch.full((int(tokens.shape[0]), width), -1, dtype=torch.int64)
+    padded[:, :length] = tokens.to(torch.int64)
+    return padded

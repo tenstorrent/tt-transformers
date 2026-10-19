@@ -444,6 +444,7 @@ def _create_sampling_state(model: Any, enabled: bool, *, salt_duplicate_seeds: b
     controller = SamplingState1D(
         sampling,
         seed_manager_factory=functools.partial(SeedManager1D, salt_duplicate_seeds=salt_duplicate_seeds),
+        history_width=int(model.config.max_seq_len),
     )
     return controller, controller.create_state()
 

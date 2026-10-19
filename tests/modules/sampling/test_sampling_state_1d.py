@@ -216,7 +216,7 @@ class FakeSampling:
         self.released = True
 
 
-def _make_controller(shape=(1, 4), *, penalty_config_updates=None):
+def _make_controller(shape=(1, 4), *, penalty_config_updates=None, history_width=None):
     events = []
     mesh = FakeMesh(shape)
     seed_buffer = FakeBuffer(torch.arange(4, dtype=torch.int32))
@@ -246,6 +246,7 @@ def _make_controller(shape=(1, 4), *, penalty_config_updates=None):
         sampling,
         penalties_factory=penalties_factory,
         seed_manager_factory=lambda sampling_config: FakeSeedManager(sampling_config, events),
+        history_width=history_width,
     )
     return controller, sampling, penalties, events
 
@@ -373,6 +374,49 @@ def test_admit_updates_params_seeds_histories_and_static_identity():
     ]
     assert torch.equal(events[-2][1], prepared.prompt_tokens)
     assert torch.equal(events[-1][1], prepared.output_tokens)
+
+
+@pytest.mark.host
+def test_history_width_gives_the_penalty_history_one_shape_whatever_the_request():
+    """The penalty-mask programs are shaped by the history they are built from.
+    Padded to one width, a new prompt or output length compiles nothing new after
+    warmup, which a traced runtime must not do once capture has run."""
+    controller, _, _, events = _make_controller(history_width=6)
+    state = controller.create_state()
+    events.clear()
+
+    controller.admit(state, _prepared())
+    prompt, output = (event[1] for event in events if event[0] in ("penalty.prompt", "penalty.output_reset"))
+
+    assert prompt.shape == output.shape == (2, 6)
+    assert prompt.tolist() == [[1, 2, -1, -1, -1, -1], [3, -1, -1, -1, -1, -1]]
+    assert output.tolist() == [[7, 8, -1, -1, -1, -1], [9, -1, -1, -1, -1, -1]]
+
+    controller, _, _, events = _make_controller(history_width=6)
+    state = controller.create_state()
+    events.clear()
+    controller.admit(state, replace(_prepared(penalties=False), prompt_tokens=None, output_tokens=None))
+    prompt, output = (event[1] for event in events if event[0] in ("penalty.prompt", "penalty.output_reset"))
+
+    # No history still uploads full-width, all-empty rows rather than skipping the scatter.
+    assert prompt.shape == output.shape == (4, 6)
+    assert bool((prompt == -1).all()) and bool((output == -1).all())
+
+
+@pytest.mark.host
+def test_history_longer_than_the_width_is_rejected(expect_error):
+    controller, _, _, _ = _make_controller(history_width=1)
+    state = controller.create_state()
+
+    with expect_error(ValueError, "more than the history width 1"):
+        controller.admit(state, _prepared())
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("width", [0, -3, True, 2.5])
+def test_history_width_must_be_a_positive_integer(width, expect_error):
+    with expect_error(ValueError, "history_width must be a positive integer"):
+        _make_controller(history_width=width)
 
 
 @pytest.mark.host
