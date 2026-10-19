@@ -26,6 +26,7 @@ from tt_transformers.llm_runtime.warmup import (
     WarmupCoordinatorConfig,
     _build_plan,
     _resolve_coverage_manifest,
+    _warmup_sampling_params,
     resolve_prefill_warmup_seq_lens,
     topk_warmup_sampling_variants,
 )
@@ -834,6 +835,43 @@ def test_device_sampling_warms_a_penalised_twin_of_every_sampled_case(allow_forc
     assert penalised == {case for case in cases if not case.penalties and case.sampling_path != "logits"}
     eager = coordinator.config.eager_plan
     assert not any(case.penalties for case in (*eager.prefill, *eager.decode))
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(("num_devices", "penalty_state"), [(1, True), (8, False), (8, True)])
+def test_prefill_warms_top_k_logprobs_variants_where_logprobs_run_on_device(num_devices, penalty_state):
+    """Only 8- and 32-chip meshes compute logprobs on device. There, every sampled
+    prefill case on the top-k path also warms its logprobs variant, crossed with
+    the penalty variants; argmax never takes logprobs, and decode is unchanged."""
+
+    config = WarmupConfig(prefill_seq_lens=LADDER, prefill_batch_sizes=(1,))
+    coordinator, *_ = make_coordinator(
+        warmup_config=config,
+        sequence_lengths=LADDER,
+        lane_capacity=2,
+        num_devices=num_devices,
+        penalty_state=penalty_state,
+    )
+    sampled = coordinator.config.sampled_plan
+    on_device = num_devices in (8, 32)
+
+    assert coordinator.config.logprobs_variants is on_device
+    assert not any(case.logprobs for case in sampled.decode)
+    assert not any(case.logprobs and case.sampling_path != "topk" for case in sampled.prefill)
+    variants = {}
+    for case in sampled.prefill:
+        if case.sampling_path == "topk":
+            key = (case.batch_size, case.sequence_length, case.cached_tokens)
+            variants.setdefault(key, set()).add((case.penalties, case.logprobs))
+    expected = {
+        (penalties, logprobs)
+        for penalties in ((False, True) if penalty_state else (False,))
+        for logprobs in ((False, True) if on_device else (False,))
+    }
+    assert variants and all(found == expected for found in variants.values())
+    logprobs_case = next((case for case in sampled.prefill if case.logprobs), None)
+    if logprobs_case is not None:
+        assert _warmup_sampling_params(logprobs_case, 2).enable_log_probs is True
 
 
 @pytest.mark.host

@@ -33,6 +33,7 @@ class WarmupCase:
     sampling_path: str
     cached_tokens: int = 0
     penalties: bool = False
+    logprobs: bool = False
 
 
 @dataclass(frozen=True)
@@ -84,6 +85,9 @@ class WarmupCoordinatorConfig:
     # ``disable_batched_prefill``), so only batch 1 is warmed unless fixed
     # waves are set: see `_build_plan`.
     sequential_prefill: bool = False
+    # Whether sampled prefill also warms its logprobs variants: only meshes that
+    # compute logprobs on device (8 or 32 chips) serve a logprobs request there.
+    logprobs_variants: bool = False
     # The prefill runtime's fixed ``(bucket, F)`` waves. Non-empty replaces the
     # configured batch ladder: see `_build_plan`.
     fixed_prefill_batch_sizes: tuple[tuple[int, int], ...] = ()
@@ -111,6 +115,7 @@ class WarmupCoordinatorConfig:
             "decode_trace_enabled",
             "penalty_variants",
             "sequential_prefill",
+            "logprobs_variants",
         ):
             if not isinstance(getattr(self, name), bool):
                 raise TypeError(f"{name} must be bool")
@@ -140,6 +145,7 @@ class WarmupCoordinatorConfig:
             can_sample_on_device=False,
             sequential_prefill=self.sequential_prefill,
             fixed_prefill_batch_sizes=self.fixed_prefill_batch_sizes,
+            logprobs_variants=self.logprobs_variants,
         )
         expected_sampled = _build_plan(
             warmup=self.warmup,
@@ -151,6 +157,7 @@ class WarmupCoordinatorConfig:
             penalty_variants=self.penalty_variants,
             sequential_prefill=self.sequential_prefill,
             fixed_prefill_batch_sizes=self.fixed_prefill_batch_sizes,
+            logprobs_variants=self.logprobs_variants,
         )
         if self.eager_plan != expected_eager or self.sampled_plan != expected_sampled:
             raise ValueError("warmup plans must match resolved policy and geometry")
@@ -211,6 +218,7 @@ class WarmupCoordinatorConfig:
         prime_q128_tile_ends = device_sampling_enabled and lane_batch_size >= 32
         penalty_variants = device_sampling_enabled and prefill.sampling_state_controller is not None
         sequential_prefill = prefill.disable_batched_prefill
+        logprobs_variants = device_sampling_enabled and decode.num_devices in (8, 32)
         eager_plan = _build_plan(
             warmup=warmup,
             layout=prefill.page_table_layout,
@@ -220,6 +228,7 @@ class WarmupCoordinatorConfig:
             can_sample_on_device=False,
             sequential_prefill=sequential_prefill,
             fixed_prefill_batch_sizes=prefill.fixed_prefill_batch_sizes,
+            logprobs_variants=logprobs_variants,
         )
         sampled_plan = _build_plan(
             warmup=warmup,
@@ -231,6 +240,7 @@ class WarmupCoordinatorConfig:
             penalty_variants=penalty_variants,
             sequential_prefill=sequential_prefill,
             fixed_prefill_batch_sizes=prefill.fixed_prefill_batch_sizes,
+            logprobs_variants=logprobs_variants,
         )
         return cls(
             warmup=warmup,
@@ -250,6 +260,7 @@ class WarmupCoordinatorConfig:
             penalty_variants=penalty_variants,
             sequential_prefill=sequential_prefill,
             fixed_prefill_batch_sizes=prefill.fixed_prefill_batch_sizes,
+            logprobs_variants=logprobs_variants,
         )
 
     def with_page_table_layout(self, layout: PageTableLayout) -> WarmupCoordinatorConfig:
@@ -278,6 +289,7 @@ class WarmupCoordinatorConfig:
                 can_sample_on_device=False,
                 sequential_prefill=self.sequential_prefill,
                 fixed_prefill_batch_sizes=self.fixed_prefill_batch_sizes,
+                logprobs_variants=self.logprobs_variants,
             ),
             sampled_plan=_build_plan(
                 warmup=self.warmup,
@@ -289,6 +301,7 @@ class WarmupCoordinatorConfig:
                 penalty_variants=self.penalty_variants,
                 sequential_prefill=self.sequential_prefill,
                 fixed_prefill_batch_sizes=self.fixed_prefill_batch_sizes,
+                logprobs_variants=self.logprobs_variants,
             ),
         )
 
@@ -782,6 +795,7 @@ def _build_plan(
     penalty_variants: bool = True,
     sequential_prefill: bool = False,
     fixed_prefill_batch_sizes: tuple[tuple[int, int], ...] = (),
+    logprobs_variants: bool = False,
 ) -> WarmupPlan:
     sampling_paths = ["logits"]
     if can_sample_on_device:
@@ -853,6 +867,13 @@ def _build_plan(
     if penalty_variants:
         prefill += [replace(case, penalties=True) for case in prefill if case.sampling_path != "logits"]
         decode += [replace(case, penalties=True) for case in decode if case.sampling_path != "logits"]
+    # Prefill samples eagerly after its hidden trace replays, so each logprobs
+    # variant is one more eager program, warmed here so that activation does not
+    # meet it later. A logprobs request always samples on the top-k path, so
+    # argmax has no logprobs variant; with penalties that bounds a sampled case
+    # at six variants. Decode logprobs need their own sampling traces.
+    if logprobs_variants:
+        prefill += [replace(case, logprobs=True) for case in prefill if case.sampling_path == "topk"]
     return WarmupPlan(tuple(prefill), tuple(decode))
 
 
@@ -863,7 +884,8 @@ def _warmup_sampling_params(case: WarmupCase, batch_size: int) -> SamplingParams
         params = _topk_sampling_params(batch_size)
     else:
         return None
-    return _with_penalties(params, batch_size) if case.penalties else params
+    params = _with_penalties(params, batch_size) if case.penalties else params
+    return replace(params, enable_log_probs=True) if case.logprobs else params
 
 
 def _greedy_sampling_params(batch_size: int) -> SamplingParams:
