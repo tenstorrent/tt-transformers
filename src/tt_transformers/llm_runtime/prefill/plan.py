@@ -236,8 +236,6 @@ def _plan_prefill_requests(
             max_actual_page_table_width,
             f"prefill row {source_row}",
         )
-        if cached[source_row] + sequence_length > page_width * block_size:
-            raise ValueError(f"padded prefill row {source_row} exceeds the canonical page-table capacity")
         uses_chunked_prefill = sequence_length > max_prefill_chunk_size or cached[source_row] > 0
         request_page_table = torch.full(
             (1, page_width),
@@ -256,6 +254,10 @@ def _plan_prefill_requests(
             max_prefill_chunk_size=max_prefill_chunk_size,
             uses_chunked_prefill=uses_chunked_prefill,
         )
+        # A chunked prefill stops after the chunk holding the last prompt token,
+        # so only the chunks that run must fit; the padded tail past them never runs.
+        if chunks[-1].chunk_start_idx + chunks[-1].chunk_size > page_width * block_size:
+            raise ValueError(f"padded prefill row {source_row} exceeds the canonical page-table capacity")
         requests.append(
             PrefillRequest(
                 kind="single",

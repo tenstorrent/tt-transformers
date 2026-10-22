@@ -644,6 +644,48 @@ def test_chunk_mapping_uses_absolute_blocks_pads_sentinels_and_stops_after_last_
 
 
 @pytest.mark.host
+def test_near_limit_continuation_checks_only_the_chunks_that_run_against_the_page_table():
+    layout = PageTableLayout.resolve(
+        block_size=32,
+        model_max_sequence_length=16384,
+        physical_num_blocks=4096,
+        max_prefill_chunk_size=2048,
+    )
+    prompt_length, cached_tokens = 16000, 11264
+    tokens, page_table, prompt_lens, start_pos = _inputs(
+        prompt_length=prompt_length,
+        cached_tokens=cached_tokens,
+        page_width=layout.prefill_width,
+    )
+
+    def plan(canonical_page_table_width):
+        return _plan_prefill_requests(
+            tokens=tokens,
+            page_table=page_table,
+            prompt_lens=prompt_lens,
+            empty_slots=(0,),
+            start_pos=start_pos,
+            block_size=32,
+            max_batch_size=32,
+            max_prefill_chunk_size=2048,
+            supports_batched_prefill=True,
+            max_actual_page_table_width=layout.raw_capacity_width,
+            canonical_page_table_width=canonical_page_table_width,
+        )
+
+    # The 4736-token tail pads to 8192, which would end past the table, but the
+    # chunk walk stops at the chunk holding the last token.
+    request = plan(layout.prefill_width)[0]
+    assert cached_tokens + request.padded_sequence_length > layout.prefill_width * 32
+    assert [chunk.chunk_start_idx for chunk in request.chunks] == [11264, 13312, 15360]
+    assert request.chunks[-1].contains_last_token
+    assert request.chunks[-1].chunk_start_idx + request.chunks[-1].chunk_size <= layout.prefill_width * 32
+
+    with pytest.raises(ValueError, match="canonical page-table capacity"):
+        plan(layout.raw_capacity_width)
+
+
+@pytest.mark.host
 def test_regular_page_table_uses_skip_sentinel_for_unallocated_tail():
     request = _plan(prompt_length=80)[0]
 
