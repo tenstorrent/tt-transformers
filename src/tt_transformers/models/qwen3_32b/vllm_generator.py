@@ -10,7 +10,6 @@ from typing import Any
 
 import ttnn
 
-from tt_transformers.device_utils import require_fabric_config
 from tt_transformers.llm_runtime.config import (
     PagedKVCacheConfig,
     TraceConfig,
@@ -72,10 +71,11 @@ class Qwen3_32BGenerator:
         "accepts_trace_mode": True,
         "supports_chunked_prefill": True,
         "supports_device_logprobs": False,
-        # Every supported multi-device geometry (T3K, P150x4) needs a ring
-        # fabric. The vLLM plugin (vllm-tt-plugin #116) otherwise defaults a
-        # mesh it is not told about to FABRIC_1D.
-        "fabric_config": {"config": ttnn.FabricConfig.FABRIC_1D_RING},
+        # Every supported multi-device geometry (T3K, P150x4) serves on FABRIC_1D,
+        # the vLLM plugin's default for these meshes (vllm-tt-plugin #116); the
+        # model's Ring collectives run on it, as TTTv1's do. Declared explicitly so
+        # the choice is a visible one-liner rather than an inherited default.
+        "fabric_config": {"config": ttnn.FabricConfig.FABRIC_1D},
     }
     requires_prefill_trace_warmup = True
 
@@ -134,7 +134,6 @@ class Qwen3_32BGenerator:
         hf_model = getattr(hf_config, "_name_or_path", None)
         if not hf_model:
             raise ValueError("hf_config must provide a non-empty _name_or_path")
-        require_fabric_config(mesh_device, cls.model_capabilities["fabric_config"]["config"], model=str(hf_model))
         return build_qwen3_32b_generator(
             Qwen3_32BGeneratorConfig(
                 hf_model=str(hf_model),

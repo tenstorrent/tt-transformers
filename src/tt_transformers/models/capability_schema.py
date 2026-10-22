@@ -111,9 +111,9 @@ _CAPABILITY_KEYS: tuple[CapabilityKey, ...] = (
             "Fabric the plugin must configure for this model's supported geometries. "
             "The value is a kwargs dict whose member is a ttnn.FabricConfig enum, so "
             "it is not a Python literal and cannot be evaluated on a host without "
-            "ttnn. Present on the SKUs whose geometries need a non-default (ring) "
-            "fabric or that pin an explicit one; absent means the plugin's own "
-            "per-mesh default applies (vllm-tt-plugin #116)."
+            "ttnn. Present on the generators that pin an explicit fabric, which is "
+            "FABRIC_1D, the plugin's default for their meshes; absent means the "
+            "plugin's own per-mesh default applies (vllm-tt-plugin #116)."
         ),
     ),
     CapabilityKey(

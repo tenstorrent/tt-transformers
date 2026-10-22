@@ -1649,19 +1649,12 @@ def test_generator_rejects_unavailable_traced_execution(binding, expect_error):
 @pytest.mark.host
 def test_initialize_vllm_model_threads_policy(binding, monkeypatch):
     captured = []
-    fabric_checks = []
     sentinel = object()
     mesh_device = object()
     monkeypatch.setattr(
         binding.generator_module,
         binding.build_generator_name,
         lambda config: captured.append(config) or sentinel,
-    )
-    monkeypatch.setattr(
-        binding.generator_module,
-        "require_fabric_config",
-        lambda *args, **kwargs: fabric_checks.append((args, kwargs)),
-        raising=False,
     )
 
     result = binding.generator_class.initialize_vllm_model(
@@ -1688,11 +1681,6 @@ def test_initialize_vllm_model_threads_policy(binding, monkeypatch):
     assert config.optimizations == "accuracy"
     assert config.trace_mode == "decode_only"
     assert config.device_sampling_enabled is True
-    declared = binding.generator_class.model_capabilities.get("fabric_config")
-    if declared is not None and declared["config"] == ttnn.FabricConfig.FABRIC_1D_RING:
-        assert fabric_checks == [((mesh_device, ttnn.FabricConfig.FABRIC_1D_RING), {"model": binding.hf_model})]
-    else:
-        assert fabric_checks == []
 
 
 @pytest.mark.host

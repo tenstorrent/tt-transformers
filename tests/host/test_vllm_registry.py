@@ -58,7 +58,7 @@ PLUGIN_CAPABILITY_KEYS = {
     "supports_async_decode": "declared",
     "supports_sample_on_device": "declared",
     "accepts_trace_mode": "declared",
-    "fabric_config": "absent: generators of one architecture need different fabrics",
+    "fabric_config": "absent: the plugin's per-mesh default, FABRIC_1D, is what every declaring generator declares",
     "max_device_top_k": "absent: read from the generator instance",
     "supports_device_penalties": "absent: read from the generator instance; absent means supported",
     "supports_device_logprobs": "absent: read from the generator instance; absent means supported",
@@ -394,8 +394,7 @@ def _run_initialize(entry: GeneratorEntry, **kwargs) -> SimpleNamespace:
     namespace: dict[str, object] = {name: record for name in loaded if not hasattr(builtins, name)}
     exec(code, namespace)
     hf_config = SimpleNamespace(_name_or_path=entry.hf_id)
-    cls = SimpleNamespace(model_capabilities={"fabric_config": {"config": None}})
-    return namespace["initialize_vllm_model"](cls, hf_config, object(), 32, 4096, **kwargs)
+    return namespace["initialize_vllm_model"](None, hf_config, object(), 32, 4096, **kwargs)
 
 
 @pytest.mark.host
@@ -428,54 +427,14 @@ def _declared_fabric_source(entry: GeneratorEntry) -> str | None:
 
 
 @pytest.mark.host
-@pytest.mark.parametrize(("dispatcher", "entry"), _all_entries(), ids=lambda value: getattr(value, "package", None))
-def test_fabric_config_for_returns_the_selected_generators_declaration(monkeypatch, dispatcher, entry) -> None:
-    """The plugin opens the mesh before the model exists, so the dispatcher answers
-    per checkpoint with the declaration of the generator that will serve it."""
+def test_declared_fabrics_are_the_plugins_default() -> None:
+    """The plugin reads ``fabric_config`` off the registered class before the mesh
+    opens. That class is the architecture dispatcher, which declares none, so a
+    generator's own declaration takes effect only when the generator is registered
+    directly. Declaring FABRIC_1D, the plugin's default for every mesh these
+    generators support, keeps both paths on the same fabric."""
 
-    def load(selected: GeneratorEntry) -> type:
-        return type("Generator", (), {"model_capabilities": {"fabric_config": {"config": selected.hf_id}}})
-
-    monkeypatch.setattr(GeneratorEntry, "load", load)
-
-    assert dispatcher.fabric_config_for(entry.hf_id) == {"config": entry.hf_id}
-
-
-@pytest.mark.host
-@pytest.mark.parametrize("dispatcher", DISPATCHERS, ids=lambda d: d.architecture)
-def test_fabric_config_for_is_none_without_a_declaration_and_rejects_unknown_models(monkeypatch, dispatcher) -> None:
-    loaded: list[str] = []
-
-    def load(selected: GeneratorEntry) -> type:
-        loaded.append(selected.hf_id)
-        return type("Generator", (), {"model_capabilities": {"supports_prefix_caching": True}})
-
-    monkeypatch.setattr(GeneratorEntry, "load", load)
-
-    entry = dispatcher.generators[0]
-    assert dispatcher.fabric_config_for(entry.hf_id) is None
-    with pytest.raises(UnsupportedModelError):
-        dispatcher.fabric_config_for("org/unknown")
-    assert loaded == [entry.hf_id]
-
-
-@pytest.mark.host
-def test_ring_generators_check_their_fabric_before_building() -> None:
-    """Every generator that declares a ring fabric checks, at load, that the mesh
-    was opened with it, so a mesh opened on another fabric fails loudly."""
-
-    ring = [entry for _, entry in _all_entries() if "FABRIC_1D_RING" in (_declared_fabric_source(entry) or "")]
-    assert ring, "no generator declares a ring fabric; the check below would pass vacuously"
-    for entry in ring:
-        method = next(
-            node
-            for node in _generator_class(entry).body
-            if isinstance(node, ast.FunctionDef) and node.name == "initialize_vllm_model"
-        )
-        called = [
-            node.func.id for node in ast.walk(method) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-        ]
-        assert "require_fabric_config" in called, f"{entry.generator} does not check its ring fabric at load"
-        assert called.index("require_fabric_config") < next(
-            index for index, name in enumerate(called) if name.startswith("build_")
-        ), f"{entry.generator} builds before checking its fabric"
+    declared = {entry.generator: _declared_fabric_source(entry) for _, entry in _all_entries()}
+    assert any(declared.values()), "no generator declares a fabric; the check below would pass vacuously"
+    for generator, source in declared.items():
+        assert source in (None, "{'config': ttnn.FabricConfig.FABRIC_1D}"), f"{generator} declares {source}"
