@@ -34,7 +34,7 @@ from tt_transformers.llm_runtime.decode import DecodeRuntime, DecodeRuntimeConfi
 from tt_transformers.llm_runtime.execution import EagerExecutor, TracedExecutor
 from tt_transformers.llm_runtime.output_reader import OutputReader
 from tt_transformers.llm_runtime.paged_kv_cache import PagedKVCacheManager
-from tt_transformers.llm_runtime.prefill.config import PrefillRuntimeConfig
+from tt_transformers.llm_runtime.prefill.config import PrefillRuntimeConfig, validate_prefill_policy
 from tt_transformers.llm_runtime.prefill.runtime import PrefillRuntime
 from tt_transformers.llm_runtime.program_compiler import ProgramCompiler
 from tt_transformers.llm_runtime.tensor_resources import attach_cleanup_failures
@@ -441,6 +441,8 @@ class Mistral7BExecutorConfig:
     device_sampling_enabled: bool
     # Prefill one sequence per pass (see ``ModelExecutorConfig.sequential_prefill``).
     sequential_prefill: bool = False
+    # Fixed-shape batched prefill (see ``ModelExecutorConfig.fixed_prefill_batch_sizes``).
+    fixed_prefill_batch_sizes: tuple[tuple[int, int], ...] = ()
 
     def __post_init__(self) -> None:
         nested_configs = (
@@ -455,6 +457,7 @@ class Mistral7BExecutorConfig:
             raise TypeError("device_sampling_enabled must be bool")
         if not isinstance(self.sequential_prefill, bool):
             raise TypeError("sequential_prefill must be bool")
+        validate_prefill_policy(self.sequential_prefill, self.fixed_prefill_batch_sizes)
 
 
 class Mistral7BExecutor:
@@ -524,6 +527,7 @@ class Mistral7BExecutor:
                 disable_batched_prefill=bool(runtime_config.disable_batched_prefill) or config.sequential_prefill,
                 max_prefill_batch_size=int(runtime_config.max_prefill_batch_size),
                 batched_prefill_batched_extract=bool(runtime_config.batched_prefill_batched_extract),
+                fixed_prefill_batch_sizes=config.fixed_prefill_batch_sizes,
             )
         )
         self.decode_runtime = DecodeRuntime(
@@ -987,6 +991,7 @@ class Mistral7BExecutor:
             disable_batched_prefill=current_prefill.disable_batched_prefill,
             max_prefill_batch_size=current_prefill.max_prefill_batch_size,
             batched_prefill_batched_extract=current_prefill.batched_prefill_batched_extract,
+            fixed_prefill_batch_sizes=current_prefill.fixed_prefill_batch_sizes,
         )
         current_decode = self.decode_runtime.config
         decode_config = DecodeRuntimeConfig.resolve(

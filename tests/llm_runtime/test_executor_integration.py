@@ -17,6 +17,7 @@ from tt_transformers.llm_runtime.config import PagedKVCacheConfig, PageTableLayo
 from tt_transformers.llm_runtime.decode import DecodeTraceSignature
 from tt_transformers.llm_runtime.execution import EagerExecutor
 from tt_transformers.llm_runtime.lane_group import LaneGroupExecutor
+from tt_transformers.llm_runtime.prefill.config import serving_prefill_policy
 from tt_transformers.llm_runtime.prefill.signatures import PrefillProgramSignature
 from tt_transformers.llm_runtime.program_compiler import ProgramKey
 from tt_transformers.llm_runtime.warmup import _build_plan
@@ -787,7 +788,14 @@ def test_model_owned_executor_has_exact_composition_and_owner_counts(binding, mo
         assert executor.traced_decode_execution is executor.traced_executor
 
 
-def _device_sampling_executor(binding, monkeypatch, *, runtime_disable: bool, sequential_prefill: bool = False):
+def _device_sampling_executor(
+    binding,
+    monkeypatch,
+    *,
+    runtime_disable: bool,
+    sequential_prefill: bool = False,
+    fixed_prefill_batch_sizes: tuple[tuple[int, int], ...] = (),
+):
     class FakeSampling1D:
         config = SimpleNamespace(
             is_resolved=lambda: True,
@@ -829,6 +837,7 @@ def _device_sampling_executor(binding, monkeypatch, *, runtime_disable: bool, se
         binding.make_executor_config("none"),
         device_sampling_enabled=True,
         sequential_prefill=sequential_prefill,
+        fixed_prefill_batch_sizes=fixed_prefill_batch_sizes,
     )
     return binding.executor_class(model, runtime_config, config)
 
@@ -876,6 +885,48 @@ def test_device_sampling_prefill_batch_policy_is_model_owned(
     if expected_kinds == ("batched",):
         assert prepared[0].request.source_rows == (0, 1)
         assert not prepared[0].request.uses_chunked_prefill
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(
+    ("rows", "runtime_disable", "expected"),
+    [
+        (1, False, (("batched", 2),)),
+        (2, False, (("batched", 2),)),
+        (3, False, (("batched", 2), ("batched", 2))),
+        (2, True, (("single", 1), ("single", 1))),
+    ],
+    ids=("lone-row", "full-wave", "two-waves", "runtime-disabled"),
+)
+def test_fixed_prefill_reaches_the_prefill_runtime(binding, monkeypatch, rows, runtime_disable, expected):
+    monkeypatch.delenv("DISABLE_BATCHED_PREFILL", raising=False)
+    fixed = ((128, 2),)
+    executor = _device_sampling_executor(
+        binding,
+        monkeypatch,
+        runtime_disable=runtime_disable,
+        fixed_prefill_batch_sizes=fixed,
+    )
+
+    assert executor.prefill_runtime.config.fixed_prefill_batch_sizes == fixed
+    assert executor.warmup.config.fixed_prefill_batch_sizes == fixed
+    prepared = executor.prefill_runtime.prepare(
+        tokens=torch.ones((rows, 128), dtype=torch.long),
+        page_table=torch.arange(rows * 4, dtype=torch.int32).reshape(rows, 4),
+        prompt_lens=torch.full((rows,), 128, dtype=torch.long),
+        empty_slots=list(range(rows)),
+    )
+
+    if binding.executor_module is qwen3_32b_executor:
+        # This family disables batched prefill under device sampling, which wins over fixed waves.
+        expected = (("single", 1),) * rows
+    assert tuple((item.request.kind, item.request.padded_batch_size) for item in prepared) == expected
+
+
+@pytest.mark.host
+def test_sequential_and_fixed_prefill_are_exclusive(binding, expect_error):
+    with expect_error(ValueError, "exclusive prefill policies"):
+        replace(binding.make_executor_config("none"), sequential_prefill=True, fixed_prefill_batch_sizes=((128, 2),))
 
 
 @pytest.mark.host
@@ -1775,7 +1826,13 @@ def test_generator_constructs_data_parallel_lane_group(binding, monkeypatch):
         assert [lane.mesh_device for lane in generator.target.lanes] == submeshes
         assert len({id(lane) for lane in generator.target.lanes}) == 2
         assert all(isinstance(config, binding.executor_config_class) for _, config in executor_calls)
-        assert all(config.sequential_prefill for _, config in executor_calls)
+        expected_policy = serving_prefill_policy(
+            getattr(binding.generator_module, "_FIXED_PREFILL_BATCH_AT_128", None), 2
+        )
+        assert all(
+            (config.sequential_prefill, config.fixed_prefill_batch_sizes) == expected_policy
+            for _, config in executor_calls
+        )
         assert all(llm.model.config.max_batch_size == 2 for llm, _ in executor_calls)
         assert generator._adapter.config.trace.mode == "all"
         assert generator._adapter.config.expected_num_layers == 1

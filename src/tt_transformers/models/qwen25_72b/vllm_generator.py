@@ -18,6 +18,7 @@ from tt_transformers.llm_runtime.config import (
     fit_paged_kv_num_blocks,
 )
 from tt_transformers.llm_runtime.lane_group import LaneGroupExecutor
+from tt_transformers.llm_runtime.prefill.config import serving_prefill_policy
 from tt_transformers.llm_runtime.vllm_adapter import NormalizedPrefillKwargs, VLLMAdapter, VLLMAdapterConfig
 from tt_transformers.models.qwen25_72b.hf_generator import (
     DEFAULT_HF_REVISION,
@@ -28,6 +29,10 @@ from tt_transformers.models.qwen25_72b.hf_generator import (
 from tt_transformers.models.qwen25_72b.model import Qwen25_72BPagedAttentionConfig
 
 _PROVISIONAL_BLOCK_SIZE = 32
+# Fixed prefill wave at the 128 bucket (``ModelExecutorConfig.fixed_prefill_batch_sizes``):
+# short prompts prefill in waves of exactly this many rows, so a request's output
+# does not depend on its neighbours while concurrent short prompts still share a pass.
+_FIXED_PREFILL_BATCH_AT_128: int | None = 4
 
 
 @dataclass(frozen=True)
@@ -313,6 +318,9 @@ def build_qwen25_72b_generator(config: Qwen25_72BGeneratorConfig) -> Qwen25_72BG
                 paged_attention_config=paged_attention_config,
             )
             model_kv_cache_dtypes, _, _, _ = _model_kv_metadata(llm.model)
+            sequential_prefill, fixed_prefill_batch_sizes = serving_prefill_policy(
+                _FIXED_PREFILL_BATCH_AT_128, per_lane_max_batch_size
+            )
             executor_config = Qwen25_72BExecutorConfig(
                 trace=TraceConfig(mode=config.trace_mode),
                 warmup=WarmupConfig(include_decode_top_k=config.device_sampling_enabled),
@@ -322,7 +330,8 @@ def build_qwen25_72b_generator(config: Qwen25_72BGeneratorConfig) -> Qwen25_72BG
                     dtype=model_kv_cache_dtypes[0],
                 ),
                 device_sampling_enabled=config.device_sampling_enabled,
-                sequential_prefill=True,
+                sequential_prefill=sequential_prefill,
+                fixed_prefill_batch_sizes=fixed_prefill_batch_sizes,
             )
             lanes.append(build_qwen25_72b_executor(llm, executor_config))
         adapter = _build_vllm_adapter(lanes[0])

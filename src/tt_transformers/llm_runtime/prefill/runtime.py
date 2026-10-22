@@ -102,7 +102,7 @@ class PrefillRuntime:
                 run_hidden_body=lambda *args, **kwargs: self._run_hidden_body(*args, **kwargs),
                 run_chunk_hidden_body=lambda *args, **kwargs: self._run_chunk_hidden_body(*args, **kwargs),
                 release_transient=lambda values: self._release_or_retain_transient(values),
-                trace_capture_prime_sequence_lengths=config.trace_capture_prime_sequence_lengths,
+                trace_capture_prime_sequence_lengths=_trace_capture_prime_sequence_lengths(config),
             )
         )
 
@@ -204,6 +204,7 @@ class PrefillRuntime:
             max_prefill_batch_size=self.config.max_prefill_batch_size,
             max_actual_page_table_width=layout.raw_capacity_width,
             canonical_page_table_width=layout.prefill_width,
+            fixed_prefill_batch_sizes=self.config.fixed_prefill_batch_sizes,
         )
         prepared = []
         pending_slot_remap = slot_remap
@@ -517,3 +518,12 @@ def _leading_length(value: Any) -> int:
     if isinstance(value, (list, tuple)):
         return len(value)
     raise TypeError(f"request-owned sampling state must be a tensor or sequence, got {type(value).__name__}")
+
+
+def _trace_capture_prime_sequence_lengths(config: PrefillRuntimeConfig) -> tuple[int, ...]:
+    # A fixed-shape bucket's first eager compile can come from a lone row, so
+    # it fills only that row's KV, while its trace capture records every padded
+    # row. Prime each fixed bucket's capture so all row programs exist before
+    # capture begins.
+    fixed_buckets = (bucket for bucket, _ in config.fixed_prefill_batch_sizes)
+    return tuple(dict.fromkeys((*config.trace_capture_prime_sequence_lengths, *fixed_buckets)))

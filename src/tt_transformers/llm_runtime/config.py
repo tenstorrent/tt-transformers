@@ -45,6 +45,11 @@ class WarmupConfig:
     required. Forced-top-k prefill and greedy decode coverage are added when
     dynamic warmup enables device sampling. Additional top-k decode coverage is
     explicitly opt in.
+
+    ``prefill_batch_sizes`` is the batch ladder warmed at the 128 bucket under
+    dynamic batched prefill. It is not consulted when the prefill runtime has
+    fixed ``(bucket, F)`` waves: each bucket then warms batch 1, plus ``F`` where
+    one is fixed, because no other batch size can be planned.
     """
 
     prefill_seq_lens: tuple[int, ...] | None = None
