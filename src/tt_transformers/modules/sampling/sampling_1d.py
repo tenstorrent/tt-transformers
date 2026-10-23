@@ -450,8 +450,7 @@ class Sampling1D(LightweightModule):
                 user is enabled the whole batch computes logprobs). Refreshed every call, so no
                 mutable logprobs state is stored on the module. Only the top-k path emits logprobs
                 (sampled-token logprob); the argmax path never does (see ``_sample_argmax``). The
-                calculator additionally requires a multi-device shard (T3K 1×8) — it returns ``None``
-                on 1×1/1×2 even when enabled.
+                calculator returns ``None`` on 1×2 even when enabled.
 
         Returns:
             (token_ids, log_probs_or_none)
@@ -660,10 +659,10 @@ class Sampling1D(LightweightModule):
         ttnn.deallocate(topk_global_indices)
 
         # Logprobs (old path: single sampled-token logprob). Gated on enable_log_probs so the
-        # disabled case incurs zero extra ops. The calculator itself returns None unless the mesh
-        # is multi-device with num_devices ∈ {8, 32} (T3K 1×8).
+        # disabled case incurs zero extra ops. The calculator itself returns None unless
+        # num_devices ∈ {1, 8, 32}.
         if self._log_probs_calculator.enable_log_probs:
-            log_probs = self._log_probs_calculator.calculate_log_probs(logits, tt_out_tok)
+            log_probs = self._log_probs_calculator.calculate_log_probs(x_bf16, tt_out_tok)
         else:
             log_probs = None
         return tt_out_tok, log_probs

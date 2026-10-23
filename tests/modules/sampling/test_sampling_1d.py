@@ -1517,9 +1517,9 @@ def test_sampling1d_argmax_never_emits_logprobs(ttnn_mesh_device):
 def test_sampling1d_logprobs_topk(ttnn_mesh_device):
     """enable_log_probs=True on the top-k path.
 
-    The old single-token logprob path only computes on multi-device shards with
-    num_devices ∈ {8, 32} (T3K 1×8). On 1×1/1×2 the calculator returns None even when enabled.
-    On 1×8, the returned logprob must match torch.log_softmax(logits)[sampled_token] within
+    The old single-token logprob path only computes with
+    num_devices ∈ {1, 8, 32}. On 1×2 the calculator returns None even when enabled.
+    On 1×1 and 1×8, the returned logprob must match torch.log_softmax(logits)[sampled_token] within
     bf16 reduction tolerance. PCC is intentionally not used here because the k=1 random-bf16 case
     is near-constant and can degenerate to zero variance on device.
     """
@@ -1539,11 +1539,11 @@ def test_sampling1d_logprobs_topk(ttnn_mesh_device):
     tokens_tt, log_probs = sampler.decode_forward(logits_tt, k=k, p=p, temp=temp, enable_log_probs=True)
 
     num_devices = max(cluster_shape)
-    if num_devices not in (8, 32):
+    if num_devices not in (1, 8, 32):
         assert log_probs is None, f"logprobs unsupported on {num_devices} devices → expected None"
         return
 
-    assert log_probs is not None, "logprobs must be computed on a 1×8 mesh when enabled"
+    assert log_probs is not None, f"logprobs must be computed on a {num_devices}-device mesh when enabled"
 
     # output_tensor shape (1,1,1,B), replicated across devices — match test_sampling.py read path
     mesh_composer = ttnn.ConcatMeshToTensor(ttnn_mesh_device, dim=3)
@@ -1555,6 +1555,36 @@ def test_sampling1d_logprobs_topk(ttnn_mesh_device):
     ref_lp = ref_log_softmax[torch.arange(B), tokens_host]
     max_abs_error = torch.max(torch.abs(ref_lp - lp_host)).item()
     assert max_abs_error <= 5e-2, f"logprobs max abs error {max_abs_error:.6f} exceeds bf16 tolerance"
+
+
+@pytest.mark.device
+@pytest.mark.parametrize("ttnn_mesh_device", [(1, 1), (1, 8)], ids=["1x1", "1x8"], indirect=True)
+def test_sampling1d_topk_logprobs_match_valid_vocab_slice(ttnn_mesh_device):
+    """Top-k logprobs normalize over the valid vocabulary, not the padded tail."""
+    torch.manual_seed(42)
+    B = 32
+    vocab_size = 32768
+    valid_vocab_size = 32000
+
+    sampler = Sampling1D(vocab_size=vocab_size, valid_vocab_size=valid_vocab_size, mesh_device=ttnn_mesh_device)
+    logits_host = torch.zeros(1, 1, B, vocab_size, dtype=torch.bfloat16)
+    logits_host[..., :valid_vocab_size] = torch.randn(1, 1, B, valid_vocab_size, dtype=torch.bfloat16) - 10.0
+    logits_tt = _make_logits_tt(logits_host, ttnn_mesh_device, shard_vocab=True)
+
+    k, p, temp = _make_sampling_params(
+        ttnn_mesh_device, B, k_val=1, p_val=0.0, temp_val=1.0, cluster_shape=tuple(ttnn_mesh_device.shape)
+    )
+    tokens_tt, log_probs = sampler.decode_forward(logits_tt, k=k, p=p, temp=temp, enable_log_probs=True)
+    assert log_probs is not None
+
+    tokens_host = to_torch_auto_compose(tokens_tt).flatten()[:B].long()
+    assert torch.all(tokens_host < valid_vocab_size)
+
+    mesh_composer = ttnn.ConcatMeshToTensor(ttnn_mesh_device, dim=3)
+    lp_host = ttnn.to_torch(log_probs, mesh_composer=mesh_composer)[:, :, 0, :B].reshape(-1).float()
+    ref_log_softmax = torch.log_softmax(logits_host[..., :valid_vocab_size].float().squeeze(), dim=-1)
+    max_abs_error = torch.max(torch.abs(ref_log_softmax[torch.arange(B), tokens_host] - lp_host)).item()
+    assert max_abs_error <= 5e-2, f"logprob error {max_abs_error:.4f} exceeds bf16 tolerance"
 
 
 # ==============================================================================
