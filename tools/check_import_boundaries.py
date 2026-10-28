@@ -15,26 +15,18 @@ from pathlib import Path
 
 # Import roots corresponding to the production dependency declarations in
 # pyproject.toml. Distribution/import spelling differs for no entry here.
-DECLARED_BASE_THIRD_PARTY_ROOTS = frozenset(
-    {
-        "PIL",
-        "huggingface_hub",
-        "loguru",
-        "numpy",
-        "pydantic",
-        "safetensors",
-        "torch",
-        "ttnn",
-        "transformers",
-        "typing_extensions",
-        "yaml",
-    }
-)
-DECLARED_OPTIONAL_THIRD_PARTY_ROOTS = frozenset({"tqdm"})
+DECLARED_BASE_THIRD_PARTY_ROOTS = frozenset({"loguru", "torch", "ttnn", "transformers"})
+# Not declared in pyproject.toml: transformers installs and pins these, and model
+# weight loaders import them directly.
+TRANSFORMERS_PROVIDED_THIRD_PARTY_ROOTS = frozenset({"huggingface_hub", "safetensors"})
+DECLARED_OPTIONAL_THIRD_PARTY_ROOTS = frozenset({"tqdm", "yaml"})
 # Installation requirements do not relax the import-layer or lazy-import policy.
 RESTRICTED_ROOT_LAYERS = {
     "tqdm": frozenset({"models"}),
     "transformers": frozenset({"models"}),
+    "huggingface_hub": frozenset({"models"}),
+    "safetensors": frozenset({"models"}),
+    "yaml": frozenset({"root"}),
 }
 DEPENDENCY_POLICY_LAYERS = frozenset({"root", "modules", "sampling", "llm_runtime", "models"})
 STDLIB_ROOTS = frozenset(sys.stdlib_module_names) | {"__future__"}
@@ -76,7 +68,11 @@ def _dependency_reason(imported: str, layer: str) -> str | None:
         return None
     if root in RESTRICTED_ROOT_LAYERS and layer not in RESTRICTED_ROOT_LAYERS[root]:
         return f"dependency {root} is not allowed in the {layer} layer"
-    if root in DECLARED_BASE_THIRD_PARTY_ROOTS or root in DECLARED_OPTIONAL_THIRD_PARTY_ROOTS:
+    if (
+        root in DECLARED_BASE_THIRD_PARTY_ROOTS
+        or root in TRANSFORMERS_PROVIDED_THIRD_PARTY_ROOTS
+        or root in DECLARED_OPTIONAL_THIRD_PARTY_ROOTS
+    ):
         return None
     return "third-party import root is not declared for the runtime/model product"
 

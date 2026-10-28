@@ -5,47 +5,14 @@
 import math
 import os
 import re
+from dataclasses import dataclass, fields
 from enum import Enum
-from types import SimpleNamespace
-from typing import Union
 
 import torch
 import ttnn
 from loguru import logger
-from PIL import Image as PIL_Image
-from pydantic import AliasChoices, BaseModel, Field
 
 from tt_transformers.tensor_utils import get_rot_transformation_mat as get_rot_transformation_mat_v2
-
-
-class URL(BaseModel):
-    uri: str
-
-    def __str__(self) -> str:
-        return self.uri
-
-
-class ImageMedia(BaseModel):
-    image: PIL_Image.Image | URL
-
-    class Config:
-        arbitrary_types_allowed = True
-
-
-class Role(Enum):
-    system = "system"
-    user = "user"
-    assistant = "assistant"
-    ipython = "ipython"
-
-
-InterleavedTextMedia = Union[
-    str,
-    # Specific modalities can be placed here, but not generic attachments
-    # since models don't consume them in a generic way
-    ImageMedia,
-    list[str | ImageMedia],
-]
 
 
 class Mode(Enum):
@@ -89,20 +56,30 @@ class RopeScalingType(str, Enum):
     DEFAULT = "default"
 
 
-class RopeScaling(BaseModel):
+@dataclass(frozen=True)
+class RopeScaling:
     """RoPE scaling configuration."""
 
-    rope_type: RopeScalingType = Field(
-        validation_alias=AliasChoices("rope_type", "type"), exclude=True, description="RoPE scaling type"
-    )
+    rope_type: RopeScalingType
     factor: float | None = None
     original_max_position_embeddings: int | None = None
 
+    @classmethod
+    def from_params(cls, params: dict) -> "RopeScaling":
+        # HF configs spell the type as either "rope_type" or "type" and carry extra keys.
+        values = dict(params)
+        rope_type = values.pop("rope_type", None) or values.pop("type", None)
+        values.pop("type", None)
+        names = {field.name for field in fields(cls)}
+        return cls(rope_type=RopeScalingType(rope_type), **{k: v for k, v in values.items() if k in names})
 
+
+@dataclass(frozen=True)
 class RopeScalingLinear(RopeScaling):
     """RoPE scaling configuration for linear."""
 
 
+@dataclass(frozen=True)
 class RopeScalingLlama3(RopeScaling):
     """RoPE scaling configuration for Llama-3.x."""
 
@@ -111,6 +88,7 @@ class RopeScalingLlama3(RopeScaling):
     high_freq_factor: float | None = 4.0
 
 
+@dataclass(frozen=True)
 class RopeScalingYarn(RopeScaling):
     """RoPE scaling configuration for Yarn."""
 
@@ -122,22 +100,23 @@ class RopeScalingYarn(RopeScaling):
     truncate: bool | None = True  # Whether to truncate the correction range (floor/ceil)
 
 
+@dataclass(frozen=True)
 class RopeScalingPhi3(RopeScaling):
     """RoPE scaling configuration for Phi3."""
 
     # Phi3-specific parameters
-    long_factor: list | None
-    short_factor: list | None
+    long_factor: list | None = None
+    short_factor: list | None = None
 
 
 def rope_scaling_model_factory(rope_scaling_params: dict, original_max_context_len: int | None = None) -> RopeScaling:
     rope_scaling_type = rope_scaling_params.get("rope_type") or rope_scaling_params.get("type")
     if rope_scaling_type == RopeScalingType.LINEAR:
-        return RopeScalingLinear(**rope_scaling_params)
+        return RopeScalingLinear.from_params(rope_scaling_params)
     elif rope_scaling_type == RopeScalingType.LLAMA3:
-        return RopeScalingLlama3(**rope_scaling_params)
+        return RopeScalingLlama3.from_params(rope_scaling_params)
     elif rope_scaling_type == RopeScalingType.YARN:
-        return RopeScalingYarn(**rope_scaling_params)
+        return RopeScalingYarn.from_params(rope_scaling_params)
     elif rope_scaling_type == RopeScalingType.PHI3:
         # transformers 5.x includes original_max_position_embeddings in the rope dict,
         # which collides with the explicit kwarg; merge so the caller value wins and the
@@ -145,7 +124,7 @@ def rope_scaling_model_factory(rope_scaling_params: dict, original_max_context_l
         phi3_params = dict(rope_scaling_params)
         if original_max_context_len is not None:
             phi3_params["original_max_position_embeddings"] = original_max_context_len
-        return RopeScalingPhi3(**phi3_params)
+        return RopeScalingPhi3.from_params(phi3_params)
     elif rope_scaling_type in ["default", "mrope"]:
         logger.warning(
             f"Rope scaling type was set to {rope_scaling_type}, defaulting to no rope scaling as this rope type is not supported yet by TTT"
@@ -883,49 +862,6 @@ def get_hf_tt_cache_path(model_path: str) -> str:
         os.makedirs(tt_cache_path, exist_ok=True)
 
     return tt_cache_path
-
-
-def hf_multimodal_encode(messages, processor):
-    hf_messages = []
-
-    for msg in messages:
-        hf_content = []
-
-        for item in msg.content:
-            if isinstance(item, ImageMedia):
-                hf_content.append(
-                    {
-                        "type": "image",
-                        "image": item.image,
-                    }
-                )
-            elif isinstance(item, str):
-                hf_content.append(
-                    {
-                        "type": "text",
-                        "text": item,
-                    }
-                )
-
-        hf_messages.append(
-            {
-                "role": msg.role,
-                "content": hf_content,
-            }
-        )
-
-    encoded = processor.apply_chat_template(
-        hf_messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
-    ).to("cpu", dtype=torch.bfloat16)
-
-    return SimpleNamespace(
-        **encoded,
-        tokens=encoded["input_ids"].squeeze(0),
-        vision=SimpleNamespace(
-            images=encoded.get("pixel_values", None),
-            mask=None,
-        ),
-    )
 
 
 def get_decode_mask(args, mesh_device, paged_attention_config=None):
