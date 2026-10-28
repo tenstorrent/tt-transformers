@@ -102,7 +102,7 @@ def _legacy_source_cached(
     body = body.replace("TT_KERNEL void", "static FORCE_INLINE void", 1)
 
     prefix = [
-        "// qwen38-v6 legacy-wrapper ABI version 1",
+        "// qwen38 legacy-wrapper ABI version 1",
         '#include "api/dataflow/dataflow_buffer.h"',
         '#include "api/tensor/tensor_binding_token.h"',
     ]
@@ -174,9 +174,10 @@ def make_kernel(
         build_levels = getattr(ttnn.KernelDescriptor, "BuildOptLevel", None)
         if build_levels is None:
             raise RuntimeError(
-                "qwen38-v6-ops requires a TTNN build that exposes "
-                "KernelDescriptor.BuildOptLevel; the compiler pragma fallback "
-                "cannot reproduce the native LTO link optimization level"
+                "gdn_decode_step and gdn_spec_step require a TTNN build that exposes "
+                "KernelDescriptor.BuildOptLevel, which ttnn 0.79.0 does not; these "
+                "operations are optional and off by default, so leave them disabled "
+                "on ttnn 0.79.0"
             )
         try:
             build_opt_level = getattr(build_levels, opt_pragma)

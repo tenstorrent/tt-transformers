@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
-"""TILE-input QKV causal convolution for the stock-TTNN v6 runtime.
+"""TILE-input QKV causal convolution for stock TTNN 0.79.0.
 
 Stock TTNN 0.79 ships the row-major KDA prefill operation, while Unified V1's
 fork also accepts TILE input/history.  This descriptor owns only that missing

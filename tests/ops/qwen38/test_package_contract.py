@@ -5,8 +5,6 @@ from pathlib import Path
 
 import pytest
 import ttnn
-from packaging.specifiers import SpecifierSet
-from packaging.version import Version
 
 try:
     import tomllib
@@ -122,7 +120,7 @@ def test_legacy_source_has_one_entry_and_explicit_bindings(
 @pytest.mark.host
 @pytest.mark.skipif(
     not hasattr(ttnn.KernelDescriptor, "BuildOptLevel"),
-    reason="requires the declared TTNN 0.79.1 release-line binding",
+    reason="requires KernelDescriptor.BuildOptLevel, which ttnn 0.79.0 does not expose",
 )
 def test_required_build_levels_are_exposed_by_ttnn():
     levels = ttnn.KernelDescriptor.BuildOptLevel
@@ -165,7 +163,7 @@ def test_legacy_source_caches_only_normalized_source_shape(monkeypatch):
 @pytest.mark.host
 @pytest.mark.skipif(
     not hasattr(ttnn.KernelDescriptor, "BuildOptLevel"),
-    reason="requires the declared TTNN 0.79.1 release-line binding",
+    reason="requires KernelDescriptor.BuildOptLevel, which ttnn 0.79.0 does not expose",
 )
 def test_build_level_binding_is_scoped_to_kernel_descriptors():
     assert not hasattr(ttnn, "KernelBuildOptLevel")
@@ -174,17 +172,36 @@ def test_build_level_binding_is_scoped_to_kernel_descriptors():
 
 
 @pytest.mark.host
-def test_package_requires_the_qualified_079_binding_backport():
+def test_package_keeps_the_stock_ttnn_pin():
     pyproject = Path(__file__).resolve().parents[3] / "pyproject.toml"
     dependencies = tomllib.loads(pyproject.read_text())["project"]["dependencies"]
-    assert "ttnn>=0.79.1rc1,<0.80" in dependencies
-    assert "ttnn==0.79.0" not in dependencies
+    assert "ttnn==0.79.0" in dependencies
 
-    qualified = SpecifierSet(">=0.79.1rc1,<0.80")
-    assert Version("0.79.1rc1") in qualified
-    assert Version("0.79.1") in qualified
-    assert Version("0.79.0") not in qualified
-    assert Version("0.80.0") not in qualified
+
+@pytest.mark.host
+@pytest.mark.skipif(
+    hasattr(ttnn.KernelDescriptor, "BuildOptLevel"),
+    reason="TTNN exposes KernelDescriptor.BuildOptLevel",
+)
+def test_build_level_operations_fail_clearly_on_stock_ttnn(monkeypatch):
+    monkeypatch.setattr(_legacy, "_tensor_binding_layout", lambda args, bindings: ([], [], []))
+    monkeypatch.setattr(_legacy, "legacy_source", lambda **kwargs: "")
+    with pytest.raises(RuntimeError, match="off by default"):
+        _legacy.make_kernel(
+            operation="gdn_spec_step",
+            role="compute",
+            filename="gdn_spec_step.cpp",
+            dfb_ids={},
+            algorithm_compile_args=[],
+            bindings=[],
+            template_count=0,
+            entry_name="compute",
+            runtime_args=[],
+            runtime_arity=0,
+            core_ranges=None,
+            config=None,
+            opt_pragma="Os",
+        )
 
 
 @pytest.mark.parametrize("bad", [0, -1, float("nan"), float("inf")])
