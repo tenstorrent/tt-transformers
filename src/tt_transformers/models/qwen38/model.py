@@ -527,7 +527,7 @@ class Qwen38Model:
             f"vision splice out of range: row offset {vis_row_offset} + {n} image positions in this "
             f"segment exceeds {int(vision_tokens.shape[0])} packed vision rows"
         )
-        # v6 contexts own host BF16 rows so the eager tower has no live device
+        # Vision contexts own host BF16 rows so the eager tower has no live device
         # allocation when a text trace replays. Retain the TTNN arm for direct
         # module tests and old cached contexts.
         if isinstance(vision_tokens, torch.Tensor):
