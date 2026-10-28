@@ -11,15 +11,7 @@ import ttnn
 from loguru import logger
 
 from tt_transformers.models.qwen38.model_capabilities import ModelCapabilitiesMixin
-from tt_transformers.models.qwen38.qwen_runtime_support import (
-    CompletionMessage,
-    StopReason,
-    TokenResult,
-    create_vision_mask,
-    encode_content,
-    extract_images_from_messages,
-    sample_top_p,
-)
+from tt_transformers.models.qwen38.qwen_runtime_support import TokenResult, sample_top_p
 from tt_transformers.models.qwen38.v1.common import (
     Mode,
     copy_host_to_device,
@@ -29,13 +21,13 @@ from tt_transformers.models.qwen38.v1.common import (
     get_padded_prefill_len,
     num_blocks_in_seq,
 )
-from tt_transformers.models.qwen38.warmup_runtime import WarmupForwardMixin
-from tt_transformers.sampling import (
+from tt_transformers.models.qwen38.v1.sampling.generator import (
     broadcast_sampling_params,
     chunk_sampling_params,
     format_sampling_params,
     scatter_sampling_params_to_slots,
 )
+from tt_transformers.models.qwen38.warmup_runtime import WarmupForwardMixin
 from tt_transformers.sampling.sampling_params import SamplingParams
 from tt_transformers.sampling.tt_log_probs import LogProbsResult, reformat_logprobs
 
@@ -3412,87 +3404,6 @@ class Generator(ModelCapabilitiesMixin, WarmupForwardMixin):
                 token=next_token[0].item(),
                 text=text,
             )
-
-    def chat_completion(
-        self,
-        messages,
-        temperature=0.6,
-        top_p: float = 0.9,
-        max_gen_len=None,
-    ):
-        model_id = 0
-        if max_gen_len is None or max_gen_len == 0 or max_gen_len >= self.model[model_id].configuration.max_seq_len:
-            max_gen_len = self.model[model_id].configuration.max_seq_len - 1
-
-        encoder = self.processor or self.tokenizer
-        model_input = encoder.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
-        vision_images = extract_images_from_messages(messages) or None
-        vision_mask = None
-        if vision_images is not None:
-            vision_mask = create_vision_mask(model_input["input_ids"][0], encoder.image_token_id) or None
-
-        tokens = []
-
-        stop_reason = None
-        for result in self.generate(
-            vision_images=vision_images,
-            vision_mask=vision_mask,
-            prompt_tokens=model_input["input_ids"][0],
-            max_gen_len=max_gen_len,
-            temperature=temperature,
-            top_p=top_p,
-        ):
-            tokens.append(result.token)
-            if result.text == "<|eot_id|>":
-                stop_reason = StopReason.end_of_turn
-            elif result.text == "<|eom_id|>":
-                stop_reason = StopReason.end_of_message
-
-        if stop_reason is None:
-            stop_reason = StopReason.out_of_tokens
-
-        decoder = self.tokenizer or self.processor
-        message = decoder.decode(tokens, skip_special_tokens=True)
-
-        return CompletionMessage(message)
-
-    def text_completion(
-        self,
-        content,
-        temperature: float = 0.6,
-        top_p: float = 0.9,
-        max_gen_len=None,
-    ):
-        """Supports only vision models at the moment"""
-        model_id = 0
-        if max_gen_len is None or max_gen_len == 0 or max_gen_len >= self.model[model_id].configuration.max_seq_len:
-            max_gen_len = self.model[model_id].configuration.max_seq_len - 1
-
-        vision_images = []
-        image_token = getattr(self.processor, "image_token", None) or getattr(self.tokenizer, "image_token", None)
-        text = encode_content(content, vision_images, image_token)
-        vision_images = vision_images or None
-        model_input = self.processor(text=text, images=vision_images, add_special_tokens=False)
-        vision_mask = None
-        if vision_images is not None:
-            vision_mask = create_vision_mask(model_input["input_ids"][0], self.processor.image_token_id) or None
-
-        tokens = []
-
-        for result in self.generate(
-            vision_images=vision_images,
-            vision_mask=vision_mask,
-            prompt_tokens=model_input["input_ids"],
-            max_gen_len=max_gen_len,
-            temperature=temperature,
-            top_p=top_p,
-        ):
-            tokens.append(result.token)
-
-        decoder = self.tokenizer or self.processor
-        generation = decoder.decode(tokens, skip_special_tokens=True)
-
-        return generation
 
     def _get_prefill_user_page_table(
         self,

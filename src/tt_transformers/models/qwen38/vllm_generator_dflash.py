@@ -68,12 +68,12 @@ from tt_transformers.models.qwen38.dflash2_serving import (  # noqa: E402
     dummy_prompt,
     serve_block_size,
 )
+from tt_transformers.models.qwen38.spec_decode import MAX_SPEC_ROWS  # noqa: E402
 from tt_transformers.models.qwen38.vllm_generator import (  # noqa: E402
-    TTQwen38ForCausalLM,
     TT_Qwen3_5ProcessingInfo,
+    TTQwen38ForCausalLM,
     _is_identity_slot_remap,
 )
-from tt_transformers.models.qwen38.spec_decode import MAX_SPEC_ROWS  # noqa: E402
 from tt_transformers.sampling.sampling_params import SamplingParams  # noqa: E402
 
 try:  # the multi-bucket decoder (profiles/dual_bucket_spec.json); a single bucket falls back to today's class without it

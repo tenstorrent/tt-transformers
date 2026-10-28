@@ -17,7 +17,8 @@ import ttnn
 from tests.models.qwen38.test_factory import parametrize_mesh_tp
 from tt_transformers.models.qwen38.model_config import Qwen38ModelArgs
 from tt_transformers.models.qwen38.qwen_runtime import Generator
-from tt_transformers.sampling import SamplingGenerator, SamplingParams, format_sampling_params
+from tt_transformers.models.qwen38.v1.sampling.generator import SamplingGenerator, format_sampling_params
+from tt_transformers.sampling.sampling_params import SamplingParams
 
 
 def _make_hot_logits(args, mesh_device, num_hot=20):

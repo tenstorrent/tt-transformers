@@ -176,7 +176,7 @@ def test_dflash2_serving_slots_are_lossless(mesh_device):
 
     # NOTE: C joined slot 0 while B was live only if A finished first; either way every request ran
     # at least part of its life next to another slot's holds or speculation.
-    del dec, model
+    dec = model = None
     gc.collect()
 
     ref_model, pt1, kv1 = _reference_model(device)
