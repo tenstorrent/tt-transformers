@@ -44,3 +44,23 @@ def setup(device):
                 raw[key] = f.get_tensor(key)
     sd = remap_qwen36_state_dict(raw)
     return args, sd, raw
+
+
+def hf_text_config(args):
+    """The checkpoint's HF text config, set up for an eager torch reference."""
+    from transformers import AutoConfig
+
+    config = AutoConfig.from_pretrained(args.CKPT_DIR)
+    config = getattr(config, "text_config", config)
+    config._attn_implementation = "sdpa"
+    return config
+
+
+def hf_layer_state(raw, layer_num, name):
+    """Raw HF weights of ``layers.<layer_num>.<name>`` in the decoder stack (not the MTP head)."""
+    marker = f"layers.{layer_num}.{name}."
+    return {
+        key.split(marker, 1)[1]: value
+        for key, value in raw.items()
+        if marker in key and not key.startswith("mtp.") and ".visual." not in key
+    }

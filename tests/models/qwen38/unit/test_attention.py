@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
-"""Component PCC: single-device gated attention (layer 3) vs torch reference.
+"""Component PCC: single-device gated attention (layer 3) vs the HF reference.
 
 ``device`` and ``setup`` come from tests/unit/conftest.py. (The TP loader's
 q_norm/k_norm +1 regression lives with the TP attention tests in
@@ -14,7 +14,7 @@ from loguru import logger
 
 from tests.models.qwen38.test_factory import compute_pcc, get_pcc_threshold, run_for_blackhole
 
-from .conftest import DEVICE_PARAMS
+from .conftest import DEVICE_PARAMS, hf_layer_state, hf_text_config
 
 pytestmark = [run_for_blackhole(), pytest.mark.parametrize("device_params", DEVICE_PARAMS, indirect=True)]
 
@@ -24,46 +24,23 @@ pytestmark = [run_for_blackhole(), pytest.mark.parametrize("device_params", DEVI
 def test_gated_attention_pcc(device, setup, request):
     """Compare TTNN gated attention against the torch reference for layer 3."""
     args, sd, raw = setup
-    from models.experimental.gated_attention_gated_deltanet.torch_functional.gated_attention import (
-        gated_attention_forward,
-    )
-    from tt_transformers.models.qwen38.rope import Qwen38RoPESetup, compute_rope_freqs
+    from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5Attention, Qwen3_5TextRotaryEmbedding
+
+    from tt_transformers.models.qwen38.rope import Qwen38RoPESetup
 
     layer_num = 3
     B, T = 1, 4
 
-    # Torch reference (uses HF convention: weight is [out, in])
-    prefix = f"layers.{layer_num}.self_attn"
-    q_w = sd[f"{prefix}.q_proj.weight"]
-    k_w = sd[f"{prefix}.k_proj.weight"]
-    v_w = sd[f"{prefix}.v_proj.weight"]
-    o_w = sd[f"{prefix}.o_proj.weight"]
-    q_norm = sd[f"{prefix}.q_norm.weight"]
-    k_norm = sd[f"{prefix}.k_norm.weight"]
+    x = torch.randn(B, T, args.dim, dtype=torch.bfloat16)
 
-    x = torch.randn(B, T, 4096, dtype=torch.bfloat16)
-
-    # RoPE for torch (cast to bfloat16 to match input dtype)
-    cos_cpu, sin_cpu = compute_rope_freqs(64, 2048, theta=10_000_000)
-    pos_ids = torch.arange(T)
-    cos_t = cos_cpu[pos_ids].unsqueeze(0).to(torch.bfloat16)  # [1, T, 64]
-    sin_t = sin_cpu[pos_ids].unsqueeze(0).to(torch.bfloat16)
-
-    ref_out, _, _ = gated_attention_forward(
-        hidden_states=x,
-        q_proj_weight=q_w,
-        k_proj_weight=k_w,
-        v_proj_weight=v_w,
-        o_proj_weight=o_w,
-        q_norm_weight=q_norm,
-        k_norm_weight=k_norm,
-        cos=cos_t,
-        sin=sin_t,
-        num_attention_heads=16,
-        num_key_value_heads=4,
-        head_dim=256,
-        norm_eps=1e-6,
-    )
+    # HF reference (transformers' modeling_qwen3_5), loaded from the raw checkpoint weights.
+    config = hf_text_config(args)
+    reference = Qwen3_5Attention(config, layer_num).to(torch.bfloat16).eval()
+    reference.load_state_dict(hf_layer_state(raw, layer_num, "self_attn"))
+    position_ids = torch.arange(T).unsqueeze(0)
+    with torch.no_grad():
+        position_embeddings = Qwen3_5TextRotaryEmbedding(config)(x, position_ids)
+        ref_out, _ = reference(x, position_embeddings=position_embeddings, attention_mask=None)
 
     # TTNN
     from tt_transformers.models.qwen38.attention import AttentionConfig, Qwen38GatedAttention
