@@ -118,7 +118,7 @@ class Qwen38Model:
             and (args.vocab_size // self.num_devices <= 64 * 1024)
         )
         if self._supports_on_device_sampling:
-            from tt_transformers.sampling.generator import SamplingGenerator
+            from tt_transformers.models.qwen38.v1.sampling.generator import SamplingGenerator
 
             # vocab/num_devices isn't a power of 2; the multi-device TopK kernel needs it padded.
             args.pad_logits_to_power_of_2 = True
