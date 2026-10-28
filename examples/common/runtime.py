@@ -14,6 +14,8 @@ from pathlib import Path
 
 import ttnn
 
+from tt_transformers.distributed import open_mesh_device_with_retry
+
 
 class UnsupportedConfiguration(RuntimeError):
     """A requested example geometry or asset is deliberately unsupported."""
@@ -102,7 +104,12 @@ def open_mesh_device(parameters: dict):
                     None,
                     ttnn.FabricTensixConfig.DISABLED,
                 )
-            parent = ttnn.open_mesh_device(mesh_shape=ttnn.MeshShape(parent_shape), **params)
+            # Retry transient fabric-router-sync timeouts seen when a cross-host
+            # link does not finish training on the first open. This is a no-op on
+            # the single-host path: a successful first open returns immediately.
+            parent = open_mesh_device_with_retry(
+                lambda: ttnn.open_mesh_device(mesh_shape=ttnn.MeshShape(parent_shape), **params)
+            )
             if requested != parent_shape:
                 submesh = parent.create_submesh(ttnn.MeshShape(requested))
                 yield submesh
