@@ -20,10 +20,12 @@ PrefillVariant = Literal["regular-single", "regular-batched", "chunked"]
 class PrefillProgramSignature:
     """Material values selecting one eager prefill program variant.
 
-    Active row count is deliberately absent: regular paged fill uses ``-1``
-    skip rows, so all active counts with the same padded geometry execute the
-    same compiled program. Sampling remains material because it changes the
-    postprocessing program family.
+    Active row count is deliberately absent: padded page-table rows are ``-1``,
+    the paged-fill skip sentinel, so all active counts with the same padded
+    geometry share one program variant. Eager execution still fills only the
+    active rows, and each row's KV slice is its own TTNN program, so warmup must
+    first reach a key with every padded row active. Sampling remains material
+    because it changes the postprocessing program family.
     """
 
     operation_variant: PrefillVariant

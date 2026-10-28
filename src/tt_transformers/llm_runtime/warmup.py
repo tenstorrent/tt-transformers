@@ -813,8 +813,11 @@ def _build_plan(
             # another size, so this is the whole batch axis. Batch 1 stays in the
             # ladder for the sequential escape hatches; with fixed shape active
             # an uncached batch-1 case plans to the F wave, so it adds nothing.
+            # F goes first: the lone row compiles the same program but fills only
+            # row 0's KV, so after it the full wave is skipped, and under eager
+            # prefill rows 1..F-1 would first compile on a served wave.
             fixed_batch = fixed_batches.get(sequence_length)
-            batches: tuple[int, ...] = (1,) if fixed_batch is None else (1, fixed_batch)
+            batches: tuple[int, ...] = (1,) if fixed_batch is None else (fixed_batch, 1)
         elif sequential_prefill:
             # A runtime that never folds prompts runs every prefill at batch 1;
             # the batch ladder would only compile programs nothing invokes.

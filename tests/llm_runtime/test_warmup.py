@@ -745,6 +745,43 @@ def test_fixed_prefill_warmup_compiles_the_fixed_wave(monkeypatch):
 
 
 @pytest.mark.host
+@pytest.mark.parametrize("can_sample_on_device", (False, True), ids=("host-sampling", "device-sampling"))
+def test_fixed_prefill_warmup_fills_the_full_wave_before_a_lone_row_under_decode_trace(
+    monkeypatch, can_sample_on_device
+):
+    # A lone row compiles the same F-row program as a full wave but fills only
+    # row 0's KV, and a compiled program is not run again. With prefill eager
+    # and decode traced nothing else fills rows 1..F-1 before serving, so the
+    # full wave must reach the fixed bucket first.
+    monkeypatch.delenv("DISABLE_BATCHED_PREFILL", raising=False)
+    coordinator, execution, trace_compiler, *_ = make_coordinator(
+        trace_mode="decode_only",
+        warmup_config=WarmupConfig(prefill_seq_lens=LADDER),
+        sequence_lengths=LADDER,
+        lane_capacity=16,
+        fixed_prefill_batch_sizes=((128, 16),),
+    )
+
+    coordinator.warmup_prefill(kv_cache="cache", enable_trace=False, can_sample_on_device=can_sample_on_device)
+    coordinator.warmup_decode(
+        kv_cache="cache",
+        enable_trace=True,
+        max_batch_size=16,
+        num_blocks=8,
+        can_sample_on_device=can_sample_on_device,
+    )
+
+    rows_at_bucket = [
+        int(call["tokens"].shape[0])
+        for call in execution.prefill_calls
+        if call["start_pos"] is None and _padded_prefill_length(int(call["tokens"].shape[-1])) == 128
+    ]
+    assert rows_at_bucket[0] == 16
+    assert set(rows_at_bucket) == {1, 16}
+    assert trace_compiler.calls == 1
+
+
+@pytest.mark.host
 def test_fixed_prefill_warmup_refuses_a_wave_wider_than_the_lane(expect_error):
     with expect_error(ValueError, "fixed prefill batch 16 at bucket 128 exceeds lane batch size 8"):
         _build_plan(
