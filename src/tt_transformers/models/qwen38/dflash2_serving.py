@@ -394,6 +394,11 @@ class DFlash2DualBucketDecoder(DFlash2Decoder):
         self.switch_count = 0
         self.switch_ms = []  # per-switch wall time (host issue time unless QWEN36_SPEC_TIMING / DEBUG fences)
         self._last_switch_step = None
+        # One plugin-owned speculative step is split across target verification
+        # and the subsequent propose call. This records the exact rows and
+        # positions verified so commit cannot be applied to a different bucket
+        # or batch layout.
+        self._contract_pending = None
 
     # ------------------------------------------------------------------ small helpers
     @staticmethod
@@ -709,7 +714,7 @@ class DFlash2DualBucketDecoder(DFlash2Decoder):
         return anchors, Cs
 
     # ------------------------------------------------------------------ join
-    def begin(self, phys, first, T, page_table_row, seed_slot=None):
+    def begin(self, phys, first, T, page_table_row, seed_slot=None, contract_seed=False):
         """Start slot phys's session after ingest_prompt(phys, ...): seat it on a row of the current bucket
         and seed that row from the slot's prefilled decode state."""
         phys = int(phys)
@@ -729,7 +734,7 @@ class DFlash2DualBucketDecoder(DFlash2Decoder):
         # row ``row``. Every other row's ring blocks / window rows are untouched.
         for dn in self._gdn:
             dn.seed_spec_row(b.id, row, seed_slot)
-        if _FOLD_SEED:
+        if _FOLD_SEED or contract_seed:
             # No replay: the slot's first step() consumes ``first`` at position T as row 0 of a real
             # iteration (see _FOLD_SEED). p = T-1 keeps ctx_len == p+1 (the drafter holds 0..T-1).
             self.pending[phys] = int(first)
@@ -838,6 +843,165 @@ class DFlash2DualBucketDecoder(DFlash2Decoder):
         )
 
     # ------------------------------------------------------------------ the loop
+    def verify_contract(self, tokens, positions, num_valid, phys_by_row):
+        """Run one exact target verify without accepting or advancing state.
+
+        ``tokens`` and ``positions`` are the plugin's global ``[B, 1+Kmax]``
+        candidate block. The current bucket may expose a smaller T. Only its
+        first T columns are executed and returned; the plugin clamps each
+        row's acceptance to that verified width.
+        """
+        assert self._captured
+        if self._contract_pending is not None:
+            raise RuntimeError("DFlash contract verify called before the prior verify was committed")
+        b = self.cur
+        tokens = torch.as_tensor(tokens)
+        positions = torch.as_tensor(positions)
+        num_valid = torch.as_tensor(num_valid).reshape(-1)
+        if tokens.ndim != 2 or positions.shape != tokens.shape:
+            raise ValueError(
+                f"DFlash contract candidates need matching 2-D token/position tensors, got "
+                f"{tuple(tokens.shape)} and {tuple(positions.shape)}"
+            )
+        if tokens.shape[0] != len(phys_by_row) or num_valid.numel() != len(phys_by_row):
+            raise ValueError("DFlash contract row metadata does not match the candidate block")
+        if tokens.shape[1] < b.T:
+            raise ValueError(f"DFlash bucket {b.id} needs T={b.T} candidate columns, got {tokens.shape[1]}")
+
+        verify_tokens, verify_positions, mi_prev = self._hold_inputs(b)
+        records = []
+        used_bucket_rows = set()
+        for logical_row, phys in enumerate(phys_by_row):
+            if phys is None:
+                continue
+            phys = int(phys)
+            if not self.active[phys]:
+                raise RuntimeError(f"DFlash contract row {logical_row} names inactive slot {phys}")
+            bucket_row = b.row_of(phys)
+            if bucket_row is None:
+                raise RuntimeError(f"DFlash slot {phys} has no row in bucket {b.id}")
+            if bucket_row in used_bucket_rows:
+                raise RuntimeError(f"DFlash bucket row {bucket_row} is assigned twice")
+            used_bucket_rows.add(bucket_row)
+
+            start = int(positions[logical_row, 0])
+            expected = int(self.p[phys]) + 1
+            if start != expected:
+                raise RuntimeError(f"DFlash slot {phys} verify starts at {start}, expected {expected}")
+            offered = int(num_valid[logical_row])
+            if not 0 <= offered <= b.K:
+                raise RuntimeError(
+                    f"DFlash bucket {b.id} received {offered} drafts for row "
+                    f"{logical_row}; k_by_rows caps this bucket at {b.K}"
+                )
+            row_tokens = []
+            for column in range(b.T):
+                value = int(tokens[logical_row, column])
+                # Invalid suffix columns have token -1 and position -1 in the
+                # plugin block. The fixed target trace still executes them in
+                # independent candidate state slots, so give it a safe token;
+                # acceptance and commit are capped before those rows.
+                if column > offered or value < 0:
+                    value = 0
+                row_tokens.append(value)
+            if row_tokens[0] != int(self.pending[phys]):
+                raise RuntimeError(
+                    f"DFlash slot {phys} anchor {row_tokens[0]} does not match pending token {self.pending[phys]}"
+                )
+            verify_tokens[bucket_row] = row_tokens
+            verify_positions[bucket_row] = start
+            mi_prev[bucket_row] = int(self.mi[phys])
+            records.append((logical_row, phys, bucket_row, start, offered))
+
+        hold = [row for row in range(b.B) if row not in used_bucket_rows]
+        ids, hidden, _ = self.model.verify_traced(
+            verify_tokens,
+            verify_positions,
+            mi_prev,
+            read_logits=False,
+            hold=hold,
+            cfg_id=b.id,
+            rope_deltas=self._rope_deltas_for(b),
+        )
+        # The contract return stays at the launch maximum width. k_by_rows
+        # guarantees no live row offers more than this bucket's K, so columns
+        # beyond b.T are inert padding and the accept walk never reads them.
+        out = torch.zeros(tokens.shape, dtype=torch.int32)
+        for logical_row, _phys, bucket_row, _start, _offered in records:
+            out[logical_row, : b.T] = torch.as_tensor(ids[bucket_row * b.T : (bucket_row + 1) * b.T], dtype=torch.int32)
+        self._contract_pending = (b.id, tuple(records))
+        return out, hidden
+
+    def commit_and_draft_contract(self, committed, counts, requested_k, output_rows):
+        """Commit the preceding verify, extend drafter state, then propose.
+
+        The target has already executed every candidate. ``counts`` selects
+        the surviving candidate state per row. The last committed output is
+        the next anchor and has not itself been executed yet.
+        """
+        pending = self._contract_pending
+        if pending is None:
+            raise RuntimeError("DFlash contract propose called without a preceding verify")
+        bucket_id, records = pending
+        b = self.cur
+        if b.id != bucket_id:
+            raise RuntimeError(f"DFlash bucket changed between verify and commit: {bucket_id} -> {b.id}")
+        committed = torch.as_tensor(committed)
+        counts = torch.as_tensor(counts).reshape(-1)
+        requested_k = int(requested_k)
+        output_rows = int(output_rows)
+        if committed.ndim != 2 or committed.shape[0] != output_rows or counts.numel() != output_rows:
+            raise ValueError("DFlash committed block/counts do not match the verified row count")
+        if requested_k < b.K:
+            raise ValueError(f"DFlash bucket {b.id} proposes K={b.K}, above requested K={requested_k}")
+
+        slot0 = [0] * b.B
+        nrows = [0] * b.B
+        for logical_row, phys, bucket_row, start, offered in records:
+            count = int(counts[logical_row])
+            if not 1 <= count <= offered + 1 or count > b.T:
+                raise RuntimeError(f"DFlash slot {phys} committed count {count} outside 1..{min(offered + 1, b.T)}")
+            next_anchor = int(committed[logical_row, count - 1])
+            if next_anchor < 0:
+                raise RuntimeError(f"DFlash slot {phys} committed a padding token")
+            accepted = count - 1
+            self.mi[phys] = accepted
+            self.pending[phys] = next_anchor
+            self.fresh[phys] = False
+            slot0[bucket_row], nrows[bucket_row] = start, count
+            self.iters[phys] += 1
+            self.accepted[phys] += accepted
+            self.drafted[phys] += offered
+            self.committed[phys] += count
+            self.hist[phys][accepted] += 1
+            b.stats["accepted"] += accepted
+            b.stats["drafted"] += offered
+            b.stats["committed"] += count
+
+        self.drafter.extend_context(slot0, nrows, layout_id=b.id, traced=_DRAFT_TRACED)
+        for _logical_row, phys, bucket_row, start, _offered in records:
+            count = nrows[bucket_row]
+            self.ctx_len[phys] = start + count
+            self.p[phys] += count
+
+        anchors, contexts = self._draft_inputs(b)
+        if not self._armed and _DRAFT_TRACED:
+            self.drafter.arm_traces()
+            self._armed = True
+        bucket_drafts = self.drafter.draft(anchors, contexts, layout_id=b.id, traced=_DRAFT_TRACED)
+        drafts = torch.zeros((output_rows, requested_k), dtype=torch.int32)
+        num_valid = torch.zeros(output_rows, dtype=torch.int32)
+        for logical_row, _phys, bucket_row, _start, _offered in records:
+            drafts[logical_row, : b.K] = torch.as_tensor(bucket_drafts[bucket_row][: b.K], dtype=torch.int32)
+            num_valid[logical_row] = b.K
+
+        self.total_steps += 1
+        b.stats["steps"] += 1
+        self._planned = False
+        self._switched_since_step = False
+        self._contract_pending = None
+        return drafts, num_valid
+
     def step(self, only=None):
         """One speculative iteration over the live slots (or over ``only`` those live slots: the others
         HOLD -- replay their last inputs, advance nothing -- which bounds how far a fast slot can run
@@ -922,6 +1086,11 @@ class DFlash2DualBucketDecoder(DFlash2Decoder):
         """Slot phys's request is done: its row keeps holding (identity bucket) or is freed (compacting
         bucket); its blocks go back to vLLM now, so no held row may touch them any more."""
         phys = int(phys)
+        contract_pending = getattr(self, "_contract_pending", None)
+        if contract_pending is not None:
+            _bucket_id, records = contract_pending
+            if any(int(record[1]) == phys for record in records):
+                raise RuntimeError(f"cannot end DFlash slot {phys} between contract verify and commit")
         if not self.active[phys]:
             self.vision_context[phys] = None
             return

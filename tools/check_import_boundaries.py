@@ -23,15 +23,16 @@ DECLARED_OPTIONAL_THIRD_PARTY_ROOTS = frozenset({"tqdm", "yaml"})
 # Serving integrations supply and pin vLLM alongside the accelerator plugin.
 # Keeping that product boundary out of this wheel avoids resolving a second,
 # potentially incompatible vLLM installation from the public package index.
-INTEGRATION_OWNED_THIRD_PARTY_ROOTS = frozenset({"vllm"})
+INTEGRATION_OWNED_THIRD_PARTY_ROOTS = frozenset({"vllm", "vllm_tt_plugin"})
 # Installation requirements do not relax the import-layer or lazy-import policy.
 RESTRICTED_ROOT_LAYERS = {
     "tqdm": frozenset({"models"}),
     "transformers": frozenset({"models"}),
     "huggingface_hub": frozenset({"models"}),
     "safetensors": frozenset({"models"}),
-    # Only the model packages' vLLM adapter modules import vLLM.
+    # Only the model packages' vLLM adapter modules import vLLM and its TT plugin.
     "vllm": frozenset({"models"}),
+    "vllm_tt_plugin": frozenset({"models"}),
     "yaml": frozenset({"root"}),
 }
 DEPENDENCY_POLICY_LAYERS = frozenset({"root", "modules", "sampling", "llm_runtime", "models"})
