@@ -143,6 +143,11 @@ return values, the `model_capabilities` flags, and how to register a generator
 with the plugin. A generator that implements it can be served without plugin
 changes.
 
+If the model's Hugging Face architecture is one that
+[`vllm_registry.py`](src/tt_transformers/vllm_registry.py) serves (Llama,
+Qwen2, Qwen3, Mistral, Phi-3), add the package's Hugging Face id and generator
+to that architecture's table there.
+
 Declare a `model_capabilities` flag only when the model supports that behavior
 on every geometry its support manifest declares.
 

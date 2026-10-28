@@ -47,6 +47,17 @@ one of two ways:
   }
   ```
 
+For the shared text architectures, register the architecture-level entry point
+in [`tt_transformers.vllm_registry`](../src/tt_transformers/vllm_registry.py)
+instead of one package's generator, for example
+`TTLlamaForCausalLM=tt_transformers.vllm_registry:LlamaForCausalLM`. One such
+class covers every package of its architecture: it picks the package's
+generator by the checkpoint's exact Hugging Face id (or a Hugging Face cache
+snapshot path of one) and rejects any other checkpoint. Its module and class
+names stay stable when model packages are added or renamed. A new package of
+one of these architectures adds a row to that module's table. Register a
+package's generator directly only for an architecture no other package serves.
+
 Several HF architectures can map to one generator. An override applies only to
 the architecture it names, so register every alias your checkpoints resolve to.
 The plugin's built-in map still points at tt-metal generators. Set
