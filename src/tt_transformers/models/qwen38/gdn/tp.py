@@ -55,7 +55,7 @@ def _require_native_kda_op(name: str):
     return operation
 
 
-def _resolve_v6_kda_tile_input() -> bool:
+def _resolve_kda_tile_input() -> bool:
     """Select the Qwen op-library TILE KDA prefill operation."""
 
     value = os.environ.get("QWEN36_KDA_TILE_IN", "1")
@@ -470,7 +470,7 @@ class TPGatedDeltaNet:
         # generic-op wheel supplies the V1 TILE program so the default avoids
         # a full activation untilize without modifying the stock TTNN wheel.
         # Persistent carry/decode/spec state remains TILE in both modes.
-        self._kda_tile_in = self._gdn_conv_kda and _resolve_v6_kda_tile_input()
+        self._kda_tile_in = self._gdn_conv_kda and _resolve_kda_tile_input()
         # QWEN36_GDN_DECODE_KDA=1: decode recurrence through the fused KDA chunk ops on a 32-row chunk (token in
         # row 0, beta/g zero on the padding rows -> t_inv is the identity and the chunk math reduces exactly to
         # the single-step delta rule). Replaces the ~35-op ttnn recurrent step. Constants built lazily.
