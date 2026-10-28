@@ -9,50 +9,76 @@ load_state_dict/weight_cache_path override the base meta-key (wq/wk/wv) scheme.
 """
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 from tt_transformers.models.qwen38.v1.model_config import ModelArgs
 from tt_transformers.models.qwen38.weights import resolve_hf_weights
 
-# Qwen3.6-27B Blackhole (P300X2/P150x4 TP) serving optimizations are ON BY DEFAULT. These are the
-# validated "optimized" config from BENCHMARKS.md (TTFT 1.4-4.2x, TPOT 1.3-2.2x vs the reference
-# build); each is set via setdefault so any flag can still be overridden from the environment (set a
-# flag to its old value to disable it). Runs at import of this module, before any layer __init__
-# reads a flag. QWEN_SDPA_BF8 is the one precision change (bf16->bf8 KV; decode PCC 0.9999,
-# 64k retrieval matches bf16) and is included by request; export QWEN_SDPA_BF8=0 for bf16 KV.
-_QWEN36_SERVING_OPT_DEFAULTS = {
-    "QWEN36_GDN_OUT_MODE": "agmm",
-    "QWEN36_GDN_CONV": "kda",
-    "QWEN36_AGMM_LAYOUT": "nt11x8",
-    "QWEN36_SDPA_K_CHUNK": "256",
-    "QWEN36_GDN_DECODE_FUSED": "2",
-    "QWEN36_GDN_SLOT_DEVICE_COPY": "2",
-    "TT_SDPA_GQA_MCAST": "1",
-    "TT_GDN_SCAN_MCAST": "1",
-    "TT_SDPA_GQA_MCAST_QPAIR": "1",
-    "QWEN36_GDN_PROJ_CHUNKS": "1",
-    "QWEN36_GDN_GB_BF16": "1",
-    # The generic-op wheel supplies the V1 TILE-input KDA prefill program while
-    # stock TTNN remains responsible for the ROW_MAJOR implementation.
-    "QWEN36_KDA_TILE_IN": "1",
-    "QWEN36_AGMM_BARRIER": "1",
-    "QWEN36_PREFILL_LOGITS_FAST": "1",
-    "QWEN36_PREFILL_BUCKET_TRACE": "1",
-    "QWEN_SDPA_BF8": "1",
-    # Speculative-decode drafter (demo/spec path): "dflash2" = the DFlash block-diffusion drafter
+
+@dataclass(frozen=True)
+class Qwen38ServingConfig:
+    """Qwen3.8 Blackhole (P300x2/P150x4 TP) serving defaults.
+
+    These are the validated optimized settings. ``apply_environment_defaults``
+    runs when a model is created, not at import, and uses ``setdefault``, so any
+    flag can still be overridden from the environment (set a flag to its old
+    value to disable it). The layers still read these flags from the
+    environment. QWEN_SDPA_BF8 is the one precision change (bf16->bf8 KV;
+    decode PCC 0.9999, 64k retrieval matches bf16); export QWEN_SDPA_BF8=0 for
+    bf16 KV.
+    """
+
+    gdn_out_mode: str = "agmm"
+    gdn_conv: str = "kda"
+    agmm_layout: str = "nt11x8"
+    sdpa_k_chunk: str = "256"
+    gdn_decode_fused: str = "2"
+    gdn_slot_device_copy: str = "2"
+    gdn_proj_chunks: str = "1"
+    gdn_gb_bf16: str = "1"
+    # The op library supplies the TILE-input KDA prefill program; stock TTNN
+    # remains responsible for the ROW_MAJOR implementation.
+    kda_tile_in: str = "1"
+    agmm_barrier: str = "1"
+    prefill_logits_fast: str = "1"
+    prefill_bucket_trace: str = "1"
+    sdpa_bf8: str = "1"
+    # Speculative-decode drafter: "dflash2" = the DFlash block-diffusion drafter
     # (dflash2_decode.py) on the same verify/accept substrate; "mtp" = the native MTP head.
-    # Measured 2026-09-12 (ISL 130, lossless): DFlash v1 K=11 107.8 tok/s vs native MTP 80.9.
-    "QWEN36_DRAFTER": "dflash2",
-    # The drafter checkpoint MUST match the served target (a local dir or an HF repo id resolved through
-    # the HF cache): z-lab/Qwen3.6-27B-DFlash for Qwen3.6-27B; incoai/Qwen3.8-27B-DFlash2 for Qwen3.8-27B
-    # (the *DFlash2* drafters target 3.8, a different checkpoint).
-    "DFLASH_WEIGHTS": "z-lab/Qwen3.6-27B-DFlash",
-    # Draft block: 12 -> K=11 -> T=12 fused verify SDPA (the measured sweet spot for the block-16 v1
-    # drafter); clamped to the checkpoint's own block_size (8 for DFlash2 -> K=7).
-    "QWEN36_DFLASH_BLOCK": "12",
-}
-for _k, _v in _QWEN36_SERVING_OPT_DEFAULTS.items():
-    os.environ.setdefault(_k, _v)
+    drafter: str = "dflash2"
+    # The drafter checkpoint must match the served target (a local dir or an HF
+    # repo id resolved through the HF cache).
+    dflash_weights: str = "incoai/Qwen3.8-27B-DFlash2"
+    # Draft block: 12 -> K=11; clamped to the checkpoint's own block_size (8 for DFlash2 -> K=7).
+    dflash_block: str = "12"
+
+    def environment(self) -> dict[str, str]:
+        return {
+            "QWEN36_GDN_OUT_MODE": self.gdn_out_mode,
+            "QWEN36_GDN_CONV": self.gdn_conv,
+            "QWEN36_AGMM_LAYOUT": self.agmm_layout,
+            "QWEN36_SDPA_K_CHUNK": self.sdpa_k_chunk,
+            "QWEN36_GDN_DECODE_FUSED": self.gdn_decode_fused,
+            "QWEN36_GDN_SLOT_DEVICE_COPY": self.gdn_slot_device_copy,
+            "QWEN36_GDN_PROJ_CHUNKS": self.gdn_proj_chunks,
+            "QWEN36_GDN_GB_BF16": self.gdn_gb_bf16,
+            "QWEN36_KDA_TILE_IN": self.kda_tile_in,
+            "QWEN36_AGMM_BARRIER": self.agmm_barrier,
+            "QWEN36_PREFILL_LOGITS_FAST": self.prefill_logits_fast,
+            "QWEN36_PREFILL_BUCKET_TRACE": self.prefill_bucket_trace,
+            "QWEN_SDPA_BF8": self.sdpa_bf8,
+            "QWEN36_DRAFTER": self.drafter,
+            "DFLASH_WEIGHTS": self.dflash_weights,
+            "QWEN36_DFLASH_BLOCK": self.dflash_block,
+        }
+
+    def apply_environment_defaults(self) -> None:
+        for name, value in self.environment().items():
+            os.environ.setdefault(name, value)
+
+
+DEFAULT_HF_MODEL = "Qwen/Qwen3.8-27B"
 
 # l1_small_size the GDN prefill depthwise ttnn.conv1d requires.
 GDN_CONV1D_L1_SMALL_SIZE = 24576
@@ -72,9 +98,10 @@ class Qwen38ModelArgs(ModelArgs):
         enable_mtp=None,
         **kwargs,
     ):
+        Qwen38ServingConfig().apply_environment_defaults()
         # HF_MODEL is canonical (defaults to Qwen/Qwen3.8-27B). Snapshot hub ids unless
         # config.json exists locally (avoids cache-dir false positives).
-        hf_model = os.environ.setdefault("HF_MODEL", "Qwen/Qwen3.8-27B")
+        hf_model = os.environ.setdefault("HF_MODEL", DEFAULT_HF_MODEL)
         if not os.path.isfile(os.path.join(hf_model, "config.json")):
             os.environ["HF_MODEL"] = resolve_hf_weights(hf_model, os.getenv("HF_MODEL_REVISION"))
         super().__init__(mesh_device, max_batch_size=max_batch_size, max_seq_len=max_seq_len, **kwargs)

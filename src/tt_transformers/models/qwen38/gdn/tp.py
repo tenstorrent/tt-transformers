@@ -45,12 +45,12 @@ from tt_transformers.models.qwen38.v1.gated_deltanet_ops import _causal_conv1d_f
 
 
 def _require_native_kda_op(name: str):
-    """Resolve an operation supplied by the paired upstream TTNN branch."""
+    """Resolve a KDA operation that stock ttnn 0.79.0 provides."""
     operation = getattr(ttnn.experimental.kda, name, None)
     if not callable(operation):
         raise RuntimeError(
-            f"Qwen3.8 requires ttnn.experimental.kda.{name}; install the "
-            "paired TTNN build from the Qwen3.8 upstream stack"
+            f"QWEN36_GDN_CONV=kda requires ttnn.experimental.kda.{name}, which ttnn==0.79.0 provides; "
+            "check the installed ttnn version, or set QWEN36_GDN_CONV=conv2d for the composite path"
         )
     return operation
 
