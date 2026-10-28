@@ -513,3 +513,12 @@ class TTQwen38ForCausalLM(Generator, SupportsMultiModal):
         kwargs.pop("non_greedy_decoding_on_device", None)
         self._validate_device_sampling_request(kwargs.get("can_sample_on_device", False))
         return warmup_decode_buckets(self, super().warmup_model_decode, *args, **kwargs)
+
+
+def __getattr__(name):
+    # The DFlash adapter subclasses TTQwen38ForCausalLM, so it is imported on first use.
+    if name == "TTQwen38DFlashForCausalLM":
+        from tt_transformers.models.qwen38.vllm_generator_dflash import TTQwen38DFlashForCausalLM
+
+        return TTQwen38DFlashForCausalLM
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

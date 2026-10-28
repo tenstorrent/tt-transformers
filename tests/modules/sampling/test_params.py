@@ -348,6 +348,8 @@ _TARGET_GENERATORS = [
         "DeepSeekR1Qwen14BGenerator",
     ),
 ]
+# qwen38 does not use the shared executors yet, so only its capability keys are checked.
+_STANDALONE_GENERATORS = [("src/tt_transformers/models/qwen38/vllm_generator.py", "TTQwen38ForCausalLM")]
 
 
 @pytest.mark.host
@@ -360,7 +362,7 @@ def test_target_generator_capabilities_advertise_exact_device_top_k(relative_pat
 
 
 @pytest.mark.host
-@pytest.mark.parametrize(("relative_path", "class_name"), _TARGET_GENERATORS)
+@pytest.mark.parametrize(("relative_path", "class_name"), _TARGET_GENERATORS + _STANDALONE_GENERATORS)
 def test_model_capabilities_only_declare_known_schema_keys(relative_path, class_name):
     """Every key a generator declares is one the capability schema knows about.
 
@@ -387,7 +389,7 @@ def test_capability_schema_parametrization_covers_every_serving_generator():
 
     Guards against a new ``models/<m>/vllm_generator.py`` carrying a
     ``model_capabilities`` dict that no schema test ever reads."""
-    parametrized = {path for path, _ in _TARGET_GENERATORS}
+    parametrized = {path for path, _ in _TARGET_GENERATORS + _STANDALONE_GENERATORS}
     discovered = {
         str(path.relative_to(_REPOSITORY_ROOT))
         for path in sorted((_REPOSITORY_ROOT / "src/tt_transformers/models").glob("*/vllm_generator.py"))

@@ -86,8 +86,8 @@ def test_model_layer_has_only_the_approved_family_modules_and_readmes() -> None:
     )
     assert len(model_directories) == 13
     # qwen38 gets its hf_generator.py, and the examples/ README that documents its
-    # demo, after the merge. Until its vLLM adapter lands it has no vllm_generator.py.
-    deferred = {"qwen38": {"hf_generator.py", "examples README", "vllm_generator.py"}}
+    # demo, after the merge.
+    deferred = {"qwen38": {"hf_generator.py", "examples README"}}
     for path in model_directories:
         exempt = deferred.get(path.name, set())
         if "hf_generator.py" not in exempt:
