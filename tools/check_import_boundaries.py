@@ -20,12 +20,18 @@ DECLARED_BASE_THIRD_PARTY_ROOTS = frozenset({"loguru", "torch", "ttnn", "transfo
 # weight loaders import them directly.
 TRANSFORMERS_PROVIDED_THIRD_PARTY_ROOTS = frozenset({"huggingface_hub", "safetensors"})
 DECLARED_OPTIONAL_THIRD_PARTY_ROOTS = frozenset({"tqdm", "yaml"})
+# Serving integrations supply and pin vLLM alongside the accelerator plugin.
+# Keeping that product boundary out of this wheel avoids resolving a second,
+# potentially incompatible vLLM installation from the public package index.
+INTEGRATION_OWNED_THIRD_PARTY_ROOTS = frozenset({"vllm"})
 # Installation requirements do not relax the import-layer or lazy-import policy.
 RESTRICTED_ROOT_LAYERS = {
     "tqdm": frozenset({"models"}),
     "transformers": frozenset({"models"}),
     "huggingface_hub": frozenset({"models"}),
     "safetensors": frozenset({"models"}),
+    # Only the model packages' vLLM adapter modules import vLLM.
+    "vllm": frozenset({"models"}),
     "yaml": frozenset({"root"}),
 }
 DEPENDENCY_POLICY_LAYERS = frozenset({"root", "modules", "sampling", "llm_runtime", "models"})
@@ -72,6 +78,7 @@ def _dependency_reason(imported: str, layer: str) -> str | None:
         root in DECLARED_BASE_THIRD_PARTY_ROOTS
         or root in TRANSFORMERS_PROVIDED_THIRD_PARTY_ROOTS
         or root in DECLARED_OPTIONAL_THIRD_PARTY_ROOTS
+        or root in INTEGRATION_OWNED_THIRD_PARTY_ROOTS
     ):
         return None
     return "third-party import root is not declared for the runtime/model product"

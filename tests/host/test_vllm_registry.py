@@ -152,7 +152,9 @@ def test_table_matches_support_manifests() -> None:
         path.parent.name: json.loads(path.read_text(encoding="utf-8"))["model"]
         for path in sorted((ROOT / "examples").glob("*/support.json"))
     }
-    served = {path.parent.name for path in MODELS.glob("*/vllm_generator.py")}
+    # qwen38 registers its own architecture, Qwen3_5ForConditionalGeneration, directly
+    # (see models/README.md), so it has no entry in these dispatchers.
+    served = {path.parent.name for path in MODELS.glob("*/vllm_generator.py")} - {"qwen38"}
 
     table = {entry.package: entry.hf_id for _, entry in _all_entries()}
 

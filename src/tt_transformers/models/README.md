@@ -27,6 +27,7 @@ every hardware and workload combination.
 | Qwen2.5 Coder 32B | [`qwen25_coder_32b`](qwen25_coder_32b/) | [Example](../../../examples/qwen25_coder_32b/README.md) |
 | Qwen2 7B | [`qwen2_7b`](qwen2_7b/) | [Example](../../../examples/qwen2_7b/README.md) |
 | Qwen3 32B | [`qwen3_32b`](qwen3_32b/) | [Example](../../../examples/qwen3_32b/README.md) |
+| Qwen3.8 27B | [`qwen38`](qwen38/) | vLLM only; see [Qwen3.8](#qwen38) |
 
 The `llama3_8b` directory implements Llama **3.1** 8B. Examples run from a
 repository checkout and are not installed by the wheel.
@@ -121,6 +122,26 @@ External vLLM registrations must point to the renamed module, for example
 `tt_transformers.models.llama3_8b.vllm_generator:Llama3Generator`. Class names
 and serving method signatures are unchanged. The old model-local
 `hf_adaptor`, `executor`, and `generator` module paths have been removed.
+
+## Qwen3.8
+
+`qwen38` serves Qwen3.8 27B (`Qwen/Qwen3.8-27B`, with the
+`incoai/Qwen3.8-27B-DFlash2` speculative drafter) on Blackhole P300x2 and
+P150x4. It does not use the shared `llm_runtime` or the family executors at
+this time; it carries its own runtime and has no `hf_generator.py` yet.
+Its device operations not in stock TTNN live in
+[`ops/qwen38`](../ops/qwen38/README.md).
+
+Register the vLLM entry points for the `Qwen3_5ForConditionalGeneration`
+architecture:
+
+| Entry point | Registration |
+|---|---|
+| Plain decode | `ModelRegistry.register_model("TTQwen3_5ForConditionalGeneration", "tt_transformers.models.qwen38.vllm_generator:TTQwen38ForCausalLM")` |
+| DFlash2 speculative decode | `ModelRegistry.register_model("TTQwen3_5ForConditionalGeneration", "tt_transformers.models.qwen38.vllm_generator:TTQwen38DFlashForCausalLM")` |
+
+Register one of the two. All `vllm` and `vllm_tt_plugin` imports stay in
+`vllm_generator.py` and `vllm_generator_dflash.py`.
 
 ## Model lifecycle
 
