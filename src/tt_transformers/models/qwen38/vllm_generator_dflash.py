@@ -59,7 +59,7 @@ from dataclasses import dataclass
 import torch
 import ttnn  # noqa: E402
 from loguru import logger
-from vllm.model_executor.models.qwen3_5 import Qwen3VLDummyInputsBuilder, Qwen3VLMultiModalProcessor  # noqa: E402
+from vllm.model_executor.models.qwen3_5 import Qwen3VLDummyInputsBuilder  # noqa: E402
 from vllm.multimodal import MULTIMODAL_REGISTRY  # noqa: E402
 
 from tt_transformers.models.qwen38.dflash2_decode import default_draft_len  # noqa: E402
@@ -71,13 +71,17 @@ from tt_transformers.models.qwen38.dflash2_serving import (  # noqa: E402
 from tt_transformers.models.qwen38.spec_decode import MAX_SPEC_ROWS  # noqa: E402
 from tt_transformers.models.qwen38.vllm_generator import (  # noqa: E402
     TT_Qwen3_5ProcessingInfo,
+    TTQwen3VLMultiModalProcessor,
     TTQwen38ForCausalLM,
     _is_identity_slot_remap,
 )
 from tt_transformers.sampling.sampling_params import SamplingParams  # noqa: E402
 
 try:  # the multi-bucket decoder (profiles/dual_bucket_spec.json); a single bucket falls back to today's class without it
-    from tt_transformers.models.qwen38.dflash2_serving import BucketPlanner, DFlash2DualBucketDecoder  # noqa: E402
+    from tt_transformers.models.qwen38.dflash2_serving import (  # noqa: E402
+        BucketPlanner,
+        DFlash2DualBucketDecoder,
+    )
 except ImportError:  # pragma: no cover - a tree without the dual-bucket decoder
     DFlash2DualBucketDecoder = None
     BucketPlanner = None
@@ -230,7 +234,7 @@ def bucket_id(bucket):
 
 
 @MULTIMODAL_REGISTRY.register_processor(
-    Qwen3VLMultiModalProcessor, info=TT_Qwen3_5ProcessingInfo, dummy_inputs=Qwen3VLDummyInputsBuilder
+    TTQwen3VLMultiModalProcessor, info=TT_Qwen3_5ProcessingInfo, dummy_inputs=Qwen3VLDummyInputsBuilder
 )
 class TTQwen38DFlashForCausalLM(TTQwen38ForCausalLM):
     """TTQwen38ForCausalLM + model-internal multi-user DFlash2 speculation on decode steps (see module doc)."""
