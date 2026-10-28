@@ -23,3 +23,21 @@ def test_static_import_boundaries() -> None:
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(
+    ("root", "allowed_layers"),
+    [("vllm", {"models"}), ("vllm_tt_plugin", {"models"}), ("yaml", {"root"})],
+)
+def test_layer_scoped_dependencies(root: str, allowed_layers: set[str]) -> None:
+    sys.path.insert(0, str(ROOT / "tools"))
+    try:
+        import check_import_boundaries as checker
+    finally:
+        sys.path.pop(0)
+
+    allowed = {
+        layer for layer in checker.DEPENDENCY_POLICY_LAYERS if checker._dependency_reason(f"{root}.x", layer) is None
+    }
+    assert allowed == allowed_layers

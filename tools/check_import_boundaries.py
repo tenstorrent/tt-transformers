@@ -30,8 +30,9 @@ RESTRICTED_ROOT_LAYERS = {
     "transformers": frozenset({"models"}),
     "huggingface_hub": frozenset({"models"}),
     "safetensors": frozenset({"models"}),
-    # Only the model packages' vLLM adapter modules import vLLM.
+    # Only the model packages' vLLM adapter modules import vLLM and its TT plugin.
     "vllm": frozenset({"models"}),
+    "vllm_tt_plugin": frozenset({"models"}),
     "yaml": frozenset({"root"}),
 }
 DEPENDENCY_POLICY_LAYERS = frozenset({"root", "modules", "sampling", "llm_runtime", "models"})

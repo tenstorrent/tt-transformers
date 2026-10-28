@@ -17,8 +17,8 @@ target verification plus the drafter's target/GDN/ring state:
     requests needing sampling, logprobs, constraints, or penalties run in
     homogeneous ordinary width-one batches through the base Qwen adapter.
 
-The older block-output methods remain temporarily for compatibility with the
-banked v5.1 artifact, but the v6 launch does not advertise or select that rail.
+The older block-output methods remain temporarily for compatibility with
+earlier serving bundles; this adapter does not advertise or select that path.
 
 Greedy: each request's tokens are the target's greedy trajectory from its sampled anchor (lossless,
 tested per request in tests/test_dflash2_serving.py). B_max x (K+1) verify rows must fit one 32-row
