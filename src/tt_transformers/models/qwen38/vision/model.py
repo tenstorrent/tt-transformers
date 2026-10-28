@@ -5,9 +5,9 @@
 import os
 
 import torch
+import transformers.vision_utils as hf_vision_utils
 import ttnn
 from loguru import logger
-from transformers.vision_utils import get_vision_interpolation_indices_and_weights
 
 from tt_transformers.models.qwen38.v1.ccl import TT_CCL
 from tt_transformers.models.qwen38.v1.common import get_rot_transformation_mat
@@ -26,15 +26,24 @@ from .vision_model_config import VisionModelArgs
 
 
 def interpolate_pos_embeddings(reference_model, grid_thw, dtype=None):
-    """Build Qwen3.5 learned vision positions with the Transformers 5.17 public API."""
-    interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
-        grid_thw,
-        num_grid_per_side=reference_model.num_grid_per_side,
-        mode=reference_model.interpolation_mode,
-        align_corners=reference_model.interpolation_align_corners,
-        spatial_merge_size=reference_model.config.spatial_merge_size,
-    )
-    pos_embeds = (reference_model.pos_embed(interp_indices) * interp_weights[:, :, None]).sum(1)
+    """Build Qwen3.5 learned vision positions with the Transformers vision utilities."""
+    if hasattr(hf_vision_utils, "get_vision_interpolation_indices_and_weights"):
+        interp_indices, interp_weights = hf_vision_utils.get_vision_interpolation_indices_and_weights(
+            grid_thw,
+            num_grid_per_side=reference_model.num_grid_per_side,
+            mode=reference_model.interpolation_mode,
+            align_corners=reference_model.interpolation_align_corners,
+            spatial_merge_size=reference_model.config.spatial_merge_size,
+        )
+        pos_embeds = (reference_model.pos_embed(interp_indices) * interp_weights[:, :, None]).sum(1)
+    else:
+        # transformers 5.12 has only the bilinear (align_corners=True) form, with the corners first.
+        interp_indices, interp_weights = hf_vision_utils.get_vision_bilinear_indices_and_weights(
+            grid_thw,
+            num_grid_per_side=reference_model.num_grid_per_side,
+            spatial_merge_size=reference_model.config.spatial_merge_size,
+        )
+        pos_embeds = (reference_model.pos_embed(interp_indices) * interp_weights[:, :, None]).sum(0)
     return pos_embeds if dtype is None else pos_embeds.to(dtype)
 
 
