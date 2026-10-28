@@ -1316,6 +1316,7 @@ def pytest_configure(config):
 import gc
 
 
+@pytest.fixture
 def ensure_gc():
     gc.collect()
 

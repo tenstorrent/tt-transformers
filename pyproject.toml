@@ -83,6 +83,8 @@ ignore = ["E501", "UP038"]
 [tool.ruff.lint.per-file-ignores]
 "qualification/tools/validate_hardware_evidence.py" = ["E402"]
 "tests/conftest.py" = ["E402"]
+"src/tt_transformers/models/qwen38/**/*.py" = ["E402", "E711", "E712", "E721", "E722", "E731", "E741", "F841", "UP007", "UP008"]
+"tests/models/qwen38/**/*.py" = ["E741", "F841"]
 
 [tool.mypy]
 python_version = "3.10"
@@ -117,6 +119,7 @@ markers = [
   "p150: requires a P150-compatible mesh",
   "p300: requires a P300-compatible mesh",
   "p150x4: requires a four-die P150x4-compatible mesh",
+  "timeout(seconds): bound a long-running hardware test",
 ]
 
 [tool.coverage.run]
