@@ -9,11 +9,21 @@ load_state_dict/weight_cache_path override the base meta-key (wq/wk/wv) scheme.
 """
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+
+import ttnn
 
 from tt_transformers.models.qwen38.v1.model_config import ModelArgs
 from tt_transformers.models.qwen38.weights import resolve_hf_weights
+
+
+def default_gdn_decode_fused() -> str:
+    """The fused GDN decode op when TTNN can build it, else the composite decode.
+
+    gdn_decode_step needs KernelDescriptor.BuildOptLevel, which ttnn 0.79.0 does not expose.
+    """
+    return "2" if hasattr(ttnn.KernelDescriptor, "BuildOptLevel") else "0"
 
 
 @dataclass(frozen=True)
@@ -33,7 +43,7 @@ class Qwen38ServingConfig:
     gdn_conv: str = "kda"
     agmm_layout: str = "nt11x8"
     sdpa_k_chunk: str = "256"
-    gdn_decode_fused: str = "2"
+    gdn_decode_fused: str = field(default_factory=default_gdn_decode_fused)
     gdn_slot_device_copy: str = "2"
     gdn_proj_chunks: str = "1"
     gdn_gb_bf16: str = "1"

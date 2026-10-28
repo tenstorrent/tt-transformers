@@ -78,3 +78,17 @@ def test_stock_ttnn_rejects_unknown_layout_selector(monkeypatch):
     monkeypatch.setenv("QWEN36_KDA_TILE_IN", "maybe")
     with pytest.raises(ValueError, match="must be 0 or 1"):
         _resolve_kda_tile_input()
+
+
+@pytest.mark.host
+@pytest.mark.model
+def test_default_decode_uses_the_composite_path_without_build_levels(monkeypatch):
+    monkeypatch.delattr(ttnn.KernelDescriptor, "BuildOptLevel", raising=False)
+    assert model_config.Qwen38ServingConfig().environment()["QWEN36_GDN_DECODE_FUSED"] == "0"
+
+
+@pytest.mark.host
+@pytest.mark.model
+def test_default_decode_uses_the_fused_op_with_build_levels(monkeypatch):
+    monkeypatch.setattr(ttnn.KernelDescriptor, "BuildOptLevel", object(), raising=False)
+    assert model_config.Qwen38ServingConfig().environment()["QWEN36_GDN_DECODE_FUSED"] == "2"
