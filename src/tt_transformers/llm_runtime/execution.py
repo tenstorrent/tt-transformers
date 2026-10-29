@@ -18,7 +18,12 @@ from tt_transformers.llm_runtime.decode import InvocationResult as DecodeInvocat
 from tt_transformers.llm_runtime.prefill.plan import PrefillRequest
 from tt_transformers.llm_runtime.prefill.runtime import PrefillRuntime
 from tt_transformers.llm_runtime.program_compiler import CompiledProgram, OutputSpec, ProgramCompiler
-from tt_transformers.llm_runtime.trace_compiler import InputRefreshPolicy, TraceCapturePlan, TraceCompiler
+from tt_transformers.llm_runtime.trace_compiler import (
+    InputRefreshPolicy,
+    TraceBodyPlan,
+    TraceCapturePlan,
+    TraceCompiler,
+)
 
 
 class TraceCoverageError(RuntimeError):
@@ -383,6 +388,7 @@ class TracedExecutor:
                 "trace_replays_by_operation": self.trace_compiler.replay_counts,
                 "strict_coverage_misses": self._coverage_miss_count,
                 "semantic_trace_count": self.trace_compiler.trace_count,
+                "decode_body_count": self.trace_compiler.body_count,
                 "trace_association_count": self.trace_compiler.trace_association_count,
             }
         )
@@ -768,14 +774,22 @@ class TracedExecutor:
         program = self.eager_executor._compile_decode(prepared)
         if self.trace_compiler.trace_key_for_program(program.key) is None:
             operation_plan = self.eager_executor.decode.capture_plan(prepared)
+            body = operation_plan.body
             self.trace_compiler.register_capture_plan(
                 TraceCapturePlan(
                     program_key=program.key,
                     trace_signature=self.eager_executor.decode.trace_signature(prepared),
                     operation="decode",
-                    prepare_inputs=operation_plan.prepare_inputs,
+                    prepare_inputs=lambda body_persistent, plan=operation_plan: plan.prepare_inputs(
+                        body_persistent.values
+                    ),
                     prepare_capture=operation_plan.prepare_capture,
-                    capture=lambda persistent, plan=operation_plan: plan.capture(persistent.values),
+                    capture=lambda persistent, logits, plan=operation_plan: plan.capture(persistent.values, logits),
+                    body=TraceBodyPlan(
+                        signature=body.signature,
+                        prepare_inputs=body.prepare_inputs,
+                        capture=lambda persistent, body=body: body.capture(persistent.values),
+                    ),
                     refresh_policy=InputRefreshPolicy(
                         every_replay=operation_plan.refresh_policy.every_replay,
                         full_on_batch_reset=operation_plan.refresh_policy.full_on_batch_reset,

@@ -933,7 +933,8 @@ def test_sequential_and_fixed_prefill_are_exclusive(binding, expect_error):
 
 
 @pytest.mark.host
-def test_llama32_1b_warms_every_q128_topk_tile_start_once_per_execution_mode():
+@pytest.mark.parametrize("logprobs_variants", (False, True))
+def test_llama32_1b_warms_every_q128_topk_tile_start_once_per_execution_mode(logprobs_variants):
     executor = object.__new__(llama32_executor.Llama32_1BExecutor)
     executor._q128_topk_tile_ends_warmed = set()
     executor.eager_executor = object()
@@ -946,6 +947,7 @@ def test_llama32_1b_warms_every_q128_topk_tile_start_once_per_execution_mode():
             prefill_trace_sequence_lengths=(128,),
             prime_q128_tile_ends=False,
             penalty_variants=True,
+            logprobs_variants=logprobs_variants,
         )
     )
     executor.compile_prefill = MagicMock()
@@ -958,13 +960,18 @@ def test_llama32_1b_warms_every_q128_topk_tile_start_once_per_execution_mode():
             enable_trace=enable_trace,
         )
 
-    assert executor.compile_prefill.call_count == 12
+    # Plain and penalised top-k at three tile starts per mode, and their
+    # logprobs twins where logprobs run on device.
+    per_mode = 12 if logprobs_variants else 6
+    assert executor.compile_prefill.call_count == 2 * per_mode
     calls = executor.compile_prefill.call_args_list
-    assert [call.kwargs["tokens"].shape[1] for call in calls] == [32, 64, 96] * 4
-    assert [call.kwargs["page_table"].shape[1] for call in calls] == [1, 2, 3] * 4
+    assert [call.kwargs["tokens"].shape[1] for call in calls] == [32, 64, 96] * (2 * per_mode // 3)
+    assert [call.kwargs["page_table"].shape[1] for call in calls] == [1, 2, 3] * (2 * per_mode // 3)
     assert all(call.kwargs["kv_cache"] is kv_cache for call in calls)
-    assert all(call.kwargs["execution"] is executor.eager_executor for call in calls[:6])
-    assert all(call.kwargs["execution"] is executor.traced_executor for call in calls[6:])
+    assert all(call.kwargs["execution"] is executor.eager_executor for call in calls[:per_mode])
+    assert all(call.kwargs["execution"] is executor.traced_executor for call in calls[per_mode:])
+    logprobs_calls = [bool(call.kwargs["sampling_params"].enable_log_probs) for call in calls[:per_mode]]
+    assert logprobs_calls == [False] * 6 + [True] * (per_mode - 6)
     assert executor._q128_topk_tile_ends_warmed == {False, True}
 
 
@@ -985,6 +992,7 @@ def test_q128_tile_warmup_primes_eagerly_when_q128_has_no_trace_family():
             prefill_trace_sequence_lengths=(),
             prime_q128_tile_ends=False,
             penalty_variants=True,
+            logprobs_variants=False,
         )
     )
     executor.compile_prefill = MagicMock()
@@ -1018,6 +1026,7 @@ def test_qwen3_lane4_warms_every_runtime_q128_topk_signature_before_activation(e
                 prefill_trace_sequence_lengths=(128, 1024),
                 prime_q128_tile_ends=False,
                 penalty_variants=True,
+                logprobs_variants=False,
             )
         ),
     )

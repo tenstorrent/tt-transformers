@@ -17,8 +17,10 @@ from tt_transformers.llm_runtime.program_compiler import ProgramCompiler
 from tt_transformers.llm_runtime.trace_compiler import (
     InputRefreshPolicy,
     PersistentInputs,
+    TraceBodyPlan,
     TraceCapturePlan,
     TraceCompiler,
+    TraceKey,
 )
 
 
@@ -826,3 +828,103 @@ def test_replay_failure_blocks_retry_after_state_may_have_changed(monkeypatch, e
     assert trace.replay_count == 0
     trace.cleanup()
     assert not trace.trace_active
+
+
+def _tail_plan(program, variant, events, *, body_variant=1):
+    return TraceCapturePlan(
+        program_key=program.key,
+        trace_signature=_Signature("tail", variant),
+        operation="decode",
+        prepare_inputs=lambda body: events.append(("prepare", variant, body.values)) or ("tail", variant),
+        capture=lambda persistent, logits: events.append(("capture", variant, logits)) or ("tokens", variant),
+        body=TraceBodyPlan(
+            signature=_Signature("body", body_variant),
+            prepare_inputs=lambda: events.append(("prepare-body", body_variant)) or ("body", body_variant),
+            capture=lambda persistent: events.append(("capture-body", persistent.values)) or "logits",
+        ),
+    )
+
+
+@pytest.mark.host
+def test_tails_share_one_body_captured_before_them_and_replayed_directly_before_each(monkeypatch):
+    """Each sampling tail reads the logits its body retains: the body is prepared
+    and captured once, before the first tail, and every tail replay enqueues the
+    body and then the tail with nothing in between."""
+
+    events = []
+    _patch_backend(monkeypatch, events)
+    compiler = ProgramCompiler("mesh", lambda: object())
+    programs = [compiler.compile(_Signature("program", variant), lambda _: torch.zeros(1)) for variant in (1, 2)]
+    trace = TraceCompiler(compiler)
+    for variant, program in zip((1, 2), programs):
+        trace.register_capture_plan(_tail_plan(program, variant, events))
+
+    trace.capture_all()
+
+    captures = [event for event in events if event[0] in ("prepare-body", "prepare", "capture-body", "capture")]
+    assert captures == [
+        ("prepare-body", 1),
+        ("prepare", 1, ("body", 1)),
+        ("prepare", 2, ("body", 1)),
+        ("capture-body", ("body", 1)),
+        ("capture", 1, "logits"),
+        ("capture", 2, "logits"),
+    ]
+    assert [event[0] for event in events].count("begin") == 3
+    assert (trace.trace_count, trace.body_count, trace.trace_association_count) == (2, 1, 2)
+
+    events.clear()
+    outputs = [trace.replay(program.key, lambda artifact, decision: None) for program in programs]
+    assert outputs == [("tokens", 1), ("tokens", 2)]
+    assert [event for event in events if event[0] == "execute"] == [
+        ("execute", 100, 0, False),
+        ("execute", 101, 0, False),
+        ("execute", 100, 0, False),
+        ("execute", 102, 0, False),
+    ]
+    assert trace.replay_counts == {"prefill": 0, "decode": 2}
+
+    events.clear()
+    trace.cleanup()
+    assert [event for event in events if event[0] == "release"] == [
+        ("release", 101),
+        ("release", 102),
+        ("release", 100),
+    ]
+
+
+@pytest.mark.host
+def test_a_body_and_its_tail_are_one_step_for_graph_switch_refresh(monkeypatch, expect_error):
+    """The previous replay is compared stage by stage, so replaying the same tail
+    after its body each step is not a graph switch. Changing tails still is: the
+    previous tail may not have fed tokens back into the body's inputs."""
+
+    events = []
+    _patch_backend(monkeypatch, events)
+    compiler = ProgramCompiler("mesh", lambda: object())
+    programs = [compiler.compile(_Signature("program", variant), lambda _: torch.zeros(1)) for variant in (1, 2)]
+    trace = TraceCompiler(compiler)
+    for variant, program in zip((1, 2), programs):
+        trace.register_capture_plan(_tail_plan(program, variant, events))
+    trace.capture_all()
+    body_key = TraceKey.from_signature(_Signature("body", 1))
+    decisions = []
+
+    def replay(program, **commands):
+        trace.replay(
+            program.key,
+            lambda artifact, decision: decisions.append(decision.full),
+            device_feedback_enabled=True,
+            feedback_compatible=True,
+            **commands,
+        )
+
+    for program in (programs[0], programs[0], programs[1], programs[1]):
+        replay(program)
+        assert trace.previous_replay_keys["body"] == body_key
+    assert decisions == [True, False, True, False]
+    assert trace.previous_replay_keys["tail"] == TraceKey.from_signature(_Signature("tail", 2))
+
+    replay(programs[1], reload_inputs=False)
+    with expect_error(RuntimeError, "requires reload_inputs=True"):
+        replay(programs[0], reload_inputs=False)
