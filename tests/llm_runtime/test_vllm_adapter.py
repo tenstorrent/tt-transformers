@@ -1171,11 +1171,9 @@ def test_every_generator_forwards_explicit_v1_commands(model, class_name, comman
     target = _ExplicitGeneratorTarget()
     generator = generator_class(target, _adapter(request_state_fields=()))
     assert generator_class.decode_input_update_contract == 1
-    # Only executors that build a SamplingState1D hold device penalty state; the
-    # others, Llama 3.2 1B and 3B included, decline. An absent key reads as True.
-    assert generator_class.model_capabilities.get("supports_device_penalties", True) is (
-        model in {"llama3_8b", "llama33_70b", "qwen3_32b"}
-    )
+    # Every executor builds a SamplingState1D, so every generator applies
+    # penalties on device. An absent key reads as True.
+    assert generator_class.model_capabilities.get("supports_device_penalties", True) is True
     assert "reset_batch" not in inspect.signature(generator_class.decode_forward).parameters
     assert (
         generator.decode_forward(

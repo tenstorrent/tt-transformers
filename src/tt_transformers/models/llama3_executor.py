@@ -11,8 +11,7 @@ Llama 3 products.  The facades deliberately do not subclass ``ModelExecutor``.
 
 from __future__ import annotations
 
-import functools
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import wraps
 from typing import Any
@@ -20,12 +19,9 @@ from typing import Any
 import torch
 
 from tt_transformers.llm_runtime.config import PagedKVCacheConfig
-from tt_transformers.llm_runtime.execution import EagerExecutor, TracedExecutor
 from tt_transformers.llm_runtime.warmup import topk_warmup_sampling_variants
-from tt_transformers.models.executor import ModelExecutor, ModelExecutorConfig
+from tt_transformers.models.executor import ModelExecutor, ModelExecutorConfig, create_sampling_state
 from tt_transformers.modules.sampling.sampling_1d import Sampling1D
-from tt_transformers.modules.sampling.sampling_state_1d import SamplingState1D
-from tt_transformers.modules.sampling.seed_manager_1d import SeedManager1D
 
 
 @dataclass(frozen=True)
@@ -175,133 +171,6 @@ def _with_executor_facade(cls):
     return cls
 
 
-class _Llama32RequestSurface:
-    """The pre-history request contract retained by Llama 3.2-1B/3B."""
-
-    def compile_prefill(
-        self,
-        *,
-        tokens: torch.Tensor,
-        page_table: torch.Tensor,
-        prompt_lens: torch.Tensor | None = None,
-        start_pos: torch.Tensor | None = None,
-        empty_slots: Sequence[int] | None = None,
-        kv_cache: Any = None,
-        sampling_params: Any = None,
-        execution: EagerExecutor | TracedExecutor | None = None,
-    ) -> None:
-        return ModelExecutor.compile_prefill(
-            _facade_target(self),
-            tokens=tokens,
-            page_table=page_table,
-            prompt_lens=prompt_lens,
-            start_pos=start_pos,
-            empty_slots=empty_slots,
-            kv_cache=kv_cache,
-            sampling_params=sampling_params,
-            execution=execution,
-        )
-
-    def compile_decode(
-        self,
-        *,
-        tokens: torch.Tensor,
-        start_pos: torch.Tensor,
-        page_table: torch.Tensor,
-        kv_cache: Any = None,
-        sampling_params: Any = None,
-        slot_remap: Any = None,
-        reset_batch: bool = False,
-        reload_inputs: bool | None = None,
-        reload_page_table: bool = False,
-        reload_sampling_params: bool = False,
-        reset_sampling_state: bool = False,
-        execution: EagerExecutor | TracedExecutor | None = None,
-    ) -> None:
-        return ModelExecutor.compile_decode(
-            _facade_target(self),
-            tokens=tokens,
-            start_pos=start_pos,
-            page_table=page_table,
-            kv_cache=kv_cache,
-            sampling_params=sampling_params,
-            slot_remap=slot_remap,
-            reset_batch=reset_batch,
-            reload_inputs=reload_inputs,
-            reload_page_table=reload_page_table,
-            reload_sampling_params=reload_sampling_params,
-            reset_sampling_state=reset_sampling_state,
-            execution=execution,
-        )
-
-    def prefill_forward(
-        self,
-        tokens: torch.Tensor,
-        page_table: torch.Tensor,
-        *,
-        prompt_lens: torch.Tensor | None = None,
-        start_pos: torch.Tensor | None = None,
-        empty_slots: Sequence[int] | None = None,
-        kv_cache: Any = None,
-        sampling_params: Any = None,
-        execution: EagerExecutor | TracedExecutor | None = None,
-    ) -> Any:
-        return ModelExecutor.prefill_forward(
-            _facade_target(self),
-            tokens,
-            page_table,
-            prompt_lens=prompt_lens,
-            start_pos=start_pos,
-            empty_slots=empty_slots,
-            kv_cache=kv_cache,
-            sampling_params=sampling_params,
-            execution=execution,
-        )
-
-    def decode_forward(
-        self,
-        tokens: torch.Tensor,
-        start_pos: torch.Tensor,
-        page_table: torch.Tensor,
-        *,
-        kv_cache: Any = None,
-        sampling_params: Any = None,
-        slot_remap: Any = None,
-        reset_batch: bool = False,
-        reload_inputs: bool | None = None,
-        reload_page_table: bool = False,
-        reload_sampling_params: bool = False,
-        reset_sampling_state: bool = False,
-        read_from_device: bool = True,
-        execution: EagerExecutor | TracedExecutor | None = None,
-    ) -> Any:
-        return ModelExecutor.decode_forward(
-            _facade_target(self),
-            tokens,
-            start_pos,
-            page_table,
-            kv_cache=kv_cache,
-            sampling_params=sampling_params,
-            slot_remap=slot_remap,
-            reset_batch=reset_batch,
-            reload_inputs=reload_inputs,
-            reload_page_table=reload_page_table,
-            reload_sampling_params=reload_sampling_params,
-            reset_sampling_state=reset_sampling_state,
-            read_from_device=read_from_device,
-            execution=execution,
-        )
-
-
-_LLAMA32_REQUEST_SURFACE = ("compile_prefill", "compile_decode", "prefill_forward", "decode_forward")
-
-
-def _with_llama32_request_surface(cls):
-    for name in _LLAMA32_REQUEST_SURFACE:
-        setattr(cls, name, _Llama32RequestSurface.__dict__[name])
-    return cls
-
-
 def _with_q128_warmup_surface(cls):
     def delegated_q128_warmup(
         self,
@@ -322,46 +191,58 @@ def _with_q128_warmup_surface(cls):
 
 
 @_with_executor_facade
-@_with_llama32_request_surface
 @_with_q128_warmup_surface
 class Llama32_1BExecutor:
     """Llama 3.2-1B facade over one family-neutral executor."""
 
     requires_prefill_trace_warmup = True
     _owner_name = "Llama32_1BExecutor"
+    request_state_fields = ("prompt_tokens", "output_tokens", "slot_remap")
 
     def __init__(self, model: Any, runtime_config: Any, config: Llama32_1BExecutorConfig) -> None:
         if not isinstance(config, Llama32_1BExecutorConfig):
             raise TypeError("config must be a Llama32_1BExecutorConfig")
+        sampling_state_controller, sampling_state = create_sampling_state(
+            model, config.device_sampling_enabled, salt_duplicate_seeds=config.salt_duplicate_seeds
+        )
         self._model_executor = ModelExecutor(
             model,
             runtime_config,
             config,
             owner_name="Llama32_1BExecutor",
+            sampling_state_controller=sampling_state_controller,
+            sampling_state=sampling_state,
             sampling_type=Sampling1D,
+            request_state_fields=("prompt_tokens", "output_tokens", "slot_remap"),
             prefill_warmup=_warmup_q128_before_prefill,
         )
         self._model_executor._q128_topk_tile_ends_warmed = set()
 
 
 @_with_executor_facade
-@_with_llama32_request_surface
 @_with_q128_warmup_surface
 class Llama32_3BExecutor:
     """Llama 3.2-3B facade over one family-neutral executor."""
 
     requires_prefill_trace_warmup = True
     _owner_name = "Llama32_3BExecutor"
+    request_state_fields = ("prompt_tokens", "output_tokens", "slot_remap")
 
     def __init__(self, model: Any, runtime_config: Any, config: Llama32_3BExecutorConfig) -> None:
         if not isinstance(config, Llama32_3BExecutorConfig):
             raise TypeError("config must be a Llama32_3BExecutorConfig")
+        sampling_state_controller, sampling_state = create_sampling_state(
+            model, config.device_sampling_enabled, salt_duplicate_seeds=config.salt_duplicate_seeds
+        )
         self._model_executor = ModelExecutor(
             model,
             runtime_config,
             config,
             owner_name="Llama32_3BExecutor",
+            sampling_state_controller=sampling_state_controller,
+            sampling_state=sampling_state,
             sampling_type=Sampling1D,
+            request_state_fields=("prompt_tokens", "output_tokens", "slot_remap"),
             prefill_warmup=_warmup_q128_before_prefill,
         )
         self._model_executor._q128_topk_tile_ends_warmed = set()
@@ -379,7 +260,7 @@ class Llama3Executor:
     def __init__(self, model: Any, runtime_config: Any, config: Llama3ExecutorConfig) -> None:
         if not isinstance(config, Llama3ExecutorConfig):
             raise TypeError("config must be a Llama3ExecutorConfig")
-        sampling_state_controller, sampling_state = _create_sampling_state(
+        sampling_state_controller, sampling_state = create_sampling_state(
             model, config.device_sampling_enabled, salt_duplicate_seeds=config.salt_duplicate_seeds
         )
         disable_batched_prefill = (
@@ -414,7 +295,7 @@ class Llama33_70BExecutor:
     def __init__(self, model: Any, runtime_config: Any, config: Llama33_70BExecutorConfig) -> None:
         if not isinstance(config, Llama33_70BExecutorConfig):
             raise TypeError("config must be a Llama33_70BExecutorConfig")
-        sampling_state_controller, sampling_state = _create_sampling_state(
+        sampling_state_controller, sampling_state = create_sampling_state(
             model, config.device_sampling_enabled, salt_duplicate_seeds=config.salt_duplicate_seeds
         )
         self._model_executor = ModelExecutor(
@@ -430,23 +311,6 @@ class Llama33_70BExecutor:
             prefill_warmup=_warmup_q128_around_prefill,
         )
         self._model_executor._q128_topk_tile_ends_warmed = set()
-
-
-def _create_sampling_state(model: Any, enabled: bool, *, salt_duplicate_seeds: bool) -> tuple[Any, Any]:
-    if not enabled:
-        return None, None
-    sampling = getattr(model, "sampling", None)
-    if not isinstance(sampling, Sampling1D):
-        raise TypeError("device sampling requires model.sampling to be a Sampling1D")
-    is_resolved = getattr(getattr(sampling, "config", None), "is_resolved", None)
-    if not callable(is_resolved) or not is_resolved():
-        raise ValueError("model.sampling must have a resolved Sampling1DConfig")
-    controller = SamplingState1D(
-        sampling,
-        seed_manager_factory=functools.partial(SeedManager1D, salt_duplicate_seeds=salt_duplicate_seeds),
-        history_width=int(model.config.max_seq_len),
-    )
-    return controller, controller.create_state()
 
 
 def _warmup_q128_before_prefill(
