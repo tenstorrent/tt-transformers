@@ -62,7 +62,30 @@ class OutputReader:
         return result
 
     def read_synchronized(self, value: Any) -> Any:
-        """Submit nested host copies and synchronize the device once."""
+        """Submit nested host copies and synchronize the device once.
+
+        This is the canonical readback path and it encodes a correctness
+        invariant, not just a performance choice:
+
+            ``ttnn.execute_trace(..., blocking=True)`` fences COMPUTE, but it does
+            NOT fence the device->host readback DMA that ``Tensor.cpu`` /
+            ``ttnn.to_torch`` start. Consuming the host buffer, or letting the
+            next ``execute_trace`` overwrite the source tensor, before that DMA
+            drains corrupts the host heap. On multi-host runs the failure is
+            rank-asymmetric and invisible to CPU memory checkers (it is a device
+            DMA, not a CPU instruction).
+
+        The discipline here is what makes it safe: submit every host copy
+        non-blocking, retain each destination, then issue a single
+        ``ttnn.synchronize_device`` that drains all of them before returning. A
+        caller must not read the returned buffers before this method returns.
+
+        Per-step host round-trips should go through this method (or an equivalent
+        drain) rather than a bare non-blocking ``cpu()``. Where a model allows
+        it, prefer keeping state on-device and gathering once over reading back
+        every step. For a cross-host step that additionally needs an MPI barrier,
+        see :func:`tt_transformers.distributed.cross_host_rendezvous`.
+        """
 
         retained_destinations: list[Any] = []
         try:
