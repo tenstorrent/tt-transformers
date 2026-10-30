@@ -113,6 +113,7 @@ for other models. Accuracy and performance workloads use each model's separate
 ## Learn the package
 
 - [Software architecture](docs/architecture.md)
+- [vLLM generator interface](docs/vllm-interface.md)
 - [Package guide](src/tt_transformers/README.md)
 - [Models and deprecation policy](src/tt_transformers/models/README.md)
 - [Reusable modules](https://github.com/tenstorrent/tt-transformers/blob/main/src/tt_transformers/modules/README.md)
