@@ -42,6 +42,10 @@ class _LaneDecodeKwargs(TypedDict):
     output_tokens: Any
     slot_remap: Any
     reset_batch: bool  # ↓ State transition
+    reload_inputs: bool | None
+    reload_page_table: bool
+    reload_sampling_params: bool
+    reset_sampling_state: bool
     execution: EagerExecutor | TracedExecutor | None  # ↓ Internal dispatch
 
 
@@ -196,6 +200,10 @@ class LaneGroupExecutor:
         output_tokens: Any = None,
         slot_remap: Any = None,
         reset_batch: bool = False,  # ↓ State transition
+        reload_inputs: bool | None = None,
+        reload_page_table: bool = False,
+        reload_sampling_params: bool = False,
+        reset_sampling_state: bool = False,
         execution: Sequence[EagerExecutor | TracedExecutor] | None = None,  # ↓ Internal dispatch
     ) -> None:
         def operation() -> None:
@@ -209,6 +217,10 @@ class LaneGroupExecutor:
                 output_tokens=output_tokens,
                 slot_remap=slot_remap,
                 reset_batch=reset_batch,
+                reload_inputs=reload_inputs,
+                reload_page_table=reload_page_table,
+                reload_sampling_params=reload_sampling_params,
+                reset_sampling_state=reset_sampling_state,
                 execution=execution,
             ):
                 self.lanes[lane_idx].compile_decode(**lane_kwargs)
@@ -367,6 +379,10 @@ class LaneGroupExecutor:
         output_tokens: Any = None,
         slot_remap: Any = None,
         reset_batch: bool = False,  # ↓ State transition
+        reload_inputs: bool | None = None,
+        reload_page_table: bool = False,
+        reload_sampling_params: bool = False,
+        reset_sampling_state: bool = False,
         read_from_device: bool = True,  # ↓ Output policy
         execution: Sequence[EagerExecutor | TracedExecutor] | None = None,  # ↓ Internal dispatch
     ) -> Any:
@@ -384,6 +400,10 @@ class LaneGroupExecutor:
                 output_tokens=output_tokens,
                 slot_remap=slot_remap,
                 reset_batch=reset_batch,
+                reload_inputs=reload_inputs,
+                reload_page_table=reload_page_table,
+                reload_sampling_params=reload_sampling_params,
+                reset_sampling_state=reset_sampling_state,
                 execution=execution,
             ):
                 lane_outputs.append(
@@ -622,6 +642,10 @@ class LaneGroupExecutor:
         output_tokens: Any,
         slot_remap: Any,
         reset_batch: bool,  # ↓ State transition
+        reload_inputs: bool | None,
+        reload_page_table: bool,
+        reload_sampling_params: bool,
+        reset_sampling_state: bool,
         execution: Sequence[EagerExecutor | TracedExecutor] | None,  # ↓ Internal dispatch
     ) -> Iterator[tuple[int, _LaneDecodeKwargs]]:
         for name, value in (("tokens", tokens), ("start_pos", start_pos), ("page_table", page_table)):
@@ -658,6 +682,10 @@ class LaneGroupExecutor:
                 "kv_cache": lane_kv_cache,
                 "sampling_params": lane_sampling_params,
                 "reset_batch": reset_batch,
+                "reload_inputs": reload_inputs,
+                "reload_page_table": reload_page_table,
+                "reload_sampling_params": reload_sampling_params,
+                "reset_sampling_state": reset_sampling_state,
                 "execution": lane_execution,
             }
             if lane_prompt_tokens is not None:

@@ -30,6 +30,11 @@ class _Signature:
 
 def _runtime(runtime_type, **methods):
     runtime = object.__new__(runtime_type)
+    if runtime_type is DecodeRuntime:
+        runtime._transient_orphans = []
+        runtime._submission_failed = False
+        runtime._external_by_raw_id = {}
+        runtime._external_by_host_id = {}
     for name, method in methods.items():
         setattr(runtime, name, method)
     return runtime
@@ -120,6 +125,10 @@ def test_execution_request_signatures_are_exact_and_aligned():
         ("output_tokens", keyword_only, None),
         ("slot_remap", keyword_only, None),
         ("reset_batch", keyword_only, False),
+        ("reload_inputs", keyword_only, None),
+        ("reload_page_table", keyword_only, False),
+        ("reload_sampling_params", keyword_only, False),
+        ("reset_sampling_state", keyword_only, False),
     ]
     decode_forward_contract = [
         *decode_contract,
@@ -803,6 +812,41 @@ def test_decode_replay_prepares_once_and_uses_same_object_for_refresh_submission
     assert isinstance(events[-1][1], DecodeInvocationResult)
     assert events[-1][1].owned is None
     assert events[-1][2] is False
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("failure_phase", ["refresh", "execute"])
+def test_failed_trace_submission_also_blocks_eager_execution(monkeypatch, failure_phase):
+    prepared = _prepared_decode()
+
+    def refresh(*args):
+        if failure_phase == "refresh":
+            raise RuntimeError("submission failed")
+
+    decode = _runtime(
+        DecodeRuntime,
+        config=SimpleNamespace(position_feedback_capable=True),
+        program_signature=lambda request: _Signature("decode", 1),
+        refresh_trace=refresh,
+    )
+    compiler = _compiler(monkeypatch)
+    eager = EagerExecutor(prefill=_runtime(PrefillRuntime), decode=decode, program_compiler=compiler)
+    traces = _trace_compiler(compiler)
+    traces.trace_key_for_program = lambda key: "trace"
+    traces.get = lambda key: SimpleNamespace(artifact=object())
+
+    def replay(key, refresh_inputs, **kwargs):
+        refresh_inputs(object(), object())
+        raise RuntimeError("submission failed")
+
+    traces.replay = replay
+    traced = TracedExecutor(eager=eager, trace_compiler=traces)
+    with pytest.raises(RuntimeError, match="submission failed"):
+        traced._execute_decode(prepared)
+    with pytest.raises(RuntimeError, match="recreate this runtime"):
+        decode.invoke(prepared)
+    with pytest.raises(RuntimeError, match="recreate this runtime"):
+        decode.ensure_trace_safe()
 
 
 @pytest.mark.host

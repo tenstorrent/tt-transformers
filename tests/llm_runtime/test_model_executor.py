@@ -309,6 +309,7 @@ def test_layout_refresh_preserves_owner_and_sampling_state_identity(monkeypatch)
         force_greedy_top_k=True,
         sampling_state_controller=prefill_config.sampling_state_controller,
         sampling_state=state,
+        salt_duplicate_seeds=False,
     )
     warmup_config = SimpleNamespace(warmup=object(), prefill_sequence_lengths=(128,))
     resolved_prefill = SimpleNamespace(page_table_layout=layout, sampling_state=state)
@@ -344,6 +345,7 @@ def test_layout_refresh_preserves_owner_and_sampling_state_identity(monkeypatch)
     assert prefill_resolve.call_args.kwargs["sampling_state"] is state
     assert decode_resolve.call_args.kwargs["sampling_state_controller"] is prefill_config.sampling_state_controller
     assert decode_resolve.call_args.kwargs["sampling_state"] is state
+    assert decode_resolve.call_args.kwargs["salt_duplicate_seeds"] is False
 
 
 @pytest.mark.host

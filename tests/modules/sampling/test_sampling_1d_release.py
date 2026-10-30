@@ -56,6 +56,83 @@ def _sampler_config(index_offsets, owned_specs):
 
 
 @pytest.mark.host
+def test_repeated_logprob_outputs_can_be_released_without_freeing_calculator(monkeypatch):
+    calculator_output = FakeTensor("calculator-output")
+    live = {calculator_output}
+    outputs = []
+    sampler = object.__new__(Sampling1D)
+    sampler.config = SimpleNamespace(allow_force_argmax=False)
+    sampler.load_device_buffers = lambda: None
+    sampler._log_probs_calculator = SimpleNamespace(set_log_probs_mode=lambda enabled: None)
+
+    def sample(*args):
+        assert calculator_output in live
+        token = FakeTensor("token")
+        live.add(token)
+        return token, calculator_output
+
+    def clone(value):
+        assert value in live
+        copied = FakeTensor("owned-logprobs")
+        live.add(copied)
+        return copied
+
+    sampler._sample_topk = sample
+    monkeypatch.setattr(sampling_1d.ttnn, "clone", clone)
+    monkeypatch.setattr(sampling_1d.ttnn, "deallocate", live.remove)
+    for _ in range(3):
+        token, log_probs = sampler.decode_forward(
+            object(), k=object(), p=object(), temp=object(), enable_log_probs=True
+        )
+        assert log_probs is not calculator_output
+        outputs.append(log_probs)
+        sampling_1d.ttnn.deallocate(token)
+        sampling_1d.ttnn.deallocate(log_probs)
+        assert live == {calculator_output}
+    assert len({id(value) for value in outputs}) == 3
+
+
+class _ValueTensor:
+    """A device tensor stand-in whose contents can be overwritten in place."""
+
+    def __init__(self, value=None):
+        self.value = value
+
+
+@pytest.mark.host
+def test_two_eager_prefills_with_logprobs_each_read_back_their_own_values(monkeypatch):
+    """The calculator writes every result into one reused output buffer. Two
+    eager prefills that both request logprobs, read back only after the second
+    has run, must each still see their own values (#58).
+
+    Every eager prefill reaches the calculator through ``decode_forward``: the
+    controller-free postprocess calls it directly, and ``SamplingState1D``'s
+    prefill and decode paths call it on the sampler, so the copy taken there
+    covers both.
+    """
+
+    calculator_buffer = _ValueTensor()
+    draws = iter([-0.25, -1.5])
+    sampler = object.__new__(Sampling1D)
+    sampler.config = SimpleNamespace(allow_force_argmax=False)
+    sampler.load_device_buffers = lambda: None
+    sampler._log_probs_calculator = SimpleNamespace(set_log_probs_mode=lambda enabled: None)
+
+    def sample(*_args):
+        calculator_buffer.value = next(draws)
+        return FakeTensor("token"), calculator_buffer
+
+    sampler._sample_topk = sample
+    monkeypatch.setattr(sampling_1d.ttnn, "clone", lambda tensor: _ValueTensor(tensor.value))
+
+    _, first = sampler.decode_forward(object(), k=object(), p=object(), temp=object(), enable_log_probs=True)
+    _, second = sampler.decode_forward(object(), k=object(), p=object(), temp=object(), enable_log_probs=True)
+
+    assert calculator_buffer.value == -1.5
+    assert (first.value, second.value) == (-0.25, -1.5)
+
+
+@pytest.mark.host
 def test_sampling_release_is_idempotent_preserves_borrowed_and_allows_reload(monkeypatch):
     deallocated = []
     allocations = []
