@@ -22,6 +22,7 @@ python qualification/tools/audit_test_taxonomy.py
 python qualification/tools/validate_support_docs.py
 python qualification/tools/validate_bh_required_capabilities.py
 python qualification/tools/run_hardware_matrix.py --validate
+python qualification/tools/affected_hardware_nodes.py --base origin/main
 ```
 
 The commands above do not open a device. Hardware execution requires explicit

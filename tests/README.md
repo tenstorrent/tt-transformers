@@ -37,6 +37,13 @@ python qualification/tools/run_hardware_matrix.py --validate
 python qualification/tools/run_hardware_matrix.py --list
 ```
 
+List the nodes that depend on a change (static import graph; host only):
+
+```bash
+python qualification/tools/affected_hardware_nodes.py --base origin/main
+python qualification/tools/affected_hardware_nodes.py --files src/tt_transformers/modules/mlp/mlp_1d.py
+```
+
 The active matrix contains 51 nodes: N150 13, N300 6, T3K 8, P150 11, and
 P150x4 11. The Llama HF generation gates cover single prompts, repeated calls,
 left-padded batches, and traced device-greedy generation compared with an
