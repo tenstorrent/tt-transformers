@@ -29,9 +29,9 @@ All notable changes to this project will be documented here.
   is itself the top bucket gains one such case per sampling path, captured as a
   trace where that bucket is traced; the Llama-3.1-8B N300 trace region grows
   to 70 MB for it.
-  The Qwen3-32B T3K trace region grows from 120 MB to 190 MB: its batch-32
+  The Qwen3-32B T3K trace region grows from 120 MB to 250 MB: its batch-32
   cases gain three prefix-cached 1024 traces and a penalised twin of every
-  sampled warmup case, and need up to 157 MB.
+  sampled warmup case, 23 traces in all, and need about 210 MB.
 - Default KV-cache sizing leaves room for the decode page table. A paged KV
   cache narrower than the decode page table is refused at load with a
   `ValueError`, instead of failing on the first decode step.
