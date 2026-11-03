@@ -361,7 +361,6 @@ class WarmupCoordinator:
         self._capture_deferred = False
         self._capture_pending = False
         self._pending_manifest: CoverageManifest | None = None
-        self._prefill_trace_postprocess_primed = False
         self._configuration_sealed = False
 
     # Public API
@@ -563,6 +562,13 @@ class WarmupCoordinator:
     def _maybe_capture(self) -> None:
         if self.trace_compiler is None or self._captured:
             return
+        for operation in ("prefill", "decode"):
+            can_sample = self._sampling_decisions.get(operation)
+            if can_sample is None:
+                return
+            required = set(getattr(self._plan(can_sample_on_device=can_sample), operation))
+            if not required.issubset(self._eager | self._trace_registered):
+                return
         required_trace: set[WarmupCase] = set()
         if self.config.prefill_trace_enabled:
             prefill_decision = self._trace_decisions.get("prefill")
@@ -608,7 +614,6 @@ class WarmupCoordinator:
         self._captured = True
         self._coverage_manifest = manifest
         self._log_prefill_coverage()
-        self._prime_prefill_trace_postprocess()
 
     def _log_prefill_coverage(self) -> None:
         lengths = tuple(sorted(self.config.prefill_sequence_lengths))
@@ -630,30 +635,6 @@ class WarmupCoordinator:
         self._required_program_keys.update(keys)
         if traced:
             self._required_trace_program_keys.update(keys)
-
-    def _prime_prefill_trace_postprocess(self) -> None:
-        if (
-            self._prefill_trace_postprocess_primed
-            or self._trace_decisions.get("prefill") is False
-            or not self.config.prefill_trace_enabled
-        ):
-            return
-        prefill_can_sample = self._sampling_decisions.get("prefill", self.config.device_sampling_enabled)
-        traced_lengths = self.config.prefill_trace_sequence_lengths
-        if not prefill_can_sample or not self.config.allow_force_argmax or not traced_lengths:
-            self._prefill_trace_postprocess_primed = True
-            return
-        sequence_length = 128 if 128 in traced_lengths else int(traced_lengths[0])
-        width = _ceil_div(sequence_length, self.config.page_table_layout.block_size)
-        self.execution.prefill_forward(
-            tokens=torch.zeros((1, sequence_length), dtype=torch.long),
-            page_table=torch.zeros((1, width), dtype=torch.int32),
-            prompt_lens=torch.full((1,), sequence_length, dtype=torch.long),
-            empty_slots=[0],
-            start_pos=None,
-            sampling_params=_greedy_sampling_params(1),
-        )
-        self._prefill_trace_postprocess_primed = True
 
     def _validate_hints(self, operation: str, enable_trace: bool, can_sample_on_device: bool) -> None:
         trace_enabled = (

@@ -44,6 +44,7 @@ class ModelCapabilities(TypedDict, total=False):
     supports_prefix_caching: bool
     supports_async_decode: bool
     supports_sample_on_device: bool
+    supports_device_penalties: bool
 
 
 class VllmGeneratorAdapter(Protocol):
@@ -64,6 +65,9 @@ class VllmGeneratorAdapter(Protocol):
     ``supports_sample_on_device``, ``supports_async_decode``, and
     ``supports_prefix_caching``.
     """
+
+    decode_input_update_contract: ClassVar[int]
+    """Version 1 selects the four explicit decode reload commands."""
 
     @classmethod
     def initialize_vllm_model(
@@ -193,7 +197,10 @@ class VllmGeneratorAdapter(Protocol):
         prompt_tokens: Any
         | None = None,  # Passed on device-sampling decode when prompt/output token history is available.
         output_tokens: Any | None = None,  # Passed with prompt_tokens for device-sampling decode state updates.
-        reset_batch: bool | None = None,  # Passed only on device-sampling decode; controls sampler state reset.
+        reload_inputs: bool = True,
+        reload_page_table: bool = False,
+        reload_sampling_params: bool = False,
+        reset_sampling_state: bool = False,
         slot_remap: Any | None = None,  # Passed only when scheduler remaps slots between decode steps.
         rope_deltas_all_users: Any
         | None = None,  # Passed for request-specific mRoPE models; may be None on steady requests.
@@ -201,6 +208,19 @@ class VllmGeneratorAdapter(Protocol):
     ) -> Any:
         """
         Submit one serving decode step.
+
+        Version 1 rejects the legacy ``reset_batch`` keyword. The plugin sends
+        all four commands on every decode. ``reload_inputs`` copies token,
+        position, RoPE, and page-table inputs. ``reload_page_table`` copies only
+        page tables and cannot be combined with ``reload_inputs``.
+
+        ``reload_sampling_params`` uploads sampling configuration.
+        ``reset_sampling_state`` rebuilds mutable RNG and penalty state and
+        requires ``reload_inputs``. Apply each supplied ``slot_remap`` exactly
+        once, including when sampling runs on the host.
+
+        When ``reload_inputs`` is false, host tokens and positions are stale.
+        Do not use them to derive forward inputs, active rows, or RNG counters.
 
         When async split is supported, ``read_from_device=False`` should return
         device-resident output suitable for deferred read.

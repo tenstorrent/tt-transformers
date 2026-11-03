@@ -421,6 +421,8 @@ class Phi4ExecutorConfig:
     sequential_prefill: bool = False
     # Fixed-shape batched prefill (see ``ModelExecutorConfig.fixed_prefill_batch_sizes``).
     fixed_prefill_batch_sizes: tuple[tuple[int, int], ...] = ()
+    # Distinct streams for equal explicit seeds (see ``ModelExecutorConfig.salt_duplicate_seeds``).
+    salt_duplicate_seeds: bool = True
 
     def __post_init__(self) -> None:
         nested_configs = (
@@ -435,6 +437,8 @@ class Phi4ExecutorConfig:
             raise TypeError("device_sampling_enabled must be bool")
         if not isinstance(self.sequential_prefill, bool):
             raise TypeError("sequential_prefill must be bool")
+        if not isinstance(self.salt_duplicate_seeds, bool):
+            raise TypeError("salt_duplicate_seeds must be bool")
         validate_prefill_policy(self.sequential_prefill, self.fixed_prefill_batch_sizes)
 
 
@@ -516,6 +520,7 @@ class Phi4Executor:
                 page_table_layout=self.page_table_layout,
                 device_sampling_enabled=config.device_sampling_enabled,
                 force_greedy_top_k=config.warmup.include_decode_top_k,
+                salt_duplicate_seeds=config.salt_duplicate_seeds,
             )
         )
         self.program_compiler = ProgramCompiler(mesh_device, lambda: self.kv_cache_manager.bound_context)
@@ -687,7 +692,12 @@ class Phi4Executor:
         page_table: torch.Tensor,
         kv_cache: Any = None,  # ↓ Borrowed resources
         sampling_params: Any = None,  # ↓ Sampling
+        slot_remap: Any = None,
         reset_batch: bool = False,  # ↓ State transition
+        reload_inputs: bool | None = None,
+        reload_page_table: bool = False,
+        reload_sampling_params: bool = False,
+        reset_sampling_state: bool = False,
         execution: EagerExecutor | TracedExecutor | None = None,  # ↓ Internal dispatch
     ) -> None:
         """Compile decode on the supplied eager or traced execution target."""
@@ -700,7 +710,12 @@ class Phi4Executor:
             start_pos=start_pos,
             page_table=page_table,
             sampling_params=sampling_params,
+            slot_remap=slot_remap,
             reset_batch=reset_batch,
+            reload_inputs=reload_inputs,
+            reload_page_table=reload_page_table,
+            reload_sampling_params=reload_sampling_params,
+            reset_sampling_state=reset_sampling_state,
         )
 
     def prefill_forward(
@@ -761,7 +776,12 @@ class Phi4Executor:
         *,
         kv_cache: Any = None,  # ↓ Borrowed resources
         sampling_params: Any = None,  # ↓ Sampling
+        slot_remap: Any = None,
         reset_batch: bool = False,  # ↓ State transition
+        reload_inputs: bool | None = None,
+        reload_page_table: bool = False,
+        reload_sampling_params: bool = False,
+        reset_sampling_state: bool = False,
         read_from_device: bool = True,  # ↓ Output policy
         execution: EagerExecutor | TracedExecutor | None = None,  # ↓ Internal dispatch
     ) -> Any:
@@ -775,7 +795,12 @@ class Phi4Executor:
             start_pos=start_pos,
             page_table=page_table,
             sampling_params=sampling_params,
+            slot_remap=slot_remap,
             reset_batch=reset_batch,
+            reload_inputs=reload_inputs,
+            reload_page_table=reload_page_table,
+            reload_sampling_params=reload_sampling_params,
+            reset_sampling_state=reset_sampling_state,
             read_from_device=read_from_device,
         )
 
@@ -979,6 +1004,7 @@ class Phi4Executor:
             page_table_layout=layout,
             device_sampling_enabled=current_decode.device_sampling_enabled,
             force_greedy_top_k=current_decode.force_greedy_top_k,
+            salt_duplicate_seeds=current_decode.salt_duplicate_seeds,
         )
         warmup_config = WarmupCoordinatorConfig.resolve(
             warmup=self.warmup.config.warmup,

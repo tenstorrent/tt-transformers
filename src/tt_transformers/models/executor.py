@@ -56,6 +56,11 @@ class ModelExecutorConfig:
     # batching throughput with outputs that do not depend on other traffic.
     # Exclusive with ``sequential_prefill``.
     fixed_prefill_batch_sizes: tuple[tuple[int, int], ...] = ()
+    # Give simultaneous requests that carry the same explicit seed distinct
+    # sampling streams (``SeedManager1D``). Serving entry points turn it off:
+    # there every request is independent, and its stream must depend only on
+    # its own seed, not on an equal-seed request running beside it.
+    salt_duplicate_seeds: bool = True
 
     def __post_init__(self) -> None:
         for name, value, expected_type in (
@@ -69,6 +74,8 @@ class ModelExecutorConfig:
             raise TypeError("device_sampling_enabled must be bool")
         if not isinstance(self.sequential_prefill, bool):
             raise TypeError("sequential_prefill must be bool")
+        if not isinstance(self.salt_duplicate_seeds, bool):
+            raise TypeError("salt_duplicate_seeds must be bool")
         validate_prefill_policy(self.sequential_prefill, self.fixed_prefill_batch_sizes)
 
 
@@ -204,6 +211,7 @@ class ModelExecutor:
                 page_table_layout=self.page_table_layout,
                 device_sampling_enabled=config.device_sampling_enabled,
                 force_greedy_top_k=config.warmup.include_decode_top_k,
+                salt_duplicate_seeds=config.salt_duplicate_seeds,
                 sampling_state_controller=sampling_state_controller,
                 sampling_state=sampling_state,
             )
@@ -388,6 +396,10 @@ class ModelExecutor:
         output_tokens: Any = None,
         slot_remap: Any = None,
         reset_batch: bool = False,
+        reload_inputs: bool | None = None,
+        reload_page_table: bool = False,
+        reload_sampling_params: bool = False,
+        reset_sampling_state: bool = False,
         execution: EagerExecutor | TracedExecutor | None = None,
     ) -> None:
         """Compile decode on the supplied eager or traced execution target."""
@@ -401,6 +413,7 @@ class ModelExecutor:
             output_tokens=output_tokens,
             slot_remap=slot_remap,
         )
+        request_state["slot_remap"] = slot_remap
         return (execution or self._decode_execution).compile_decode(
             tokens=tokens,
             start_pos=start_pos,
@@ -408,6 +421,10 @@ class ModelExecutor:
             sampling_params=sampling_params,
             **request_state,
             reset_batch=reset_batch,
+            reload_inputs=reload_inputs,
+            reload_page_table=reload_page_table,
+            reload_sampling_params=reload_sampling_params,
+            reset_sampling_state=reset_sampling_state,
         )
 
     def prefill_forward(
@@ -462,6 +479,10 @@ class ModelExecutor:
         output_tokens: Any = None,
         slot_remap: Any = None,
         reset_batch: bool = False,
+        reload_inputs: bool | None = None,
+        reload_page_table: bool = False,
+        reload_sampling_params: bool = False,
+        reset_sampling_state: bool = False,
         read_from_device: bool = True,
         execution: EagerExecutor | TracedExecutor | None = None,
     ) -> Any:
@@ -476,6 +497,7 @@ class ModelExecutor:
             output_tokens=output_tokens,
             slot_remap=slot_remap,
         )
+        request_state["slot_remap"] = slot_remap
         return (execution or self._decode_execution).decode_forward(
             tokens=tokens,
             start_pos=start_pos,
@@ -483,6 +505,10 @@ class ModelExecutor:
             sampling_params=sampling_params,
             **request_state,
             reset_batch=reset_batch,
+            reload_inputs=reload_inputs,
+            reload_page_table=reload_page_table,
+            reload_sampling_params=reload_sampling_params,
+            reset_sampling_state=reset_sampling_state,
             read_from_device=read_from_device,
         )
 
@@ -667,6 +693,7 @@ class ModelExecutor:
             page_table_layout=layout,
             device_sampling_enabled=current_decode.device_sampling_enabled,
             force_greedy_top_k=current_decode.force_greedy_top_k,
+            salt_duplicate_seeds=current_decode.salt_duplicate_seeds,
             sampling_state_controller=current_decode.sampling_state_controller,
             sampling_state=current_decode.sampling_state,
         )

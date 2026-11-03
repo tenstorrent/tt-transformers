@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 # SPDX-License-Identifier: Apache-2.0
 
-import contextlib
 from dataclasses import dataclass
 from itertools import permutations
 from types import SimpleNamespace
@@ -35,6 +34,11 @@ class _Signature:
 
 def _patch_backend(monkeypatch, events):
     next_trace_id = iter(range(100, 200))
+    monkeypatch.setattr(
+        trace_compiler_module,
+        "trace_allocation_tracker",
+        SimpleNamespace(acknowledge_corruptible=lambda value: events.append(("acknowledge", value))),
+    )
     monkeypatch.setattr(ttnn, "synchronize_device", lambda mesh: events.append(("sync", mesh)))
     monkeypatch.setattr(
         ttnn,
@@ -53,28 +57,6 @@ def _patch_backend(monkeypatch, events):
     )
     monkeypatch.setattr(ttnn, "release_trace", lambda mesh, trace_id: events.append(("release", trace_id)))
     monkeypatch.setattr(trace_compiler_module, "_trim_host_allocator", lambda: events.append(("trim",)))
-
-
-def _patch_allocation_scope(monkeypatch, events, compiler=None):
-    @contextlib.contextmanager
-    def corruptible_allocation_scope(mesh_device):
-        gate = None if compiler is None else compiler.trace_capture_in_progress
-        events.append(("scope_enter", mesh_device, gate))
-        try:
-            yield
-        finally:
-            events.append(("scope_exit",))
-
-    monkeypatch.setattr(
-        trace_compiler_module,
-        "trace_allocation_tracker",
-        SimpleNamespace(corruptible_allocation_scope=corruptible_allocation_scope),
-    )
-
-
-def _scoped_events(events):
-    kinds = {"scope_enter", "scope_exit", "begin", "capture", "end", "release"}
-    return [event for event in events if event[0] in kinds]
 
 
 def _compiled_program(program_compiler, monkeypatch, variant):
@@ -413,65 +395,33 @@ def test_capture_failure_rolls_back_traces_and_uncaptured_inputs(monkeypatch, ex
 
 
 @pytest.mark.host
-def test_capture_runs_inside_the_corruptible_allocation_scope(monkeypatch):
+def test_capture_acknowledges_only_explicit_output_tensors(monkeypatch):
     events = []
     _patch_backend(monkeypatch, events)
+
+    class DeviceTensor:
+        pass
+
+    monkeypatch.setattr(ttnn, "Tensor", DeviceTensor)
     compiler = ProgramCompiler("mesh", lambda: object())
-    _patch_allocation_scope(monkeypatch, events, compiler)
-    program = compiler.compile(_Signature("program", 1), lambda context: torch.zeros(1))
+    program = compiler.compile(_Signature("program", 1), lambda _: torch.zeros(1))
     trace = TraceCompiler(compiler)
-    trace.register_capture_plan(_plan(program, 1, events))
+    inputs, output, logprobs = DeviceTensor(), DeviceTensor(), DeviceTensor()
+    trace.register_capture_plan(
+        TraceCapturePlan(program.key, _Signature("trace", 1), "decode", lambda: inputs, lambda _: (output, logprobs))
+    )
 
     trace.capture_all()
 
-    assert _scoped_events(events) == [
-        ("scope_enter", "mesh", True),
-        ("begin", "mesh", 0),
-        ("capture", 1),
-        ("end", 100, 0),
-        ("scope_exit",),
-    ]
-    assert trace.trace_active
-    assert not compiler.trace_capture_in_progress
+    assert [event[1] for event in events if event[0] == "acknowledge"] == [output, logprobs]
+    assert events.index(("acknowledge", output)) > events.index(("end", 100, 0))
 
 
 @pytest.mark.host
-def test_each_planned_trace_enters_and_exits_its_own_allocation_scope(monkeypatch):
+def test_failed_capture_closes_recording_without_acknowledging_allocations(monkeypatch, expect_error):
     events = []
     _patch_backend(monkeypatch, events)
     compiler = ProgramCompiler("mesh", lambda: object())
-    _patch_allocation_scope(monkeypatch, events, compiler)
-    programs = [
-        compiler.compile(_Signature("program", variant), lambda context: torch.zeros(1)) for variant in (1, 2, 3)
-    ]
-    trace = TraceCompiler(compiler)
-    for variant, program in enumerate(programs, 1):
-        trace.register_capture_plan(_plan(program, variant, events))
-
-    trace.capture_all()
-
-    scoped = _scoped_events(events)
-    assert [event[0] for event in scoped].count("scope_enter") == 3
-    assert [event[0] for event in scoped].count("scope_exit") == 3
-    assert scoped == [
-        event
-        for trace_id, variant in zip((100, 101, 102), (1, 2, 3))
-        for event in (
-            ("scope_enter", "mesh", True),
-            ("begin", "mesh", 0),
-            ("capture", variant),
-            ("end", trace_id, 0),
-            ("scope_exit",),
-        )
-    ]
-
-
-@pytest.mark.host
-def test_failed_capture_cleans_up_inside_the_allocation_scope(monkeypatch, expect_error):
-    events = []
-    _patch_backend(monkeypatch, events)
-    compiler = ProgramCompiler("mesh", lambda: object())
-    _patch_allocation_scope(monkeypatch, events, compiler)
     end_failure = RuntimeError("end capture failed")
 
     def end_trace_capture(mesh, trace_id, cq_id):
@@ -497,13 +447,11 @@ def test_failed_capture_cleans_up_inside_the_allocation_scope(monkeypatch, expec
 
     assert caught.value is primary
     assert primary.cleanup_failures == (end_failure,)
-    assert _scoped_events(events) == [
-        ("scope_enter", "mesh", True),
+    assert [event for event in events if event[0] in {"begin", "capture", "end", "release", "acknowledge"}] == [
         ("begin", "mesh", 0),
         ("capture", 1),
         ("end", 100, 0),
         ("release", 100),
-        ("scope_exit",),
     ]
     assert not trace.trace_active and not compiler.trace_active
     assert trace.get(trace.trace_key_for_program(program.key)).artifact is None
@@ -710,3 +658,171 @@ def test_cleanup_releases_operation_owned_persistent_dataclasses_once(monkeypatc
 
     assert len(deallocated) == len(values)
     assert {id(value) for value in deallocated} == {id(value) for value in values}
+
+
+@pytest.mark.host
+def test_all_exact_bodies_and_alias_workspaces_prime_before_first_capture(monkeypatch):
+    events = []
+    _patch_backend(monkeypatch, events)
+    compiler = ProgramCompiler("mesh", lambda: object())
+    programs = [compiler.compile(_Signature("program", index), lambda _: torch.zeros(1)) for index in (1, 2, 3)]
+    trace = TraceCompiler(compiler)
+    identity = []
+    for index, program in enumerate(programs, 1):
+        key = 1 if index == 1 else 2
+
+        def prepare_capture(_, key=key):
+            identity[:] = [key]
+            events.append(("bind", key))
+
+        def capture(_, key=key):
+            assert identity == [key]
+            events.append(("capture", key))
+            return torch.zeros(1)
+
+        trace.register_capture_plan(
+            TraceCapturePlan(
+                program.key,
+                _Signature("trace", key),
+                "decode" if key == 1 else "prefill",
+                lambda: (),
+                capture,
+                prime=lambda _, key=key: events.append(("prime", key)) or torch.zeros(1),
+                release_prime_output=lambda _: [],
+                prepare_capture=prepare_capture,
+                prime_workspace=lambda _, workspace, index=index: events.append(("workspace-prime", index)),
+            )
+        )
+    events.clear()
+
+    trace.capture_all()
+
+    first_begin = next(index for index, event in enumerate(events) if event[0] == "begin")
+    assert [event for event in events[:first_begin] if event[0] == "prime"] == [("prime", 1), ("prime", 2)]
+    assert [event for event in events[:first_begin] if event[0] == "workspace-prime"] == [
+        ("workspace-prime", 1),
+        ("workspace-prime", 2),
+        ("workspace-prime", 3),
+    ]
+    assert [event for event in events[first_begin:] if event[0] in {"prime", "workspace-prime"}] == []
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("phase", ("capture", "before_replay", "refresh"))
+def test_late_device_program_cache_change_rejects_capture_or_replay(monkeypatch, expect_error, phase):
+    events = []
+    _patch_backend(monkeypatch, events)
+    entries = [3]
+    mesh = SimpleNamespace(num_program_cache_entries=lambda: entries[0])
+    compiler = ProgramCompiler(mesh, lambda: object())
+    program = compiler.compile(_Signature("program", 1), lambda _: torch.zeros(1))
+    trace = TraceCompiler(compiler)
+
+    def capture(_):
+        if phase == "capture":
+            entries[0] += 1
+        return torch.zeros(1)
+
+    trace.register_capture_plan(TraceCapturePlan(program.key, _Signature("trace", 1), "decode", lambda: (), capture))
+    if phase == "capture":
+        with expect_error(RuntimeError, "TTNN program cache changed during capture"):
+            trace.capture_all()
+        assert not trace.trace_active
+        assert ("release", 100) in events
+        return
+
+    trace.capture_all()
+    if phase == "before_replay":
+        entries[0] += 1
+
+    def refresh(*_):
+        if phase == "refresh":
+            entries[0] += 1
+
+    with expect_error(RuntimeError, "TTNN program cache changed"):
+        trace.replay(program.key, refresh)
+    assert not any(event[0] == "execute" for event in events)
+
+
+@pytest.mark.host
+def test_v1_replay_uses_commands_without_legacy_reload_inference(monkeypatch, expect_error):
+    events = []
+    _patch_backend(monkeypatch, events)
+    compiler = ProgramCompiler("mesh", lambda: object())
+    programs = [compiler.compile(_Signature("program", index), lambda _: torch.zeros(1)) for index in (1, 2)]
+    trace = TraceCompiler(compiler)
+    for index, program in enumerate(programs, 1):
+        trace.register_capture_plan(
+            _plan(program, index, events, policy=InputRefreshPolicy(every_replay=("sampling",)))
+        )
+    trace.capture_all()
+    decisions = []
+
+    def refresh(_, decision):
+        decisions.append(decision)
+
+    trace.replay(programs[0].key, refresh, reload_inputs=True)
+    trace.replay(
+        programs[0].key,
+        refresh,
+        reload_inputs=False,
+        reset_batch=True,
+        page_table_changed=True,
+        device_feedback_enabled=True,
+        feedback_compatible=True,
+    )
+    assert not decisions[-1].full
+    assert not decisions[-1].page_table
+    assert decisions[-1].fields == ()
+    trace.replay(
+        programs[0].key,
+        refresh,
+        reload_inputs=False,
+        reload_page_table=True,
+        reload_sampling_params=True,
+        device_feedback_enabled=True,
+        feedback_compatible=True,
+    )
+    assert decisions[-1].page_table
+    assert decisions[-1].fields == ("sampling",)
+    with expect_error(RuntimeError, "requires reload_inputs=True"):
+        trace.replay(
+            programs[1].key,
+            refresh,
+            reload_inputs=False,
+            device_feedback_enabled=True,
+            feedback_compatible=True,
+        )
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("failure_phase", ("refresh", "execute"))
+def test_replay_failure_blocks_retry_after_state_may_have_changed(monkeypatch, expect_error, failure_phase):
+    events = []
+    _patch_backend(monkeypatch, events)
+    compiler = ProgramCompiler("mesh", lambda: object())
+    program = compiler.compile(_Signature("program", 1), lambda _: torch.zeros(1))
+    trace = TraceCompiler(compiler)
+    trace.register_capture_plan(_plan(program, 1, events))
+    trace.capture_all()
+    refresh_calls = []
+
+    def fail():
+        raise RuntimeError("device submission failed")
+
+    def refresh(*_):
+        refresh_calls.append("mutated")
+        if failure_phase == "refresh":
+            fail()
+
+    if failure_phase == "execute":
+        monkeypatch.setattr(ttnn, "execute_trace", lambda *args, **kwargs: fail())
+    with expect_error(RuntimeError, "device submission failed"):
+        trace.replay(program.key, refresh)
+    with expect_error(RuntimeError, "Trace replay previously failed"):
+        trace.replay(program.key, refresh)
+
+    assert refresh_calls == ["mutated"]
+    assert trace.replay_count == 0
+    trace.cleanup()
+    assert not trace.trace_active

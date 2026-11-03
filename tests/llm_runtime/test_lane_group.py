@@ -116,6 +116,10 @@ class _Lane:
         output_tokens=None,
         slot_remap=None,
         reset_batch=False,
+        reload_inputs=None,
+        reload_page_table=False,
+        reload_sampling_params=False,
+        reset_sampling_state=False,
         execution=None,
     ):
         self._call(
@@ -130,6 +134,10 @@ class _Lane:
                 "output_tokens": output_tokens,
                 "slot_remap": slot_remap,
                 "reset_batch": reset_batch,
+                "reload_inputs": reload_inputs,
+                "reload_page_table": reload_page_table,
+                "reload_sampling_params": reload_sampling_params,
+                "reset_sampling_state": reset_sampling_state,
                 "execution": execution,
             },
         )
@@ -211,6 +219,10 @@ class _Lane:
         output_tokens=None,
         slot_remap=None,
         reset_batch=False,
+        reload_inputs=None,
+        reload_page_table=False,
+        reload_sampling_params=False,
+        reset_sampling_state=False,
         read_from_device=True,
         execution=None,
     ):
@@ -224,6 +236,10 @@ class _Lane:
             "output_tokens": output_tokens,
             "slot_remap": slot_remap,
             "reset_batch": reset_batch,
+            "reload_inputs": reload_inputs,
+            "reload_page_table": reload_page_table,
+            "reload_sampling_params": reload_sampling_params,
+            "reset_sampling_state": reset_sampling_state,
             "read_from_device": read_from_device,
             "execution": execution,
         }
@@ -307,6 +323,10 @@ _PUBLIC_SIGNATURES = {
         ("output_tokens", _KEYWORD_ONLY, None),
         ("slot_remap", _KEYWORD_ONLY, None),
         ("reset_batch", _KEYWORD_ONLY, False),
+        ("reload_inputs", _KEYWORD_ONLY, None),
+        ("reload_page_table", _KEYWORD_ONLY, False),
+        ("reload_sampling_params", _KEYWORD_ONLY, False),
+        ("reset_sampling_state", _KEYWORD_ONLY, False),
         ("execution", _KEYWORD_ONLY, None),
     ),
     "warmup_model_prefill": (
@@ -350,6 +370,10 @@ _PUBLIC_SIGNATURES = {
         ("output_tokens", _KEYWORD_ONLY, None),
         ("slot_remap", _KEYWORD_ONLY, None),
         ("reset_batch", _KEYWORD_ONLY, False),
+        ("reload_inputs", _KEYWORD_ONLY, None),
+        ("reload_page_table", _KEYWORD_ONLY, False),
+        ("reload_sampling_params", _KEYWORD_ONLY, False),
+        ("reset_sampling_state", _KEYWORD_ONLY, False),
         ("read_from_device", _KEYWORD_ONLY, True),
         ("execution", _KEYWORD_ONLY, None),
     ),
@@ -1183,6 +1207,10 @@ def test_side_effect_execution_target_methods_return_none_even_if_lanes_return_v
             kv_cache=None,
             sampling_params=None,
             reset_batch=False,
+            reload_inputs=None,
+            reload_page_table=False,
+            reload_sampling_params=False,
+            reset_sampling_state=False,
             execution=None,
         ):
             super().compile_decode(
@@ -1192,6 +1220,10 @@ def test_side_effect_execution_target_methods_return_none_even_if_lanes_return_v
                 kv_cache=kv_cache,
                 sampling_params=sampling_params,
                 reset_batch=reset_batch,
+                reload_inputs=reload_inputs,
+                reload_page_table=reload_page_table,
+                reload_sampling_params=reload_sampling_params,
+                reset_sampling_state=reset_sampling_state,
                 execution=execution,
             )
             return self.lane_idx
@@ -1292,6 +1324,10 @@ def test_non_null_lane_log_probs_are_aggregated_in_global_row_order():
         kv_cache=None,
         sampling_params=None,
         reset_batch=False,
+        reload_inputs=None,
+        reload_page_table=False,
+        reload_sampling_params=False,
+        reset_sampling_state=False,
         read_from_device=True,
         execution=None,
     ):
@@ -1428,3 +1464,32 @@ def test_eager_degrade_note_reaches_only_the_lanes_that_serve_the_rows():
     assert note_kwargs["tokens"].flatten().tolist() == [10, 11]
     assert note_kwargs["prompt_lens"].tolist() == [7, 9]
     assert note_kwargs["start_pos"] is None
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(
+    "commands",
+    (
+        dict(reload_inputs=True, reload_page_table=False, reload_sampling_params=True, reset_sampling_state=True),
+        dict(reload_inputs=False, reload_page_table=True, reload_sampling_params=False, reset_sampling_state=False),
+    ),
+)
+def test_lane_decode_preserves_commands_and_rebases_each_remap(commands):
+    lanes = [_Lane(0), _Lane(1)]
+    group = LaneGroupExecutor(lanes)
+    remap = torch.tensor([1, 0, 3, 2])
+    group.decode_forward(
+        torch.tensor([10, 11, 12, 13]),
+        torch.tensor([1, 2, 3, 4]),
+        torch.arange(4, dtype=torch.int32).view(4, 1),
+        sampling_params=None,
+        slot_remap=remap,
+        **commands,
+    )
+    for lane in lanes:
+        calls = [kwargs for method, kwargs in lane.calls if method == "decode"]
+        assert len(calls) == 1
+        assert {key: calls[0][key] for key in commands} == commands
+        assert calls[0]["slot_remap"].tolist() == [1, 0]
+        assert calls[0]["sampling_params"] is None
+    assert remap.tolist() == [1, 0, 3, 2]

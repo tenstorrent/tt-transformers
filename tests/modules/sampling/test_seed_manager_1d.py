@@ -43,11 +43,11 @@ class _TrackingSeedBuffer(LazyBuffer):
         self.updates.append(new_source.detach().clone())
 
 
-def _make_manager(capacity=4):
+def _make_manager(capacity=4, *, salt_duplicate_seeds=True):
     defaults = torch.arange(capacity, dtype=torch.int32)
     buffer = _TrackingSeedBuffer(defaults)
     config = SimpleNamespace(max_batch_size=capacity, seeds=buffer)
-    manager = SeedManager1D(config, entropy_factory=_EntropySequence())
+    manager = SeedManager1D(config, entropy_factory=_EntropySequence(), salt_duplicate_seeds=salt_duplicate_seeds)
     return manager, manager.create_state(), buffer, defaults
 
 
@@ -125,6 +125,31 @@ def test_equal_request_seeds_produce_distinct_salted_streams():
 
     assert state.snapshot().salts == (0, 1, 2, 3)
     assert len(set(values)) == 4
+
+
+@pytest.mark.host
+def test_without_duplicate_salting_an_explicit_seed_streams_the_same_alone_or_beside_its_twin():
+    """A server of independent requests needs a seed's stream to depend only on
+    that seed: an equal-seed request running beside it must not change it."""
+    alone_manager, alone, _, _ = _make_manager(salt_duplicate_seeds=False)
+    alone_manager.admit(alone, [1234], [1])
+    alone_values = alone_manager.refresh(alone, [1], positions=[None, 7, None, None])
+
+    shared_manager, shared, _, _ = _make_manager(salt_duplicate_seeds=False)
+    shared_manager.admit(shared, [1234, 1234], [0, 1])
+    shared_values = shared_manager.refresh(shared, [0, 1], positions=[7, 7, None, None])
+
+    assert shared.snapshot().salts == (0, 0, 0, 0)
+    # refresh returns the slot-indexed buffer: both twins carry the lone request's seed.
+    assert shared_values[0] == shared_values[1] == alone_values[1]
+    shared_manager.reload_request_seeds(shared, [1234, 1234, 1234, None], [0, 1, 2])
+    assert shared.snapshot().salts == (0, 0, 0, 0)
+
+
+@pytest.mark.host
+def test_duplicate_salting_is_a_bool(expect_error):
+    with expect_error(TypeError, "salt_duplicate_seeds must be bool"):
+        _make_manager(salt_duplicate_seeds=0)
 
 
 @pytest.mark.host
