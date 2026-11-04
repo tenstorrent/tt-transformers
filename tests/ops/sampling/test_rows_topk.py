@@ -77,3 +77,28 @@ def test_rows_topk_is_exact(ttnn_mesh_device, width, rows):
             assert torch.equal(gv[r], row[order]), r
         else:
             assert torch.equal(gv[r], torch.sort(row, descending=True).values[:K]), r
+
+
+@pytest.mark.device
+@pytest.mark.blackhole
+@pytest.mark.parametrize(
+    "ttnn_mesh_device",
+    [pytest.param({"mesh_shape": (1, 1), "trace_region_size": 32 << 20}, id="p150-1x1")],
+    indirect=True,
+)
+@pytest.mark.parametrize(
+    "width, dtype",
+    [(62048, ttnn.bfloat16), (62112, ttnn.bfloat16), (62080, ttnn.bfloat8_b)],
+    ids=["narrower", "wider", "bfloat8_b"],
+)
+def test_rows_topk_rejects_mismatched_logits(ttnn_mesh_device, width, dtype):
+    op = RowsTopK(ttnn_mesh_device, 62080, K)
+    x = ttnn.from_torch(
+        torch.zeros(1, 1, 32, width).bfloat16(),
+        dtype=dtype,
+        layout=ttnn.TILE_LAYOUT,
+        device=ttnn_mesh_device,
+        memory_config=ttnn.DRAM_MEMORY_CONFIG,
+    )
+    with pytest.raises(ValueError, match="BF16 TILE logits"):
+        op(x, 1)

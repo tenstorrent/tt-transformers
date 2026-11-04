@@ -58,6 +58,14 @@ class RowsTopK:
 
     def __call__(self, logits, rows):
         """logits: [1, 1, 32, width] BF16 TILE (rows 0 .. rows-1 live). Returns (values, indices) as ttnn.topk(k=32)."""
+        # The scan kernel reads self.tiles pages of 2048 bytes (BF16 tiles): anything else reads past the buffer or skips
+        # its tail without an error.
+        expected = [1, 1, 32, self.tiles * 32]
+        if logits.dtype != ttnn.bfloat16 or logits.layout != ttnn.TILE_LAYOUT or list(logits.padded_shape) != expected:
+            raise ValueError(
+                f"RowsTopK needs BF16 TILE logits of padded shape {expected}, got {logits.dtype} {logits.layout} "
+                f"{list(logits.padded_shape)}"
+            )
         B, K, nc = rows, self.k, len(self.work)
         assert 1 <= B <= MAX_ROWS
 
