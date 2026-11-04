@@ -11,7 +11,7 @@ layering and resource ownership principles.
 | Package | Responsibility | Use it when |
 |---|---|---|
 | [`modules`](modules/README.md) | Attention, embedding, LM-head, MLP, RMSNorm, RoPE, device sampling, lazy tensors, and collectives. | Building or tuning reusable tensor operations. |
-| [`ops`](ops/) | Device operations TTNN does not provide, as `ttnn.generic_op` launchers over kernels shipped in the package, grouped by function (`ops/sampling`: `RowsTopK`, a decode top-k over the live rows on Blackhole). | A module or model needs an operation TTNN lacks. |
+| [`ops`](ops/) | Device operations TTNN does not provide, as `ttnn.generic_op` launchers over kernels shipped in the package, grouped by function (`ops/moe`: `ExpertGateUp`, the fused MoE decode's routing and gate\|up stage on Blackhole; `ops/sampling`: `RowsTopK`, a decode top-k over the live rows on Blackhole). | A module or model needs an operation TTNN lacks. |
 | [`sampling`](sampling/README.md) | Model-neutral sampling parameters, penalties, log-probabilities, generation, and seed utilities. | Sharing sampling behavior across models. |
 | [`llm_runtime`](llm_runtime/README.md) | Prefill/decode planning, KV-cache coordination, program and trace compilation, output ownership, warmup, and cleanup. | Managing execution and resources across inference calls. |
 | [`models`](models/README.md) | Checkpoint adaptation, model-specific tensor layouts, executor policy, and generator interfaces. | Composing the shared layers for a particular model. |
