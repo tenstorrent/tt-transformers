@@ -51,6 +51,14 @@ logical mesh, environment, selector, exit status, metrics, and teardown state.
 One TT process may run per physical host. A skipped hardware test is not
 evidence of support.
 
+To find the hardware-matrix nodes a change can affect, run
+`python qualification/tools/affected_hardware_nodes.py --base origin/main`.
+It follows imports from the changed files to every matrix test that depends on
+them, prints the chain that selected each node, and lists affected device tests
+that no matrix node runs. Run the selected nodes for changes to shared code such
+as `modules/`, `ops/`, `llm_runtime/`, or `sampling/`, and report them with the
+evidence above.
+
 ## Pull requests
 
 Keep commits focused and explain user-visible behavior, validation performed,
