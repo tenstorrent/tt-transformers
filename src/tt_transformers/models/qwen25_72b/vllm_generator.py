@@ -82,7 +82,6 @@ class Qwen25_72BGenerator:
         "supports_stochastic_device_prefill": False,
         "accepts_trace_mode": True,
         "supports_chunked_prefill": True,
-        "supports_device_logprobs": False,
         # The only supported geometry (T3K) serves on FABRIC_1D, the vLLM plugin's
         # default for it (vllm-tt-plugin #116); the model's Ring collectives run on
         # it, as TTTv1's do. Declared explicitly so the choice is a visible

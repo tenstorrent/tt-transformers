@@ -30,6 +30,7 @@ from tt_transformers.llm_runtime.prefill.signatures import (
     PrefillTraceSignature,
     PreparedPrefill,
     capture_schema_fingerprint,
+    hidden_trace_signature,
     workspace_fingerprint,
 )
 from tt_transformers.llm_runtime.tensor_resources import attach_cleanup_failures, raise_cleanup_failures
@@ -150,7 +151,7 @@ class PrefillTraceLifecycle:
                 raise_cleanup_failures(failures)
 
         return PrefillCapturePlan(
-            signature=prepared.trace_signature,
+            signature=hidden_trace_signature(prepared),
             prepare_inputs=prepare_inputs,
             capture=capture,
             prepare_workspace=prepare_workspace,

@@ -245,8 +245,6 @@ Eager programs and traces have related but different identities:
 - `PrefillProgramSignature` includes every material program choice, including
   operation variant, padded invocation geometry, page-table widths, sampling
   path, and any material last-token tile.
-- `PrefillTraceSignature` identifies the static hidden body and persistent
-  input geometry. Sampling state is deliberately excluded.
 - capture-schema and workspace fingerprints allow one hidden trace family to
   keep distinct postprocessing workspaces for its program aliases.
 

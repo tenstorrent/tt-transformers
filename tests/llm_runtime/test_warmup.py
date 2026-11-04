@@ -26,6 +26,7 @@ from tt_transformers.llm_runtime.warmup import (
     WarmupCoordinatorConfig,
     _build_plan,
     _resolve_coverage_manifest,
+    _warmup_sampling_params,
     resolve_prefill_warmup_seq_lens,
     topk_warmup_sampling_variants,
 )
@@ -874,6 +875,46 @@ def test_device_sampling_warms_a_penalised_twin_of_every_sampled_case(allow_forc
 
 
 @pytest.mark.host
+@pytest.mark.parametrize(("num_devices", "penalty_state"), [(1, True), (8, False), (8, True)])
+def test_sampled_cases_warm_top_k_logprobs_variants_where_logprobs_run_on_device(num_devices, penalty_state):
+    """Only 8- and 32-chip meshes compute logprobs on device. There, every sampled
+    prefill and decode case on the top-k path also warms its logprobs variant,
+    crossed with the penalty variants; argmax never takes logprobs."""
+
+    config = WarmupConfig(prefill_seq_lens=LADDER, prefill_batch_sizes=(1,), include_decode_top_k=True)
+    coordinator, *_ = make_coordinator(
+        warmup_config=config,
+        sequence_lengths=LADDER,
+        lane_capacity=2,
+        num_devices=num_devices,
+        penalty_state=penalty_state,
+    )
+    sampled = coordinator.config.sampled_plan
+    on_device = num_devices in (8, 32)
+
+    assert coordinator.config.logprobs_variants is on_device
+    expected = {
+        (penalties, logprobs)
+        for penalties in ((False, True) if penalty_state else (False,))
+        for logprobs in ((False, True) if on_device else (False,))
+    }
+    for cases in (sampled.prefill, sampled.decode):
+        assert not any(case.logprobs and case.sampling_path != "topk" for case in cases)
+        variants = {}
+        for case in cases:
+            if case.sampling_path == "topk":
+                key = (case.batch_size, case.sequence_length, case.cached_tokens)
+                variants.setdefault(key, set()).add((case.penalties, case.logprobs))
+        assert variants and all(found == expected for found in variants.values())
+    sampled_decode = [case for case in sampled.decode if case.sampling_path != "logits"]
+    assert len(sampled_decode) == len(expected) + (2 if penalty_state else 1)
+    assert len(sampled_decode) <= 6
+    logprobs_case = next((case for case in sampled.decode if case.logprobs), None)
+    if logprobs_case is not None:
+        assert _warmup_sampling_params(logprobs_case, 2).enable_log_probs is True
+
+
+@pytest.mark.host
 def test_runtime_without_penalty_state_warms_no_penalised_twin():
     """Without device penalty state a penalised request samples on host, so no twin is warmed."""
 
@@ -887,6 +928,24 @@ def test_runtime_without_penalty_state_warms_no_penalised_twin():
     assert not any(case.penalties for case in (*sampled.prefill, *sampled.decode))
     assert any(case.sampling_path != "logits" for case in sampled.prefill)
     assert len(topk_warmup_sampling_variants(1, penalties=False)) == 1
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("penalties", (False, True))
+def test_topk_warmup_variants_add_a_logprobs_variant_of_each_where_logprobs_run_on_device(penalties):
+    """The executors prime the Q128 single-user top-k programs for every tile start
+    with these variants, so where logprobs run on device each needs its logprobs
+    twin too: a short prompt with logprobs runs one of those programs."""
+
+    def penalised(params):
+        return params.presence_penalty is not None and bool(torch.as_tensor(params.presence_penalty).any())
+
+    plain = topk_warmup_sampling_variants(1, penalties=penalties)
+    variants = topk_warmup_sampling_variants(1, penalties=penalties, logprobs=True)
+
+    assert len(variants) == 2 * len(plain)
+    assert [bool(params.enable_log_probs) for params in variants] == [False] * len(plain) + [True] * len(plain)
+    assert [penalised(params) for params in variants] == [penalised(params) for params in plain] * 2
 
 
 @pytest.mark.host
