@@ -217,7 +217,8 @@ def git_changed_files(base: str, root: Path = ROOT) -> list[str]:
         result = subprocess.run(["git", *args], cwd=root, check=True, capture_output=True, text=True)
         return [line for line in result.stdout.splitlines() if line]
 
-    return git("diff", "--name-only", "--merge-base", base) + git("ls-files", "--others", "--exclude-standard")
+    changed = git("diff", "--name-only", "--no-renames", "--merge-base", base)
+    return changed + git("ls-files", "--others", "--exclude-standard")
 
 
 def render_text(selection: Selection) -> str:
