@@ -13,7 +13,13 @@ import ttnn
 
 from tt_transformers.ops.moe import _program
 from tt_transformers.ops.moe.expert_down import ExpertDown
-from tt_transformers.ops.moe.fused_decode import FusedMoEDecode, SharedExpert, round_sig
+from tt_transformers.ops.moe.fused_decode import (
+    FusedMoEDecode,
+    SharedExpert,
+    round_sig,
+    router_weight,
+    shared_expert_weights,
+)
 
 try:
     import tomllib
@@ -53,6 +59,32 @@ def test_round_sig_keeps_five_significant_bits():
     assert torch.equal(mantissa * 32, torch.round(mantissa * 32))  # at most 5 significant bits
     assert ((r - x).abs() <= x.abs() * 2**-5).all()  # half an ulp at 5 bits, relative
     assert torch.equal(round_sig(r), r)
+
+
+@pytest.mark.host
+def test_router_weight_puts_the_shared_gate_in_column_e():
+    router, gate = torch.randn(64, 256), torch.randn(1, 256)
+    rw = router_weight(router, gate)
+    assert rw.shape == (256, 96)
+    assert torch.equal(rw[:, :64], router.T) and torch.equal(rw[:, 64], gate[0]) and not rw[:, 65:].any()
+    assert not router_weight(router)[:, 64:].any()
+
+
+@pytest.mark.host
+@pytest.mark.parametrize("gate_first", [False, True])
+def test_shared_expert_weights_pack_each_device_shard_like_the_routed_experts(gate_first):
+    H, inter, devices = 64, 32, 2
+    shared = SharedExpert(
+        *(torch.randn(*s) for s in [(1, H), (inter * devices, H), (inter * devices, H), (H, inter * devices)])
+    )
+    up_gate, down = shared_expert_weights(shared, inter, devices, gate_first)
+    assert up_gate.shape == (1, 1, H, 2 * inter * devices) and down.shape == (1, 1, inter * devices, H)
+    for d in range(devices):
+        rows = slice(d * inter, (d + 1) * inter)
+        gate, up = round_sig(shared.gate_proj[rows].T), round_sig(shared.up_proj[rows].T)
+        shard = up_gate[0, 0, :, 2 * d * inter : 2 * (d + 1) * inter]
+        assert torch.equal(shard, torch.cat([gate, up] if gate_first else [up, gate], -1))
+    assert torch.equal(down[0, 0], round_sig(shared.down_proj.T))
 
 
 @pytest.mark.host
@@ -121,9 +153,9 @@ def _x(dev, H, seed):
     )
 
 
-def _routing(op, x_tt, E, k):
+def _routing(op, x_tt, rw, E, k):
     """Top-k ids (ties to the lower id), softmax weights and the shared-gate logit from the op's own router output."""
-    logits = op.logits(x_tt)
+    logits = op.logits(x_tt, rw)
     row = ttnn.to_torch(logits).float().reshape(-1)
     ttnn.deallocate(logits)
     ids = sorted(range(E), key=lambda i: (-row[i].item(), i))[:k]
@@ -143,7 +175,8 @@ def _routing(op, x_tt, E, k):
     ids=["bfp8", "bfp4_m6", "bfp8_bfp4_down"],
 )
 def test_shared_expert_moe_matches_torch(ttnn_mesh_device, inter, dtype, down_dtype):
-    """Qwen3.5-MoE layout on one device: softmax top-k routed experts plus a sigmoid-gated shared expert."""
+    """Qwen3.5-MoE layout on one device: softmax top-k routed experts plus a sigmoid-gated shared expert. Two layers'
+    router weights share the op."""
     dev, H, E, k = ttnn_mesh_device, 2048, 64, 8
     gate_proj, up_proj, down_proj = _hf_experts(E, H, inter, seed=1)
     up_gate, down, w_ug, w_dn = _routed(dev, gate_proj, up_proj, down_proj, dtype, False, down_dtype)
@@ -154,26 +187,24 @@ def test_shared_expert_moe_matches_torch(ttnn_mesh_device, inter, dtype, down_dt
         up_proj=torch.randn(inter, H, generator=g) * 0.03,
         down_proj=torch.randn(H, inter, generator=g) * 0.03,
     )
-    router = torch.randn(E, H, generator=g) * 0.05
-    cache = {}
-    kw = dict(hidden=H, inter=inter, num_experts=E, k=k, weight_dtype=dtype, down_dtype=down_dtype, cache=cache)
-    op = FusedMoEDecode(dev, router_weight=router, shared_expert=shared, **kw)
-    w_sug = ttnn.to_torch(op.shared_up_gate).float()[0, 0]
-    w_sdn = ttnn.to_torch(op.shared_down).float()[0, 0]
+    routers = [router_weight(torch.randn(E, H, generator=g) * 0.05, shared.expert_gate) for _ in range(2)]
+    routers = [_upload(rw, ttnn.bfloat16, dev)[0] for rw in routers]  # two layers' routers through the one op
+    s_ug, s_dn = shared_expert_weights(shared, inter, 1)
+    (sug, w_sug), (sdn, w_sdn) = _upload(s_ug, dtype, dev), _upload(s_dn, down_dtype, dev)
+    w_sug, w_sdn = w_sug[0, 0], w_sdn[0, 0]
+    op = FusedMoEDecode(dev, H, inter, E, k, dtype, down_dtype=down_dtype)
 
     for trial in range(3):
+        rw = routers[trial % 2]
         xb, x_tt = _x(dev, H, seed=trial)
-        out = ttnn.to_torch(op(x_tt, up_gate, down)).float().reshape(-1)
-        ids, weights, gate_logit = _routing(op, x_tt, E, k)
+        out = ttnn.to_torch(op(x_tt, rw, up_gate, down, shared_up_gate=sug, shared_down=sdn)).float().reshape(-1)
+        ids, weights, gate_logit = _routing(op, x_tt, rw, E, k)
         xf = xb.float().reshape(-1)
         ref = torch.sigmoid(gate_logit) * _swiglu_down(xf, w_sug, w_sdn, inter, False)
         for j, e in enumerate(ids):
             ref += weights[j] * _swiglu_down(xf, w_ug[e], w_dn[e], inter, False)
         assert _pcc(out, ref) > 0.999, (trial, _pcc(out, ref))
         ttnn.deallocate(x_tt)
-
-    second_layer = FusedMoEDecode(dev, router_weight=router, shared_expert=shared, **kw)
-    assert second_layer.gate_up is op.gate_up and second_layer.out is op.out  # one set of ops and buffers per model
 
 
 @pytest.mark.device
@@ -191,19 +222,10 @@ def test_expert_parallel_moe_matches_torch(ttnn_mesh_device, window):
     router = torch.randn(E, H, generator=torch.Generator().manual_seed(5)) * 0.05
     router[:local] += {"mixed": 0, "none": -20, "all": 20}[window] * xf / xf.dot(xf)  # shifts the window's logits
 
-    op = FusedMoEDecode(
-        dev,
-        hidden=H,
-        inter=inter,
-        num_experts=E,
-        k=k,
-        weight_dtype=ttnn.bfloat4_b,
-        router_weight=router,
-        ep_experts=local,
-        gate_first=True,
-    )
-    out = ttnn.to_torch(op(x_tt, up_gate, down)).float().reshape(-1)
-    ids, weights, _ = _routing(op, x_tt, E, k)
+    rw, _ = _upload(router_weight(router), ttnn.bfloat16, dev)
+    op = FusedMoEDecode(dev, H, inter, E, k, ttnn.bfloat4_b, shared=False, ep_experts=local, gate_first=True)
+    out = ttnn.to_torch(op(x_tt, rw, up_gate, down)).float().reshape(-1)
+    ids, weights, _ = _routing(op, x_tt, rw, E, k)
     live = [(j, e) for j, e in enumerate(ids) if e < local]
     assert len(live) == {"none": 0, "all": k}.get(window, len(live))
     if not live:
