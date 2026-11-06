@@ -50,6 +50,11 @@ def place_along_rows(mesh_device, per_bank: dict[int, int]) -> dict[int, list]:
     return out
 
 
+def replicate(mesh_device) -> dict:
+    """from_torch kwargs that put the same tensor on every device of the mesh."""
+    return {"mesh_mapper": ttnn.ReplicateTensorToMesh(mesh_device)} if mesh_device.get_num_devices() > 1 else {}
+
+
 def core_range_set(cores) -> ttnn.CoreRangeSet:
     return ttnn.CoreRangeSet([ttnn.CoreRange(c, c) for c in cores])
 
@@ -73,7 +78,8 @@ def runtime_args(args: dict[tuple[int, int], list[int]]) -> ttnn.RuntimeArgs:
 
 def reader_writer_compute(cores, name: str, reader, writer, compute, defines=(), dst_full: bool = False):
     """Kernel descriptors for kernels/{name}_reader.cpp (NCRISC, NOC0), {name}_writer.cpp (BRISC, NOC1) and
-    {name}_compute.cpp (LoFi, FP32 accumulation). reader / writer / compute: (compile args, {(x, y): runtime args})."""
+    {name}_compute.cpp (LoFi, FP32 accumulation). reader / writer / compute: (compile args, {(x, y): runtime args});
+    the compute's runtime args may be None."""
     (rd_ct, rd_rt), (wr_ct, wr_rt), (cp_ct, cp_rt) = reader, writer, compute
     dm = ttnn.DataMovementConfigDescriptor
     defines = list(defines)
@@ -98,7 +104,7 @@ def reader_writer_compute(cores, name: str, reader, writer, compute, defines=(),
             kernel_source=str(KERNEL_DIR / f"{name}_compute.cpp"),
             core_ranges=cores,
             compile_time_args=cp_ct,
-            runtime_args=runtime_args(cp_rt),
+            runtime_args=runtime_args(cp_rt) if cp_rt else [],
             defines=defines,
             config=ttnn.ComputeConfigDescriptor(
                 math_fidelity=ttnn.MathFidelity.LoFi,

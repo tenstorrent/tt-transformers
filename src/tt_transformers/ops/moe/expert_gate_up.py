@@ -29,6 +29,7 @@ from ._program import (
     packet_bytes,
     place_along_rows,
     reader_writer_compute,
+    replicate,
 )
 
 READERS = 4  # cores per column group
@@ -74,10 +75,6 @@ def ep_offsets(mesh_device, experts_per_die: int):
         memory_config=ttnn.DRAM_MEMORY_CONFIG,
         mesh_mapper=ttnn.ShardTensorToMesh(mesh_device, dim=0),
     )
-
-
-def _replicate(mesh_device) -> dict:
-    return {"mesh_mapper": ttnn.ReplicateTensorToMesh(mesh_device)} if mesh_device.get_num_devices() > 1 else {}
 
 
 class ExpertGateUp:
@@ -136,7 +133,7 @@ class ExpertGateUp:
     def allocate_outputs(self):
         """(act [1, 1, k + 1, inter] BF16 row-major, route [1, 1, 1, 32] UINT16 row-major), zeroed in L1. Build them
         before any trace capture (host upload) and reuse them across layers and steps."""
-        kw = dict(device=self.mesh_device, memory_config=ttnn.L1_MEMORY_CONFIG, **_replicate(self.mesh_device))
+        kw = dict(device=self.mesh_device, memory_config=ttnn.L1_MEMORY_CONFIG, **replicate(self.mesh_device))
         act = ttnn.from_torch(
             torch.zeros(1, 1, self.k + 1, self.inter, dtype=torch.bfloat16),
             dtype=ttnn.bfloat16,
