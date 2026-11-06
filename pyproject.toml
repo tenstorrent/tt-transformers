@@ -69,6 +69,7 @@ include-package-data = false
 where = ["src"]
 
 [tool.setuptools.package-data]
+"tt_transformers.ops.moe" = ["kernels/*.cpp", "kernels/*.hpp"]
 "tt_transformers.ops.sampling" = ["kernels/**/*.cpp"]
 
 [tool.ruff]
