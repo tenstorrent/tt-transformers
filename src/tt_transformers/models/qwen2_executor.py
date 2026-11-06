@@ -121,23 +121,7 @@ class _ExecutorFacadeSurface:
     process_decode_output_host = _delegate_to_model_executor("process_decode_output_host")
     warmup_model_prefill = _delegate_to_model_executor("warmup_model_prefill")
     warmup_model_decode = _delegate_to_model_executor("warmup_model_decode")
-
-    def cleanup(self) -> None:
-        target = _model_executor_target(self)
-        if target is not self:
-            return target.cleanup()
-
-        # Older fabricated integration objects attach a state controller to
-        # every executor. Qwen2 never owned native sampling state, so keep its
-        # historical release order while invoking the common cleanup body.
-        controller = self.__dict__.get("sampling_state_controller")
-        if controller is not None:
-            self.__dict__["sampling_state_controller"] = None
-        try:
-            return ModelExecutor.cleanup(self)
-        finally:
-            if controller is not None:
-                self.__dict__["sampling_state_controller"] = controller
+    cleanup = _delegate_to_model_executor("cleanup")
 
     def __getattr__(self, name: str) -> Any:
         if name == "_model_executor":

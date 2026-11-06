@@ -948,6 +948,8 @@ class Phi4Executor:
             actions.append(self.trace_compiler.cleanup)
         actions.append(self.program_compiler.cleanup)
         if self.config.device_sampling_enabled:
+            if self.sampling_state_controller is not None:
+                actions.append(lambda: self.sampling_state_controller.release(self.sampling_state))
             actions.append(self.model.sampling.release)
         actions.append(self.kv_cache_manager.release)
 

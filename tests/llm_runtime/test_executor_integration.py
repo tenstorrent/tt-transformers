@@ -1917,12 +1917,8 @@ def test_executor_cleanup_is_ordered_retryable_and_idempotent(binding, expect_er
     executor.program_compiler = _Owner("program")
     executor.config = SimpleNamespace(device_sampling_enabled=True)
     executor.model = SimpleNamespace(sampling=_Owner("sampling"))
-    if binding.executor_module in (llama33_70b_executor, qwen3_32b_executor):
-        executor.sampling_state_controller = _Owner("sampling-state")
-        executor.sampling_state = object()
-    else:
-        executor.sampling_state_controller = None
-        executor.sampling_state = None
+    executor.sampling_state_controller = _Owner("sampling-state")
+    executor.sampling_state = object()
     executor.kv_cache_manager = _Owner("kv")
 
     with expect_error(RuntimeError, "reader") as raised:
@@ -1935,10 +1931,10 @@ def test_executor_cleanup_is_ordered_retryable_and_idempotent(binding, expect_er
         "decode-external",
         "trace",
         "program",
+        "sampling-state",
+        "sampling",
+        "kv",
     ]
-    if binding.executor_module in (llama33_70b_executor, qwen3_32b_executor):
-        expected_order.append("sampling-state")
-    expected_order.extend(["sampling", "kv"])
     assert calls == expected_order
     assert tuple(error.args[0] for error in raised.value.cleanup_failures) == ("trace",)
     assert executor.terminal
