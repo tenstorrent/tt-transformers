@@ -12,6 +12,7 @@ KERNEL_DIR = Path(__file__).parent / "kernels"
 TILE = 32
 TILE_BYTES = {ttnn.bfloat4_b: 576, ttnn.bfloat8_b: 1088}  # the expert weight dtypes the LoFi matmuls read
 MAX_PACKET_BYTES = 16384
+WEIGHT_CB_MAX_BYTES = 1024 * 1024  # a core's weight buffer, leaving the rest of the 1.5 MiB L1 to the op
 
 
 def packet_bytes(tiles: int, tile_bytes: int) -> int:

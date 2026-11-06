@@ -22,6 +22,7 @@ import ttnn
 from ._program import (
     TILE,
     TILE_BYTES,
+    WEIGHT_CB_MAX_BYTES,
     bank_workers,
     cb,
     core_range_set,
@@ -33,7 +34,6 @@ from ._program import (
 READERS = 4  # cores per column group
 RING_BLOCKS = 5  # bank blocks in each core's weight ring (3 read ahead of compute)
 RING_BYTES = 768 * 1024
-RING_MAX_BYTES = 1024 * 1024  # the 3-block minimum may exceed RING_BYTES up to here, leaving the rest of L1 to the op
 MAX_K = 15  # route record: ids at [0, k), the live count at 15, slot weights at [16, 17 + k)
 
 
@@ -55,7 +55,7 @@ def gu_layout(n_tiles: int, banks: int):
 def ring_blocks(kt: int, m: int, tile_bytes: int) -> int:
     """Blocks in the weight ring: RING_BLOCKS, fewer (>= 3) when a [kt, m] block would push it past RING_BYTES."""
     block = kt * m * tile_bytes
-    if 3 * block > RING_MAX_BYTES:
+    if 3 * block > WEIGHT_CB_MAX_BYTES:
         raise ValueError(f"a 3-block weight ring of {3 * block} bytes does not fit in L1")
     return max(3, min(RING_BLOCKS, RING_BYTES // block))
 
