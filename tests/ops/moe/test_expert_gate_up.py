@@ -12,7 +12,7 @@ import torch
 import ttnn
 
 from tt_transformers.ops.moe import _program
-from tt_transformers.ops.moe.expert_gate_up import ExpertGateUp, ep_offsets, gu_layout
+from tt_transformers.ops.moe.expert_gate_up import ExpertGateUp, ep_offsets, gu_layout, ring_blocks
 
 try:
     import tomllib
@@ -62,6 +62,9 @@ def test_gate_up_layout_covers_every_pair_once(m):
         dict(k=16),
         dict(k=0),
         dict(inter=100),
+        dict(hidden=32),  # custom_mm: kt in [2, 256] and even
+        dict(hidden=2080),
+        dict(hidden=8256),
         dict(ep_experts=32),  # expert parallelism without shared=False
         dict(shared=False, ep_experts=48),
     ],
@@ -70,6 +73,13 @@ def test_rejects_unsupported_configuration(kwargs):
     args = dict(hidden=2048, inter=128, num_experts=256, k=8, weight_dtype=ttnn.bfloat8_b) | kwargs
     with pytest.raises(ValueError):
         ExpertGateUp(None, **args)
+
+
+@pytest.mark.host
+def test_rejects_a_weight_ring_that_outgrows_l1():
+    assert ring_blocks(64, 6, 576) == 3
+    with pytest.raises(ValueError):
+        ring_blocks(256, 2, 1088)  # hidden 8192, m 2, bfp8: 3 blocks are 1.6 MiB
 
 
 def _round_sig(t, bits=5):
@@ -150,6 +160,7 @@ def test_shared_expert_gate_up_matches_torch(ttnn_mesh_device, E, inter, dtype):
         ref_ws = torch.sigmoid(lgb[0, 0, 0, E].float())
         rec = ttnn.to_torch(route).reshape(-1).long()
         assert rec[:k].tolist() == ids, (trial, rec[:k].tolist(), ids)
+        assert not rec[k:15].any() and not rec[17 + k :].any(), trial
         got_w = _bf16_bits(rec[16 : 17 + k])
         assert torch.allclose(got_w, torch.cat([ref_ws.reshape(1), ref_w]), rtol=1e-2, atol=1e-3), trial
 
@@ -204,6 +215,7 @@ def test_expert_parallel_window_matches_torch(ttnn_mesh_device):
         rec = ttnn.to_torch(route).reshape(-1).long()
         assert rec[15].item() == len(live), (trial, rec[15].item(), len(live))
         assert rec[: len(live)].tolist() == [le for _, le in live], trial
+        assert not rec[len(live) : 15].any() and not rec[17 + len(live) :].any(), trial
 
         got = ttnn.to_torch(act).float()[0, 0]
         xf = xb[0, 0, 0].float()
@@ -213,6 +225,45 @@ def test_expert_parallel_window_matches_torch(ttnn_mesh_device):
         ttnn.deallocate(x_tt)
         ttnn.deallocate(lg_tt)
     ttnn.deallocate(offset)
+
+
+@pytest.mark.device
+@pytest.mark.blackhole
+@MESH_1X1
+@pytest.mark.parametrize("shared_first", [True, False], ids=["shared_first", "routed_first"])
+def test_shared_and_routed_only_take_separate_cache_entries(ttnn_mesh_device, request, shared_first):
+    """shared only adds runtime args on the slot-0 cores, so it must key the program cache."""
+    dev, H, inter, E, k = ttnn_mesh_device, 2048, 128, 64, 4
+    dev.enable_program_cache()
+    dev.clear_program_cache()
+    request.addfinalizer(dev.disable_and_clear_program_cache)
+    up_gate, W = _weights(dev, (1, E, H, 2 * inter), ttnn.bfloat8_b, seed=3)
+    shared, Ws = _weights(dev, (1, 1, H, 2 * inter), ttnn.bfloat8_b, seed=4)
+    torch.manual_seed(0)
+    x = torch.zeros(1, 1, 32, H)
+    x[0, 0, 0] = torch.randn(H)
+    lg = torch.zeros(1, 1, 32, E + 32)
+    lg[0, 0, 0, : E + 1] = torch.randn(E + 1) * 2
+    xb, lgb = x.bfloat16(), lg.bfloat16()
+    x_tt, lg_tt = _l1(xb, dev), _l1(lgb, dev)
+    xf, ids = xb[0, 0, 0].float(), _top_k(lgb[0, 0, 0, :E].float(), k)
+    entries = dev.num_program_cache_entries()
+    for use_shared in (shared_first, not shared_first):
+        op = ExpertGateUp(dev, H, inter, E, k, ttnn.bfloat8_b, shared=use_shared)
+        act, route = op.allocate_outputs()
+        op(x_tt, lg_tt, up_gate, act, route, shared_up_gate=shared if use_shared else None)
+        rec = ttnn.to_torch(route).reshape(-1).long()
+        assert rec[:k].tolist() == ids, use_shared
+        w = _bf16_bits(rec[16 : 17 + k])
+        got = ttnn.to_torch(act).float()[0, 0]
+        ref = {s: _swiglu(xf, W[0, e], w[s], inter, False) for s, e in enumerate(ids, start=1)}
+        if use_shared:
+            ref[0] = _swiglu(xf, Ws[0, 0], w[0], inter, False)
+        for s, r in ref.items():
+            assert _pcc(got[s], r) > 0.999, (use_shared, s, _pcc(got[s], r))
+    assert dev.num_program_cache_entries() == entries + 2
+    ttnn.deallocate(x_tt)
+    ttnn.deallocate(lg_tt)
 
 
 @pytest.mark.device

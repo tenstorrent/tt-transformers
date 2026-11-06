@@ -33,6 +33,7 @@ from ._program import (
 READERS = 4  # cores per column group
 RING_BLOCKS = 5  # bank blocks in each core's weight ring (3 read ahead of compute)
 RING_BYTES = 768 * 1024
+RING_MAX_BYTES = 1024 * 1024  # the 3-block minimum may exceed RING_BYTES up to here, leaving the rest of L1 to the op
 MAX_K = 15  # route record: ids at [0, k), the live count at 15, slot weights at [16, 17 + k)
 
 
@@ -53,7 +54,10 @@ def gu_layout(n_tiles: int, banks: int):
 
 def ring_blocks(kt: int, m: int, tile_bytes: int) -> int:
     """Blocks in the weight ring: RING_BLOCKS, fewer (>= 3) when a [kt, m] block would push it past RING_BYTES."""
-    return max(3, min(RING_BLOCKS, RING_BYTES // (kt * m * tile_bytes)))
+    block = kt * m * tile_bytes
+    if 3 * block > RING_MAX_BYTES:
+        raise ValueError(f"a 3-block weight ring of {3 * block} bytes does not fit in L1")
+    return max(3, min(RING_BLOCKS, RING_BYTES // block))
 
 
 def ep_offsets(mesh_device, experts_per_die: int):
@@ -101,6 +105,8 @@ class ExpertGateUp:
             raise ValueError(f"k must be in [1, {MAX_K}], got {k}")
         if hidden % TILE or inter % TILE:
             raise ValueError(f"hidden ({hidden}) and inter ({inter}) must be multiples of {TILE}")
+        if not 2 <= hidden // TILE <= 256 or hidden // TILE % 2:
+            raise ValueError(f"custom_mm needs an even hidden / {TILE} in [2, 256], got {hidden // TILE}")
         if ep_experts is not None and (shared or ep_experts <= 0 or num_experts % ep_experts):
             raise ValueError("expert parallelism needs shared=False and ep_experts dividing num_experts")
         self.banks = len(bank_workers(mesh_device))
@@ -148,8 +154,8 @@ class ExpertGateUp:
         weights [1, E, hidden, 2 inter] (E = ep_experts or num_experts), shared_up_gate [1, 1, hidden, 2 inter], both
         DRAM interleaved in the weight dtype. ep_offset: from `ep_offsets`. Writes act and route (`allocate_outputs`).
 
-        route: [k ids (local under expert parallelism) | 0... | count at 15 | shared weight | k routed weights] (BF16
-        weights). act row s: slot s's activations; under expert parallelism only rows 1..count are written."""
+        route: [k ids (local under expert parallelism) | 0... | count at 15 | shared weight | k routed weights | 0...]
+        (BF16 weights). act row s: slot s's activations; under expert parallelism only rows 1..count are written."""
         self._check(x, logits, up_gate, act, route, shared_up_gate, ep_offset)
         ws = shared_up_gate if self.shared else up_gate  # not read without a shared expert
         cb_x, cb_w, cb_route, cb_scr, cb_part, cb_lg, cb_act = 0, 1, 2, 3, 4, 5, 16
@@ -181,6 +187,8 @@ class ExpertGateUp:
             wr_ct += ttnn.TensorAccessorArgs(t).get_compile_time_args()
         cp_ct = [cb_x, cb_w, cb_act, self.kt, self.m, self.banks]
         defines = [("EP_EXPERTS", str(self.ep_experts))] if self.ep_experts else []
+        if self.shared:  # keys the program cache: the shared expert only adds runtime args
+            defines.append(("SHARED", "1"))
         if self.gate_first:
             defines.append(("GATE_FIRST", "1"))
         kernels = reader_writer_compute(

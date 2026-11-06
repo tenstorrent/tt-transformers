@@ -137,9 +137,12 @@ void kernel_main() {
 #endif
     cb_reserve_back(cb_route, 1);
     volatile tt_l1_ptr uint16_t* route = reinterpret_cast<volatile tt_l1_ptr uint16_t*>(get_write_ptr(cb_route));
-    for (uint32_t j = 0; j < topk; ++j) {
-        route[j] = static_cast<uint16_t>(j < n_live ? ids[j] : 0);
-        route[16 + 1 + j] = j < n_live ? w[j] : 0;
+    for (uint32_t j = 0; j < 32; ++j) {
+        route[j] = 0;
+    }
+    for (uint32_t j = 0; j < n_live; ++j) {
+        route[j] = static_cast<uint16_t>(ids[j]);
+        route[17 + j] = w[j];
     }
     route[15] = static_cast<uint16_t>(n_live);
     route[16] = w_shared;
