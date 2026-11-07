@@ -37,7 +37,7 @@ repository checkout and are not installed by the wheel.
 |---|---|
 | `hf_generator.py` | Load Hugging Face checkpoints/tokenizers, construct an executor, and expose `.generate()`. |
 | `model.py` | Compose reusable modules into the model's TTNN tensor computation and layouts. |
-| `vllm_generator.py` | Preserve the scheduler-facing vLLM interface and delegate execution. |
+| `vllm_generator.py` | Implement the [vLLM generator interface](../../../docs/vllm-interface.md) and delegate execution. |
 | `weight_utils.py` | Convert model-specific weights where a separate helper is needed. |
 | `__init__.py` | Declare the model package's intended import surface. |
 
