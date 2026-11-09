@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import functools
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
@@ -27,7 +26,7 @@ from tt_transformers.device_utils import cleanup_object_graph
 from tt_transformers.llm_runtime.config import PagedKVCacheConfig, TraceConfig, WarmupConfig, fit_paged_kv_num_blocks
 from tt_transformers.llm_runtime.tensor_resources import attach_cleanup_failures
 from tt_transformers.llm_runtime.warmup import topk_warmup_sampling_variants
-from tt_transformers.models.executor import ModelExecutor, ModelExecutorConfig
+from tt_transformers.models.executor import ModelExecutor, ModelExecutorConfig, create_sampling_state
 from tt_transformers.models.qwen3_32b.model import (
     DEFAULT_HF_REVISION,
     QWEN3_32B_ACCURACY,
@@ -39,8 +38,6 @@ from tt_transformers.models.qwen3_32b.model import (
     _slice_last_token_tile,
 )
 from tt_transformers.modules.sampling.sampling_1d import Sampling1D
-from tt_transformers.modules.sampling.sampling_state_1d import SamplingState1D
-from tt_transformers.modules.sampling.seed_manager_1d import SeedManager1D
 
 DEFAULT_HF_MODEL = "Qwen/Qwen3-32B"
 
@@ -502,7 +499,7 @@ class Qwen3_32BExecutor:
         if not isinstance(config, Qwen3_32BExecutorConfig):
             raise TypeError("config must be a Qwen3_32BExecutorConfig")
 
-        sampling_state_controller, sampling_state = _create_sampling_state(
+        sampling_state_controller, sampling_state = create_sampling_state(
             model, config.device_sampling_enabled, salt_duplicate_seeds=config.salt_duplicate_seeds
         )
         trace_capture_prime_sequence_lengths = _resolve_trace_capture_prime_sequence_lengths(
@@ -523,23 +520,6 @@ class Qwen3_32BExecutor:
             prefill_warmup=_warmup_q128_around_prefill,
         )
         self._model_executor._q128_topk_tile_ends_warmed = set()
-
-
-def _create_sampling_state(model: Any, enabled: bool, *, salt_duplicate_seeds: bool) -> tuple[Any, Any]:
-    if not enabled:
-        return None, None
-    sampling = getattr(model, "sampling", None)
-    if not isinstance(sampling, Sampling1D):
-        raise TypeError("device sampling requires model.sampling to be a Sampling1D")
-    is_resolved = getattr(getattr(sampling, "config", None), "is_resolved", None)
-    if not callable(is_resolved) or not is_resolved():
-        raise ValueError("model.sampling must have a resolved Sampling1DConfig")
-    controller = SamplingState1D(
-        sampling,
-        seed_manager_factory=functools.partial(SeedManager1D, salt_duplicate_seeds=salt_duplicate_seeds),
-        history_width=int(model.config.max_seq_len),
-    )
-    return controller, controller.create_state()
 
 
 def _warmup_q128_around_prefill(

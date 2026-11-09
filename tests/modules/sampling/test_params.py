@@ -400,11 +400,10 @@ def test_capability_schema_parametrization_covers_every_serving_generator():
 def test_capability_schema_records_the_non_uniform_reader_defaults():
     """The schema records a per-key reader default, not one blanket rule.
 
-    ``supports_device_penalties`` and ``supports_stochastic_device_prefill``
-    default to True when absent (the plugin reads ``supports_device_penalties``
-    that way; the other follows the same convention but is not read today);
-    every other key follows the contract's "absent means not supported"."""
-    default_true = {"supports_device_penalties", "supports_stochastic_device_prefill"}
+    ``supports_device_penalties`` defaults to True when absent, the way the
+    plugin reads it; every other key follows the contract's "absent means not
+    supported"."""
+    default_true = {"supports_device_penalties"}
     assert all(CAPABILITY_SCHEMA[name].reader_default is True for name in default_true)
     assert all(
         key.reader_default is False
@@ -579,9 +578,10 @@ _EXECUTORS_WITH_DEVICE_PENALTY_STATE = {
 
 @pytest.mark.host
 def test_penalty_state_derivation_finds_the_controller_executors():
-    # The scan must find the executors that do build the controller, or the two
-    # declaration tests below would pass vacuously by expecting False everywhere.
-    assert {"Llama3Generator", "Llama33_70BGenerator", "Qwen3_32BGenerator"} <= _EXECUTORS_WITH_DEVICE_PENALTY_STATE
+    # The scan must find the executors that do build the controller, or the
+    # declaration test below would pass vacuously by expecting False everywhere.
+    # Every vLLM generator's executor now owns one.
+    assert _EXECUTORS_WITH_DEVICE_PENALTY_STATE == {class_name for _, class_name in _TARGET_GENERATORS}
 
 
 @pytest.mark.host
@@ -592,13 +592,3 @@ def test_generators_without_penalty_state_decline_device_penalties(relative_path
     capabilities = _capabilities_from_source(relative_path, class_name)
     expected = class_name in _EXECUTORS_WITH_DEVICE_PENALTY_STATE
     assert capabilities.get("supports_device_penalties", True) is expected
-
-
-@pytest.mark.host
-@pytest.mark.parametrize(("relative_path", "class_name"), _TARGET_GENERATORS)
-def test_generators_without_sampling_state_decline_stochastic_device_prefill(relative_path, class_name):
-    # Without a SamplingState1D the prefill sampler seeds from a fixed per-slot
-    # buffer, so a sampled first token would ignore the request and its seed.
-    capabilities = _capabilities_from_source(relative_path, class_name)
-    expected = class_name in _EXECUTORS_WITH_DEVICE_PENALTY_STATE
-    assert capabilities.get("supports_stochastic_device_prefill", True) is expected

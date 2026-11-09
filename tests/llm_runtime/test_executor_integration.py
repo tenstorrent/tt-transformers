@@ -807,33 +807,35 @@ def _device_sampling_executor(
         def decode_forward(self):
             raise AssertionError("construction-policy test must not execute sampling")
 
+    class FakeSamplingState1D:
+        def __init__(self, sampling, *, seed_manager_factory=None, history_width=None):
+            self.sampling = sampling
+            # Report the salting policy the executor asked its seed manager for.
+            self.seed_manager = SimpleNamespace(
+                salt_duplicate_seeds=getattr(seed_manager_factory, "keywords", {}).get("salt_duplicate_seeds", True)
+            )
+
+        def create_state(self):
+            return SimpleNamespace(seed_state=SimpleNamespace(capacity=32))
+
+        def admit(self, *args, **kwargs):
+            return None
+
+        def decode_forward(self, *args, **kwargs):
+            return None
+
+        def release(self, *args, **kwargs):
+            return None
+
     sampling_policy_module = _sampling_policy_module(binding)
     monkeypatch.setattr(sampling_policy_module, "Sampling1D", FakeSampling1D)
+    # The family executors build their controller through the shared helper;
+    # the direct-composition executors build it in their own module.
+    monkeypatch.setattr(sampling_policy_module, "SamplingState1D", FakeSamplingState1D, raising=False)
+    monkeypatch.setattr(shared_model_executor, "Sampling1D", FakeSampling1D)
+    monkeypatch.setattr(shared_model_executor, "SamplingState1D", FakeSamplingState1D)
     model = binding.make_model()
     model.sampling = FakeSampling1D()
-    if binding.executor_module in (llama33_70b_executor, qwen3_32b_executor):
-
-        class FakeSamplingState1D:
-            def __init__(self, sampling, *, seed_manager_factory=None, history_width=None):
-                self.sampling = sampling
-                # Report the salting policy the executor asked its seed manager for.
-                self.seed_manager = SimpleNamespace(
-                    salt_duplicate_seeds=getattr(seed_manager_factory, "keywords", {}).get("salt_duplicate_seeds", True)
-                )
-
-            def create_state(self):
-                return SimpleNamespace(seed_state=SimpleNamespace(capacity=32))
-
-            def admit(self, *args, **kwargs):
-                return None
-
-            def decode_forward(self, *args, **kwargs):
-                return None
-
-            def release(self, *args, **kwargs):
-                return None
-
-        monkeypatch.setattr(sampling_policy_module, "SamplingState1D", FakeSamplingState1D)
     runtime_config = binding.make_runtime_config()
     runtime_config.disable_batched_prefill = runtime_disable
     config = replace(
@@ -1241,11 +1243,6 @@ def test_qwen3_generator_sampling_policy_controls_decode_topk_warmup(monkeypatch
     ],
 )
 def test_executor_call_contract(binding, method, positional, keyword_only):
-    if binding.executor_module not in (llama33_70b_executor, qwen3_32b_executor):
-        excluded = {"prompt_tokens", "output_tokens"}
-        if method not in ("decode_forward", "compile_decode"):
-            excluded.add("slot_remap")
-        keyword_only = [name for name in keyword_only if name not in excluded]
     signature = inspect.signature(getattr(binding.executor_class, method))
     parameters = signature.parameters
     required = {
@@ -1920,12 +1917,8 @@ def test_executor_cleanup_is_ordered_retryable_and_idempotent(binding, expect_er
     executor.program_compiler = _Owner("program")
     executor.config = SimpleNamespace(device_sampling_enabled=True)
     executor.model = SimpleNamespace(sampling=_Owner("sampling"))
-    if binding.executor_module in (llama33_70b_executor, qwen3_32b_executor):
-        executor.sampling_state_controller = _Owner("sampling-state")
-        executor.sampling_state = object()
-    else:
-        executor.sampling_state_controller = None
-        executor.sampling_state = None
+    executor.sampling_state_controller = _Owner("sampling-state")
+    executor.sampling_state = object()
     executor.kv_cache_manager = _Owner("kv")
 
     with expect_error(RuntimeError, "reader") as raised:
@@ -1938,10 +1931,10 @@ def test_executor_cleanup_is_ordered_retryable_and_idempotent(binding, expect_er
         "decode-external",
         "trace",
         "program",
+        "sampling-state",
+        "sampling",
+        "kv",
     ]
-    if binding.executor_module in (llama33_70b_executor, qwen3_32b_executor):
-        expected_order.append("sampling-state")
-    expected_order.extend(["sampling", "kv"])
     assert calls == expected_order
     assert tuple(error.args[0] for error in raised.value.cleanup_failures) == ("trace",)
     assert executor.terminal

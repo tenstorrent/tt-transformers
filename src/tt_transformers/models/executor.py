@@ -11,6 +11,7 @@ on a concrete model.
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
@@ -33,6 +34,8 @@ from tt_transformers.llm_runtime.warmup import (
     resolve_prefill_warmup_seq_lens,
 )
 from tt_transformers.modules.sampling.sampling_1d import Sampling1D
+from tt_transformers.modules.sampling.sampling_state_1d import SamplingState1D
+from tt_transformers.modules.sampling.seed_manager_1d import SeedManager1D
 
 
 @dataclass(frozen=True)
@@ -752,6 +755,29 @@ class ModelExecutor:
             raise RuntimeError(f"{owner_name} is terminal; construct a new executor")
         if self.prefill_runtime.transient_orphan_count or self.decode_runtime.transient_orphan_count:
             raise RuntimeError(f"{owner_name} has unreleased transient resources; clean up this executor")
+
+
+def create_sampling_state(model: Any, enabled: bool, *, salt_duplicate_seeds: bool) -> tuple[Any, Any]:
+    """Build the device sampling controller and its state, or ``(None, None)`` when disabled.
+
+    The controller owns request-scoped sampling state: per-request seeds for
+    prefill and decode sampling, and the penalty history.
+    """
+
+    if not enabled:
+        return None, None
+    sampling = getattr(model, "sampling", None)
+    if not isinstance(sampling, Sampling1D):
+        raise TypeError("device sampling requires model.sampling to be a Sampling1D")
+    is_resolved = getattr(getattr(sampling, "config", None), "is_resolved", None)
+    if not callable(is_resolved) or not is_resolved():
+        raise ValueError("model.sampling must have a resolved Sampling1DConfig")
+    controller = SamplingState1D(
+        sampling,
+        seed_manager_factory=functools.partial(SeedManager1D, salt_duplicate_seeds=salt_duplicate_seeds),
+        history_width=int(model.config.max_seq_len),
+    )
+    return controller, controller.create_state()
 
 
 def _raise_cleanup_failures(failures: list[BaseException], owner: str) -> None:
