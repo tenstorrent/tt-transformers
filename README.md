@@ -121,6 +121,8 @@ for other models. Accuracy and performance workloads use each model's separate
 - [Repository examples](https://github.com/tenstorrent/tt-transformers/blob/main/examples/README.md)
 - [Validation summary](https://github.com/tenstorrent/tt-transformers/blob/main/docs/validation.md)
 
+For the pending Qwen3.8 model stack, see the [Blackhole bring-up notes and external measurement evidence](docs/qwen38-blackhole-bringup.md).
+
 ## Development
 
 See [CONTRIBUTING.md](https://github.com/tenstorrent/tt-transformers/blob/main/CONTRIBUTING.md),
