@@ -1,0 +1,215 @@
+{
+  "schema": "external-qwen38-bringup-evidence/v1",
+  "qualification": "External tt-stack hardware measurement; does not qualify tt-transformers. No new hardware run was performed for this contribution.",
+  "source_master": "782434b31721d1232bda854c9848c5ff7b88caf5",
+  "source_record": "bench/runs/ttx-sweep32k-s12phv-1m-onestep-pack-l1234-ab20261103T194006Z-r0.jsonl",
+  "source_url": "https://git.bitp.cz/bitpartner/tt-stack/src/commit/782434b31721d1232bda854c9848c5ff7b88caf5/bench/runs/ttx-sweep32k-s12phv-1m-onestep-pack-l1234-ab20261103T194006Z-r0.jsonl",
+  "source_sha256": "20558c9e0d5057a62510cf2646b581053aa5b35f2440134e0693dfff3f555775",
+  "pp_definition": "concurrency * requested_prompt_tokens / ttft_max_s (requested token counts, not exact calibrated counts)",
+  "repetitions": 1,
+  "hardware": {
+    "physical_devices": "2 cabled Tenstorrent P150a",
+    "tp": 2,
+    "mesh": [
+      1,
+      2
+    ]
+  },
+  "model": "ThinkingCap G2 Qwen3.8-27B fine-tune; GPTQ-snapped packed bfp4 weights; K bfp8 / V bfp4; MTP",
+  "cells": [
+    {
+      "concurrency": 1,
+      "requested_prompt_tokens": 4096,
+      "actual_prompt_tokens": [
+        4103
+      ],
+      "output_tokens_per_request": 1024,
+      "ttft_max_s": 0.771,
+      "pp_tok_s": 5312.581,
+      "tg_tok_s_per_user": 68.073,
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 20,
+        "server_defaults": false,
+        "greedy": false,
+        "seed_base": 0,
+        "seeded": true
+      },
+      "all_streams_complete": true,
+      "record_utc": "2026-11-03T19:55:59Z",
+      "git": {
+        "commit": "a8e3549107a4502fc6a3d031081c5eb873db2c29",
+        "branch": "opus/cold-prefix-s10",
+        "dirty": false
+      },
+      "image_tag": "vllm-tt:k2-mr-pk3r",
+      "arm": "s12phv-1m-onestep-pack-l1234"
+    },
+    {
+      "concurrency": 1,
+      "requested_prompt_tokens": 32768,
+      "actual_prompt_tokens": [
+        32699
+      ],
+      "output_tokens_per_request": 1024,
+      "ttft_max_s": 4.443,
+      "pp_tok_s": 7375.197,
+      "tg_tok_s_per_user": 63.744,
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 20,
+        "server_defaults": false,
+        "greedy": false,
+        "seed_base": 0,
+        "seeded": true
+      },
+      "all_streams_complete": true,
+      "record_utc": "2026-11-03T19:55:59Z",
+      "git": {
+        "commit": "a8e3549107a4502fc6a3d031081c5eb873db2c29",
+        "branch": "opus/cold-prefix-s10",
+        "dirty": false
+      },
+      "image_tag": "vllm-tt:k2-mr-pk3r",
+      "arm": "s12phv-1m-onestep-pack-l1234"
+    },
+    {
+      "concurrency": 4,
+      "requested_prompt_tokens": 4096,
+      "actual_prompt_tokens": [
+        4096,
+        4100,
+        4094,
+        4076
+      ],
+      "output_tokens_per_request": 1024,
+      "ttft_max_s": 2.766,
+      "pp_tok_s": 5923.355,
+      "tg_tok_s_per_user": 75.115,
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 20,
+        "server_defaults": false,
+        "greedy": false,
+        "seed_base": 0,
+        "seeded": true
+      },
+      "all_streams_complete": true,
+      "record_utc": "2026-11-03T19:54:53Z",
+      "git": {
+        "commit": "a8e3549107a4502fc6a3d031081c5eb873db2c29",
+        "branch": "opus/cold-prefix-s10",
+        "dirty": false
+      },
+      "image_tag": "vllm-tt:k2-mr-pk3r",
+      "arm": "s12phv-1m-onestep-pack-l1234"
+    },
+    {
+      "concurrency": 4,
+      "requested_prompt_tokens": 32768,
+      "actual_prompt_tokens": [
+        32617,
+        32707,
+        32822,
+        32780
+      ],
+      "output_tokens_per_request": 1024,
+      "ttft_max_s": 18.158,
+      "pp_tok_s": 7218.416,
+      "tg_tok_s_per_user": 62.968,
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 20,
+        "server_defaults": false,
+        "greedy": false,
+        "seed_base": 0,
+        "seeded": true
+      },
+      "all_streams_complete": true,
+      "record_utc": "2026-11-03T19:54:53Z",
+      "git": {
+        "commit": "a8e3549107a4502fc6a3d031081c5eb873db2c29",
+        "branch": "opus/cold-prefix-s10",
+        "dirty": false
+      },
+      "image_tag": "vllm-tt:k2-mr-pk3r",
+      "arm": "s12phv-1m-onestep-pack-l1234"
+    },
+    {
+      "concurrency": 8,
+      "requested_prompt_tokens": 4096,
+      "actual_prompt_tokens": [
+        4104,
+        4086,
+        4101,
+        4089,
+        4089,
+        4091,
+        4087,
+        4103
+      ],
+      "output_tokens_per_request": 1024,
+      "ttft_max_s": 5.892,
+      "pp_tok_s": 5561.439,
+      "tg_tok_s_per_user": 60.777,
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 20,
+        "server_defaults": false,
+        "greedy": false,
+        "seed_base": 0,
+        "seeded": true
+      },
+      "all_streams_complete": true,
+      "record_utc": "2026-11-03T19:53:06Z",
+      "git": {
+        "commit": "a8e3549107a4502fc6a3d031081c5eb873db2c29",
+        "branch": "opus/cold-prefix-s10",
+        "dirty": false
+      },
+      "image_tag": "vllm-tt:k2-mr-pk3r",
+      "arm": "s12phv-1m-onestep-pack-l1234"
+    },
+    {
+      "concurrency": 8,
+      "requested_prompt_tokens": 32768,
+      "actual_prompt_tokens": [
+        32644,
+        32748,
+        32874,
+        32788,
+        32772,
+        32751,
+        32863,
+        32819
+      ],
+      "output_tokens_per_request": 1024,
+      "ttft_max_s": 36.591,
+      "pp_tok_s": 7164.166,
+      "tg_tok_s_per_user": 53.364,
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 20,
+        "server_defaults": false,
+        "greedy": false,
+        "seed_base": 0,
+        "seeded": true
+      },
+      "all_streams_complete": true,
+      "record_utc": "2026-11-03T19:53:06Z",
+      "git": {
+        "commit": "a8e3549107a4502fc6a3d031081c5eb873db2c29",
+        "branch": "opus/cold-prefix-s10",
+        "dirty": false
+      },
+      "image_tag": "vllm-tt:k2-mr-pk3r",
+      "arm": "s12phv-1m-onestep-pack-l1234"
+    }
+  ]
+}
