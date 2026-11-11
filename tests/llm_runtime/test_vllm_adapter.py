@@ -18,6 +18,7 @@ from tt_transformers.llm_runtime.vllm_adapter import (
     VLLMAdapter,
     VLLMAdapterConfig,
 )
+from tt_transformers.llm_runtime.vllm_facade import CompilingVLLMGeneratorFacade, VLLMGeneratorFacade
 from tt_transformers.models.llama3_8b import vllm_generator as llama3_generator_module
 from tt_transformers.models.llama3_8b.hf_generator import Llama3Executor
 from tt_transformers.models.llama3_8b.vllm_generator import Llama3Generator
@@ -727,17 +728,19 @@ def test_registered_generator_sizing_signature_has_no_compatibility_bag():
 
 @pytest.mark.host
 def test_registered_generator_compatibility_bags_exist_only_on_forward_methods():
-    variadic_keyword_methods = {
+    assert _variadic_keyword_methods(Llama3Generator) == {"prefill_forward", "decode_forward"}
+
+
+def _variadic_keyword_methods(generator_class):
+    # Walks inherited methods too: the delegation lives on the shared facade.
+    return {
         method_name
-        for method_name, method in vars(Llama3Generator).items()
-        if inspect.isfunction(method)
-        and any(
+        for method_name, method in inspect.getmembers(generator_class, inspect.isfunction)
+        if any(
             parameter.kind is inspect.Parameter.VAR_KEYWORD
             for parameter in inspect.signature(method).parameters.values()
         )
     }
-
-    assert variadic_keyword_methods == {"prefill_forward", "decode_forward"}
 
 
 class _ExplicitGeneratorTarget:
@@ -1216,3 +1219,98 @@ def test_every_v1_generator_forwards_remap_while_device_sampling_is_dormant(mode
     assert actual["slot_remap"] is remap
     assert actual["sampling_params"] is None
     assert actual["reload_inputs"] is True
+
+
+_SHARED_FACADE_METHODS = (
+    "model",
+    "model_args",
+    "mesh_device",
+    "cache_path",
+    "already_warmed_up_prefill",
+    "get_max_tokens_all_users",
+    "allocate_kv_cache",
+    "prefill_forward",
+    "decode_forward",
+    "read_decode_output",
+    "process_decode_output_host",
+    "warmup_model_prefill",
+    "warmup_model_decode",
+    "cleanup",
+    "_select_prefill_execution",
+    "_select_execution",
+)
+_COMPILE_METHODS = ("compile_prefill", "compile_decode")
+# A model overrides shared delegation only to wrap it; each entry calls super().
+_FACADE_OVERRIDES = {"llama33_70b": {"cleanup"}}
+_FACADES_WITHOUT_COMPILE = {"qwen25_72b", "qwen25_coder_32b", "qwen3_32b"}
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(("model", "class_name"), _V1_GENERATORS)
+def test_every_generator_delegates_through_the_shared_facade(model, class_name):
+    # A keyword added to a shared method then reaches every served model at once.
+    generator_class = getattr(import_module(f"tt_transformers.models.{model}.vllm_generator"), class_name)
+    assert issubclass(generator_class, VLLMGeneratorFacade)
+
+    overrides = _FACADE_OVERRIDES.get(model, set())
+    for method_name in _SHARED_FACADE_METHODS:
+        if method_name in overrides:
+            assert method_name in vars(generator_class), method_name
+        else:
+            assert inspect.getattr_static(generator_class, method_name) is inspect.getattr_static(
+                VLLMGeneratorFacade, method_name
+            ), method_name
+
+    has_compile = model not in _FACADES_WITHOUT_COMPILE
+    assert issubclass(generator_class, CompilingVLLMGeneratorFacade) is has_compile
+    for method_name in _COMPILE_METHODS:
+        if has_compile:
+            assert inspect.getattr_static(generator_class, method_name) is inspect.getattr_static(
+                CompilingVLLMGeneratorFacade, method_name
+            ), method_name
+        else:
+            assert not hasattr(generator_class, method_name), method_name
+
+    # What stays per model: the capability declaration and construction.
+    assert isinstance(vars(generator_class)["model_capabilities"], dict)
+    assert "initialize_vllm_model" in vars(generator_class)
+    assert generator_class.decode_input_update_contract == 1
+    assert generator_class.requires_prefill_trace_warmup is True
+    assert _variadic_keyword_methods(generator_class) == {"prefill_forward", "decode_forward"}
+
+
+class _WarmupTarget:
+    def __init__(self):
+        self.calls = []
+
+    def warmup_model_prefill(self, **kwargs):
+        self.calls.append(("warmup_model_prefill", kwargs))
+        return "prefill-warm"
+
+    def warmup_model_decode(self, **kwargs):
+        self.calls.append(("warmup_model_decode", kwargs))
+        return "decode-warm"
+
+    def cleanup(self):
+        self.calls.append(("cleanup", {}))
+        return "cleaned"
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(("model", "class_name"), _V1_GENERATORS)
+def test_every_generator_forwards_warmup_and_cleanup_verbatim(model, class_name):
+    generator_class = getattr(import_module(f"tt_transformers.models.{model}.vllm_generator"), class_name)
+    target = _WarmupTarget()
+    generator = generator_class(target, _adapter(request_state_fields=()))
+    prefill = {"kv_cache": "cache", "can_sample_on_device": True, "enable_trace": False}
+    decode = {**prefill, "max_batch_size": 4, "num_blocks": 64}
+
+    assert generator.warmup_model_prefill(**prefill) == "prefill-warm"
+    assert generator.warmup_model_decode(**decode) == "decode-warm"
+    assert generator.cleanup() == "cleaned"
+
+    assert target.calls == [
+        ("warmup_model_prefill", prefill),
+        ("warmup_model_decode", decode),
+        ("cleanup", {}),
+    ]
