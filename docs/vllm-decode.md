@@ -86,3 +86,29 @@ ordering and command handling with fake devices. It does not prove device
 accuracy or allocator safety. See the upstream
 [TraceCorrectness guide](https://github.com/tenstorrent/tt-metal/blob/main/tech_reports/AdvancedPerformanceOptimizationsForModels/TraceCorrectness.md)
 for the device trace requirements.
+
+## Deferred device sampling (structured outputs)
+
+vLLM builds a structured-output request's allowed-token mask after it submits
+the step's forward. A generator that declares `supports_device_grammar`
+splits such a step in two:
+
+1. `decode_forward(..., defer_device_sampling=True, read_from_device=False)`
+   runs the model body and returns an opaque payload. It takes no
+   `sampling_params` and changes no sampler state. The step's reload
+   commands, slot remap and token histories travel in the payload.
+2. `sample_deferred_decode(payload, sampling_params, grammar_bitmask=...)`
+   validates the mask, stages it, applies the captured commands and samples
+   through the grammar tail. It returns what an immediate device-sampled
+   `decode_forward(..., read_from_device=False)` returns.
+
+Only one payload can be pending, and no other trace replays until it is
+sampled. A failure after the body ran latches the runtime. A `None` mask
+samples through the same grammar tail with every token allowed, so a steady
+continuation never switches tails without a reload.
+
+`enable_device_grammar()` allocates the mask buffer before warmup. It leaves
+the feature off when the sampler's vocab shards would split a 32-token mask
+word, and `device_grammar_enabled` then reports `False`. Warmup with
+`can_sample_device_grammar=True` adds a grammar twin of every device-sampled
+decode case except logprobs ones.

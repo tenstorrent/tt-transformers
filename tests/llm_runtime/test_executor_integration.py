@@ -1228,6 +1228,7 @@ def test_qwen3_generator_sampling_policy_controls_decode_topk_warmup(monkeypatch
                 "reset_sampling_state",
                 "read_from_device",
                 "execution",
+                "defer_device_sampling",
             ],
         ),
         ("read_decode_output", ["self", "tt_out"], ["async_read"]),
@@ -1238,7 +1239,14 @@ def test_qwen3_generator_sampling_policy_controls_decode_topk_warmup(monkeypatch
         (
             "warmup_model_decode",
             ["self"],
-            ["kv_cache", "max_batch_size", "num_blocks", "can_sample_on_device", "enable_trace"],
+            [
+                "kv_cache",
+                "max_batch_size",
+                "num_blocks",
+                "can_sample_on_device",
+                "enable_trace",
+                "can_sample_device_grammar",
+            ],
         ),
     ],
 )
@@ -1271,6 +1279,8 @@ def test_executor_call_contract(binding, method, positional, keyword_only):
         "read_from_device": True,
         "async_read": False,
         "is_tokens": False,
+        "defer_device_sampling": False,
+        "can_sample_device_grammar": False,
     }
 
     assert list(parameters) == positional + keyword_only

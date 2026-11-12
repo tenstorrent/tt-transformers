@@ -670,6 +670,8 @@ def test_runtime_inactive_peer_is_cleaned_up_without_readmitting_survivor():
                 ("reload_page_table", inspect.Parameter.KEYWORD_ONLY, False),
                 ("reload_sampling_params", inspect.Parameter.KEYWORD_ONLY, False),
                 ("reset_sampling_state", inspect.Parameter.KEYWORD_ONLY, False),
+                ("grammar", inspect.Parameter.KEYWORD_ONLY, False),
+                ("deferred_forward", inspect.Parameter.KEYWORD_ONLY, False),
             ),
         ),
         (
@@ -1778,6 +1780,28 @@ def test_live_eager_decode_buffers_block_trace_until_read_completes(monkeypatch,
     with expect_error(RuntimeError, "read outstanding"):
         runtime.ensure_trace_safe()
     runtime._release_external_lease(runtime._external_by_host_id[id(pending.value)])
+    runtime.ensure_trace_safe()
+
+
+@pytest.mark.host
+def test_a_raw_output_handed_straight_to_host_processing_is_read_and_released(monkeypatch, expect_error):
+    """Synchronous plugin scheduling calls process_decode_output_host on the raw
+    output of decode_forward(read_from_device=False), without read_decode_output.
+    The output is read there and its lease released, so the next replay may run."""
+
+    runtime = make_runtime()
+    raw = object()
+    reads = []
+    monkeypatch.setattr(
+        runtime.config.output_reader, "read", lambda value, blocking: reads.append((value, blocking)) or "host"
+    )
+    monkeypatch.setattr(runtime, "_normalize_host_output", lambda host, is_tokens: (host, is_tokens))
+    runtime.consume(InvocationResult(raw, None, True), read_from_device=False)
+    with expect_error(RuntimeError, "read outstanding"):
+        runtime.ensure_trace_safe()
+
+    assert runtime.process_decode_output_host(raw, is_tokens=True) == ("host", True)
+    assert reads == [(raw, True)]
     runtime.ensure_trace_safe()
 
 

@@ -134,6 +134,8 @@ def test_execution_request_signatures_are_exact_and_aligned():
         *decode_contract,
         ("read_from_device", keyword_only, True),
     ]
+    compile_decode_contract = [*decode_contract, ("grammar", keyword_only, False)]
+    prepare_decode_contract = [*compile_decode_contract, ("deferred_forward", keyword_only, False)]
 
     def parameter_contract(method):
         return [
@@ -144,11 +146,11 @@ def test_execution_request_signatures_are_exact_and_aligned():
     for executor_type in (EagerExecutor, TracedExecutor):
         assert parameter_contract(executor_type.compile_prefill) == prefill_contract
         assert parameter_contract(executor_type.prefill_forward) == prefill_contract
-        assert parameter_contract(executor_type.compile_decode) == decode_contract
+        assert parameter_contract(executor_type.compile_decode) == compile_decode_contract
         assert parameter_contract(executor_type.decode_forward) == decode_forward_contract
 
     assert parameter_contract(EagerExecutor._prepare_prefill) == prefill_contract
-    assert parameter_contract(EagerExecutor._prepare_decode) == decode_contract
+    assert parameter_contract(EagerExecutor._prepare_decode) == prepare_decode_contract
     for method_name in ("compile_prefill", "prefill_forward", "compile_decode", "decode_forward"):
         assert inspect.signature(getattr(EagerExecutor, method_name)) == inspect.signature(
             getattr(TracedExecutor, method_name)

@@ -294,7 +294,15 @@ def make_coordinator(
         ("warmup_prefill", ("self", "kv_cache", "can_sample_on_device", "enable_trace")),
         (
             "warmup_decode",
-            ("self", "kv_cache", "max_batch_size", "num_blocks", "can_sample_on_device", "enable_trace"),
+            (
+                "self",
+                "kv_cache",
+                "max_batch_size",
+                "num_blocks",
+                "can_sample_on_device",
+                "enable_trace",
+                "can_sample_device_grammar",
+            ),
         ),
     ],
 )
@@ -303,9 +311,10 @@ def test_warmup_signatures_match_registered_plugin_contract(method_name, paramet
 
     assert tuple(parameters) == parameter_names
     assert parameters["self"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    optional = {"can_sample_device_grammar": False}
     for name in parameter_names[1:]:
         assert parameters[name].kind is inspect.Parameter.KEYWORD_ONLY
-        assert parameters[name].default is inspect.Parameter.empty
+        assert parameters[name].default is optional.get(name, inspect.Parameter.empty)
 
 
 @pytest.mark.host

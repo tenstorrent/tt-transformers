@@ -128,6 +128,17 @@ _CAPABILITY_KEYS: tuple[CapabilityKey, ...] = (
             "device penalty state (SamplingState1D) declare False."
         ),
     ),
+    CapabilityKey(
+        name="supports_device_grammar",
+        value_type="bool",
+        reader_default=False,
+        required=False,
+        doc=(
+            "Generator can sample structured-output (grammar-masked) decode steps on "
+            "device. Requires supports_sample_on_device. The plugin still keeps host "
+            "grammar unless the loaded generator reports device_grammar_enabled."
+        ),
+    ),
 )
 
 

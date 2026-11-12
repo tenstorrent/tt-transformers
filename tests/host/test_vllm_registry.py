@@ -66,7 +66,7 @@ PLUGIN_CAPABILITY_KEYS = {
     "tt_adaptive_block_output": "absent: block-output only",
     "tt_adaptive_block_max_prompt_tokens": "absent: block-output only",
     "tt_block_kv_extent_tokens": "absent: block-output only",
-    "supports_device_grammar": "absent: no generator declares it",
+    "supports_device_grammar": "any: declared when any generator declares it; the loaded generator gates it",
     "supports_spec_decode": "absent: no generator declares it",
     "supports_async_spec_decode": "absent: no generator declares it",
     "spec_requirements": "absent: speculative decoding only",
@@ -261,6 +261,9 @@ def test_a_checkpoint_is_served_only_under_its_own_architecture() -> None:
 def test_class_capabilities_are_the_intersection_of_the_generators(dispatcher) -> None:
     declared = [_declared_capabilities(entry) for entry in dispatcher.generators]
     shared = {key for key in declared[0] if all(caps.get(key) is True for caps in declared)}
+    gated = {key for key, policy in PLUGIN_CAPABILITY_KEYS.items() if policy.startswith("any:")}
+    shared -= gated
+    shared |= {key for key in gated if any(caps.get(key) is True for caps in declared)}
 
     assert dispatcher.model_capabilities == {key: True for key in shared}
 
@@ -270,7 +273,7 @@ def test_class_capabilities_are_the_intersection_of_the_generators(dispatcher) -
 def test_class_capabilities_cover_every_plugin_key(dispatcher) -> None:
     declared_keys = {key for key, policy in PLUGIN_CAPABILITY_KEYS.items() if policy == "declared"}
 
-    assert set(dispatcher.model_capabilities) == declared_keys
+    assert set(dispatcher.model_capabilities) - {"supports_device_grammar"} == declared_keys
     assert "fabric_config" not in dispatcher.model_capabilities
     assert "max_device_top_k" not in dispatcher.model_capabilities
 

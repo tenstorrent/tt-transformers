@@ -32,6 +32,7 @@ from tt_transformers.llm_runtime.config import (
     fit_paged_kv_num_blocks,
 )
 from tt_transformers.llm_runtime.decode import DecodeRuntime, DecodeRuntimeConfig
+from tt_transformers.llm_runtime.device_grammar import DeviceGrammarExecutorMixin
 from tt_transformers.llm_runtime.execution import EagerExecutor, TracedExecutor
 from tt_transformers.llm_runtime.output_reader import OutputReader
 from tt_transformers.llm_runtime.paged_kv_cache import PagedKVCacheManager
@@ -467,7 +468,7 @@ class Mistral7BExecutorConfig:
         validate_prefill_policy(self.sequential_prefill, self.fixed_prefill_batch_sizes)
 
 
-class Mistral7BExecutor:
+class Mistral7BExecutor(DeviceGrammarExecutorMixin):
     """Compose every runtime owner for one Mistral-7B execution lane.
 
     Construction wires one `PrefillRuntime`, `DecodeRuntime`,
@@ -848,12 +849,34 @@ class Mistral7BExecutor:
         reset_sampling_state: bool = False,
         read_from_device: bool = True,  # ↓ Output policy
         execution: EagerExecutor | TracedExecutor | None = None,  # ↓ Internal dispatch
+        defer_device_sampling: bool = False,  # ↓ Deferred device sampling
     ) -> Any:
-        """Validate ownership and execute one decode call."""
+        """Validate ownership and execute one decode call.
+
+        With ``defer_device_sampling`` only the model body runs; the returned
+        payload is sampled once by `sample_deferred_decode`.
+        """
 
         self._ensure_active()
         self._validate_bound_cache(kv_cache)
         self._ensure_sampling_for(sampling_params)
+        if defer_device_sampling:
+            return self._defer_decode(
+                execution or self._decode_execution,
+                sampling_params=sampling_params,
+                read_from_device=read_from_device,
+                tokens=tokens,
+                start_pos=start_pos,
+                page_table=page_table,
+                prompt_tokens=prompt_tokens,
+                output_tokens=output_tokens,
+                slot_remap=slot_remap,
+                reset_batch=reset_batch,
+                reload_inputs=reload_inputs,
+                reload_page_table=reload_page_table,
+                reload_sampling_params=reload_sampling_params,
+                reset_sampling_state=reset_sampling_state,
+            )
         return (execution or self._decode_execution).decode_forward(
             tokens=tokens,
             start_pos=start_pos,
@@ -942,6 +965,7 @@ class Mistral7BExecutor:
         num_blocks: int,
         can_sample_on_device: bool,  # ↓ Execution policy
         enable_trace: bool,
+        can_sample_device_grammar: bool = False,
     ) -> None:
         self._ensure_active()
         return self.warmup.warmup_decode(
@@ -950,6 +974,7 @@ class Mistral7BExecutor:
             num_blocks=num_blocks,
             can_sample_on_device=can_sample_on_device,
             enable_trace=enable_trace,
+            **(self._grammar_warmup_kwargs() if can_sample_device_grammar else {}),
         )
 
     def cleanup(self) -> None:

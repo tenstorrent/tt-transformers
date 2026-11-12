@@ -138,9 +138,14 @@ class VLLMGeneratorFacade:
         reload_sampling_params: bool = False,
         reset_sampling_state: bool = False,
         read_from_device: bool = True,  # ↓ Output policy
+        defer_device_sampling: bool = False,  # ↓ Deferred device sampling
         **compatibility_kwargs: Any,  # ↓ Compatibility
     ) -> Any:
-        """Normalize and dispatch one vLLM decode call."""
+        """Normalize and dispatch one vLLM decode call.
+
+        With ``defer_device_sampling=True`` the forward runs now and returns an
+        opaque payload for `sample_deferred_decode`.
+        """
 
         normalized, trace_requested = self._adapter.normalize_decode(
             tokens,
@@ -153,6 +158,8 @@ class VLLMGeneratorFacade:
             reload_page_table=reload_page_table,
             reload_sampling_params=reload_sampling_params,
             reset_sampling_state=reset_sampling_state,
+            defer_device_sampling=defer_device_sampling,
+            read_from_device=read_from_device,
             compatibility_kwargs=compatibility_kwargs,
         )
         execution = self._select_execution("decode", trace_requested)
@@ -161,6 +168,41 @@ class VLLMGeneratorFacade:
             read_from_device=read_from_device,
             **normalized,
         )
+
+    def sample_deferred_decode(
+        self,
+        payload: Any,
+        sampling_params: Any = None,
+        *,
+        grammar_bitmask: Any = None,
+    ) -> Any:
+        """Sample a deferred decode through the step's grammar mask (vLLM structured outputs)."""
+
+        return self.target.sample_deferred_decode(
+            payload,
+            sampling_params=sampling_params,
+            grammar_bitmask=grammar_bitmask,
+        )
+
+    def enable_device_grammar(self) -> None:
+        """Allocate grammar mask buffers before warmup, when this model declares the capability.
+
+        The architecture class vLLM registers declares device grammar when any of
+        its generators does, so a generator that does not declare it stays on
+        host grammar here.
+        """
+
+        if not self._declares_device_grammar():
+            return
+        enable = getattr(self.target, "enable_device_grammar", None)
+        if callable(enable):
+            enable()
+
+    @property
+    def device_grammar_enabled(self) -> bool:
+        """True only when this model declares grammar and every lane can apply a mask."""
+
+        return self._declares_device_grammar() and bool(getattr(self.target, "device_grammar_enabled", False))
 
     def read_decode_output(
         self,
@@ -205,13 +247,16 @@ class VLLMGeneratorFacade:
         num_blocks: int,
         can_sample_on_device: bool,  # ↓ Execution policy
         enable_trace: bool,
+        can_sample_device_grammar: bool = False,
     ) -> None:
+        grammar = {"can_sample_device_grammar": True} if can_sample_device_grammar else {}
         result = self.target.warmup_model_decode(
             kv_cache=kv_cache,
             max_batch_size=max_batch_size,
             num_blocks=num_blocks,
             can_sample_on_device=can_sample_on_device,
             enable_trace=enable_trace,
+            **grammar,
         )
         self._after_warmup()
         return result
@@ -222,6 +267,9 @@ class VLLMGeneratorFacade:
         return self.target.cleanup()
 
     # Private implementation
+
+    def _declares_device_grammar(self) -> bool:
+        return self.model_capabilities.get("supports_device_grammar", False) is True
 
     def _after_warmup(self) -> None:
         """Run after each successful warmup call; a model may override it."""
