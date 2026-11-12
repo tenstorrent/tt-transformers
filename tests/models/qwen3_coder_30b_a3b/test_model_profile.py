@@ -152,6 +152,8 @@ def test_moe_builder_selects_four_way_expert_parallelism(monkeypatch):
     assert captured["config"].prefill_gate_up_program_config.compute_with_storage_grid_size == ttnn.CoreCoord(6, 8)
     assert captured["config"].prefill_down_program_config.compute_with_storage_grid_size == ttnn.CoreCoord(8, 8)
     assert captured["config"].prefill_compute_kernel_config.math_fidelity == ttnn.MathFidelity.LoFi
+    assert captured["config"].prefill_sorted_min_tokens == 128
+    assert captured["config"].prefill_sorted_down_in0_block_w == 12
     assert captured["loaded"] is True
     assert all(w.source is None for w in (weights.router, weights.up_gate, weights.down))
 

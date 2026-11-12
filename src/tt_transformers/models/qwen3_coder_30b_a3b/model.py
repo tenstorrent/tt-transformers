@@ -207,6 +207,11 @@ def _build_moe(
                 fp32_dest_acc_en=False,
                 packer_l1_acc=False,
             ),
+            # expert-sorted prefill wins from 128 tokens (at 64 the chunked sparse prefill is still faster)
+            prefill_sorted_min_tokens=128,
+            prefill_sorted_max_tokens=4096,
+            prefill_sorted_gate_up_in0_block_w=precision.expert_prefill_gate_up_in0_block_w,
+            prefill_sorted_down_in0_block_w=precision.expert_prefill_down_in0_block_w,
         )
     )
     # Upload eagerly and drop the host copies: packed fp32 experts are ~2.4 GB per layer and would otherwise
