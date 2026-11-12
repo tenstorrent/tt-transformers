@@ -132,3 +132,52 @@ def test_grouped_matmul_reads_fresh_routing_on_program_cache_hits(ttnn_mesh_devi
         if call == 0:
             entries = dev.num_program_cache_entries()
     assert entries > 0 and dev.num_program_cache_entries() == entries
+
+
+@pytest.mark.device
+@pytest.mark.blackhole
+@pytest.mark.parametrize(
+    "ttnn_mesh_device",
+    [pytest.param({"mesh_shape": (1, 1), "trace_region_size": 8 << 20}, id="p150-1x1")],
+    indirect=True,
+)
+@pytest.mark.parametrize(
+    "k, n, untilize_out", [(2048, 1536, False), (768, 2048, True)], ids=["streamed", "resident-row-major"]
+)
+def test_grouped_matmul_replays_a_trace_with_new_routing(ttnn_mesh_device, k, n, untilize_out):
+    """One captured program serves any routing: new activations and group ids written into its inputs."""
+    dev, experts, groups = ttnn_mesh_device, 32, 40
+    op = GroupedExpertMatmul(
+        k, n, experts, ttnn.bfloat4_b, _config(), in0_block_w=4 if k == 768 else 16, untilize_out=untilize_out
+    )
+    weights_tt = ttnn.from_torch(
+        torch.randn(1, experts, k, n) * 0.03,
+        dtype=ttnn.bfloat4_b,
+        layout=ttnn.TILE_LAYOUT,
+        device=dev,
+        memory_config=ttnn.DRAM_MEMORY_CONFIG,
+    )
+    weights = ttnn.to_torch(weights_tt).float()
+
+    def host(x, ids):
+        return (
+            ttnn.from_torch(x, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT),
+            ttnn.from_torch(ids.reshape(1, -1).int(), dtype=ttnn.uint16, layout=ttnn.ROW_MAJOR_LAYOUT),
+        )
+
+    x_tt, ids_tt = (
+        t.to(dev, ttnn.DRAM_MEMORY_CONFIG) for t in host(torch.zeros(1, groups, 32, k), _group_ids(experts, groups, 0))
+    )
+    op(x_tt, weights_tt, ids_tt)  # compile before capture
+    trace = ttnn.begin_trace_capture(dev, cq_id=0)
+    out = op(x_tt, weights_tt, ids_tt)
+    ttnn.end_trace_capture(dev, trace, cq_id=0)
+    try:
+        for seed in (20, 21):
+            x, ids = torch.randn(1, groups, 32, k).bfloat16(), _group_ids(experts, groups, seed)
+            for source, target in zip(host(x, ids), (x_tt, ids_tt)):
+                ttnn.copy_host_to_device_tensor(source, target)
+            ttnn.execute_trace(dev, trace, cq_id=0, blocking=True)
+            _check(ttnn.to_torch(out).float(), x, weights, ids, experts)
+    finally:
+        ttnn.release_trace(dev, trace)
