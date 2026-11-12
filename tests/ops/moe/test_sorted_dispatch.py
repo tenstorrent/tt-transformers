@@ -188,3 +188,63 @@ def test_ops_read_fresh_buffers_on_program_cache_hits(ttnn_mesh_device, request)
         if call == 0:
             entries = dev.num_program_cache_entries()
     assert entries > 0 and dev.num_program_cache_entries() == entries
+
+
+@pytest.mark.device
+@pytest.mark.blackhole
+@pytest.mark.parametrize(
+    "ttnn_mesh_device",
+    [pytest.param({"mesh_shape": (1, 1), "trace_region_size": 8 << 20}, id="p150-1x1")],
+    indirect=True,
+)
+def test_ops_replay_a_trace_with_new_routing(ttnn_mesh_device):
+    """One captured dispatch -> gather -> un-dispatch serves any routing written into its inputs."""
+    dev, tokens, hidden, k, experts, local = ttnn_mesh_device, 96, 2048, 8, 128, 32
+    rows = dispatch_rows(tokens, k, local)
+
+    def host(ids, scores, x, expert_rows):
+        return (
+            ttnn.from_torch(ids, dtype=ttnn.uint16, layout=ttnn.TILE_LAYOUT),
+            ttnn.from_torch(scores, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT),
+            ttnn.from_torch(x, dtype=ttnn.bfloat16, layout=ttnn.ROW_MAJOR_LAYOUT),
+            ttnn.from_torch(expert_rows, dtype=ttnn.bfloat16, layout=ttnn.ROW_MAJOR_LAYOUT),
+        )
+
+    ids, scores = _routing(tokens, k, experts, local, seed=6)
+    inputs = [
+        t.to(dev, ttnn.DRAM_MEMORY_CONFIG)
+        for t in host(ids, scores, torch.zeros(tokens, hidden), torch.zeros(rows, hidden))
+    ]
+    ids_tt, scores_tt, x_tt, expert_rows_tt = inputs
+
+    def chain():
+        src_tok, weights, group_ids, undispatch = sorted_dispatch(ids_tt, scores_tt, local, rows=rows)
+        gathered = gather_rows(x_tt, src_tok, group_ids, local)
+        summed = gather_add_rows(expert_rows_tt, undispatch, tokens, k)
+        return src_tok, weights, group_ids, undispatch, gathered, summed
+
+    chain()  # compile before capture
+    trace = ttnn.begin_trace_capture(dev, cq_id=0)
+    outputs = chain()
+    ttnn.end_trace_capture(dev, trace, cq_id=0)
+    try:
+        for seed in (7, 8):
+            ids, scores = _routing(tokens, k, experts, local, seed)
+            x, expert_rows = torch.randn(tokens, hidden).bfloat16(), torch.randn(rows, hidden).bfloat16()
+            for source, target in zip(host(ids, scores, x, expert_rows), inputs):
+                ttnn.copy_host_to_device_tensor(source, target)
+            ttnn.execute_trace(dev, trace, cq_id=0, blocking=True)
+            src_tok, weights, group_ids, undispatch = _reference_dispatch(ids, scores, local, rows)
+            assert torch.equal(_host(outputs[0]), src_tok) and torch.equal(_host(outputs[2]), group_ids), seed
+            assert torch.equal(_host(outputs[1], torch.bfloat16), weights) and torch.equal(
+                _host(outputs[3]), undispatch
+            )
+            real = (group_ids < local).nonzero().flatten()
+            gathered = ttnn.to_torch(outputs[4]).reshape(-1, GROUP, hidden)
+            assert torch.equal(gathered[real], x[src_tok].reshape(-1, GROUP, hidden)[real]), seed
+            routed_here = (ids < local).reshape(-1, 1)
+            reference = (expert_rows[undispatch].float() * routed_here).reshape(tokens, k, hidden).sum(1)
+            got = ttnn.to_torch(outputs[5]).float().reshape(tokens, hidden)
+            assert torch.allclose(got, reference, atol=0.1, rtol=0.02), seed
+    finally:
+        ttnn.release_trace(dev, trace)
