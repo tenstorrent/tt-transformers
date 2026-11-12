@@ -79,6 +79,12 @@ _SHARED_CAPABILITIES: dict[str, Any] = {
     "supports_chunked_prefill": True,
 }
 
+# Declared by an architecture class when any of its generators declares it. The
+# plugin admits device grammar from the class, then keeps host grammar for a
+# loaded generator whose ``device_grammar_enabled`` is False, and a generator
+# that does not declare the key never enables it.
+_RUNTIME_GATED_CAPABILITIES: dict[str, Any] = {"supports_device_grammar": True}
+
 
 class _ArchitectureDispatcher:
     """Select a generator by exact Hugging Face id for one vLLM architecture."""
@@ -168,6 +174,7 @@ class _ArchitectureDispatcher:
 
 class LlamaForCausalLM(_ArchitectureDispatcher):
     architecture = "LlamaForCausalLM"
+    model_capabilities = {**_SHARED_CAPABILITIES, **_RUNTIME_GATED_CAPABILITIES}
     generators = (
         _entry("meta-llama/Llama-3.2-1B-Instruct", "llama32_1b", "Llama32_1BGenerator"),
         _entry("meta-llama/Llama-3.2-3B-Instruct", "llama32_3b", "Llama32_3BGenerator"),
@@ -178,6 +185,7 @@ class LlamaForCausalLM(_ArchitectureDispatcher):
 
 class Qwen2ForCausalLM(_ArchitectureDispatcher):
     architecture = "Qwen2ForCausalLM"
+    model_capabilities = {**_SHARED_CAPABILITIES, **_RUNTIME_GATED_CAPABILITIES}
     generators = (
         _entry("Qwen/Qwen2-7B-Instruct", "qwen2_7b", "Qwen2Generator"),
         _entry("Qwen/Qwen2.5-7B-Instruct", "qwen25_7b", "Qwen25Generator"),
@@ -198,9 +206,11 @@ class Qwen3ForCausalLM(_ArchitectureDispatcher):
 
 class MistralForCausalLM(_ArchitectureDispatcher):
     architecture = "MistralForCausalLM"
+    model_capabilities = {**_SHARED_CAPABILITIES, **_RUNTIME_GATED_CAPABILITIES}
     generators = (_entry("mistralai/Mistral-7B-Instruct-v0.3", "mistral_7b", "Mistral7BGenerator"),)
 
 
 class Phi3ForCausalLM(_ArchitectureDispatcher):
     architecture = "Phi3ForCausalLM"
+    model_capabilities = {**_SHARED_CAPABILITIES, **_RUNTIME_GATED_CAPABILITIES}
     generators = (_entry("microsoft/phi-4", "phi4", "Phi4Generator"),)
