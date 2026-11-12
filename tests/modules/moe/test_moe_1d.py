@@ -164,7 +164,7 @@ def _layer(seed, hidden, intermediate, experts, shared):
     )
 
 
-def _module(device, layer, k, parallelism, gate_first):
+def _module(device, layer, k, parallelism, gate_first, **config):
     weights = moe_weights_from_hf(
         layer["router"],
         layer["gate"],
@@ -176,7 +176,9 @@ def _module(device, layer, k, parallelism, gate_first):
         shared_expert=layer["shared"],
         gate_first=gate_first,
     )
-    config = MoE1DConfig(**weights.__dict__, k=k, parallelism=parallelism, gate_first=gate_first, mesh_device=device)
+    config = MoE1DConfig(
+        **weights.__dict__, k=k, parallelism=parallelism, gate_first=gate_first, mesh_device=device, **config
+    )
     return MoE1D.from_config(config)
 
 
@@ -205,13 +207,28 @@ def fresh_fused_decode_cache():
     [("tensor", False, False), ("tensor", False, True), ("expert", True, False)],
     ids=["tensor", "tensor-shared", "expert-gate-first"],
 )
-@pytest.mark.parametrize("mode, seq_len", [("decode", 1), ("decode", 32), ("prefill", 48), ("prefill", 64)])
+@pytest.mark.parametrize(
+    "mode, seq_len, sorted_prefill",
+    [
+        ("decode", 1, None),
+        ("decode", 32, None),
+        ("prefill", 48, None),
+        ("prefill", 64, None),
+        ("prefill", 48, 4096),
+        ("prefill", 300, 128),
+    ],
+    ids=["decode-1", "decode-32", "prefill-48", "prefill-64", "sorted-48", "sorted-300-in-128s"],
+)
 def test_moe_1d_matches_torch(
-    ttnn_mesh_device, fresh_fused_decode_cache, parallelism, gate_first, shared, mode, seq_len
+    ttnn_mesh_device, fresh_fused_decode_cache, parallelism, gate_first, shared, mode, seq_len, sorted_prefill
 ):
+    """sorted_prefill: the expert-sorted prefill in slices of that many tokens (None: the chunked sparse prefill)."""
     hidden, intermediate, experts, k = 2048, 128, 64, 8
     layer = _layer(7, hidden, intermediate, experts, shared)
-    module = _module(ttnn_mesh_device, layer, k, parallelism, gate_first)
+    sorted_config = (
+        dict(prefill_sorted_min_tokens=1, prefill_sorted_max_tokens=sorted_prefill) if sorted_prefill else {}
+    )
+    module = _module(ttnn_mesh_device, layer, k, parallelism, gate_first, **sorted_config)
     x = torch.randn(1, 1, seq_len, hidden, generator=torch.Generator().manual_seed(8)).bfloat16()
     output = _run(ttnn_mesh_device, module, x, mode)
     pcc = _pcc(output, _reference(x, layer, k))
@@ -239,13 +256,20 @@ def test_moe_1d_layers_share_one_fused_decode(ttnn_mesh_device, fresh_fused_deco
     [pytest.param({"mesh_shape": (1, 4), "fabric_config": ttnn.FabricConfig.FABRIC_1D_RING}, id="p150x4-1x4-ring")],
     indirect=True,
 )
-@pytest.mark.parametrize("mode, seq_len", [("decode", 1), ("decode", 32), ("prefill", 48)])
+@pytest.mark.parametrize(
+    "mode, seq_len, sorted_prefill",
+    [("decode", 1, None), ("decode", 32, None), ("prefill", 48, None), ("prefill", 300, 128)],
+    ids=["decode-1", "decode-32", "prefill-48", "sorted-300-in-128s"],
+)
 def test_moe_1d_expert_parallel_across_devices(
-    ttnn_mesh_device, require_blackhole_mesh_device, fresh_fused_decode_cache, mode, seq_len
+    ttnn_mesh_device, require_blackhole_mesh_device, fresh_fused_decode_cache, mode, seq_len, sorted_prefill
 ):
     """Each die holds a quarter of the experts; the reduce-scattered partials sum to the full MoE output."""
     hidden, intermediate, experts, k = 2048, 128, 64, 8
     layer = _layer(12, hidden, intermediate, experts, shared=False)
+    sorted_config = (
+        dict(prefill_sorted_min_tokens=1, prefill_sorted_max_tokens=sorted_prefill) if sorted_prefill else {}
+    )
     weights = moe_weights_from_hf(
         layer["router"],
         layer["gate"],
@@ -256,15 +280,24 @@ def test_moe_1d_expert_parallel_across_devices(
         weight_dtype=ttnn.bfloat8_b,
         gate_first=True,
     )
-    config = MoE1DConfig(**weights.__dict__, k=k, parallelism="expert", gate_first=True, mesh_device=ttnn_mesh_device)
-    module = MoE1D.from_config(config)
+    module = MoE1D.from_config(
+        MoE1DConfig(
+            **weights.__dict__,
+            k=k,
+            parallelism="expert",
+            gate_first=True,
+            mesh_device=ttnn_mesh_device,
+            **sorted_config,
+        )
+    )
     x = torch.randn(1, 1, seq_len, hidden, generator=torch.Generator().manual_seed(13)).bfloat16()
+    memory_config = ttnn.L1_MEMORY_CONFIG if mode == "decode" else ttnn.DRAM_MEMORY_CONFIG
     x_tt = ttnn.from_torch(
         x,
         dtype=ttnn.bfloat16,
         layout=ttnn.TILE_LAYOUT,
         device=ttnn_mesh_device,
-        memory_config=ttnn.L1_MEMORY_CONFIG if mode == "decode" else ttnn.DRAM_MEMORY_CONFIG,
+        memory_config=memory_config,
         mesh_mapper=ttnn.ReplicateTensorToMesh(ttnn_mesh_device),
     )
     out = module(x_tt, mode)
@@ -287,9 +320,19 @@ def test_moe_1d_expert_parallel_across_devices(
     ],
     indirect=["ttnn_mesh_device"],
 )
-@pytest.mark.parametrize("mode, seq_len", [("decode", 1), ("decode", 32), ("prefill", 128)])
+@pytest.mark.parametrize(
+    "mode, seq_len, sorted_prefill",
+    [("decode", 1, False), ("decode", 32, False), ("prefill", 128, False), ("prefill", 128, True)],
+    ids=["decode-1", "decode-32", "prefill-128", "sorted-prefill-128"],
+)
 def test_moe_1d_replays_a_trace_with_new_inputs(
-    ttnn_mesh_device, require_blackhole_mesh_device, fresh_fused_decode_cache, parallelism, mode, seq_len
+    ttnn_mesh_device,
+    require_blackhole_mesh_device,
+    fresh_fused_decode_cache,
+    parallelism,
+    mode,
+    seq_len,
+    sorted_prefill,
 ):
     hidden, intermediate, experts, k = 2048, 128, 64, 8
     devices = ttnn_mesh_device.get_num_devices()
@@ -307,7 +350,12 @@ def test_moe_1d_replays_a_trace_with_new_inputs(
         gate_first=not shared,
     )
     config = MoE1DConfig(
-        **weights.__dict__, k=k, parallelism=parallelism, gate_first=not shared, mesh_device=ttnn_mesh_device
+        **weights.__dict__,
+        k=k,
+        parallelism=parallelism,
+        gate_first=not shared,
+        mesh_device=ttnn_mesh_device,
+        prefill_sorted_min_tokens=1 if sorted_prefill else None,
     )
     module = MoE1D.from_config(config)
     memory_config = ttnn.L1_MEMORY_CONFIG if mode == "decode" else ttnn.DRAM_MEMORY_CONFIG

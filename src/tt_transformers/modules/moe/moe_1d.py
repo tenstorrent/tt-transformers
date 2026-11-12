@@ -25,6 +25,8 @@ from tt_transformers.modules.tt_ccl import (
     get_tt_ccl,
 )
 from tt_transformers.ops.moe.fused_decode import FusedMoEDecode, SharedExpert, round_sig, router_weight
+from tt_transformers.ops.moe.grouped_matmul import GroupedExpertMatmul
+from tt_transformers.ops.moe.sorted_dispatch import GROUP, dispatch_rows, gather_add_rows, gather_rows, sorted_dispatch
 
 MoEParallelism = Literal["tensor", "expert"]
 TILE = 32
@@ -233,10 +235,16 @@ class MoE1DConfig:
     prefill_output_tile: ttnn.Tile | None = None
     decode_reduce_chunks_per_sync: int = 1
     decode_reduce_num_workers_per_link: int = 1
+    # expert-sorted routed prefill from this many tokens (None: always the chunked sparse prefill), in slices of at
+    # most prefill_sorted_max_tokens, with these K-blocks for the grouped gate|up and down matmuls
+    prefill_sorted_min_tokens: int | None = None
+    prefill_sorted_max_tokens: int = 4096
+    prefill_sorted_gate_up_in0_block_w: int = 16
+    prefill_sorted_down_in0_block_w: int = 4
 
 
 class MoE1D(LightweightModule):
-    """Mixture-of-experts layer with fused decode and chunked sparse prefill."""
+    """Mixture-of-experts layer with fused decode, and chunked sparse or expert-sorted prefill."""
 
     def __init__(
         self,
@@ -297,6 +305,9 @@ class MoE1D(LightweightModule):
             if cfg.parallelism == "tensor"
             else self._routing_matrix_expert_parallel
         )
+        self._local_experts = cfg.num_experts if cfg.parallelism == "tensor" else cfg.experts_per_device
+        if cfg.prefill_sorted_min_tokens is not None:
+            self._sorted_gate_up, self._sorted_down = _grouped_matmuls(cfg, self._local_experts)
         if cfg.mesh_device.get_num_devices() == 1:
             self._reduce_decode = self._clone_decode
             self._reduce_prefill = self._clone_prefill
@@ -314,6 +325,8 @@ class MoE1D(LightweightModule):
         if self.config.shared_up_gate is not None:
             self.shared_up_gate = self.config.shared_up_gate.get_device_weight()
             self.shared_down = self.config.shared_down.get_device_weight()
+        if self.config.prefill_sorted_min_tokens is not None and self.config.parallelism == "expert":
+            self._expert_offset = _expert_offsets(self.config.mesh_device, self._local_experts)
         self._device_weights_loaded = True
 
     def decode_forward(self, x: ttnn.Tensor | LazyWeight) -> ttnn.Tensor:
@@ -351,7 +364,13 @@ class MoE1D(LightweightModule):
             shared_down=self.shared_down,
         )
 
+    def _use_sorted(self, x: ttnn.Tensor) -> bool:
+        minimum = self.config.prefill_sorted_min_tokens
+        return minimum is not None and x.shape[-2] >= minimum
+
     def _prefill_routed(self, x: ttnn.Tensor) -> ttnn.Tensor:
+        if self._use_sorted(x):
+            return self._sorted_prefill(x)
         logits = ttnn.linear(x, self.router, memory_config=ttnn.DRAM_MEMORY_CONFIG)
         routed = self._routed_prefill(x, logits)
         ttnn.deallocate(logits)
@@ -360,7 +379,7 @@ class MoE1D(LightweightModule):
     def _prefill_shared(self, x: ttnn.Tensor) -> ttnn.Tensor:
         cfg = self.config
         logits = ttnn.linear(x, self.router, memory_config=ttnn.DRAM_MEMORY_CONFIG)
-        routed = self._routed_prefill(x, logits)
+        routed = self._sorted_prefill(x) if self._use_sorted(x) else self._routed_prefill(x, logits)
         gate_logit = ttnn.slice(logits, (0, 0, 0, cfg.num_experts), (1, 1, x.shape[-2], cfg.num_experts + 1))
         gate = ttnn.sigmoid(gate_logit)
         expert = self._dense_expert_prefill(x, self.shared_up_gate, self.shared_down)
@@ -380,6 +399,89 @@ class MoE1D(LightweightModule):
         for tensor in (expert_logits, values, indices, weights, routing):
             ttnn.deallocate(tensor)
         return output
+
+    def _sorted_prefill(self, x: ttnn.Tensor) -> ttnn.Tensor:
+        """Routed experts over the tokens in slices of at most prefill_sorted_max_tokens."""
+        cfg = self.config
+        tokens, step = x.shape[-2], cfg.prefill_sorted_max_tokens
+        if tokens <= step:
+            return self._sorted_slice(x)
+        pieces = []
+        for start in range(0, tokens, step):
+            end = min(tokens, start + step)
+            piece = ttnn.slice(x, (0, 0, start, 0), (1, 1, end, cfg.hidden), memory_config=ttnn.DRAM_MEMORY_CONFIG)
+            pieces.append(self._sorted_slice(piece))
+            _deallocate_if_distinct(piece, x)
+        output = ttnn.concat(pieces, dim=2, memory_config=cfg.prefill_output_memcfg)
+        for piece in pieces:
+            ttnn.deallocate(piece)
+        return output
+
+    def _sorted_slice(self, x: ttnn.Tensor) -> ttnn.Tensor:
+        """Dispatch the routed (token, slot) pairs expert by expert, run each 32-row group through its expert, and
+        sum each token's weighted expert outputs back: this device's routed partial [1, 1, T, H]."""
+        cfg, local = self.config, self._local_experts
+        tokens, groups_rows = x.shape[-2], dispatch_rows(x.shape[-2], cfg.k, local)
+        ids, scores = self._sorted_routing(x)
+        src_tok, weights, group_ids, undispatch = sorted_dispatch(ids, scores, local, rows=groups_rows)
+        groups = group_ids.shape[-1]
+        for tensor in (ids, scores):
+            ttnn.deallocate(tensor)
+
+        rows = ttnn.to_layout(ttnn.reshape(x, (tokens, cfg.hidden)), ttnn.ROW_MAJOR_LAYOUT)
+        gathered = gather_rows(rows, src_tok, group_ids, local)
+        ttnn.deallocate(rows)
+        ttnn.deallocate(src_tok)
+        projected = self._sorted_gate_up(gathered, self.up_gate, group_ids)
+        ttnn.deallocate(gathered)
+        activated = self._activate_gate_up(projected)
+        ttnn.deallocate(projected)
+        row_weights = ttnn.to_layout(ttnn.reshape(weights, (1, groups, GROUP, 1)), ttnn.TILE_LAYOUT)
+        ttnn.deallocate(weights)
+        weighted = ttnn.multiply(activated, row_weights, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+        ttnn.deallocate(activated)
+        ttnn.deallocate(row_weights)
+        expert_out = self._sorted_down(weighted, self.down, group_ids)
+        ttnn.deallocate(weighted)
+        ttnn.deallocate(group_ids)
+        if not self._sorted_down.untilize_out:
+            tiled, expert_out = expert_out, ttnn.to_layout(expert_out, ttnn.ROW_MAJOR_LAYOUT)
+            ttnn.deallocate(tiled)
+        output = gather_add_rows(
+            ttnn.reshape(expert_out, (groups_rows, cfg.hidden)),
+            undispatch,
+            tokens,
+            cfg.k,
+            memory_config=cfg.prefill_output_memcfg,
+        )
+        ttnn.deallocate(expert_out)
+        ttnn.deallocate(undispatch)
+        return output
+
+    def _sorted_routing(self, x: ttnn.Tensor) -> tuple[ttnn.Tensor, ttnn.Tensor]:
+        """Top-k ids local to this device (others: local_experts, routed elsewhere) and their softmax weights."""
+        cfg, tokens = self.config, x.shape[-2]
+        logits = ttnn.linear(x, self.router, dtype=ttnn.float32, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+        expert_logits = ttnn.slice(logits, (0, 0, 0, 0), (1, 1, tokens, cfg.num_experts))
+        ttnn.deallocate(logits)
+        values, indices = ttnn.topk(expert_logits, k=cfg.k, dim=-1)
+        ttnn.deallocate(expert_logits)
+        probabilities = ttnn.softmax(values, dim=-1, numeric_stable=True)
+        scores = ttnn.typecast(probabilities, ttnn.bfloat16)
+        ttnn.deallocate(values)
+        ttnn.deallocate(probabilities)
+        if cfg.parallelism == "tensor":
+            return indices, scores
+        global_ids = ttnn.typecast(ttnn.typecast(indices, ttnn.uint32), ttnn.float32)
+        ttnn.deallocate(indices)
+        local = ttnn.sub(global_ids, self._expert_offset)
+        ttnn.deallocate(global_ids)
+        here = ttnn.logical_and(ttnn.ge(local, 0.0), ttnn.lt(local, float(self._local_experts)))
+        kept = ttnn.where(here, local, float(self._local_experts))
+        ids = ttnn.typecast(kept, ttnn.uint32)
+        for tensor in (local, here, kept):
+            ttnn.deallocate(tensor)
+        return ids, scores
 
     def _routing_matrix_tensor_parallel(self, weights: ttnn.Tensor, indices: ttnn.Tensor) -> ttnn.Tensor:
         cfg = self.config
@@ -666,6 +768,10 @@ def resolve_moe1d_config(config: MoE1DConfig) -> MoE1DConfig:
     )
     if prefill_num_reduce_scatter_links <= 0:
         raise ValueError("prefill_num_reduce_scatter_links must be positive")
+    if config.prefill_sorted_min_tokens is not None and config.prefill_sorted_min_tokens <= 0:
+        raise ValueError("prefill_sorted_min_tokens must be positive (or None to disable the sorted prefill)")
+    if config.prefill_sorted_max_tokens <= 0 or config.prefill_sorted_max_tokens % TILE:
+        raise ValueError("prefill_sorted_max_tokens must be a positive multiple of 32")
 
     local_experts = num_experts if config.parallelism == "tensor" else experts_per_device
     live_fraction = 1.0 - (1.0 - 1.0 / num_experts) ** (config.prefill_chunk_size * config.k)
@@ -754,6 +860,38 @@ def resolve_moe1d_config(config: MoE1DConfig) -> MoE1DConfig:
         prefill_down_program_config=prefill_down_program_config,
         prefill_compute_kernel_config=prefill_compute_kernel_config,
         prefill_output_tile=config.prefill_output_tile or ttnn.Tile([TILE, TILE]),
+    )
+
+
+def _grouped_matmuls(cfg: MoE1DConfig, local_experts: int) -> tuple[GroupedExpertMatmul, GroupedExpertMatmul]:
+    """The sorted prefill's gate|up and down matmuls; down writes ROW_MAJOR rows when its weights stay resident."""
+    compute = cfg.prefill_compute_kernel_config
+    gate_up = GroupedExpertMatmul(
+        cfg.hidden,
+        2 * cfg.intermediate,
+        local_experts,
+        cfg.up_gate.dtype,
+        compute,
+        in0_block_w=cfg.prefill_sorted_gate_up_in0_block_w,
+    )
+    down_args = (cfg.intermediate, cfg.hidden, local_experts, cfg.down.dtype, compute)
+    down = GroupedExpertMatmul(*down_args, in0_block_w=cfg.prefill_sorted_down_in0_block_w)
+    if down.resident:
+        down = GroupedExpertMatmul(*down_args, in0_block_w=cfg.prefill_sorted_down_in0_block_w, untilize_out=True)
+    return gate_up, down
+
+
+def _expert_offsets(mesh_device: ttnn.MeshDevice, local_experts: int) -> ttnn.Tensor:
+    """[1, 1, 1, 1] FP32 per device: the global id of its first expert."""
+    num_devices = mesh_device.get_num_devices()
+    offsets = torch.arange(num_devices, dtype=torch.float32).mul(local_experts).reshape(num_devices, 1, 1, 1)
+    return ttnn.from_torch(
+        offsets,
+        dtype=ttnn.float32,
+        layout=ttnn.TILE_LAYOUT,
+        device=mesh_device,
+        memory_config=ttnn.DRAM_MEMORY_CONFIG,
+        mesh_mapper=ttnn.ShardTensorToMesh(mesh_device, dim=0) if num_devices > 1 else None,
     )
 
 
