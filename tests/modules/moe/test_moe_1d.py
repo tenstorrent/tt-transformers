@@ -271,3 +271,64 @@ def test_moe_1d_expert_parallel_across_devices(
     output = ttnn.to_torch(out, mesh_composer=ttnn.ConcatMeshToTensor(ttnn_mesh_device, dim=3)).float()
     pcc = _pcc(output[0, 0, :seq_len], _reference(x, layer, k))
     assert pcc > 0.99, pcc
+
+
+@pytest.mark.device
+@pytest.mark.blackhole
+@pytest.mark.parametrize(
+    "ttnn_mesh_device, parallelism",
+    [
+        pytest.param({"mesh_shape": (1, 1), "trace_region_size": 32 << 20}, "tensor", id="p150-1x1-tensor-shared"),
+        pytest.param(
+            {"mesh_shape": (1, 4), "trace_region_size": 32 << 20, "fabric_config": ttnn.FabricConfig.FABRIC_1D_RING},
+            "expert",
+            id="p150x4-1x4-ring-expert",
+        ),
+    ],
+    indirect=["ttnn_mesh_device"],
+)
+@pytest.mark.parametrize("mode, seq_len", [("decode", 1), ("prefill", 128)])
+def test_moe_1d_replays_a_trace_with_new_inputs(
+    ttnn_mesh_device, require_blackhole_mesh_device, fresh_fused_decode_cache, parallelism, mode, seq_len
+):
+    hidden, intermediate, experts, k = 2048, 128, 64, 8
+    devices = ttnn_mesh_device.get_num_devices()
+    shared = parallelism == "tensor"
+    layer = _layer(14, hidden, intermediate, experts, shared=shared)
+    weights = moe_weights_from_hf(
+        layer["router"],
+        layer["gate"],
+        layer["up"],
+        layer["down"],
+        num_devices=devices,
+        parallelism=parallelism,
+        weight_dtype=ttnn.bfloat8_b,
+        shared_expert=layer["shared"],
+        gate_first=not shared,
+    )
+    config = MoE1DConfig(
+        **weights.__dict__, k=k, parallelism=parallelism, gate_first=not shared, mesh_device=ttnn_mesh_device
+    )
+    module = MoE1D.from_config(config)
+    memory_config = ttnn.L1_MEMORY_CONFIG if mode == "decode" else ttnn.DRAM_MEMORY_CONFIG
+    replicate = ttnn.ReplicateTensorToMesh(ttnn_mesh_device) if devices > 1 else None
+
+    def host(x):
+        return ttnn.from_torch(x, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT, mesh_mapper=replicate)
+
+    x_tt = host(torch.zeros(1, 1, seq_len, hidden)).to(ttnn_mesh_device, memory_config)
+    module(x_tt, mode)  # compile before capture
+    trace = ttnn.begin_trace_capture(ttnn_mesh_device, cq_id=0)
+    out = module(x_tt, mode)
+    ttnn.end_trace_capture(ttnn_mesh_device, trace, cq_id=0)
+    composer = ttnn.ConcatMeshToTensor(ttnn_mesh_device, dim=3) if devices > 1 else None
+    try:
+        for seed in (15, 16):
+            x = torch.randn(1, 1, seq_len, hidden, generator=torch.Generator().manual_seed(seed)).bfloat16()
+            ttnn.copy_host_to_device_tensor(host(x), x_tt)
+            ttnn.execute_trace(ttnn_mesh_device, trace, cq_id=0, blocking=True)
+            output = ttnn.to_torch(out, mesh_composer=composer).float()[0, 0, :seq_len]
+            pcc = _pcc(output, _reference(x, layer, k))
+            assert pcc > 0.99, (seed, pcc)
+    finally:
+        ttnn.release_trace(ttnn_mesh_device, trace)

@@ -373,13 +373,16 @@ class MoE1D(LightweightModule):
 
     def _routing_matrix_tensor_parallel(self, weights: ttnn.Tensor, indices: ttnn.Tensor) -> ttnn.Tensor:
         cfg = self.config
-        zeros = ttnn.zeros(
+        # empty + fill stays on device; ttnn.zeros uploads from host, which a trace cannot capture
+        empty = ttnn.empty(
             [1, 1, weights.shape[-2], cfg.num_experts],
-            dtype=ttnn.bfloat16,
-            layout=ttnn.TILE_LAYOUT,
-            device=cfg.mesh_device,
-            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            ttnn.bfloat16,
+            ttnn.TILE_LAYOUT,
+            cfg.mesh_device,
+            ttnn.DRAM_MEMORY_CONFIG,
         )
+        zeros = ttnn.fill(empty, 0.0, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+        ttnn.deallocate(empty)
         scatter_indices = ttnn.typecast(indices, ttnn.uint32) if indices.dtype != ttnn.uint32 else indices
         routing = ttnn.scatter(zeros, dim=-1, index=scatter_indices, src=weights)
         ttnn.deallocate(zeros)
