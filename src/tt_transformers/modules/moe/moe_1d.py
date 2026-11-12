@@ -316,9 +316,18 @@ class MoE1D(LightweightModule):
         self._device_weights_loaded = True
 
     def decode_forward(self, x: ttnn.Tensor | LazyWeight) -> ttnn.Tensor:
+        """x [1, 1, users, H]. One user runs the fused decode; the fused op computes a single token, so more users run
+        the routed sparse path over every row."""
         self.load_device_weights()
         x = _load_input(x, self.config, self.config.decode_input_memcfg)
-        return self._reduce_decode(self._decode_impl(x))
+        if x.shape[-2] == 1:
+            return self._reduce_decode(self._decode_impl(x))
+        rows = ttnn.to_memory_config(x, self.config.prefill_input_memcfg)
+        partial = self._prefill_impl(rows)
+        _deallocate_if_distinct(rows, x)
+        output = self._reduce_decode(partial)
+        ttnn.deallocate(partial)
+        return output
 
     def prefill_forward(self, x: ttnn.Tensor | LazyWeight) -> ttnn.Tensor:
         self.load_device_weights()

@@ -205,7 +205,7 @@ def fresh_fused_decode_cache():
     [("tensor", False, False), ("tensor", False, True), ("expert", True, False)],
     ids=["tensor", "tensor-shared", "expert-gate-first"],
 )
-@pytest.mark.parametrize("mode, seq_len", [("decode", 1), ("prefill", 48), ("prefill", 64)])
+@pytest.mark.parametrize("mode, seq_len", [("decode", 1), ("decode", 32), ("prefill", 48), ("prefill", 64)])
 def test_moe_1d_matches_torch(
     ttnn_mesh_device, fresh_fused_decode_cache, parallelism, gate_first, shared, mode, seq_len
 ):
@@ -239,7 +239,7 @@ def test_moe_1d_layers_share_one_fused_decode(ttnn_mesh_device, fresh_fused_deco
     [pytest.param({"mesh_shape": (1, 4), "fabric_config": ttnn.FabricConfig.FABRIC_1D_RING}, id="p150x4-1x4-ring")],
     indirect=True,
 )
-@pytest.mark.parametrize("mode, seq_len", [("decode", 1), ("prefill", 48)])
+@pytest.mark.parametrize("mode, seq_len", [("decode", 1), ("decode", 32), ("prefill", 48)])
 def test_moe_1d_expert_parallel_across_devices(
     ttnn_mesh_device, require_blackhole_mesh_device, fresh_fused_decode_cache, mode, seq_len
 ):
@@ -287,7 +287,7 @@ def test_moe_1d_expert_parallel_across_devices(
     ],
     indirect=["ttnn_mesh_device"],
 )
-@pytest.mark.parametrize("mode, seq_len", [("decode", 1), ("prefill", 128)])
+@pytest.mark.parametrize("mode, seq_len", [("decode", 1), ("decode", 32), ("prefill", 128)])
 def test_moe_1d_replays_a_trace_with_new_inputs(
     ttnn_mesh_device, require_blackhole_mesh_device, fresh_fused_decode_cache, parallelism, mode, seq_len
 ):
