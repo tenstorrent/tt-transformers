@@ -122,6 +122,7 @@ class Attention1DConfig:
     tt_ccl: TT_CCL | None = None
     topology: ttnn.Topology | None = None  # None = auto-detect
     num_reduce_scatter_links: int | None = None
+    decode_num_reduce_scatter_links: int | None = None
     num_all_gather_links: int | None = None
     decode_agmm_num_links: int = 1
     decode_agmm_chunks_per_sync: int = CCL_CHUNKS_PER_SYNC
@@ -1245,7 +1246,7 @@ class Attention1D(LightweightModule):
             dim=3,
             multi_device_global_semaphore=cfg.tt_ccl.get_and_cycle_rs_semaphore_handles(),
             barrier_semaphore=cfg.tt_ccl.get_and_cycle_barrier_semaphore_handle(),
-            num_links=cfg.num_reduce_scatter_links,
+            num_links=cfg.decode_num_reduce_scatter_links,
             memory_config=cfg.decode_residual_memcfg,
             intermediate_memory_config=ttnn.DRAM_MEMORY_CONFIG,
             topology=cfg.topology,
@@ -1615,6 +1616,9 @@ def _resolve_attention1d_config(
     tt_ccl = to_set.get("tt_ccl", config.tt_ccl)
     if config.num_reduce_scatter_links is None and num_devices > 1:
         to_set["num_reduce_scatter_links"] = tt_ccl.get_num_links()
+    resolved_reduce_scatter_links = to_set.get("num_reduce_scatter_links", config.num_reduce_scatter_links)
+    if config.decode_num_reduce_scatter_links is None:
+        to_set["decode_num_reduce_scatter_links"] = resolved_reduce_scatter_links
     if config.num_all_gather_links is None and num_devices > 1:
         to_set["num_all_gather_links"] = tt_ccl.get_num_links()
 

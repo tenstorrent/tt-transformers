@@ -84,7 +84,7 @@ def test_model_layer_has_only_the_approved_family_modules_and_readmes() -> None:
     model_directories = sorted(
         path for path in _MODELS_ROOT.iterdir() if path.is_dir() and (path / "model.py").is_file()
     )
-    assert len(model_directories) == 12
+    assert len(model_directories) == 13
     for path in model_directories:
         assert (path / "hf_generator.py").is_file()
         assert (path / "vllm_generator.py").is_file()

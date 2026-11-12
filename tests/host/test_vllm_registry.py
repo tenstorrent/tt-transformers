@@ -31,6 +31,7 @@ from tt_transformers.vllm_registry import (
     Phi3ForCausalLM,
     Qwen2ForCausalLM,
     Qwen3ForCausalLM,
+    Qwen3MoeForCausalLM,
     UnsupportedModelError,
     resolve_hf_id,
 )
@@ -38,7 +39,14 @@ from tt_transformers.vllm_registry import (
 ROOT = Path(__file__).resolve().parents[2]
 MODELS = ROOT / "src" / "tt_transformers" / "models"
 
-DISPATCHERS = (LlamaForCausalLM, Qwen2ForCausalLM, Qwen3ForCausalLM, MistralForCausalLM, Phi3ForCausalLM)
+DISPATCHERS = (
+    LlamaForCausalLM,
+    Qwen2ForCausalLM,
+    Qwen3ForCausalLM,
+    Qwen3MoeForCausalLM,
+    MistralForCausalLM,
+    Phi3ForCausalLM,
+)
 
 # The dotted paths the plugin registers. Changing one breaks every plugin
 # release that names it, so a rename must fail here first.
@@ -46,6 +54,7 @@ PUBLIC_SYMBOLS = (
     "tt_transformers.vllm_registry:LlamaForCausalLM",
     "tt_transformers.vllm_registry:Qwen2ForCausalLM",
     "tt_transformers.vllm_registry:Qwen3ForCausalLM",
+    "tt_transformers.vllm_registry:Qwen3MoeForCausalLM",
     "tt_transformers.vllm_registry:MistralForCausalLM",
     "tt_transformers.vllm_registry:Phi3ForCausalLM",
 )
