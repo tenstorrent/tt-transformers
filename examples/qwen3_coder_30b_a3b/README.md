@@ -21,8 +21,8 @@ The inputs stay as CPU PyTorch tensors; the model handles TT transfers and KV
 storage. `MESH_DEVICE` selects the caller-owned mesh. Configure `TT_CACHE_PATH`
 when using an existing writable TT model cache, as described below.
 
-[`benchmark.py`](benchmark.py) contains the token-accuracy case and the one-
-and 32-user performance cases.
+[`benchmark.py`](benchmark.py) contains the token-accuracy case, the one- and
+32-user performance cases, and TTFT at 128, 1024 and 4096 prompt tokens.
 
 <!-- BEGIN GENERATED SUPPORT -->
 
