@@ -50,6 +50,7 @@ Current module inventory:
 |--------|--------------|--------------------|---------------------|
 | MLP (1D) | `MLP1D` (`mlp/mlp_1d.py`) | `MLP1D(w1, w2, w3)` | `forward(x, mode)` |
 | MLP (2D) | `MLP2D` (`mlp/mlp_2d.py`) | `MLP2D(w1, w2, w3)` | `forward(x, mode)` |
+| MoE (1D) | `MoE1D` (`moe/moe_1d.py`) | `MoE1D(router, up_gate, down, k, parallelism)` | `forward(x, mode)` |
 | Attention | `Attention1D` (`attention/attention_1d.py`) | `Attention1D(wqkv, wo, n_heads, n_kv_heads, head_dim, max_batch_size, max_seq_len)` | `forward(..., mode)` |
 | RMSNorm (1D) | `RMSNorm1D` (`rmsnorm/rmsnorm_1d.py`) | `RMSNorm1D(weight)` | `forward(x, mode)` |
 | RMSNorm (2D) | `RMSNorm2D` (`rmsnorm/rmsnorm_2d.py`) | `RMSNorm2D(weight)` | `forward(x, mode)` |
@@ -223,7 +224,7 @@ pytest tests/modules/mlp/test_mlp_1d.py::test_mlp_1d_config_creation -v
 pytest tests/modules/ -v
 ```
 
-Test files by module: `mlp/test_mlp_1d.py`, `mlp/test_mlp_2d.py`, `attention/test_attention_1d.py`, `rmsnorm/test_rmsnorm_1d.py`, `rmsnorm/test_rmsnorm_2d.py`, `rope/test_rope_1d.py`, `embedding/test_embedding_1d.py`, `lm_head/test_lm_head_1d.py`, `sampling/test_sampling_1d.py`, `sampling/test_penalties_1d.py`. Shared infrastructure has its own tests too (`test_lazy_buffer.py`, `test_tensor_utils.py`).
+Test files by module: `mlp/test_mlp_1d.py`, `mlp/test_mlp_2d.py`, `moe/test_moe_1d.py`, `attention/test_attention_1d.py`, `rmsnorm/test_rmsnorm_1d.py`, `rmsnorm/test_rmsnorm_2d.py`, `rope/test_rope_1d.py`, `embedding/test_embedding_1d.py`, `lm_head/test_lm_head_1d.py`, `sampling/test_sampling_1d.py`, `sampling/test_penalties_1d.py`. Shared infrastructure has its own tests too (`test_lazy_buffer.py`, `test_tensor_utils.py`).
 
 ### Device Topologies Tested
 
