@@ -1353,8 +1353,9 @@ class _GrammarTarget:
 @pytest.mark.host
 @pytest.mark.parametrize(("model", "class_name"), _V1_GENERATORS)
 def test_every_generator_forwards_the_device_grammar_contract(model, class_name):
-    """Each facade forwards the deferred decode, the sample call, enablement and the
-    grammar warmup flag to its executor, and reports the executor's runtime support."""
+    """Each facade forwards the deferred decode, the sample call and the grammar warmup
+    flag to its executor. Only a model that declares device grammar enables it, so an
+    architecture class can advertise the capability for some of its checkpoints."""
 
     generator_class = getattr(import_module(f"tt_transformers.models.{model}.vllm_generator"), class_name)
     target = _GrammarTarget()
@@ -1362,8 +1363,9 @@ def test_every_generator_forwards_the_device_grammar_contract(model, class_name)
     tokens = torch.zeros(4, dtype=torch.long)
     page_table = torch.zeros((4, 2), dtype=torch.int32)
 
+    declared = generator_class.model_capabilities.get("supports_device_grammar", False) is True
     generator.enable_device_grammar()
-    assert generator.device_grammar_enabled is True
+    assert generator.device_grammar_enabled is declared
     payload = generator.decode_forward(
         tokens,
         torch.zeros(4, dtype=torch.long),
@@ -1385,18 +1387,18 @@ def test_every_generator_forwards_the_device_grammar_contract(model, class_name)
 
     assert (payload, sampled) == ("payload", "tokens")
     assert [name for name, _ in target.calls] == [
-        "enable_device_grammar",
+        *(["enable_device_grammar"] if declared else []),
         "decode_forward",
         "sample_deferred_decode",
         "warmup_model_decode",
     ]
-    decode = target.calls[1][1]
+    decode = target.calls[-3][1]
     assert decode["defer_device_sampling"] is True
     assert decode["sampling_params"] is None
     assert decode["read_from_device"] is False
     assert decode["execution"] == "traced-decode"
-    assert target.calls[2][1] == {"payload": "payload", "sampling_params": "params", "grammar_bitmask": "mask"}
-    assert target.calls[3][1]["can_sample_device_grammar"] is True
+    assert target.calls[-2][1] == {"payload": "payload", "sampling_params": "params", "grammar_bitmask": "mask"}
+    assert target.calls[-1][1]["can_sample_device_grammar"] is True
 
 
 @pytest.mark.host

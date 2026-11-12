@@ -185,17 +185,24 @@ class VLLMGeneratorFacade:
         )
 
     def enable_device_grammar(self) -> None:
-        """Allocate grammar mask buffers before warmup, when the target supports them."""
+        """Allocate grammar mask buffers before warmup, when this model declares the capability.
 
+        The architecture class vLLM registers declares device grammar when any of
+        its generators does, so a generator that does not declare it stays on
+        host grammar here.
+        """
+
+        if not self._declares_device_grammar():
+            return
         enable = getattr(self.target, "enable_device_grammar", None)
         if callable(enable):
             enable()
 
     @property
     def device_grammar_enabled(self) -> bool:
-        """True only when every lane of the target can apply a grammar mask."""
+        """True only when this model declares grammar and every lane can apply a mask."""
 
-        return bool(getattr(self.target, "device_grammar_enabled", False))
+        return self._declares_device_grammar() and bool(getattr(self.target, "device_grammar_enabled", False))
 
     def read_decode_output(
         self,
@@ -260,6 +267,9 @@ class VLLMGeneratorFacade:
         return self.target.cleanup()
 
     # Private implementation
+
+    def _declares_device_grammar(self) -> bool:
+        return self.model_capabilities.get("supports_device_grammar", False) is True
 
     def _after_warmup(self) -> None:
         """Run after each successful warmup call; a model may override it."""

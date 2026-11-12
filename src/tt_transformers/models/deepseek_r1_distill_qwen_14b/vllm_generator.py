@@ -75,6 +75,7 @@ class DeepSeekR1Qwen14BGenerator(CompilingVLLMGeneratorFacade):
         "max_device_top_k": 32,
         "accepts_trace_mode": True,
         "supports_chunked_prefill": True,
+        "supports_device_grammar": True,
     }
 
     @classmethod

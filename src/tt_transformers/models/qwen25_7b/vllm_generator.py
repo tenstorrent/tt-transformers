@@ -75,6 +75,7 @@ class Qwen25Generator(CompilingVLLMGeneratorFacade):
         "max_device_top_k": 32,
         "accepts_trace_mode": True,
         "supports_chunked_prefill": True,
+        "supports_device_grammar": True,
         # The only supported multi-device geometry is N300, which the vLLM plugin
         # (vllm-tt-plugin #116) already defaults to FABRIC_1D. Declared explicitly
         # so the choice is a visible one-liner rather than an inherited default.
