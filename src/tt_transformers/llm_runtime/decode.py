@@ -938,8 +938,19 @@ class DecodeRuntime:
         return pending.value, list(pending.events)
 
     def process_decode_output_host(self, tt_out: Any, *, is_tokens: bool = False) -> tuple[Any, Any]:
-        """Complete and normalize a host value returned by async decode read."""
+        """Complete and normalize a host value returned by async decode read.
 
+        A synchronous caller may hand back the raw device output of
+        ``decode_forward(..., read_from_device=False)`` without calling
+        `read_decode_output` first. That output is read here, blocking, and
+        its lease is released so the next trace replay is not refused.
+        """
+
+        raw_lease = self._external_by_raw_id.get(id(tt_out))
+        if raw_lease is not None and raw_lease.raw_value is tt_out:
+            host = self.config.output_reader.read(tt_out, blocking=True)
+            self._release_external_lease(raw_lease)
+            return self._normalize_host_output(host, is_tokens=is_tokens)
         completed = self.config.output_reader.complete(tt_out)
         self._release_external_lease(self._external_by_host_id.get(id(tt_out)))
         return self._normalize_host_output(completed, is_tokens=is_tokens)
