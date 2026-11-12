@@ -6,11 +6,13 @@
 token-accuracy  teacher-forced top-1 / top-5 against the Hugging Face reference (eager)
 perf-batch1     TTFT and decode throughput for one user (traced, on-device top-k sampling)
 perf-batch32    the same for 32 users
+perf-prefill    TTFT for one user at 128, 1024 and 4096 prompt tokens (prefill traced at 128 and 1024)
 """
 
 from __future__ import annotations
 
 import argparse
+import bz2
 import json
 import os
 from pathlib import Path
@@ -33,12 +35,14 @@ from tt_transformers.sampling.sampling_params import SamplingParams
 
 REFERENCE = Path("tests/assets/reference_outputs/qwen3_coder_30b_a3b/Qwen3-Coder-30B-A3B-Instruct.refpt")
 PROMPTS = Path("examples/assets/sample_prompts/input_data_questions_prefill_128.json")
+BOOK = Path("tests/assets/reference_inputs/tale-of-two-cities.txt.bz2")
+PREFILL_LENGTHS = (128, 1024, 4096)
 BLOCK_SIZE = 32
 MAX_SEQ_LEN = 2048
 DECODE_TOKENS = 128
 # measured on Blackhole P300x2 (four p300c dies), ttnn 0.79.0, "performance" precision
 MIN_ACCURACY = {"top1": 97.0, "top5": 99.0}  # measured 98.2 / 99.8
-CASES = ("token-accuracy", "perf-batch1", "perf-batch32")
+CASES = ("token-accuracy", "perf-batch1", "perf-batch32", "perf-prefill")
 
 
 def mesh_parameters() -> dict:
@@ -89,16 +93,10 @@ def token_accuracy(model, mesh_device) -> dict:
     return {"top1": top1, "top5": top5}
 
 
-def performance(model, mesh_device, users: int) -> dict:
-    tokenizer = load_tokenizer(os.environ.get("HF_MODEL", DEFAULT_HF_MODEL))
-    sampling = SamplingParams(temperature=0.0, top_k=32, top_p=0.08)
+def _traced(model, mesh_device, tokens, lens, sampling):
+    """A traced executor, its paged KV cache and page table, warmed up on this prompt shape."""
     executor = TracedQwen3Coder30BA3BExecutor(model, mesh_device, ondevice_decode_loop=True)
     kv_cache, page_table = _paged_kv(executor, model, mesh_device)
-    prompts = [entry["prompt"] for entry in json.loads(PROMPTS.read_text())]
-    encoded = [list(encode_prompt_hf(tokenizer, prompt)) for prompt in (prompts * users)[:users]]
-    lens = torch.tensor([len(ids) for ids in encoded])
-    pad = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
-    tokens = torch.tensor([ids + [pad] * (int(lens.max()) - len(ids)) for ids in encoded])
     warmup_demo_executor(
         executor,
         kv_cache=kv_cache,
@@ -107,18 +105,50 @@ def performance(model, mesh_device, users: int) -> dict:
         prefill_sampling_params=sampling,
         prefill_compile_execution=executor.traced_prefill_execution,
     )
-    result = run_perf_benchmark(
+    return executor, kv_cache, page_table
+
+
+def _timed(executor, kv_cache, page_table, tokens, lens, sampling, decode_tokens):
+    return run_perf_benchmark(
         executor,
         tokens=tokens,
         kv_cache=kv_cache,
         page_table=page_table,
-        num_decode_tokens=DECODE_TOKENS,
-        max_batch_size=users,
+        num_decode_tokens=decode_tokens,
+        max_batch_size=tokens.shape[0],
         prompt_lens=lens,
         sampling_params=sampling,
     )
+
+
+def performance(model, mesh_device, users: int) -> dict:
+    tokenizer = load_tokenizer(os.environ.get("HF_MODEL", DEFAULT_HF_MODEL))
+    sampling = SamplingParams(temperature=0.0, top_k=32, top_p=0.08)
+    prompts = [entry["prompt"] for entry in json.loads(PROMPTS.read_text())]
+    encoded = [list(encode_prompt_hf(tokenizer, prompt)) for prompt in (prompts * users)[:users]]
+    lens = torch.tensor([len(ids) for ids in encoded])
+    pad = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
+    tokens = torch.tensor([ids + [pad] * (int(lens.max()) - len(ids)) for ids in encoded])
+    executor, kv_cache, page_table = _traced(model, mesh_device, tokens, lens, sampling)
+    result = _timed(executor, kv_cache, page_table, tokens, lens, sampling, DECODE_TOKENS)
     metrics = {"ttft_ms": result.ttft_ms, "decode_tok_s_u": result.tok_s_u, "decode_tok_s": result.tok_s}
     logger.info(f"performance, {users} users: {metrics}")
+    return metrics
+
+
+def prefill(model, mesh_device) -> dict:
+    """TTFT at each prompt length, from the reference book; each length runs once untimed first."""
+    tokenizer = load_tokenizer(os.environ.get("HF_MODEL", DEFAULT_HF_MODEL))
+    sampling = SamplingParams(temperature=0.0, top_k=32, top_p=0.08)
+    with bz2.open(BOOK, "rt", encoding="utf-8") as book:
+        text = tokenizer.encode(book.read(), add_special_tokens=False)
+    cases = [(torch.tensor([text[:length]]), torch.tensor([length])) for length in PREFILL_LENGTHS]
+    executor, kv_cache, page_table = _traced(model, mesh_device, *cases[0], sampling)
+    metrics = {}
+    for (tokens, lens), length in zip(cases, PREFILL_LENGTHS):
+        _timed(executor, kv_cache, page_table, tokens, lens, sampling, 4)
+        metrics[f"ttft_ms_{length}"] = _timed(executor, kv_cache, page_table, tokens, lens, sampling, 4).ttft_ms
+    logger.info(f"prefill: {metrics}")
     return metrics
 
 
@@ -129,12 +159,14 @@ def run_case(case: str, mesh_device, optimizations: str = "performance") -> dict
         hf_model=os.environ.get("HF_MODEL", DEFAULT_HF_MODEL),
         instruct=False,
         max_batch_size=users,
-        max_seq_len=MAX_SEQ_LEN,
+        max_seq_len=2 * PREFILL_LENGTHS[-1] if case == "perf-prefill" else MAX_SEQ_LEN,
         optimizations=optimizations,
     )
     try:
         if case == "token-accuracy":
             return token_accuracy(llm.model, mesh_device)
+        if case == "perf-prefill":
+            return prefill(llm.model, mesh_device)
         return performance(llm.model, mesh_device, users)
     finally:
         llm.cleanup()
