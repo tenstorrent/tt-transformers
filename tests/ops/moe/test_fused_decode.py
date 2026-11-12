@@ -162,6 +162,23 @@ def _routing(op, x_tt, rw, E, k):
     return ids, torch.softmax(row[ids], -1), row[E]
 
 
+def _shared_expert_layer(dev, H, E, inter, dtype, down_dtype, seed):
+    """One Qwen3.5-MoE layer's weights in their own buffers: (the op's weight arguments, their values in torch)."""
+    up_gate, down, w_ug, w_dn = _routed(dev, *_hf_experts(E, H, inter, seed), dtype, False, down_dtype)
+    g = torch.Generator().manual_seed(seed + 1)
+    shared = SharedExpert(
+        expert_gate=torch.randn(1, H, generator=g) * 0.03,
+        gate_proj=torch.randn(inter, H, generator=g) * 0.03,
+        up_proj=torch.randn(inter, H, generator=g) * 0.03,
+        down_proj=torch.randn(H, inter, generator=g) * 0.03,
+    )
+    rw, _ = _upload(router_weight(torch.randn(E, H, generator=g) * 0.05, shared.expert_gate), ttnn.bfloat16, dev)
+    s_ug, s_dn = shared_expert_weights(shared, inter, 1)
+    (sug, w_sug), (sdn, w_sdn) = _upload(s_ug, dtype, dev), _upload(s_dn, down_dtype, dev)
+    weights = dict(router_weight=rw, up_gate=up_gate, down=down, shared_up_gate=sug, shared_down=sdn)
+    return weights, (w_ug, w_dn, w_sug[0, 0], w_sdn[0, 0])
+
+
 @pytest.mark.device
 @pytest.mark.blackhole
 @MESH_1X1
@@ -174,37 +191,29 @@ def _routing(op, x_tt, rw, E, k):
     ],
     ids=["bfp8", "bfp4_m6", "bfp8_bfp4_down"],
 )
-def test_shared_expert_moe_matches_torch(ttnn_mesh_device, inter, dtype, down_dtype):
+def test_shared_expert_moe_matches_torch(ttnn_mesh_device, request, inter, dtype, down_dtype):
     """Qwen3.5-MoE layout on one device: softmax top-k routed experts plus a sigmoid-gated shared expert. Two layers'
-    router weights share the op."""
+    weights alternate through the one op (A -> B -> A) on cached programs."""
     dev, H, E, k = ttnn_mesh_device, 2048, 64, 8
-    gate_proj, up_proj, down_proj = _hf_experts(E, H, inter, seed=1)
-    up_gate, down, w_ug, w_dn = _routed(dev, gate_proj, up_proj, down_proj, dtype, False, down_dtype)
-    g = torch.Generator().manual_seed(2)
-    shared = SharedExpert(
-        expert_gate=torch.randn(1, H, generator=g) * 0.03,
-        gate_proj=torch.randn(inter, H, generator=g) * 0.03,
-        up_proj=torch.randn(inter, H, generator=g) * 0.03,
-        down_proj=torch.randn(H, inter, generator=g) * 0.03,
-    )
-    routers = [router_weight(torch.randn(E, H, generator=g) * 0.05, shared.expert_gate) for _ in range(2)]
-    routers = [_upload(rw, ttnn.bfloat16, dev)[0] for rw in routers]  # two layers' routers through the one op
-    s_ug, s_dn = shared_expert_weights(shared, inter, 1)
-    (sug, w_sug), (sdn, w_sdn) = _upload(s_ug, dtype, dev), _upload(s_dn, down_dtype, dev)
-    w_sug, w_sdn = w_sug[0, 0], w_sdn[0, 0]
+    dev.enable_program_cache()
+    dev.clear_program_cache()
+    request.addfinalizer(dev.disable_and_clear_program_cache)
+    layers = [_shared_expert_layer(dev, H, E, inter, dtype, down_dtype, seed) for seed in (1, 11)]
     op = FusedMoEDecode(dev, H, inter, E, k, dtype, down_dtype=down_dtype)
 
-    for trial in range(3):
-        rw = routers[trial % 2]
+    for trial, (weights, (w_ug, w_dn, w_sug, w_sdn)) in enumerate([layers[0], layers[1], layers[0]]):
         xb, x_tt = _x(dev, H, seed=trial)
-        out = ttnn.to_torch(op(x_tt, rw, up_gate, down, shared_up_gate=sug, shared_down=sdn)).float().reshape(-1)
-        ids, weights, gate_logit = _routing(op, x_tt, rw, E, k)
+        out = ttnn.to_torch(op(x_tt, **weights)).float().reshape(-1)
+        ids, routing, gate_logit = _routing(op, x_tt, weights["router_weight"], E, k)
         xf = xb.float().reshape(-1)
         ref = torch.sigmoid(gate_logit) * _swiglu_down(xf, w_sug, w_sdn, inter, False)
         for j, e in enumerate(ids):
-            ref += weights[j] * _swiglu_down(xf, w_ug[e], w_dn[e], inter, False)
+            ref += routing[j] * _swiglu_down(xf, w_ug[e], w_dn[e], inter, False)
         assert _pcc(out, ref) > 0.999, (trial, _pcc(out, ref))
         ttnn.deallocate(x_tt)
+        if trial == 0:
+            entries = dev.num_program_cache_entries()
+    assert entries > 0 and dev.num_program_cache_entries() == entries
 
 
 @pytest.mark.device
