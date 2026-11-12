@@ -732,8 +732,12 @@ class SamplingState1D:
         tt_out_tok=None,
         count_tokens: bool = True,
         advance_seeds: bool = True,
+        apply_grammar: bool = False,
     ):
         """Apply penalties, sample, and update output history in order.
+
+        ``apply_grammar`` blocks the tokens of the sampler's staged grammar mask
+        after penalties and before selection.
 
         Eager compile-only warmups set ``count_tokens=False`` so they do not
         admit a phantom generated token.  Trace capture keeps it true because
@@ -764,6 +768,7 @@ class SamplingState1D:
                 tt_out_tok=tt_out_tok,
                 enable_log_probs=list(prepared.enable_log_probs),
                 **unpenalized,
+                **({"apply_grammar": True} if apply_grammar else {}),
             )
         except BaseException:
             self.cancel_sampling(state, sample_id=sample_id)

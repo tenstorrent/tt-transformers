@@ -181,6 +181,8 @@ class TraceCompiler:
         self._replay_counts = {"prefill": 0, "decode": 0}
         self._device_program_cache_entries: tuple[int, ...] | None = None
         self._replay_failed = False
+        # A decode body replayed alone by replay_body, waiting for replay_tail.
+        self._pending_body: TraceKey | None = None
 
     # Public API
 
@@ -473,6 +475,7 @@ class TraceCompiler:
         self._ensure_live()
         if self._replay_failed:
             raise RuntimeError("Trace replay previously failed; clean up this executor before further execution")
+        self._require_no_pending_body()
         self.program_compiler.require_compiled(program_key)
         trace_key = self._program_to_trace.get(program_key)
         if trace_key is None:
@@ -538,6 +541,111 @@ class TraceCompiler:
         self._replay_counts[record.operation] += 1
         self._previous_replay_keys["body"] = resident_key
         self._previous_replay_keys["tail"] = trace_key if body_key is not None else None
+        return artifact.outputs
+
+    @property
+    def body_pending(self) -> bool:
+        """True between `replay_body` and its `replay_tail`."""
+
+        return self._pending_body is not None
+
+    def body_outputs(self, body_signature: Any) -> Any:
+        """Return a captured decode body's retained outputs, or raise if it has none."""
+
+        record = self._bodies.get(TraceKey.from_signature(body_signature))
+        if record is None or record.artifact is None:
+            raise RuntimeError("Required decode body trace is unavailable")
+        return record.artifact.outputs
+
+    def replay_body(
+        self,
+        body_signature: Any,
+        refresh_inputs: Callable[[TraceArtifact, RefreshDecision], None],
+        *,
+        device_feedback_enabled: bool,
+        feedback_compatible: bool,
+        reload_inputs: bool,
+        reload_page_table: bool = False,
+    ) -> Any:
+        """Refresh a decode body's inputs and enqueue its trace without a tail.
+
+        Deferred device sampling runs the model body when the step is submitted
+        and its sampling tail later, once the step's grammar mask exists. Until
+        `replay_tail` runs, every other replay raises: the tail reads the body's
+        retained outputs, and another replay in between could overwrite them.
+        Returns the body's outputs.
+        """
+
+        self._ensure_live()
+        if self._replay_failed:
+            raise RuntimeError("Trace replay previously failed; clean up this executor before further execution")
+        self._require_no_pending_body()
+        body_key = TraceKey.from_signature(body_signature)
+        record = self._bodies.get(body_key)
+        if record is None or record.artifact is None:
+            raise RuntimeError(f"Trace key {body_key.digest} has no captured body")
+        if reload_inputs and reload_page_table:
+            raise ValueError("reload_inputs and reload_page_table are mutually exclusive")
+        switched = self._previous_replay_keys["body"] != body_key
+        if not reload_inputs and (switched or not (device_feedback_enabled and feedback_compatible)):
+            raise RuntimeError("Decode trace requires reload_inputs=True to establish resident inputs")
+        decision = RefreshDecision(full=reload_inputs, page_table=reload_page_table, fields=())
+        artifact = record.artifact
+        self._require_unchanged_program_cache("before replay")
+        try:
+            refresh_inputs(artifact, decision)
+            self._require_unchanged_program_cache("while refreshing replay inputs")
+            ttnn.execute_trace(self.mesh_device, artifact.trace_id, cq_id=0, blocking=False)
+        except BaseException:
+            self._replay_failed = True
+            raise
+        self._pending_body = body_key
+        return artifact.outputs
+
+    def replay_tail(
+        self,
+        program_key: ProgramKey,
+        refresh_inputs: Callable[[TraceArtifact], None],
+        *,
+        reload_inputs: bool,
+    ) -> Any:
+        """Refresh a decode tail's sampling inputs and enqueue it after its pending body.
+
+        The body already ran, so any failure here is terminal for this compiler.
+        """
+
+        self._ensure_live()
+        if self._replay_failed:
+            raise RuntimeError("Trace replay previously failed; clean up this executor before further execution")
+        body_key = self._pending_body
+        if body_key is None:
+            raise RuntimeError("No decode body is pending; replay_body must run first")
+        try:
+            self.program_compiler.require_compiled(program_key)
+            trace_key = self._program_to_trace.get(program_key)
+            if trace_key is None:
+                raise RuntimeError(f"Program key {program_key.digest} has no trace association")
+            artifact = self._traces[trace_key].artifact
+            if artifact is None:
+                raise RuntimeError(f"Trace key {trace_key.digest} has not been captured")
+            if self._body_for_trace.get(trace_key) != body_key:
+                raise RuntimeError("Decode tail does not follow the pending body")
+            # Resident inputs are valid only for the tail that fed them back.
+            if not reload_inputs and self._previous_replay_keys["tail"] != trace_key:
+                raise RuntimeError("Decode trace requires reload_inputs=True to establish resident inputs")
+            self._require_unchanged_program_cache("before replay")
+            refresh_inputs(artifact)
+            self._require_unchanged_program_cache("while refreshing replay inputs")
+            ttnn.execute_trace(self.mesh_device, artifact.trace_id, cq_id=0, blocking=False)
+        except BaseException:
+            self._replay_failed = True
+            raise
+        self._pending_body = None
+        record = self._traces[trace_key]
+        self._replay_count += 1
+        self._replay_counts[record.operation] += 1
+        self._previous_replay_keys["body"] = body_key
+        self._previous_replay_keys["tail"] = trace_key
         return artifact.outputs
 
     def cleanup(self) -> None:
@@ -659,6 +767,10 @@ class TraceCompiler:
             return failures
         record.artifact = None
         return []
+
+    def _require_no_pending_body(self) -> None:
+        if self._pending_body is not None:
+            raise RuntimeError("A decode body is waiting for its sampling tail; no other trace may replay first")
 
     def _ensure_live(self) -> None:
         if self._released:

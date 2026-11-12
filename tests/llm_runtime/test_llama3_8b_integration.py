@@ -305,6 +305,7 @@ def test_model_owned_executor_constructs_exact_composition(mode):
                 "reset_sampling_state",
                 "read_from_device",
                 "execution",
+                "defer_device_sampling",
             ),
         ),
         ("read_decode_output", ("self", "tt_out"), ("async_read",)),
@@ -322,7 +323,14 @@ def test_model_owned_executor_constructs_exact_composition(mode):
         (
             "warmup_model_decode",
             ("self",),
-            ("kv_cache", "max_batch_size", "num_blocks", "can_sample_on_device", "enable_trace"),
+            (
+                "kv_cache",
+                "max_batch_size",
+                "num_blocks",
+                "can_sample_on_device",
+                "enable_trace",
+                "can_sample_device_grammar",
+            ),
         ),
     ],
 )
@@ -354,6 +362,8 @@ def test_model_owned_executor_has_exact_call_contract(method_name, positional_na
         "read_from_device": True,
         "async_read": False,
         "is_tokens": False,
+        "defer_device_sampling": False,
+        "can_sample_device_grammar": False,
     }
 
     assert tuple(parameters) == positional_names + keyword_only_names

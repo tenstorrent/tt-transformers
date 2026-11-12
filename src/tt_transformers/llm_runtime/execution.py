@@ -13,7 +13,7 @@ from typing import Any
 import torch
 from loguru import logger
 
-from tt_transformers.llm_runtime.decode import DecodeRuntime
+from tt_transformers.llm_runtime.decode import DecodeRuntime, DeferredDecode
 from tt_transformers.llm_runtime.decode import InvocationResult as DecodeInvocationResult
 from tt_transformers.llm_runtime.prefill.plan import PrefillRequest
 from tt_transformers.llm_runtime.prefill.runtime import PrefillRuntime
@@ -166,6 +166,7 @@ class EagerExecutor:
         reload_page_table: bool = False,
         reload_sampling_params: bool = False,
         reset_sampling_state: bool = False,
+        grammar: bool = False,  # ↓ Grammar-masked sampling variant
     ) -> CompiledProgram:
         """Prepare and compile the eager program needed by one decode call."""
 
@@ -183,6 +184,7 @@ class EagerExecutor:
                 reload_page_table=reload_page_table,
                 reload_sampling_params=reload_sampling_params,
                 reset_sampling_state=reset_sampling_state,
+                grammar=grammar,
             )
         )
 
@@ -288,6 +290,8 @@ class EagerExecutor:
         reload_page_table: bool = False,
         reload_sampling_params: bool = False,
         reset_sampling_state: bool = False,
+        grammar: bool = False,
+        deferred_forward: bool = False,
     ):
         kwargs: dict[str, Any] = {
             "tokens": tokens,
@@ -310,6 +314,10 @@ class EagerExecutor:
                 reload_sampling_params=reload_sampling_params,
                 reset_sampling_state=reset_sampling_state,
             )
+        if grammar:
+            kwargs["grammar"] = True
+        if deferred_forward:
+            kwargs["deferred_forward"] = True
         return self.decode.prepare(**kwargs)
 
     def _compile_decode(self, prepared: Any):
@@ -324,7 +332,37 @@ class EagerExecutor:
             release_output=lambda result: result.owned,
         )
 
+    def defer_decode(self, **request: Any) -> DeferredDecode:
+        """Run one decode's model body now; sample it later with `sample_deferred_decode`."""
+
+        self.decode.require_no_pending_deferred()
+        forward = self._prepare_decode(**request, deferred_forward=True)
+        self.decode.ensure_trace_safe()
+        device_inputs, logits = self.decode.invoke_deferred_body(forward)
+        payload = DeferredDecode(
+            owner=self, request=dict(request), forward=forward, logits=logits, device_inputs=device_inputs
+        )
+        self.decode.begin_deferred(payload)
+        return payload
+
+    def sample_deferred_decode(self, payload: Any, *, sampling_params: Any, grammar_bitmask: Any = None) -> Any:
+        """Sample a deferred decode through the step's grammar mask; return its device output."""
+
+        payload = self.decode.take_deferred(payload)
+        try:
+            if payload.owner is not self:
+                raise RuntimeError("deferred decode was submitted through another executor")
+            prepared = self._prepare_decode(**payload.request, sampling_params=sampling_params, grammar=True)
+            if self._program_gate_active():
+                self._require_ready_after_trace_gate((self.decode.program_signature(prepared),))
+            result = self.decode.sample_deferred_eager(payload, prepared, grammar_bitmask)
+        except BaseException as primary:
+            self.decode.abandon_deferred(payload, primary)
+            raise
+        return self.decode.consume(result, read_from_device=False)
+
     def _execute_decode(self, prepared: Any, *, read_from_device: bool = True):
+        self.decode.require_no_pending_deferred()
         self.decode.ensure_trace_safe()
         if self._program_gate_active():
             self._require_ready_after_trace_gate((self.decode.program_signature(prepared),))
@@ -546,6 +584,7 @@ class TracedExecutor:
         reload_page_table: bool = False,
         reload_sampling_params: bool = False,
         reset_sampling_state: bool = False,
+        grammar: bool = False,  # ↓ Grammar-masked sampling variant
     ) -> CompiledProgram:
         """Compile the eager decode program and register its trace plan."""
 
@@ -563,6 +602,7 @@ class TracedExecutor:
                 reload_page_table=reload_page_table,
                 reload_sampling_params=reload_sampling_params,
                 reset_sampling_state=reset_sampling_state,
+                grammar=grammar,
             )
         )
 
@@ -809,10 +849,69 @@ class TracedExecutor:
             )
         return program
 
-    def _execute_decode(self, prepared: Any, *, read_from_device: bool = True):
+    def defer_decode(self, **request: Any) -> DeferredDecode:
+        """Replay one decode's model body now; sample it later with `sample_deferred_decode`."""
+
         decode = self.eager_executor.decode
-        signature = decode.program_signature(prepared)
-        program_key = self.eager_executor.program_compiler.key_for(signature)
+        decode.require_no_pending_deferred()
+        forward = self.eager_executor._prepare_decode(**request, deferred_forward=True)
+        decode.ensure_trace_safe()
+        refresh_started = False
+
+        def refresh(artifact, decision):
+            nonlocal refresh_started
+            refresh_started = True
+            decode.refresh_trace_inputs(artifact, forward, decision)
+
+        # The tail samples on device, so it feeds tokens back when the model can.
+        feedback = decode.config.position_feedback_capable
+        try:
+            logits = self.trace_compiler.replay_body(
+                decode.body_signature(forward),
+                refresh,
+                device_feedback_enabled=feedback,
+                feedback_compatible=feedback,
+                reload_inputs=forward.reload_inputs is not False,
+                reload_page_table=forward.reload_page_table,
+            )
+        except BaseException:
+            if refresh_started:
+                decode.invalidate_after_failed_submission()
+            raise
+        payload = DeferredDecode(owner=self, request=dict(request), forward=forward, logits=logits)
+        decode.begin_deferred(payload)
+        return payload
+
+    def sample_deferred_decode(self, payload: Any, *, sampling_params: Any, grammar_bitmask: Any = None) -> Any:
+        """Replay a deferred body's grammar tail with the step's mask; return its device output."""
+
+        decode = self.eager_executor.decode
+        payload = decode.take_deferred(payload)
+        try:
+            if payload.owner is not self:
+                raise RuntimeError("deferred decode was submitted through another executor")
+            prepared = self.eager_executor._prepare_decode(
+                **payload.request, sampling_params=sampling_params, grammar=True
+            )
+            decode.validate_grammar_mask(grammar_bitmask)
+            signature = decode.program_signature(prepared)
+            program_key = self.eager_executor.program_compiler.key_for(signature)
+            self._require_decode_trace(decode, signature, program_key)
+            decode.validate_submission(prepared)
+            decode.stage_grammar_mask(grammar_bitmask)
+            output = self.trace_compiler.replay_tail(
+                program_key,
+                lambda artifact: decode.refresh_trace_sampling(artifact, prepared),
+                reload_inputs=prepared.reload_inputs is not False,
+            )
+        except BaseException as primary:
+            decode.abandon_deferred(payload, primary)
+            raise
+        decode.note_submitted(prepared)
+        result = DecodeInvocationResult(value=output, owned=None, is_tokens=True)
+        return decode.consume(result, read_from_device=False)
+
+    def _require_decode_trace(self, decode: Any, signature: Any, program_key: Any) -> None:
         trace_key = self.trace_compiler.trace_key_for_program(program_key)
         record = self.trace_compiler.get(trace_key) if trace_key is not None else None
         if record is None or record.artifact is None:
@@ -840,6 +939,13 @@ class TracedExecutor:
                 "Add the missing signature to construction-time trace coverage, or rerun with "
                 "TraceConfig(mode='none') for debugging."
             )
+
+    def _execute_decode(self, prepared: Any, *, read_from_device: bool = True):
+        decode = self.eager_executor.decode
+        decode.require_no_pending_deferred()
+        signature = decode.program_signature(prepared)
+        program_key = self.eager_executor.program_compiler.key_for(signature)
+        self._require_decode_trace(decode, signature, program_key)
         decode.ensure_trace_safe()
         decode.validate_submission(prepared)
         commands = {}

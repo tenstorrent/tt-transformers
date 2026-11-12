@@ -670,6 +670,8 @@ def test_runtime_inactive_peer_is_cleaned_up_without_readmitting_survivor():
                 ("reload_page_table", inspect.Parameter.KEYWORD_ONLY, False),
                 ("reload_sampling_params", inspect.Parameter.KEYWORD_ONLY, False),
                 ("reset_sampling_state", inspect.Parameter.KEYWORD_ONLY, False),
+                ("grammar", inspect.Parameter.KEYWORD_ONLY, False),
+                ("deferred_forward", inspect.Parameter.KEYWORD_ONLY, False),
             ),
         ),
         (

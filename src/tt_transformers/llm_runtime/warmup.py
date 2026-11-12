@@ -34,6 +34,7 @@ class WarmupCase:
     cached_tokens: int = 0
     penalties: bool = False
     logprobs: bool = False
+    grammar: bool = False
 
 
 @dataclass(frozen=True)
@@ -531,8 +532,15 @@ class WarmupCoordinator:
         num_blocks: int,
         can_sample_on_device: bool,  # ↓ Execution policy
         enable_trace: bool,
+        can_sample_device_grammar: bool = False,
     ) -> None:
-        """Compile decode coverage and capture once prefill coverage is ready."""
+        """Compile decode coverage and capture once prefill coverage is ready.
+
+        ``can_sample_device_grammar`` also compiles a grammar-masked twin of
+        every device-sampled case except logprobs ones, which grammar sampling
+        does not support. The twins prime with the all-allowed mask
+        ``enable_device_grammar`` staged.
+        """
 
         self._validate_hints("decode", enable_trace, can_sample_on_device)
         self._validate_bound_cache(kv_cache)
@@ -548,7 +556,10 @@ class WarmupCoordinator:
             self._ensure_sampling_buffers()
         plan = self._plan(can_sample_on_device=can_sample_on_device)
         destination = self._trace_registered if enable_trace else self._eager
-        for case in plan.decode:
+        cases = plan.decode
+        if can_sample_device_grammar and can_sample_on_device:
+            cases += grammar_warmup_cases(plan.decode)
+        for case in cases:
             if case in destination:
                 continue
             sampling = _warmup_sampling_params(case, lane_batch)
@@ -558,6 +569,7 @@ class WarmupCoordinator:
                 start_pos=torch.zeros(lane_batch, dtype=torch.long),
                 page_table=torch.zeros((lane_batch, int(num_blocks)), dtype=torch.int32),
                 sampling_params=sampling,
+                **({"grammar": True} if case.grammar else {}),
             )
             self._record_required_programs(program, traced=enable_trace)
             if not enable_trace:
@@ -881,6 +893,16 @@ def _build_plan(
         prefill += [replace(case, logprobs=True) for case in prefill if case.sampling_path == "topk"]
         decode += [replace(case, logprobs=True) for case in decode if case.sampling_path == "topk"]
     return WarmupPlan(tuple(prefill), tuple(decode))
+
+
+def grammar_warmup_cases(decode: tuple[WarmupCase, ...]) -> tuple[WarmupCase, ...]:
+    """Grammar-masked twins of the device-sampled decode cases; none for logprobs."""
+
+    return tuple(
+        replace(case, grammar=True)
+        for case in decode
+        if case.sampling_path != "logits" and not case.logprobs and not case.grammar
+    )
 
 
 def _warmup_sampling_params(case: WarmupCase, batch_size: int) -> SamplingParams | None:
