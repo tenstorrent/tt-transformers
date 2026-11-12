@@ -343,6 +343,7 @@ _TARGET_GENERATORS = [
     ("src/tt_transformers/models/qwen25_72b/vllm_generator.py", "Qwen25_72BGenerator"),
     ("src/tt_transformers/models/qwen25_coder_32b/vllm_generator.py", "Qwen25Coder32BGenerator"),
     ("src/tt_transformers/models/qwen3_32b/vllm_generator.py", "Qwen3_32BGenerator"),
+    ("src/tt_transformers/models/qwen3_coder_30b_a3b/vllm_generator.py", "Qwen3Coder30BA3BGenerator"),
     (
         "src/tt_transformers/models/deepseek_r1_distill_qwen_14b/vllm_generator.py",
         "DeepSeekR1Qwen14BGenerator",

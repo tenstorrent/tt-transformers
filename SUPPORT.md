@@ -21,6 +21,7 @@ or 3.12, and Linux on x86-64.
 | Qwen2.5 Coder 32B | experimental | `381fc969f78efac66bc87ff7ddeadb7e73c218a7` | T3K TP8 |
 | Qwen2 7B | experimental | `f2826a00ceef68f0f2b946d945ecc0477ce4450c` | N300 TP2; T3K TP2/DP4 |
 | Qwen3 32B | experimental | `9216db5781bf21249d130ec9da846c4624c16137` | T3K TP8; Blackhole P150_X4 TP4 |
+| Qwen3 Coder 30B A3B | experimental | `b2cff646eb4bb1d68355c01b18ae02e7cf42d120` | Blackhole P150_X4 TP4 (experts EP4) |
 
 Machine-readable details live in each `examples/<model>/support.json`. Those
 manifests are the authority for checkpoint, cache, topology, context, and

@@ -26,6 +26,7 @@ MODEL_PRODUCTS = {
     "qwen25_coder_32b": "Qwen25Coder32B",
     "qwen2_7b": "Qwen2",
     "qwen3_32b": "Qwen3_32B",
+    "qwen3_coder_30b_a3b": "Qwen3Coder30BA3B",
 }
 
 pytestmark = [pytest.mark.host, pytest.mark.model]

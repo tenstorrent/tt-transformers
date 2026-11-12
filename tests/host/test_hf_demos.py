@@ -23,6 +23,7 @@ _FAMILIES = (
     "qwen25_72b",
     "qwen25_coder_32b",
     "qwen3_32b",
+    "qwen3_coder_30b_a3b",
     "deepseek_r1_distill_qwen_14b",
     "mistral_7b",
     "phi4",

@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "model": {
+    "package": "qwen3_coder_30b_a3b",
+    "hf_id": "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+    "hf_revision": "b2cff646eb4bb1d68355c01b18ae02e7cf42d120"
+  },
+  "status": "experimental",
+  "software": {
+    "tt_transformers": "2.0.0.dev0",
+    "ttnn": "0.79.0",
+    "python": [
+      "3.10",
+      "3.12"
+    ],
+    "torch": "2.11.0",
+    "transformers": "5.12.1"
+  },
+  "hardware": [
+    {
+      "architecture": "blackhole",
+      "sku": "P150_X4 required logical target; code accepts physical P300_X2 alias with distinct provenance",
+      "mesh": "1x4",
+      "tp": 4,
+      "dp": 1
+    }
+  ],
+  "assets": {
+    "reference_root": "tests/assets/reference_outputs/qwen3_coder_30b_a3b",
+    "hf_assets_external": true,
+    "offline_environment": [
+      "HF_HOME",
+      "HF_HUB_OFFLINE=1",
+      "TRANSFORMERS_OFFLINE=1"
+    ],
+    "tt_cache_writable": true,
+    "remote_code_default": false,
+    "cwd_relative_cache_default": false,
+    "cache_resolver": "tt_transformers.cache_environment.resolve_model_cache_path",
+    "tt_cache_path_semantics": "append topology exactly once"
+  },
+  "known_gaps": [
+    "Current regression evidence does not qualify the complete declared model contract",
+    "Decode for more than one user runs the routed sparse MoE path, not the fused MoE decode",
+    "Prefill runs the chunked sparse MoE path, not the expert-sorted prefill",
+    "HF generate() refuses the checkpoint's repetition_penalty=1.05, which it does not implement (as for Qwen2.5 Coder 32B and Qwen2.5 7B); vLLM serving applies it",
+    "P150 and P300 single/two-die model paths",
+    "DP greater than 1",
+    "any geometry not declared in support.json"
+  ],
+  "validation": {
+    "date": null,
+    "git_sha": null,
+    "evidence": []
+  },
+  "limits": {
+    "source_proven": [
+      "Attention is tensor-parallel over the four devices; the 128 routed experts are expert-parallel, 32 per device",
+      "One-user decode runs the fused MoE decode; more users run the routed sparse MoE path",
+      "Benchmark cases cover token accuracy and 1- and 32-user performance at max_seq_len 2048"
+    ]
+  },
+  "features": {
+    "device_sampling": "Host and on-device top-k paths exist.",
+    "trace": "case_and_topology_specific"
+  }
+}

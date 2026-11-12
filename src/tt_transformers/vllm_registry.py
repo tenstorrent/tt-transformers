@@ -35,6 +35,7 @@ __all__ = [
     "Phi3ForCausalLM",
     "Qwen2ForCausalLM",
     "Qwen3ForCausalLM",
+    "Qwen3MoeForCausalLM",
     "UnsupportedModelError",
     "resolve_hf_id",
 ]
@@ -194,6 +195,17 @@ class Qwen2ForCausalLM(_ArchitectureDispatcher):
 class Qwen3ForCausalLM(_ArchitectureDispatcher):
     architecture = "Qwen3ForCausalLM"
     generators = (_entry("Qwen/Qwen3-32B", "qwen3_32b", "Qwen3_32BGenerator"),)
+
+
+class Qwen3MoeForCausalLM(_ArchitectureDispatcher):
+    architecture = "Qwen3MoeForCausalLM"
+    generators = (
+        _entry(
+            "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+            "qwen3_coder_30b_a3b",
+            "Qwen3Coder30BA3BGenerator",
+        ),
+    )
 
 
 class MistralForCausalLM(_ArchitectureDispatcher):
