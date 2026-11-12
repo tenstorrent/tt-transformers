@@ -1782,6 +1782,28 @@ def test_live_eager_decode_buffers_block_trace_until_read_completes(monkeypatch,
 
 
 @pytest.mark.host
+def test_a_raw_output_handed_straight_to_host_processing_is_read_and_released(monkeypatch, expect_error):
+    """Synchronous plugin scheduling calls process_decode_output_host on the raw
+    output of decode_forward(read_from_device=False), without read_decode_output.
+    The output is read there and its lease released, so the next replay may run."""
+
+    runtime = make_runtime()
+    raw = object()
+    reads = []
+    monkeypatch.setattr(
+        runtime.config.output_reader, "read", lambda value, blocking: reads.append((value, blocking)) or "host"
+    )
+    monkeypatch.setattr(runtime, "_normalize_host_output", lambda host, is_tokens: (host, is_tokens))
+    runtime.consume(InvocationResult(raw, None, True), read_from_device=False)
+    with expect_error(RuntimeError, "read outstanding"):
+        runtime.ensure_trace_safe()
+
+    assert runtime.process_decode_output_host(raw, is_tokens=True) == ("host", True)
+    assert reads == [(raw, True)]
+    runtime.ensure_trace_safe()
+
+
+@pytest.mark.host
 @pytest.mark.parametrize("salt_duplicate_seeds", (True, False))
 def test_v1_remap_and_reset_preserve_continuing_equal_seed_salt(salt_duplicate_seeds):
     runtime = make_runtime(seed_buffer=FakeLazySeedBuffer(), salt_duplicate_seeds=salt_duplicate_seeds)
