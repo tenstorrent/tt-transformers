@@ -66,7 +66,7 @@ PLUGIN_CAPABILITY_KEYS = {
     "tt_adaptive_block_output": "absent: block-output only",
     "tt_adaptive_block_max_prompt_tokens": "absent: block-output only",
     "tt_block_kv_extent_tokens": "absent: block-output only",
-    "supports_device_grammar": "absent: no generator declares it",
+    "supports_device_grammar": "absent: declared per generator until every generator of an architecture has it",
     "supports_spec_decode": "absent: no generator declares it",
     "supports_async_spec_decode": "absent: no generator declares it",
     "spec_requirements": "absent: speculative decoding only",

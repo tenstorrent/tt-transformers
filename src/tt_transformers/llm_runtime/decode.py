@@ -45,6 +45,7 @@ class DecodeProgramSignature:
     device_feedback: bool
     penalties_enabled: bool = False
     logprobs_enabled: bool = False
+    grammar_enabled: bool = False
 
     def key_material(self) -> tuple[tuple[str, Any], ...]:
         material = [
@@ -58,6 +59,8 @@ class DecodeProgramSignature:
             material.append(("penalties_enabled", True))
         if self.logprobs_enabled:
             material.append(("logprobs_enabled", True))
+        if self.grammar_enabled:
+            material.append(("grammar_enabled", True))
         return tuple(material)
 
 
@@ -90,6 +93,7 @@ class DecodeTraceSignature:
     device_feedback: bool
     penalties_enabled: bool = False
     logprobs_enabled: bool = False
+    grammar_enabled: bool = False
 
     def key_material(self) -> tuple[tuple[str, Any], ...]:
         material = [
@@ -103,6 +107,8 @@ class DecodeTraceSignature:
             material.append(("penalties_enabled", True))
         if self.logprobs_enabled:
             material.append(("logprobs_enabled", True))
+        if self.grammar_enabled:
+            material.append(("grammar_enabled", True))
         return tuple(material)
 
 
@@ -149,6 +155,8 @@ class PreparedDecode:
     reload_sampling_params: bool = False
     reset_sampling_state: bool = False
     slot_remap: Any = None
+    # Sample through the staged grammar mask (vLLM structured outputs).
+    grammar: bool = False
 
     @property
     def sampling_values(self):
@@ -234,6 +242,23 @@ class DecodeOutputLease:
     pending: PendingRead | None = None
     released: bool = False
     deallocated_tensor_ids: set[int] = field(default_factory=set, repr=False)
+
+
+@dataclass(eq=False)
+class DeferredDecode:
+    """A decode forward whose device sampling waits for the step's grammar mask.
+
+    vLLM fills structured-output masks after it submits the forward, so the
+    forward runs first and returns this payload, and ``sample_deferred_decode``
+    samples it once. The payload is opaque to callers.
+    """
+
+    owner: Any
+    request: dict[str, Any]
+    forward: PreparedDecode
+    logits: Any
+    device_inputs: Any = None
+    consumed: bool = False
 
 
 @dataclass(frozen=True)
@@ -393,6 +418,10 @@ class DecodeRuntime:
     stream must keep prefill on the logits path and begin sampling in decode.
     """
 
+    # Deferred device sampling state; class defaults keep partially built runtimes valid.
+    _grammar_enabled = False
+    _pending_deferred: DeferredDecode | None = None
+
     def __init__(self, config: DecodeRuntimeConfig):
         if not isinstance(config, DecodeRuntimeConfig):
             raise TypeError("config must be a DecodeRuntimeConfig")
@@ -408,6 +437,8 @@ class DecodeRuntime:
         self._external_by_raw_id: dict[int, DecodeOutputLease] = {}
         self._external_by_host_id: dict[int, DecodeOutputLease] = {}
         self._transient_orphans: list[TensorResourceOrphan] = []
+        self._grammar_enabled = False
+        self._pending_deferred = None
         self._sampling_state_controller = config.sampling_state_controller
         self._sampling_state = config.sampling_state
         sampling_config = getattr(getattr(config.model, "sampling", None), "config", None)
@@ -460,8 +491,15 @@ class DecodeRuntime:
         reload_page_table: bool = False,
         reload_sampling_params: bool = False,
         reset_sampling_state: bool = False,
+        grammar: bool = False,  # ↓ Deferred device sampling
+        deferred_forward: bool = False,
     ) -> PreparedDecode:
-        """Normalize one host decode request into an immutable prepared value."""
+        """Normalize one host decode request into an immutable prepared value.
+
+        ``deferred_forward`` prepares only the model body of a deferred decode:
+        sampling parameters arrive later, at ``sample_deferred_decode``, which
+        prepares the whole request again with them and ``grammar=True``.
+        """
 
         self._ensure_usable()
         self._validate_inputs(tokens, start_pos, page_table)
@@ -469,10 +507,23 @@ class DecodeRuntime:
         _validate_reload_commands(
             reload_inputs, reload_page_table, reload_sampling_params, reset_sampling_state, reset_batch
         )
-        if reload_inputs is False and (sampling_params is None or not self._resident_feedback):
-            raise ValueError("resident decode requires a previous submitted device-feedback decode")
-        if sampling_params is None and (reload_sampling_params or reset_sampling_state):
-            raise ValueError("sampling commands require device sampling parameters")
+        if deferred_forward:
+            if sampling_params is not None or grammar:
+                raise ValueError("a deferred forward takes its sampling parameters at sample time")
+            if not self.config.device_sampling_enabled:
+                raise ValueError("deferred decode requires device sampling")
+            if reload_inputs is False and not self._resident_feedback:
+                raise ValueError("resident decode requires a previous submitted device-feedback decode")
+        else:
+            if reload_inputs is False and (sampling_params is None or not self._resident_feedback):
+                raise ValueError("resident decode requires a previous submitted device-feedback decode")
+            if sampling_params is None and (reload_sampling_params or reset_sampling_state):
+                raise ValueError("sampling commands require device sampling parameters")
+        if grammar:
+            if not self._grammar_enabled:
+                raise RuntimeError("grammar sampling requires enable_grammar() first")
+            if sampling_params is None:
+                raise ValueError("grammar sampling requires device sampling parameters")
         normalized_remap = _normalize_decode_slot_remap(
             slot_remap,
             lane_capacity=self.config.lane_capacity,
@@ -558,6 +609,8 @@ class DecodeRuntime:
             if self._previous_page_table is None:
                 raise RuntimeError("resident decode has no page table")
             normalized = self._previous_page_table
+        if grammar and prepared_sampling is not None and prepared_sampling.log_probs_enabled:
+            raise ValueError("device grammar sampling does not support logprobs")
         return PreparedDecode(
             tokens=tokens,
             start_pos=start_pos,
@@ -575,6 +628,7 @@ class DecodeRuntime:
             reload_sampling_params=reload_sampling_params,
             reset_sampling_state=reset_sampling_state,
             slot_remap=normalized_remap,
+            grammar=bool(grammar),
         )
 
     def program_signature(self, prepared: PreparedDecode) -> DecodeProgramSignature:
@@ -595,6 +649,7 @@ class DecodeRuntime:
             penalties_enabled=program.penalties_enabled,
             logprobs_enabled=program.logprobs_enabled,
             device_feedback=program.device_feedback,
+            grammar_enabled=program.grammar_enabled,
         )
 
     def body_signature(self, prepared: PreparedDecode) -> DecodeBodySignature:
@@ -800,6 +855,9 @@ class DecodeRuntime:
         elif bool(decision.page_table):
             page_table = self._prepare_page_table_host(prepared.page_table)
             ttnn.copy_host_to_device_tensor(page_table, values.device_inputs.page_table)
+        self._refresh_trace_kpt(values, prepared)
+
+    def _refresh_trace_kpt(self, values: DecodePersistentInputs, prepared: PreparedDecode) -> None:
         if prepared.sampling_path == "topk":
             sampling = prepared.prepared_sampling
             if sampling is None:
@@ -915,9 +973,158 @@ class DecodeRuntime:
     def cleanup_transients(self) -> None:
         """Retry every transient tensor release that previously failed."""
 
-        failures = release_orphans(self._transient_orphans)
+        failures = []
+        pending = self._pending_deferred
+        if pending is not None:
+            # Cleanup ends the runtime; an unsampled eager body still owns its inputs.
+            self._pending_deferred = None
+            pending.consumed = True
+            failures.extend(self._release_or_retain_transient((pending.device_inputs,)))
+        failures.extend(release_orphans(self._transient_orphans))
         if failures:
             raise_cleanup_failures(failures)
+
+    # Deferred device sampling (vLLM structured outputs)
+
+    @property
+    def grammar_enabled(self) -> bool:
+        return self._grammar_enabled
+
+    def enable_grammar(self) -> None:
+        """Allocate the sampler's grammar mask buffer; call before any trace capture.
+
+        Raises ``ValueError`` when the sampler's vocab layout cannot apply a mask.
+        """
+
+        sampling = getattr(self.config.model, "sampling", None)
+        if not self.config.device_sampling_enabled or sampling is None:
+            raise ValueError("device grammar sampling requires device sampling")
+        sampling.enable_device_grammar()
+        self._grammar_enabled = True
+
+    def validate_grammar_mask(self, grammar_bitmask: Any) -> None:
+        """Reject a malformed mask before any sampler state changes."""
+
+        if grammar_bitmask is not None:
+            self.config.model.sampling.validate_grammar_bitmask(grammar_bitmask)
+
+    def stage_grammar_mask(self, grammar_bitmask: Any) -> None:
+        """Copy one step's mask into the persistent buffer; ``None`` stages all-allowed."""
+
+        self.config.model.sampling.update_grammar_bitmask(grammar_bitmask)
+
+    @property
+    def deferred_pending(self) -> bool:
+        return self._pending_deferred is not None
+
+    def require_no_pending_deferred(self) -> None:
+        if self._pending_deferred is not None:
+            raise RuntimeError("a deferred decode is pending; sample it with sample_deferred_decode() first")
+
+    def begin_deferred(self, payload: DeferredDecode) -> None:
+        """Record the one pending deferred decode."""
+
+        self.require_no_pending_deferred()
+        self._pending_deferred = payload
+
+    def take_deferred(self, payload: Any) -> DeferredDecode:
+        """Consume the pending payload once; a stale one raises and leaves it pending."""
+
+        self._ensure_usable()
+        if not isinstance(payload, DeferredDecode) or payload.consumed or payload is not self._pending_deferred:
+            raise RuntimeError("deferred decode payload is stale or was already sampled")
+        payload.consumed = True
+        self._pending_deferred = None
+        return payload
+
+    def invoke_deferred_body(self, forward: PreparedDecode) -> tuple[DecodeDeviceInputs, Any]:
+        """Stage inputs and run the model body eagerly; return the inputs and its logits."""
+
+        self._ensure_usable()
+        self._require_prepared(forward)
+        if forward.reload_inputs is False:
+            raise ValueError("eager decode requires reload_inputs=True")
+        device_inputs = self._stage_inputs(self._prepare_inputs_host(forward))
+        try:
+            with _validate_module_inputs(self.config.model):
+                logits = self._run_model(device_inputs)
+        except BaseException as primary:
+            self.invalidate_after_failed_submission()
+            attach_cleanup_failures(primary, self._release_or_retain_transient((device_inputs,)))
+            raise
+        return device_inputs, logits
+
+    def sample_deferred_eager(
+        self, payload: DeferredDecode, prepared: PreparedDecode, grammar_bitmask: Any
+    ) -> InvocationResult:
+        """Stage the mask and sample an eager deferred body; the tail owns its inputs from here."""
+
+        device_inputs, payload.device_inputs = payload.device_inputs, None
+        try:
+            self.validate_grammar_mask(grammar_bitmask)
+            self.stage_grammar_mask(grammar_bitmask)
+        except BaseException as primary:
+            self.invalidate_after_failed_submission()
+            attach_cleanup_failures(primary, self._release_or_retain_transient((device_inputs,)))
+            raise
+        return self.invoke_deferred_tail(prepared, device_inputs, payload.logits)
+
+    def abandon_deferred(self, payload: DeferredDecode, primary: BaseException) -> None:
+        """Latch the runtime after a deferred decode failed once its body ran."""
+
+        self.invalidate_after_failed_submission()
+        if payload.device_inputs is not None:
+            inputs, payload.device_inputs = payload.device_inputs, None
+            attach_cleanup_failures(primary, self._release_or_retain_transient((inputs,)))
+
+    def invoke_deferred_tail(
+        self, prepared: PreparedDecode, device_inputs: DecodeDeviceInputs, logits: Any
+    ) -> InvocationResult:
+        """Sample an eager deferred body exactly as `invoke` samples its own body."""
+
+        self._require_prepared(prepared)
+        kpt = None
+        try:
+            self.validate_submission(prepared)
+            kpt = self._make_device_kpt(prepared)
+            self._refresh_sampling_seeds(prepared)
+            with _validate_module_inputs(self.config.model):
+                output = self._run_tail(
+                    logits,
+                    device_inputs,
+                    prepared,
+                    kpt,
+                    device_feedback=False,
+                    count_tokens=True,
+                    advance_seeds=False,
+                )
+        except BaseException as primary:
+            self.invalidate_after_failed_submission()
+            attach_cleanup_failures(primary, self._release_or_retain_transient((device_inputs, kpt)))
+            raise
+        self._note_submitted(prepared, feedback=False)
+        return InvocationResult(value=output, owned=(output, (device_inputs, kpt)), is_tokens=True)
+
+    def refresh_trace_inputs(self, artifact: Any, prepared: PreparedDecode, decision: Any) -> None:
+        """Forward half of `refresh_trace`: copy the body's host inputs or page table."""
+
+        self._require_prepared(prepared)
+        values = _persistent_values(artifact)
+        if bool(decision.full):
+            host_inputs = self._prepare_inputs_host(prepared)
+            _copy_host_to_device(host_inputs.values(), values.device_inputs.values())
+        elif bool(decision.page_table):
+            page_table = self._prepare_page_table_host(prepared.page_table)
+            ttnn.copy_host_to_device_tensor(page_table, values.device_inputs.page_table)
+
+    def refresh_trace_sampling(self, artifact: Any, prepared: PreparedDecode) -> None:
+        """Sample half of `refresh_trace`: slot remap, seeds and K/P/T of one tail."""
+
+        self._require_prepared(prepared)
+        values = _persistent_values(artifact)
+        self._validate_trace_seed_handle(values)
+        self._refresh_sampling_seeds(prepared)
+        self._refresh_trace_kpt(values, prepared)
 
     # Private implementation
 
@@ -958,6 +1165,7 @@ class DecodeRuntime:
                 prepared.prepared_sampling.log_probs_enabled if prepared.prepared_sampling is not None else False
             ),
             device_feedback=prepared.device_feedback,
+            grammar_enabled=prepared.grammar,
         )
 
     def _note_submitted(self, prepared: PreparedDecode, *, feedback: bool | None = None) -> None:
@@ -1131,21 +1339,24 @@ class DecodeRuntime:
                 tt_out_tok=None,
                 count_tokens=count_tokens,
                 advance_seeds=advance_seeds,
+                **({"apply_grammar": True} if prepared.grammar else {}),
             )
         else:
-            output = self._sample_device(logits, kpt, sampling)
+            output = self._sample_device(logits, kpt, sampling, apply_grammar=prepared.grammar)
         if device_feedback:
             sampled_tokens = ttnn.reshape(output[0], inputs.tokens.shape)
             ttnn.copy(input_a=sampled_tokens, input_b=inputs.tokens)
             model.increment_positions(inputs.positions, inputs.rotary_indices)
         return output
 
-    def _sample_device(self, logits, kpt, sampling: PreparedSamplingParams):
+    def _sample_device(self, logits, kpt, sampling: PreparedSamplingParams, *, apply_grammar: bool = False):
+        grammar = {"apply_grammar": True} if apply_grammar else {}
         if kpt is None:
             return self.config.model.sampling.decode_forward(
                 logits,
                 tt_out_tok=None,
                 enable_log_probs=sampling.enable_log_probs,
+                **grammar,
             )
         return self.config.model.sampling.decode_forward(
             logits,
@@ -1154,6 +1365,7 @@ class DecodeRuntime:
             temp=kpt[2],
             tt_out_tok=None,
             enable_log_probs=sampling.enable_log_probs,
+            **grammar,
         )
 
     def _seed_device_handle(self):

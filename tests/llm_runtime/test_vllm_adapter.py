@@ -206,6 +206,8 @@ def test_adapter_is_plain_orchestration_with_one_config_surface(expect_error):
                 ("reload_page_table", inspect.Parameter.KEYWORD_ONLY, False),
                 ("reload_sampling_params", inspect.Parameter.KEYWORD_ONLY, False),
                 ("reset_sampling_state", inspect.Parameter.KEYWORD_ONLY, False),
+                ("defer_device_sampling", inspect.Parameter.KEYWORD_ONLY, False),
+                ("read_from_device", inspect.Parameter.KEYWORD_ONLY, False),
                 ("compatibility_kwargs", inspect.Parameter.KEYWORD_ONLY, None),
             ],
         ),
@@ -248,6 +250,7 @@ def test_normalized_typed_dicts_have_stable_key_order_and_optional_request_state
         "prompt_tokens",
         "output_tokens",
         "slot_remap",
+        "defer_device_sampling",
     )
     assert NormalizedDecodeKwargs.__required_keys__ == frozenset(
         {
@@ -262,7 +265,9 @@ def test_normalized_typed_dicts_have_stable_key_order_and_optional_request_state
             "reset_sampling_state",
         }
     )
-    assert NormalizedDecodeKwargs.__optional_keys__ == frozenset({"prompt_tokens", "output_tokens", "slot_remap"})
+    assert NormalizedDecodeKwargs.__optional_keys__ == frozenset(
+        {"prompt_tokens", "output_tokens", "slot_remap", "defer_device_sampling"}
+    )
 
 
 @pytest.mark.host
@@ -670,6 +675,7 @@ def _signature_entries(method):
                 ("reload_sampling_params", inspect.Parameter.KEYWORD_ONLY, False),
                 ("reset_sampling_state", inspect.Parameter.KEYWORD_ONLY, False),
                 ("read_from_device", inspect.Parameter.KEYWORD_ONLY, True),
+                ("defer_device_sampling", inspect.Parameter.KEYWORD_ONLY, False),
                 ("compatibility_kwargs", inspect.Parameter.VAR_KEYWORD, inspect.Parameter.empty),
             ],
         ),
@@ -707,6 +713,7 @@ def _signature_entries(method):
                 ("num_blocks", inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.empty),
                 ("can_sample_on_device", inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.empty),
                 ("enable_trace", inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.empty),
+                ("can_sample_device_grammar", inspect.Parameter.KEYWORD_ONLY, False),
             ],
         ),
     ],
@@ -891,7 +898,9 @@ def test_registered_generator_compile_methods_normalize_and_select_execution():
     )
     assert target.calls[2][0] == "compile_decode"
     assert target.calls[2][1]["execution"] is target.traced_decode_execution
-    assert set(target.calls[2][1]) == set(NormalizedDecodeKwargs.__annotations__) | {"execution"}
+    assert set(target.calls[2][1]) == set(NormalizedDecodeKwargs.__annotations__) - {"defer_device_sampling"} | {
+        "execution"
+    }
 
 
 @pytest.mark.host
@@ -944,9 +953,9 @@ def test_registered_generator_discards_allowlisted_compatibility_and_limits_trac
     assert target.calls[2][0] == "decode_forward"
     assert target.calls[2][1]["execution"] is target.traced_decode_execution
     assert target.calls[2][1]["read_from_device"] is False
-    assert set(target.calls[2][1]) == set(NormalizedDecodeKwargs.__annotations__) | {
-        "read_from_device",
+    assert set(target.calls[2][1]) == set(NormalizedDecodeKwargs.__annotations__) - {"defer_device_sampling"} | {
         "execution",
+        "read_from_device",
     }
 
 
@@ -1314,3 +1323,137 @@ def test_every_generator_forwards_warmup_and_cleanup_verbatim(model, class_name)
         ("warmup_model_decode", decode),
         ("cleanup", {}),
     ]
+
+
+class _GrammarTarget:
+    """Records the device grammar calls a facade forwards to its executor."""
+
+    eager_execution = "eager"
+    traced_decode_execution = "traced-decode"
+    device_grammar_enabled = True
+
+    def __init__(self):
+        self.calls = []
+
+    def enable_device_grammar(self):
+        self.calls.append(("enable_device_grammar", {}))
+
+    def decode_forward(self, **kwargs):
+        self.calls.append(("decode_forward", kwargs))
+        return "payload"
+
+    def sample_deferred_decode(self, payload, **kwargs):
+        self.calls.append(("sample_deferred_decode", {"payload": payload, **kwargs}))
+        return "tokens"
+
+    def warmup_model_decode(self, **kwargs):
+        self.calls.append(("warmup_model_decode", kwargs))
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(("model", "class_name"), _V1_GENERATORS)
+def test_every_generator_forwards_the_device_grammar_contract(model, class_name):
+    """Each facade forwards the deferred decode, the sample call, enablement and the
+    grammar warmup flag to its executor, and reports the executor's runtime support."""
+
+    generator_class = getattr(import_module(f"tt_transformers.models.{model}.vllm_generator"), class_name)
+    target = _GrammarTarget()
+    generator = generator_class(target, _adapter(request_state_fields=()))
+    tokens = torch.zeros(4, dtype=torch.long)
+    page_table = torch.zeros((4, 2), dtype=torch.int32)
+
+    generator.enable_device_grammar()
+    assert generator.device_grammar_enabled is True
+    payload = generator.decode_forward(
+        tokens,
+        torch.zeros(4, dtype=torch.long),
+        page_table,
+        enable_trace=True,
+        read_from_device=False,
+        reload_inputs=False,
+        defer_device_sampling=True,
+    )
+    sampled = generator.sample_deferred_decode(payload, sampling_params="params", grammar_bitmask="mask")
+    generator.warmup_model_decode(
+        kv_cache="cache",
+        max_batch_size=4,
+        num_blocks=64,
+        can_sample_on_device=True,
+        enable_trace=True,
+        can_sample_device_grammar=True,
+    )
+
+    assert (payload, sampled) == ("payload", "tokens")
+    assert [name for name, _ in target.calls] == [
+        "enable_device_grammar",
+        "decode_forward",
+        "sample_deferred_decode",
+        "warmup_model_decode",
+    ]
+    decode = target.calls[1][1]
+    assert decode["defer_device_sampling"] is True
+    assert decode["sampling_params"] is None
+    assert decode["read_from_device"] is False
+    assert decode["execution"] == "traced-decode"
+    assert target.calls[2][1] == {"payload": "payload", "sampling_params": "params", "grammar_bitmask": "mask"}
+    assert target.calls[3][1]["can_sample_device_grammar"] is True
+
+
+@pytest.mark.host
+def test_a_target_without_grammar_support_keeps_host_grammar():
+    """A lane group or other target without the members reports grammar disabled."""
+
+    target = _WarmupTarget()
+    generator = Llama3Generator(target, _adapter(request_state_fields=()))
+
+    generator.enable_device_grammar()
+    generator.warmup_model_decode(
+        kv_cache="cache", max_batch_size=4, num_blocks=64, can_sample_on_device=True, enable_trace=False
+    )
+
+    assert generator.device_grammar_enabled is False
+    assert "can_sample_device_grammar" not in target.calls[0][1]
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(
+    ("kwargs", "error"),
+    [
+        ({"sampling_params": object()}, "requires sampling_params=None"),
+        ({"read_from_device": True}, "requires sampling_params=None"),
+        ({"defer_device_sampling": 1}, "must be bool"),
+    ],
+)
+def test_deferred_decode_normalization_rejects_sampling_now(kwargs, error, expect_error):
+    adapter = _adapter()
+    request = {"enable_trace": True, "defer_device_sampling": True, **kwargs}
+    with expect_error((TypeError, ValueError), error):
+        adapter.normalize_decode(
+            torch.zeros(4, dtype=torch.long), torch.zeros(4, dtype=torch.long), torch.zeros((4, 2)), **request
+        )
+
+
+@pytest.mark.host
+def test_deferred_decode_normalization_allows_a_resident_step_without_sampling_params():
+    adapter = _adapter()
+    normalized, traced = adapter.normalize_decode(
+        torch.zeros(4, dtype=torch.long),
+        torch.zeros(4, dtype=torch.long),
+        torch.zeros((4, 2)),
+        enable_trace=True,
+        reload_inputs=False,
+        defer_device_sampling=True,
+    )
+
+    assert traced is True
+    assert normalized["defer_device_sampling"] is True
+    assert normalized["sampling_params"] is None
+    assert normalized["reload_inputs"] is False
+    with pytest.raises(ValueError, match="reload_inputs=False requires traced device sampling"):
+        adapter.normalize_decode(
+            torch.zeros(4, dtype=torch.long),
+            torch.zeros(4, dtype=torch.long),
+            torch.zeros((4, 2)),
+            enable_trace=True,
+            reload_inputs=False,
+        )

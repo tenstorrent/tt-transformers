@@ -61,6 +61,7 @@ class NormalizedDecodeKwargs(_NormalizedDecodeRequiredKwargs, total=False):
     prompt_tokens: Any  # ↓ Request-owned sampling state
     output_tokens: Any
     slot_remap: Any
+    defer_device_sampling: bool  # ↓ Deferred device sampling (present only when True)
 
 
 @dataclass(frozen=True)
@@ -184,9 +185,16 @@ class VLLMAdapter:
         reload_page_table: bool = False,
         reload_sampling_params: bool = False,
         reset_sampling_state: bool = False,
+        defer_device_sampling: bool = False,  # ↓ Deferred device sampling
+        read_from_device: bool = False,
         compatibility_kwargs: Mapping[str, Any] | None = None,  # ↓ Compatibility
     ) -> tuple[NormalizedDecodeKwargs, bool]:
-        """Normalize one explicit decode request and return trace intent separately."""
+        """Normalize one explicit decode request and return trace intent separately.
+
+        A deferred decode (``defer_device_sampling=True``) runs the forward now and
+        samples later, so it takes no ``sampling_params`` and cannot read its
+        output during submission.
+        """
 
         self._validate_compatibility_kwargs(compatibility_kwargs, operation="decode")
         self._validate_trace_selection(enable_trace, operation="decode")
@@ -195,6 +203,7 @@ class VLLMAdapter:
             ("reload_page_table", reload_page_table),
             ("reload_sampling_params", reload_sampling_params),
             ("reset_sampling_state", reset_sampling_state),
+            ("defer_device_sampling", defer_device_sampling),
         ):
             if type(value) is not bool:
                 raise TypeError(f"{name} must be bool")
@@ -202,7 +211,10 @@ class VLLMAdapter:
             raise ValueError("reload_inputs and reload_page_table are mutually exclusive")
         if reset_sampling_state and not reload_inputs:
             raise ValueError("reset_sampling_state requires reload_inputs=True")
-        if not reload_inputs and (not enable_trace or sampling_params is None):
+        if defer_device_sampling and (sampling_params is not None or read_from_device):
+            raise ValueError("defer_device_sampling=True requires sampling_params=None and read_from_device=False")
+        device_sampled = sampling_params is not None or defer_device_sampling
+        if not reload_inputs and (not enable_trace or not device_sampled):
             raise ValueError("reload_inputs=False requires traced device sampling")
         normalized: NormalizedDecodeKwargs = {
             "tokens": tokens,
@@ -220,6 +232,8 @@ class VLLMAdapter:
         # even for models that do not accept prompt or output token histories.
         if compatibility_kwargs is not None and compatibility_kwargs.get("slot_remap") is not None:
             normalized["slot_remap"] = compatibility_kwargs["slot_remap"]
+        if defer_device_sampling:
+            normalized["defer_device_sampling"] = True
         _normalize_tensor(normalized, "tokens", torch.long)
         _normalize_tensor(normalized, "start_pos", torch.long)
         _normalize_tensor(normalized, "page_table", torch.int32)
