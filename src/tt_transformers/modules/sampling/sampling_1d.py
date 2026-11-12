@@ -24,9 +24,16 @@ from tt_transformers.device_ownership import compatibility_default_device
 from tt_transformers.modules.lazy_buffer import LazyBuffer, resolve_lazy_buffer
 from tt_transformers.modules.lightweightmodule import LightweightModule
 from tt_transformers.modules.tt_ccl import get_tt_ccl
+from tt_transformers.sampling.grammar_bitmask import (
+    GRAMMAR_WORD_BITS,
+    all_allowed_grammar_bitmask,
+    format_grammar_bitmask,
+    grammar_layout_error,
+)
 from tt_transformers.sampling.vocab_padding import (
     build_invalid_vocab_mask,
     build_tail_invalid_vocab_mask,
+    get_vocab_num_shards,
     get_vocab_shard_dims,
 )
 
@@ -204,6 +211,10 @@ def _adjust_values_for_tiebreak(values, global_indices, greedy_col, sub_core_gri
     return adjusted
 
 
+# Additive block value for a disallowed grammar token: the bf16 maximum, so a
+# blocked logit lands at the bf16 minimum like a padded vocab column.
+_BF16_MAX = 3.3895313892515355e38
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -280,7 +291,17 @@ class Sampling1D(LightweightModule):
 
     k/p/temp are per-call forward args — NOT stored on the module. This eliminates
     mutable sampling state.
+
+    Device grammar sampling (vLLM structured outputs) is opt-in: after
+    ``enable_device_grammar`` allocates the packed-mask buffer,
+    ``update_grammar_bitmask`` stages a mask and ``decode_forward(apply_grammar=True)``
+    blocks every disallowed token before the argmax or top-k selection.
     """
+
+    # Persistent packed grammar mask and the [0, 32) shift vector that unpacks it.
+    # None until enable_device_grammar(); class defaults so from_config() needs no setup.
+    _grammar_bitmask: ttnn.Tensor | None = None
+    _grammar_shift: ttnn.Tensor | None = None
 
     def __init__(self, vocab_size: int, mesh_device: ttnn.MeshDevice | None = None, **kwargs):
         """Happy path — minimal required args."""
@@ -420,10 +441,159 @@ class Sampling1D(LightweightModule):
             if not isinstance(specification, LazyBuffer) or specification._value is None:
                 setattr(self, f"_{name}", None)
 
+        for name in ("_grammar_bitmask", "_grammar_shift"):
+            tensor = getattr(self, name, None)
+            if tensor is None:
+                continue
+            try:
+                ttnn.deallocate(tensor)
+            except BaseException as error:
+                failures.append(error)
+            else:
+                setattr(self, name, None)
+
         self._sampling_sub_core_grids = None
         self._device_buffers_loaded = False
         if failures:
             _raise_cleanup_failures(failures)
+
+    # -- Device grammar (vLLM structured outputs) -----------------------------
+
+    @property
+    def grammar_vocab_size(self) -> int:
+        """Vocabulary size vLLM packs grammar masks for: the real, unpadded vocab."""
+        return int(self.config.valid_vocab_size)
+
+    @property
+    def device_grammar_enabled(self) -> bool:
+        return self._grammar_bitmask is not None
+
+    def _num_grammar_vocab_shards(self) -> int:
+        return get_vocab_num_shards(tuple(self.config.mesh_device.shape))
+
+    def device_grammar_layout_error(self) -> str | None:
+        """Why this sampler's logits layout cannot apply a grammar mask, or ``None``."""
+        return grammar_layout_error(int(self.config.vocab_size), self._num_grammar_vocab_shards())
+
+    def enable_device_grammar(self) -> None:
+        """Allocate the persistent packed-mask buffer, all-allowed, before any trace capture.
+
+        Idempotent. Raises ``ValueError`` when a vocab shard would split a mask word.
+        """
+        error = self.device_grammar_layout_error()
+        if error is not None:
+            raise ValueError(error)
+        if self._grammar_bitmask is not None:
+            return
+        import torch  # lazy, like _resolve_sampling1d_config
+
+        cfg = self.config
+        mesh_device = cfg.mesh_device
+        initial = all_allowed_grammar_bitmask(int(cfg.max_batch_size), int(cfg.vocab_size))
+        bitmask = ttnn.from_torch(
+            initial,
+            device=mesh_device,
+            dtype=ttnn.int32,
+            layout=ttnn.ROW_MAJOR_LAYOUT,
+            mesh_mapper=self._grammar_bitmask_mapper(),
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+        )
+        try:
+            shift = ttnn.from_torch(
+                torch.arange(GRAMMAR_WORD_BITS, dtype=torch.int32),
+                device=mesh_device,
+                dtype=ttnn.int32,
+                layout=ttnn.ROW_MAJOR_LAYOUT,
+                mesh_mapper=ttnn.ReplicateTensorToMesh(mesh_device),
+                memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            )
+        except BaseException:
+            ttnn.deallocate(bitmask)
+            raise
+        self._grammar_bitmask = bitmask
+        self._grammar_shift = shift
+
+    def validate_grammar_bitmask(self, grammar_bitmask):
+        """Return the fixed-shape mask for a vLLM mask, or raise before any state changes."""
+        cfg = self.config
+        return format_grammar_bitmask(
+            grammar_bitmask,
+            vocab_size=self.grammar_vocab_size,
+            padded_vocab_size=int(cfg.vocab_size),
+            max_batch_size=int(cfg.max_batch_size),
+        )
+
+    def update_grammar_bitmask(self, grammar_bitmask) -> None:
+        """Replace the whole staged mask. ``None`` stages an all-allowed mask.
+
+        Rows past the mask's batch become all-allowed, so a row whose request
+        finished keeps no stale constraint. The copy reuses the persistent
+        buffer and compiles nothing, so it is safe between trace replays.
+        """
+        if self._grammar_bitmask is None:
+            raise RuntimeError("device grammar buffers were not enabled; call enable_device_grammar() first")
+        cfg = self.config
+        if grammar_bitmask is None:
+            formatted = all_allowed_grammar_bitmask(int(cfg.max_batch_size), int(cfg.vocab_size))
+        else:
+            formatted = self.validate_grammar_bitmask(grammar_bitmask)
+        host = ttnn.from_torch(
+            formatted,
+            dtype=ttnn.int32,
+            layout=ttnn.ROW_MAJOR_LAYOUT,
+            mesh_mapper=self._grammar_bitmask_mapper(),
+        )
+        ttnn.copy_host_to_device_tensor(host, self._grammar_bitmask)
+
+    def _grammar_bitmask_mapper(self):
+        """Shard the 2D packed mask on its word axis exactly like the logits' vocab axis."""
+        mesh_device = self.config.mesh_device
+        cluster_shape = tuple(mesh_device.shape)
+        dims = tuple(1 if dim == 3 or dim == -1 else dim for dim in get_vocab_shard_dims(cluster_shape))
+        return ttnn.ShardTensor2dMesh(mesh_device, dims=dims, mesh_shape=cluster_shape)
+
+    def _apply_grammar_bitmask(self, logits):
+        """Return bf16 logits with every disallowed token pushed to the bf16 minimum.
+
+        Out of place: a traced decode body keeps its logits for every tail, so the
+        caller's tensor must not change.
+        """
+        bitmask, shift = self._grammar_bitmask, self._grammar_shift
+        if bitmask is None or shift is None:
+            raise RuntimeError("device grammar buffers were not enabled before sampling")
+        cfg = self.config
+        rows = int(cfg.max_batch_size)
+        local_words = int(bitmask.shape[-1])
+        local_width = local_words * GRAMMAR_WORD_BITS
+        if int(logits.shape[2]) != rows or int(logits.shape[-1]) != local_width:
+            raise ValueError(
+                "grammar mask does not cover the logits: "
+                f"mask is [{rows}, {local_width}] per device, logits are {tuple(logits.shape)}"
+            )
+        scg = {} if cfg.sub_core_grids is None else {"sub_core_grids": cfg.sub_core_grids}
+
+        packed = ttnn.reshape(bitmask, (rows, local_words, 1))
+        shifted = ttnn.bitwise_right_shift(packed, shift, **scg)
+        bits = ttnn.bitwise_and(shifted, 1, **scg)
+        ttnn.deallocate(shifted)
+        unpacked = ttnn.reshape(bits, (1, 1, rows, local_width))
+        bits_tiled = ttnn.to_layout(unpacked, ttnn.TILE_LAYOUT)
+        ttnn.deallocate(bits)
+        allowed = ttnn.typecast(bits_tiled, ttnn.bfloat16, **scg)
+        ttnn.deallocate(bits_tiled)
+        # (allowed - 1) is 0 for an allowed token and -1 for a blocked one; scaling by the
+        # bf16 maximum gives the same additive block value the invalid-vocab mask uses.
+        blocked = ttnn.subtract(allowed, 1.0, **scg)
+        ttnn.deallocate(allowed)
+        additive = ttnn.multiply(blocked, _BF16_MAX, **scg)
+        ttnn.deallocate(blocked)
+
+        x_bf16 = logits if logits.dtype == ttnn.bfloat16 else ttnn.typecast(logits, ttnn.bfloat16, **scg)
+        masked = ttnn.add(x_bf16, additive, **scg)
+        ttnn.deallocate(additive)
+        if x_bf16 is not logits:
+            ttnn.deallocate(x_bf16)
+        return masked
 
     # -- Forward methods ------------------------------------------------------
 
@@ -438,6 +608,7 @@ class Sampling1D(LightweightModule):
         tt_out_tok: ttnn.Tensor | None = None,
         enable_log_probs: bool | list[bool] = False,
         log_prob_logits: ttnn.Tensor | None = None,
+        apply_grammar: bool = False,
     ):
         """Sample tokens from logits.
 
@@ -456,26 +627,44 @@ class Sampling1D(LightweightModule):
                 sampled ones. A caller that applies penalties to a copy of the logits passes
                 the unpenalised logits here, since logprobs describe the model's distribution
                 before any logits processor. Defaults to ``logits``.
+            apply_grammar: Block the tokens the staged grammar mask disallows (see
+                ``update_grammar_bitmask``) before selection. Requires
+                ``enable_device_grammar``; cannot be combined with logprobs.
 
         Returns:
             (token_ids, log_probs_or_none)
         """
-        self.load_device_buffers()
-        cfg = self.config
+        # Route: argmax or top-k. Checked before any device work.
+        use_argmax = k is None and p is None and temp is None
+        if use_argmax and not self.config.allow_force_argmax:
+            raise ValueError("k/p/temp are all None but allow_force_argmax is False")
+        if not use_argmax and (k is None or p is None or temp is None):
+            raise ValueError("k, p, temp must all be provided, or all be None (for argmax)")
+        if apply_grammar:
+            if self._grammar_bitmask is None:
+                raise RuntimeError("apply_grammar=True requires enable_device_grammar() first")
+            log_probs_requested = (
+                any(enable_log_probs) if isinstance(enable_log_probs, (list, tuple)) else bool(enable_log_probs)
+            )
+            if log_probs_requested:
+                raise ValueError("device grammar sampling does not support logprobs")
 
+        self.load_device_buffers()
         # Per-call logprobs mode — refreshed each forward from the arg, never persisted on the
         # module (TTTv2 principle: no mutable sampling state). Mirrors main's reset_params path.
         self._log_probs_calculator.set_log_probs_mode(enable_log_probs)
 
-        # Route: argmax or top-k
-        if k is None and p is None and temp is None:
-            if cfg.allow_force_argmax:
-                return self._sample_argmax(logits, tt_out_tok)
-            else:
-                raise ValueError("k/p/temp are all None but allow_force_argmax is False")
-        if k is None or p is None or temp is None:
-            raise ValueError("k, p, temp must all be provided, or all be None (for argmax)")
+        if not apply_grammar:
+            return self._select(logits, use_argmax, k, p, temp, seeds, tt_out_tok, log_prob_logits)
+        masked = self._apply_grammar_bitmask(logits)
+        try:
+            return self._select(masked, use_argmax, k, p, temp, seeds, tt_out_tok, log_prob_logits)
+        finally:
+            ttnn.deallocate(masked)
 
+    def _select(self, logits, use_argmax, k, p, temp, seeds, tt_out_tok, log_prob_logits):
+        if use_argmax:
+            return self._sample_argmax(logits, tt_out_tok)
         tokens, log_probs = self._sample_topk(logits, k, p, temp, seeds, tt_out_tok, log_prob_logits)
         # The calculator reuses its output buffer. Runtime outputs are owned
         # by the caller and are released after warmup, readback, or trace cleanup.
