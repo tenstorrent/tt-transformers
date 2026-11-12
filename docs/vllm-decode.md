@@ -1,7 +1,7 @@
 # vLLM decode and trace lifecycle
 
-The model `vllm_generator.py` classes declare
-`decode_input_update_contract = 1`. They implement the TT plugin's
+The model `vllm_generator.py` classes inherit
+`decode_input_update_contract = 1` from the shared `VLLMGeneratorFacade`. They implement the TT plugin's
 [decode reload contract](https://github.com/tenstorrent/vllm-tt-plugin/blob/main/docs/DECODE_RELOAD_CONTRACT.md).
 Use a plugin that supports this contract. The vLLM boundary rejects the old
 `reset_batch` keyword. The standalone executor keeps its existing interface.

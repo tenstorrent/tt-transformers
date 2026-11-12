@@ -19,7 +19,8 @@ from tt_transformers.llm_runtime.config import (
 )
 from tt_transformers.llm_runtime.lane_group import LaneGroupExecutor
 from tt_transformers.llm_runtime.prefill.config import serving_prefill_policy
-from tt_transformers.llm_runtime.vllm_adapter import NormalizedPrefillKwargs, VLLMAdapter, VLLMAdapterConfig
+from tt_transformers.llm_runtime.vllm_adapter import VLLMAdapter, VLLMAdapterConfig
+from tt_transformers.llm_runtime.vllm_facade import VLLMGeneratorFacade
 from tt_transformers.models.qwen25_72b.hf_generator import (
     DEFAULT_HF_REVISION,
     Qwen25_72BExecutorConfig,
@@ -67,8 +68,8 @@ class Qwen25_72BGeneratorConfig:
         TraceConfig(mode=self.trace_mode)
 
 
-class Qwen25_72BGenerator:
-    decode_input_update_contract = 1
+class Qwen25_72BGenerator(VLLMGeneratorFacade):
+    """vLLM facade for Qwen2.5-72B."""
 
     model_capabilities = {
         "supports_prefix_caching": True,
@@ -83,46 +84,6 @@ class Qwen25_72BGenerator:
         # one-liner rather than an inherited default.
         "fabric_config": {"config": ttnn.FabricConfig.FABRIC_1D},
     }
-    requires_prefill_trace_warmup = True
-
-    def __init__(self, target: Any, adapter: VLLMAdapter):
-        self.target = target
-        self._adapter = adapter
-
-    @property
-    def model(self):
-        return self.target.model
-
-    @property
-    def model_args(self):
-        return self.target.model_args
-
-    @property
-    def mesh_device(self):
-        return self.target.mesh_device
-
-    @property
-    def cache_path(self):
-        return self.target.cache_path
-
-    @property
-    def already_warmed_up_prefill(self):
-        return self.target.already_warmed_up_prefill
-
-    @already_warmed_up_prefill.setter
-    def already_warmed_up_prefill(self, value):
-        self.target.already_warmed_up_prefill = value
-
-    @classmethod
-    def get_max_tokens_all_users(
-        cls,
-        model_name: str = "",
-        num_devices: int = 1,
-        tt_data_parallel: int = 1,
-        max_model_len: int = 0,
-        max_num_seqs: int = 1,
-    ) -> int:
-        return int(max_model_len)
 
     @classmethod
     def initialize_vllm_model(
@@ -153,137 +114,6 @@ class Qwen25_72BGenerator:
                 device_sampling_enabled=device_sampling_enabled,
             )
         )
-
-    def allocate_kv_cache(self, kv_cache_shape=None, dtype=None, num_layers=None):
-        """Resolve the late vLLM capacity, then allocate a borrowed cache handle."""
-
-        supplied = (kv_cache_shape is not None, dtype is not None, num_layers is not None)
-        if not any(supplied):
-            return self.target.allocate_kv_cache()
-        if not all(supplied):
-            raise TypeError("kv_cache_shape, dtype, and num_layers must be supplied together")
-
-        resolved = self._adapter.resolve_legacy_kv_cache_config(kv_cache_shape, dtype, num_layers)
-        self.target.configure_paged_kv_cache(resolved)
-        return self.target.allocate_kv_cache()
-
-    def prefill_forward(
-        self,
-        tokens,
-        page_table,
-        *,
-        enable_trace: bool,
-        prompt_lens=None,
-        start_pos=None,
-        empty_slots=None,
-        kv_cache=None,
-        sampling_params=None,
-        **compatibility_kwargs,
-    ):
-        normalized, trace_requested = self._adapter.normalize_prefill(
-            tokens,
-            page_table,
-            enable_trace=enable_trace,
-            prompt_lens=prompt_lens,
-            start_pos=start_pos,
-            empty_slots=empty_slots,
-            kv_cache=kv_cache,
-            sampling_params=sampling_params,
-            compatibility_kwargs=compatibility_kwargs,
-        )
-        execution = self._select_prefill_execution(normalized, trace_requested)
-        return self.target.prefill_forward(execution=execution, **normalized)
-
-    def decode_forward(
-        self,
-        tokens,
-        start_pos,
-        page_table,
-        *,
-        enable_trace: bool,
-        kv_cache=None,
-        sampling_params=None,
-        reload_inputs: bool = True,
-        reload_page_table: bool = False,
-        reload_sampling_params: bool = False,
-        reset_sampling_state: bool = False,
-        read_from_device=True,
-        **compatibility_kwargs,
-    ):
-        normalized, trace_requested = self._adapter.normalize_decode(
-            tokens,
-            start_pos,
-            page_table,
-            enable_trace=enable_trace,
-            kv_cache=kv_cache,
-            sampling_params=sampling_params,
-            reload_inputs=reload_inputs,
-            reload_page_table=reload_page_table,
-            reload_sampling_params=reload_sampling_params,
-            reset_sampling_state=reset_sampling_state,
-            compatibility_kwargs=compatibility_kwargs,
-        )
-        execution = self._select_execution("decode", trace_requested)
-        return self.target.decode_forward(execution=execution, read_from_device=read_from_device, **normalized)
-
-    def read_decode_output(self, tt_out: Any, *, async_read: bool = False) -> Any:
-        return self.target.read_decode_output(tt_out=tt_out, async_read=async_read)
-
-    def process_decode_output_host(self, tt_out: Any, *, is_tokens: bool = False) -> tuple[Any, Any]:
-        return self.target.process_decode_output_host(tt_out=tt_out, is_tokens=is_tokens)
-
-    def warmup_model_prefill(self, *, kv_cache, can_sample_on_device: bool, enable_trace: bool) -> None:
-        return self.target.warmup_model_prefill(
-            kv_cache=kv_cache,
-            can_sample_on_device=can_sample_on_device,
-            enable_trace=enable_trace,
-        )
-
-    def warmup_model_decode(
-        self, *, kv_cache, max_batch_size: int, num_blocks: int, can_sample_on_device: bool, enable_trace: bool
-    ) -> None:
-        return self.target.warmup_model_decode(
-            kv_cache=kv_cache,
-            max_batch_size=max_batch_size,
-            num_blocks=num_blocks,
-            can_sample_on_device=can_sample_on_device,
-            enable_trace=enable_trace,
-        )
-
-    def cleanup(self):
-        return self.target.cleanup()
-
-    def _select_prefill_execution(self, normalized: NormalizedPrefillKwargs, trace_requested: bool):
-        # Guarded eager degrade. Static trace intent still gates whether a trace
-        # is attempted, but a request whose padded bucket was never captured has no
-        # required trace, so it runs eager (against a program pre-compiled at warmup)
-        # rather than raising. A trace-eligible request still selects the traced target,
-        # which hard-fails on a missing artifact, so a required trace miss is never turned
-        # into eager KV writes.
-        if not trace_requested:
-            return self.target.eager_execution
-        if self.target.can_trace_prefill(
-            tokens=normalized["tokens"],
-            prompt_lens=normalized.get("prompt_lens"),
-            start_pos=normalized.get("start_pos"),
-            empty_slots=normalized.get("empty_slots"),
-        ):
-            return self._select_execution("prefill", True)
-        self.target.note_eager_prefill_degrade(
-            tokens=normalized["tokens"],
-            prompt_lens=normalized.get("prompt_lens"),
-            start_pos=normalized.get("start_pos"),
-            empty_slots=normalized.get("empty_slots"),
-        )
-        return self.target.eager_execution
-
-    def _select_execution(self, operation: str, enable_trace: bool):
-        if not enable_trace:
-            return self.target.eager_execution
-        execution = getattr(self.target, f"traced_{operation}_execution")
-        if execution is None:
-            raise RuntimeError(f"vLLM requested unavailable traced {operation} execution")
-        return execution
 
 
 def build_qwen25_72b_generator(config: Qwen25_72BGeneratorConfig) -> Qwen25_72BGenerator:
