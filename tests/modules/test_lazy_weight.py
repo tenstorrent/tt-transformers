@@ -533,6 +533,21 @@ class TestPaddedShape:
         assert result == (1, 32, 256)
 
     @pytest.mark.host
+    def test_padded_shape_does_not_pad_untiled_shard_dims(self, mock_memory_config):
+        """Sharding 64 experts (dim 1) over 4 devices gives 16 per device: only the tiled dims pad to 32."""
+        device = MagicMock(spec=ttnn.MeshDevice)
+        device.get_num_devices.return_value = 4
+        config = ttnn.MeshMapperConfig(placements=[ttnn.PlacementShard(1)], mesh_shape_override=ttnn.MeshShape([4]))
+        lw = LazyWeight(
+            source=torch.randn(1, 64, 64, 96),
+            device=device,
+            memory_config=mock_memory_config,
+            mesh_mapper_config=config,
+            layout=ttnn.TILE_LAYOUT,
+        )
+        assert lw.padded_shape == (1, 64, 64, 96)
+
+    @pytest.mark.host
     def test_padded_shape_raises_valueerror_when_device_none_but_resolved(
         self, mock_tensor, mock_memory_config, mock_mesh_mapper_config
     ):

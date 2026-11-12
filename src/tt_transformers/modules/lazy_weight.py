@@ -261,7 +261,8 @@ class LazyWeight:
         for shard_dim in shard_dims:
             if shard_dim < 0:
                 shard_dim = len(shape) + shard_dim
-            shape[shard_dim] = get_padded_hidden_dim(shape[shard_dim], num_devices)
+            if shard_dim >= len(shape) - 2:  # only the two tiled dims need tile-aligned shards
+                shape[shard_dim] = get_padded_hidden_dim(shape[shard_dim], num_devices)
 
         return tuple(shape)
 
