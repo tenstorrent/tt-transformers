@@ -76,10 +76,20 @@ def runtime_args(args: dict[tuple[int, int], list[int]]) -> ttnn.RuntimeArgs:
     return rt
 
 
-def reader_writer_compute(cores, name: str, reader, writer, compute, defines=(), dst_full: bool = False):
+def reader_writer_compute(
+    cores,
+    name: str,
+    reader,
+    writer,
+    compute,
+    defines=(),
+    dst_full: bool = False,
+    math_fidelity=ttnn.MathFidelity.LoFi,
+    fp32_dest_acc_en: bool = True,
+):
     """Kernel descriptors for kernels/{name}_reader.cpp (NCRISC, NOC0), {name}_writer.cpp (BRISC, NOC1) and
-    {name}_compute.cpp (LoFi, FP32 accumulation). reader / writer / compute: (compile args, {(x, y): runtime args});
-    the compute's runtime args may be None."""
+    {name}_compute.cpp (LoFi with FP32 accumulation unless given). reader / writer / compute: (compile args,
+    {(x, y): runtime args}); the compute's runtime args may be None."""
     (rd_ct, rd_rt), (wr_ct, wr_rt), (cp_ct, cp_rt) = reader, writer, compute
     dm = ttnn.DataMovementConfigDescriptor
     defines = list(defines)
@@ -107,8 +117,8 @@ def reader_writer_compute(cores, name: str, reader, writer, compute, defines=(),
             runtime_args=runtime_args(cp_rt) if cp_rt else [],
             defines=defines,
             config=ttnn.ComputeConfigDescriptor(
-                math_fidelity=ttnn.MathFidelity.LoFi,
-                fp32_dest_acc_en=True,
+                math_fidelity=math_fidelity,
+                fp32_dest_acc_en=fp32_dest_acc_en,
                 math_approx_mode=False,
                 dst_full_sync_en=dst_full,
             ),

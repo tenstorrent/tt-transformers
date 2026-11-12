@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
-"""FusedMoEDecode (ops/moe/fused_decode.py) and ExpertDown (ops/moe/expert_down.py): the down kernels ship with the
+"""FusedMoEDecode (ops/moe/fused_decode.py) and ExpertDown (ops/moe/expert_down.py): the MoE kernels ship with the
 package, weights round to the LoFi width, unsupported configurations are rejected, and on device one decode token's
 MoE output matches torch from HF-style weights, with a shared expert and under expert parallelism."""
 
@@ -36,19 +36,18 @@ MESH_1X1 = pytest.mark.parametrize(
 
 
 @pytest.mark.host
-def test_down_kernels_ship_and_are_covered_by_package_data():
+def test_kernels_ship_and_are_covered_by_package_data():
     globs = tomllib.loads((REPO / "pyproject.toml").read_text())["tool"]["setuptools"]["package-data"][
         "tt_transformers.ops.moe"
     ]
     packaged = {path for glob in globs for path in _program.KERNEL_DIR.parent.glob(glob)}
-    for name in ("dn_reader.cpp", "dn_writer.cpp", "dn_compute.cpp"):
-        kernel = _program.KERNEL_DIR / name
-        assert kernel in packaged, name
+    for kernel in sorted(_program.KERNEL_DIR.glob("*.cpp")):
+        assert kernel in packaged, kernel.name
         for include in re.findall(r'#include "([^"]+)"', kernel.read_text()):
             if (kernel.parent / include).exists():
-                assert (kernel.parent / include) in packaged, f"{name}: {include}"
-            else:
-                assert include.startswith(("api/", "ckernel")), f"{name}: {include}"
+                assert (kernel.parent / include) in packaged, f"{kernel.name}: {include}"
+            else:  # a tt-metal or ttnn header the runtime compiles against
+                assert include.startswith(("api/", "ckernel", "ttnn/cpp/")), f"{kernel.name}: {include}"
 
 
 @pytest.mark.host
