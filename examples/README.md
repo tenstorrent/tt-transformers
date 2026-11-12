@@ -68,6 +68,7 @@ delegate to this module and preserve their existing selectors and thresholds.
 | [Qwen2.5 Coder 32B](qwen25_coder_32b/README.md) | T3K one-layer smoke |
 | [Qwen2 7B](qwen2_7b/README.md) | no model-family cell in the current matrix |
 | [Qwen3 32B](qwen3_32b/README.md) | T3K token accuracy; P150_X4 smoke and token accuracy |
+| [Qwen3 Coder 30B A3B](qwen3_coder_30b_a3b/README.md) | no model-family cell in the current matrix |
 
 ## Validation boundary
 

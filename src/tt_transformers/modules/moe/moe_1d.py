@@ -218,6 +218,7 @@ class MoE1DConfig:
     experts_per_device: int | None = None
     gate_first: bool = False
     num_reduce_scatter_links: int = 1
+    prefill_num_reduce_scatter_links: int | None = None
     decode_input_memcfg: ttnn.MemoryConfig = ttnn.L1_MEMORY_CONFIG
     decode_output_memcfg: ttnn.MemoryConfig = ttnn.L1_MEMORY_CONFIG
     prefill_input_memcfg: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG
@@ -574,7 +575,7 @@ class MoE1D(LightweightModule):
             dim=3,
             multi_device_global_semaphore=cfg.tt_ccl.get_and_cycle_rs_semaphore_handles(),
             barrier_semaphore=cfg.tt_ccl.get_and_cycle_barrier_semaphore_handle(),
-            num_links=cfg.num_reduce_scatter_links,
+            num_links=cfg.prefill_num_reduce_scatter_links,
             memory_config=cfg.prefill_output_memcfg,
             intermediate_memory_config=cfg.prefill_reduce_intermediate_memcfg,
             topology=cfg.topology,
@@ -656,6 +657,15 @@ def resolve_moe1d_config(config: MoE1DConfig) -> MoE1DConfig:
         raise ValueError("down does not match the packed expert layout")
     if config.prefill_chunk_size <= 0 or config.prefill_chunk_size % TILE:
         raise ValueError("prefill_chunk_size must be a positive multiple of 32")
+    if config.num_reduce_scatter_links <= 0:
+        raise ValueError("num_reduce_scatter_links must be positive")
+    prefill_num_reduce_scatter_links = (
+        config.num_reduce_scatter_links
+        if config.prefill_num_reduce_scatter_links is None
+        else config.prefill_num_reduce_scatter_links
+    )
+    if prefill_num_reduce_scatter_links <= 0:
+        raise ValueError("prefill_num_reduce_scatter_links must be positive")
 
     local_experts = num_experts if config.parallelism == "tensor" else experts_per_device
     live_fraction = 1.0 - (1.0 - 1.0 / num_experts) ** (config.prefill_chunk_size * config.k)
@@ -738,6 +748,7 @@ def resolve_moe1d_config(config: MoE1DConfig) -> MoE1DConfig:
         intermediate=intermediate,
         num_experts=num_experts,
         experts_per_device=experts_per_device,
+        prefill_num_reduce_scatter_links=prefill_num_reduce_scatter_links,
         expert_ids=expert_ids,
         prefill_gate_up_program_config=prefill_gate_up_program_config,
         prefill_down_program_config=prefill_down_program_config,

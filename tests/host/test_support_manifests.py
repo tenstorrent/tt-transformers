@@ -23,6 +23,7 @@ MODELS = {
     "qwen25_coder_32b",
     "qwen2_7b",
     "qwen3_32b",
+    "qwen3_coder_30b_a3b",
 }
 
 
@@ -32,7 +33,7 @@ def test_support_schema_and_all_model_manifests_have_required_shape():
     required = set(schema["required"])
     paths = sorted((ROOT / "examples").glob("*/support.json"))
     if {path.parent.name for path in paths} != MODELS:
-        raise AssertionError("support manifests must cover exactly the twelve extracted models")
+        raise AssertionError("support manifests must cover exactly the thirteen extracted models")
     for path in paths:
         manifest = json.loads(path.read_text())
         if not required <= set(manifest):
@@ -66,8 +67,8 @@ def test_examples_are_pytest_free_and_tests_depend_on_examples_only_one_way():
 @pytest.mark.host
 def test_hardware_wrappers_import_public_example_modules():
     wrappers = sorted((ROOT / "tests/hardware/models").glob("*/test_*.py"))
-    if len(wrappers) != 15:
-        raise AssertionError(f"expected 15 hardware wrappers, got {len(wrappers)}")
+    if len(wrappers) != 16:
+        raise AssertionError(f"expected 16 hardware wrappers, got {len(wrappers)}")
     for path in wrappers:
         source = path.read_text()
         if "from examples." not in source or "run_" not in source:

@@ -30,6 +30,7 @@ _MODEL_PACKAGES = (
     "qwen25_coder_32b",
     "qwen2_7b",
     "qwen3_32b",
+    "qwen3_coder_30b_a3b",
 )
 
 

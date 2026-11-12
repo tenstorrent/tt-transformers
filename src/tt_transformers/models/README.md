@@ -27,6 +27,7 @@ every hardware and workload combination.
 | Qwen2.5 Coder 32B | [`qwen25_coder_32b`](qwen25_coder_32b/) | [Example](../../../examples/qwen25_coder_32b/README.md) |
 | Qwen2 7B | [`qwen2_7b`](qwen2_7b/) | [Example](../../../examples/qwen2_7b/README.md) |
 | Qwen3 32B | [`qwen3_32b`](qwen3_32b/) | [Example](../../../examples/qwen3_32b/README.md) |
+| Qwen3 Coder 30B A3B | [`qwen3_coder_30b_a3b`](qwen3_coder_30b_a3b/) | [Example](../../../examples/qwen3_coder_30b_a3b/README.md) |
 
 The `llama3_8b` directory implements Llama **3.1** 8B. Examples run from a
 repository checkout and are not installed by the wheel.
