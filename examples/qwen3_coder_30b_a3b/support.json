@@ -42,7 +42,6 @@
   "known_gaps": [
     "Current regression evidence does not qualify the complete declared model contract",
     "Decode for more than one user runs the routed sparse MoE path, not the fused MoE decode",
-    "Prefill runs the chunked sparse MoE path, not the expert-sorted prefill",
     "HF generate() refuses the checkpoint's repetition_penalty=1.05, which it does not implement (as for Qwen2.5 Coder 32B and Qwen2.5 7B); vLLM serving applies it",
     "P150 and P300 single/two-die model paths",
     "DP greater than 1",
@@ -57,6 +56,7 @@
     "source_proven": [
       "Attention is tensor-parallel over the four devices; the 128 routed experts are expert-parallel, 32 per device",
       "One-user decode runs the fused MoE decode; more users run the routed sparse MoE path",
+      "Prefill of 128 tokens or more runs the expert-sorted MoE prefill, in slices of at most 4096 tokens",
       "Benchmark cases cover token accuracy and 1- and 32-user performance at max_seq_len 2048"
     ]
   },
