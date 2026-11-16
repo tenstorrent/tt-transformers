@@ -46,12 +46,27 @@ def clear_fused_decode_cache():
 
 
 @dataclass(frozen=True)
+class ExpertPacking:
+    """How [gate | up] was packed; tensor parallelism interleaves the halves per device shard."""
+
+    parallelism: MoEParallelism
+    num_devices: int
+    gate_first: bool
+
+    @property
+    def tag(self) -> str:
+        layout = f"tp{self.num_devices}" if self.parallelism == "tensor" else "ep"
+        return f"{layout}_{'gate' if self.gate_first else 'up'}_first"
+
+
+@dataclass(frozen=True)
 class MoE1DWeights:
     router: LazyWeight
     up_gate: LazyWeight
     down: LazyWeight
     shared_up_gate: LazyWeight | None = None
     shared_down: LazyWeight | None = None
+    packing: ExpertPacking | None = None
 
 
 def _cache(cache_dir: Path | None, prefix: str, name: str) -> tuple[Path, str] | None:
@@ -165,6 +180,7 @@ def moe_weights_from_hf(
         gate_first=gate_first,
     )
     router_source = router_weight(router, shared_expert.expert_gate if shared_expert is not None else None)
+    packing = ExpertPacking(parallelism, num_devices, gate_first)
 
     def lazy(source, dtype, name):
         return LazyWeight(
@@ -186,15 +202,17 @@ def moe_weights_from_hf(
             num_devices=num_devices,
             gate_first=gate_first,
         )
-        shared_up_gate = lazy(shared_up_source, weight_dtype, "shared_up_gate")
+        shared_tag = replace(packing, parallelism="tensor").tag
+        shared_up_gate = lazy(shared_up_source, weight_dtype, f"shared_up_gate_{shared_tag}")
         shared_down = lazy(shared_down_source, down_dtype or weight_dtype, "shared_down")
 
     return MoE1DWeights(
         router=lazy(router_source, ttnn.bfloat16, "router"),
-        up_gate=lazy(up_gate, weight_dtype, "up_gate"),
+        up_gate=lazy(up_gate, weight_dtype, f"up_gate_{packing.tag}"),
         down=lazy(down, down_dtype or weight_dtype, "down"),
         shared_up_gate=shared_up_gate,
         shared_down=shared_down,
+        packing=packing,
     )
 
 
@@ -207,6 +225,7 @@ class MoE1DConfig:
     parallelism: MoEParallelism
     shared_up_gate: LazyWeight | None = None
     shared_down: LazyWeight | None = None
+    packing: ExpertPacking | None = None
     expert_ids: LazyWeight | None = None
     mesh_device: ttnn.MeshDevice | None = None
     tt_ccl: TT_CCL | None = None
@@ -608,6 +627,19 @@ def _resolve_mesh(config: MoE1DConfig) -> ttnn.MeshDevice:
     return mesh_device
 
 
+def _check_packing(config: MoE1DConfig, num_devices: int) -> None:
+    packing = config.packing
+    if packing is None:
+        return
+    if (packing.parallelism, packing.gate_first) != (config.parallelism, config.gate_first):
+        raise ValueError(
+            f"weights were packed for {packing.parallelism} parallelism with gate_first={packing.gate_first}, "
+            f"not {config.parallelism} with gate_first={config.gate_first}"
+        )
+    if packing.parallelism == "tensor" and packing.num_devices != num_devices:
+        raise ValueError(f"weights were packed for {packing.num_devices} devices, not {num_devices}")
+
+
 def resolve_moe1d_config(config: MoE1DConfig) -> MoE1DConfig:
     """Resolve dimensions, distribution, collectives, and LazyWeights."""
     if not isinstance(config, MoE1DConfig):
@@ -625,6 +657,7 @@ def resolve_moe1d_config(config: MoE1DConfig) -> MoE1DConfig:
     num_devices = mesh_device.get_num_devices()
     if config.parallelism == "tensor" and config.gate_first and num_devices > 1:
         raise ValueError("multi-device tensor parallelism requires [up | gate] packing")
+    _check_packing(config, num_devices)
     hidden = config.router.source.shape[-2] if config.hidden is None else config.hidden
     num_experts = config.router.source.shape[-1] - 32 if config.num_experts is None else config.num_experts
     if tuple(config.router.source.shape) != (hidden, num_experts + 32):

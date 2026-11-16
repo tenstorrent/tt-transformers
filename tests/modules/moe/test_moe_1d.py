@@ -8,6 +8,7 @@ import torch
 import ttnn
 
 from tt_transformers.modules.moe.moe_1d import (
+    ExpertPacking,
     MoE1D,
     MoE1DConfig,
     _largest_divisor_at_most,
@@ -21,6 +22,11 @@ from tt_transformers.ops.moe.fused_decode import SharedExpert, round_sig
 MESH_1X1 = pytest.mark.parametrize(
     "ttnn_mesh_device",
     [pytest.param({"mesh_shape": (1, 1), "trace_region_size": 32 << 20}, id="p150-1x1")],
+    indirect=True,
+)
+MESH_1X4 = pytest.mark.parametrize(
+    "ttnn_mesh_device",
+    [pytest.param({"mesh_shape": (1, 4), "fabric_config": ttnn.FabricConfig.FABRIC_1D_RING}, id="p150x4-1x4-ring")],
     indirect=True,
 )
 
@@ -123,7 +129,9 @@ def test_hf_weight_loader_includes_shared_expert_and_cache_names(tmp_path: Path)
     assert weights.router.source.shape == (hidden, experts + 32)
     assert weights.shared_up_gate.source.shape == (1, 1, hidden, 2 * intermediate)
     assert weights.shared_down.source.shape == (1, 1, intermediate, hidden)
-    assert weights.up_gate.cache_dir_weight_name == (tmp_path, "layer_3_up_gate")
+    assert weights.packing == ExpertPacking("tensor", devices, gate_first=False)
+    assert weights.up_gate.cache_dir_weight_name == (tmp_path, "layer_3_up_gate_tp2_up_first")
+    assert weights.shared_up_gate.cache_dir_weight_name == (tmp_path, "layer_3_shared_up_gate_tp2_up_first")
     assert weights.shared_down.cache_dir_weight_name == (tmp_path, "layer_3_shared_down")
 
 
@@ -164,26 +172,39 @@ def _layer(seed, hidden, intermediate, experts, shared):
     )
 
 
-def _module(device, layer, k, parallelism, gate_first):
-    weights = moe_weights_from_hf(
+def _weights(layer, parallelism, gate_first, num_devices, cache_dir=None):
+    return moe_weights_from_hf(
         layer["router"],
         layer["gate"],
         layer["up"],
         layer["down"],
-        num_devices=1,
+        num_devices=num_devices,
         parallelism=parallelism,
         weight_dtype=ttnn.bfloat8_b,
         shared_expert=layer["shared"],
         gate_first=gate_first,
+        cache_dir=cache_dir,
     )
+
+
+def _module(device, layer, k, parallelism, gate_first, cache_dir=None):
+    weights = _weights(layer, parallelism, gate_first, device.get_num_devices(), cache_dir)
     config = MoE1DConfig(**weights.__dict__, k=k, parallelism=parallelism, gate_first=gate_first, mesh_device=device)
     return MoE1D.from_config(config)
 
 
 def _run(device, module, x, mode):
-    memory_config = ttnn.L1_MEMORY_CONFIG if mode == "decode" else ttnn.DRAM_MEMORY_CONFIG
-    x_tt = ttnn.from_torch(x, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT, device=device, memory_config=memory_config)
-    return ttnn.to_torch(module(x_tt, mode)).float()[0, 0, : x.shape[-2]]
+    multi_device = device.get_num_devices() > 1
+    x_tt = ttnn.from_torch(
+        x,
+        dtype=ttnn.bfloat16,
+        layout=ttnn.TILE_LAYOUT,
+        device=device,
+        memory_config=ttnn.L1_MEMORY_CONFIG if mode == "decode" else ttnn.DRAM_MEMORY_CONFIG,
+        mesh_mapper=ttnn.ReplicateTensorToMesh(device) if multi_device else None,
+    )
+    composer = ttnn.ConcatMeshToTensor(device, dim=3) if multi_device else None
+    return ttnn.to_torch(module(x_tt, mode), mesh_composer=composer).float()[0, 0, : x.shape[-2]]
 
 
 def _pcc(a, b):
@@ -234,42 +255,67 @@ def test_moe_1d_layers_share_one_fused_decode(ttnn_mesh_device, fresh_fused_deco
 
 @pytest.mark.device
 @pytest.mark.blackhole
+@MESH_1X1
+def test_moe_1d_cache_keeps_packing_orders_apart(ttnn_mesh_device, fresh_fused_decode_cache, tmp_path: Path):
+    hidden, intermediate, experts, k = 2048, 128, 64, 8
+    layer = _layer(17, hidden, intermediate, experts, shared=True)
+    x = torch.randn(1, 1, 1, hidden, generator=torch.Generator().manual_seed(18)).bfloat16()
+    for gate_first in (False, True, False):
+        module = _module(ttnn_mesh_device, layer, k, "tensor", gate_first, cache_dir=tmp_path)
+        pcc = _pcc(_run(ttnn_mesh_device, module, x, "decode"), _reference(x, layer, k))
+        assert pcc > 0.99, (gate_first, pcc)
+
+
+@pytest.mark.device
+@pytest.mark.blackhole
+@MESH_1X1
 @pytest.mark.parametrize(
-    "ttnn_mesh_device",
-    [pytest.param({"mesh_shape": (1, 4), "fabric_config": ttnn.FabricConfig.FABRIC_1D_RING}, id="p150x4-1x4-ring")],
-    indirect=True,
+    "packed, built, error",
+    [
+        (("tensor", 2, False), ("tensor", False), "packed for 2 devices"),
+        (("tensor", 1, True), ("tensor", False), "gate_first=True"),
+        (("expert", 1, True), ("tensor", True), "expert parallelism"),
+    ],
+    ids=["device-count", "packing-order", "parallelism"],
+)
+def test_moe_1d_rejects_weights_packed_for_another_layout(ttnn_mesh_device, packed, built, error):
+    layer = _layer(19, 2048, 128, 64, shared=False)
+    weights = _weights(layer, packed[0], packed[2], packed[1])
+    parallelism, gate_first = built
+    config = MoE1DConfig(
+        **weights.__dict__, k=8, parallelism=parallelism, gate_first=gate_first, mesh_device=ttnn_mesh_device
+    )
+    with pytest.raises(ValueError, match=error):
+        MoE1D.from_config(config)
+
+
+@pytest.mark.device
+@pytest.mark.blackhole
+@MESH_1X4
+@pytest.mark.parametrize(
+    "parallelism, gate_first, shared, intermediate",
+    [("tensor", False, False, 512), ("tensor", False, True, 512), ("expert", True, False, 128)],
+    ids=["tensor", "tensor-shared", "expert-gate-first"],
 )
 @pytest.mark.parametrize("mode, seq_len", [("decode", 1), ("decode", 32), ("prefill", 48)])
-def test_moe_1d_expert_parallel_across_devices(
-    ttnn_mesh_device, require_blackhole_mesh_device, fresh_fused_decode_cache, mode, seq_len
+def test_moe_1d_matches_torch_across_devices(
+    ttnn_mesh_device,
+    require_blackhole_mesh_device,
+    fresh_fused_decode_cache,
+    parallelism,
+    gate_first,
+    shared,
+    intermediate,
+    mode,
+    seq_len,
 ):
-    """Each die holds a quarter of the experts; the reduce-scattered partials sum to the full MoE output."""
-    hidden, intermediate, experts, k = 2048, 128, 64, 8
-    layer = _layer(12, hidden, intermediate, experts, shared=False)
-    weights = moe_weights_from_hf(
-        layer["router"],
-        layer["gate"],
-        layer["up"],
-        layer["down"],
-        num_devices=4,
-        parallelism="expert",
-        weight_dtype=ttnn.bfloat8_b,
-        gate_first=True,
-    )
-    config = MoE1DConfig(**weights.__dict__, k=k, parallelism="expert", gate_first=True, mesh_device=ttnn_mesh_device)
-    module = MoE1D.from_config(config)
+    """Each die holds a quarter of every expert (tensor) or of the experts (expert); the reduce-scattered partials sum
+    to the full MoE output."""
+    hidden, experts, k = 2048, 64, 8
+    layer = _layer(12, hidden, intermediate, experts, shared)
+    module = _module(ttnn_mesh_device, layer, k, parallelism, gate_first)
     x = torch.randn(1, 1, seq_len, hidden, generator=torch.Generator().manual_seed(13)).bfloat16()
-    x_tt = ttnn.from_torch(
-        x,
-        dtype=ttnn.bfloat16,
-        layout=ttnn.TILE_LAYOUT,
-        device=ttnn_mesh_device,
-        memory_config=ttnn.L1_MEMORY_CONFIG if mode == "decode" else ttnn.DRAM_MEMORY_CONFIG,
-        mesh_mapper=ttnn.ReplicateTensorToMesh(ttnn_mesh_device),
-    )
-    out = module(x_tt, mode)
-    output = ttnn.to_torch(out, mesh_composer=ttnn.ConcatMeshToTensor(ttnn_mesh_device, dim=3)).float()
-    pcc = _pcc(output[0, 0, :seq_len], _reference(x, layer, k))
+    pcc = _pcc(_run(ttnn_mesh_device, module, x, mode), _reference(x, layer, k))
     assert pcc > 0.99, pcc
 
 

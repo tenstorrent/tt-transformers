@@ -3,6 +3,6 @@
 
 """Reusable mixture-of-experts modules."""
 
-from .moe_1d import MoE1D, MoE1DConfig, MoE1DWeights, moe_weights_from_hf
+from .moe_1d import ExpertPacking, MoE1D, MoE1DConfig, MoE1DWeights, moe_weights_from_hf
 
-__all__ = ["MoE1D", "MoE1DConfig", "MoE1DWeights", "moe_weights_from_hf"]
+__all__ = ["ExpertPacking", "MoE1D", "MoE1DConfig", "MoE1DWeights", "moe_weights_from_hf"]
