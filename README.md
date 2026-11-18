@@ -120,6 +120,7 @@ for other models. Accuracy and performance workloads use each model's separate
 - [Sampling](https://github.com/tenstorrent/tt-transformers/blob/main/src/tt_transformers/sampling/README.md)
 - [Repository examples](https://github.com/tenstorrent/tt-transformers/blob/main/examples/README.md)
 - [Validation summary](https://github.com/tenstorrent/tt-transformers/blob/main/docs/validation.md)
+- [Multi-host (cross-box) mesh support](docs/multihost.md)
 
 ## Development
 

@@ -52,7 +52,9 @@ If the checkout already selects another `build` directory, the tool refuses to
 replace it. Use another worktree or explicitly adopt its current directory with
 `--build-dir /absolute/path/to/build`. It will be configured with the requested
 options. The default profile is Release without Tracy or multihost/OpenMPI.
-Use `--distributed` for multihost support.
+Use `--distributed` for multihost support. See
+[Multi-host (cross-box) mesh support](multihost.md) for the runtime primitives
+and the correctness rules, and the runbook below for the launch procedure.
 
 After editing native tt-metal code:
 
@@ -210,3 +212,35 @@ Use your normal environment to return to the release runtime. No release pins
 or locks are changed by the tool. Keep build/execution directories out of Git;
 the tool does not automatically delete branches, cancel runs, publish packages,
 or change driver/firmware installations.
+
+## Multi-host (cross-box) runs
+
+A multi-host run drives a single mesh that spans more than one host (for example
+two Blackhole boxes as one `1x4` FABRIC_1D mesh, 2+2). It needs a distributed
+(multihost/OpenMPI) ttnn build — `--distributed`, above — and the runtime
+primitives in [`tt_transformers.distributed`](../src/tt_transformers/distributed.py),
+documented in [Multi-host (cross-box) mesh support](multihost.md). The launch
+procedure below comes from an out-of-tree cross-host bring-up and still needs
+code-owner validation on multi-host hardware.
+
+- **Reset the fabric clean on every host first.** Do a hard reset of the chips
+  on each host before launch, not a warm reset — a warm reset can leave fabric
+  router state that prevents the cross-host link from training at mesh-open.
+  (`open_mesh_device_with_retry` additionally retries the transient
+  fabric-router-sync timeout, but it cannot recover unclean state.)
+- **Launch with `tt-run`, not a bare `mpirun`/`python` per host.** Pass the
+  interpreter's import path explicitly with `-x PYTHONPATH` so every rank
+  resolves the same modules, and do **not** run the target under `python -I`:
+  isolated mode drops `PYTHONPATH` and the ranks will import mismatched code.
+- **Identical absolute path and Unix user on every host.** Launch the same
+  absolute script path as the same Unix user on each host; a path or user
+  mismatch between ranks is a common and confusing cross-host failure.
+- **Use `num_links=1`.** The per-step cross-host exchange is sync/rendezvous-
+  bound, not bandwidth-bound, so a single link is sufficient; more links add
+  setup cost without improving step latency.
+
+The cross-host link can intermittently fail to train on the first mesh-open even
+after a clean reset; open the mesh through
+[`open_mesh_device_with_retry`](../src/tt_transformers/distributed.py), which
+retries only that transient fabric-router-sync timeout and is a no-op on a
+first-try success.
