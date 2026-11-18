@@ -1148,6 +1148,7 @@ _V1_GENERATORS = (
     ("qwen25_72b", "Qwen25_72BGenerator"),
     ("qwen25_coder_32b", "Qwen25Coder32BGenerator"),
     ("qwen3_32b", "Qwen3_32BGenerator"),
+    ("qwen3_coder_30b_a3b", "Qwen3Coder30BA3BGenerator"),
     ("mistral_7b", "Mistral7BGenerator"),
     ("phi4", "Phi4Generator"),
     ("deepseek_r1_distill_qwen_14b", "DeepSeekR1Qwen14BGenerator"),

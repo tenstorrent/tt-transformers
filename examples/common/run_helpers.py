@@ -39,17 +39,15 @@ class TeacherForceResult:
     batch_size: int = 1
     prefill_len: int = 0
 
-    def top1_accuracy(self) -> float:
-        matches = sum(
-            1 for i, prediction in enumerate(self.predicted_tokens) if self.reference_top5[i, 0].item() == prediction
-        )
-        return matches / len(self.predicted_tokens)
+    def top1_accuracy(self, user: int = 0) -> float:
+        predicted = self.predicted_tokens_per_user[user]
+        matches = sum(1 for i, prediction in enumerate(predicted) if self.reference_top5[i, 0].item() == prediction)
+        return matches / len(predicted)
 
-    def top5_accuracy(self) -> float:
-        matches = sum(
-            1 for i, prediction in enumerate(self.predicted_tokens) if prediction in self.reference_top5[i, :]
-        )
-        return matches / len(self.predicted_tokens)
+    def top5_accuracy(self, user: int = 0) -> float:
+        predicted = self.predicted_tokens_per_user[user]
+        matches = sum(1 for i, prediction in enumerate(predicted) if prediction in self.reference_top5[i, :])
+        return matches / len(predicted)
 
     @property
     def ttft_ms(self) -> float:

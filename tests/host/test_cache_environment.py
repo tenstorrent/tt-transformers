@@ -331,9 +331,9 @@ def test_implicit_preflight_confirms_the_exact_identity_namespace(tmp_path):
 
 
 @pytest.mark.host
-def test_all_twelve_hf_adaptors_use_the_shared_policy():
+def test_all_thirteen_hf_adaptors_use_the_shared_policy():
     adaptors = sorted((ROOT / "src/tt_transformers/models").glob("*/hf_generator.py"))
-    assert len(adaptors) == 12
+    assert len(adaptors) == 13
     for path in adaptors:
         source = path.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(path))
@@ -382,6 +382,7 @@ def test_all_twelve_hf_adaptors_use_the_shared_policy():
         ("qwen25_coder_32b", 8, "T3K", {}),
         ("qwen2_7b", 2, "N300", {}),
         ("qwen3_32b", 4, "P150x4", {"sku": "P150x4"}),
+        ("qwen3_coder_30b_a3b", 4, "P150x4", {}),
     ),
 )
 def test_adaptor_default_cache_keeps_pinned_topology_suffix(
