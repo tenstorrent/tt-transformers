@@ -174,6 +174,7 @@ def _build_moe(
             router=weights.router,
             up_gate=weights.up_gate,
             down=weights.down,
+            packing=weights.packing,
             k=qcfg.num_experts_per_token,
             parallelism="expert",
             mesh_device=mesh_device,

@@ -57,7 +57,7 @@
     "source_proven": [
       "Attention is tensor-parallel over the four devices; the 128 routed experts are expert-parallel, 32 per device",
       "One-user decode runs the fused MoE decode; more users run the routed sparse MoE path",
-      "Benchmark cases cover token accuracy and 1- and 32-user performance at max_seq_len 2048"
+      "Benchmark cases cover 1- and 32-user token accuracy and performance at max_seq_len 2048"
     ]
   },
   "features": {

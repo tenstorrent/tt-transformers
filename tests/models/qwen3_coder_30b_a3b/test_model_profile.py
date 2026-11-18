@@ -18,6 +18,7 @@ from tt_transformers.models.qwen3_coder_30b_a3b.model import (
     _expert_weights,
     _validate_checkpoint_config,
 )
+from tt_transformers.modules.moe import ExpertPacking
 
 
 def _hf_config(**overrides):
@@ -103,6 +104,7 @@ def test_moe_builder_selects_four_way_expert_parallelism(monkeypatch):
         router=SimpleNamespace(source=object()),
         up_gate=SimpleNamespace(source=object()),
         down=SimpleNamespace(source=object()),
+        packing=ExpertPacking("expert", 4, gate_first=True),
     )
 
     def fake_weights(*args, **kwargs):
@@ -142,6 +144,7 @@ def test_moe_builder_selects_four_way_expert_parallelism(monkeypatch):
     assert captured["weight_kwargs"]["num_devices"] == 4
     assert captured["weight_kwargs"]["parallelism"] == "expert"
     assert captured["weight_kwargs"]["gate_first"] is True
+    assert captured["config"].packing is weights.packing
     assert captured["config"].experts_per_device == 32
     assert captured["config"].k == 8
     assert captured["config"].parallelism == "expert"

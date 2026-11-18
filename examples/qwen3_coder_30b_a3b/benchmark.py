@@ -3,10 +3,11 @@
 
 """Qwen3-Coder-30B-A3B accuracy and performance cases on a four-device Blackhole mesh.
 
-token-accuracy  teacher-forced top-1 / top-5 against the Hugging Face reference (eager)
-perf-batch1     TTFT and decode throughput for one user (traced, on-device top-k sampling)
-perf-batch32    the same for 32 users
-perf-prefill    TTFT for one user at 128, 1024 and 4096 prompt tokens (prefill traced at 128 and 1024)
+token-accuracy          teacher-forced top-1 / top-5 against the Hugging Face reference (eager)
+token-accuracy-batch32  the same for 32 users, each fed the reference, through the multi-user MoE decode
+perf-batch1             TTFT and decode throughput for one user (traced, on-device top-k sampling)
+perf-batch32            the same for 32 users
+perf-prefill            TTFT for one user at 128, 1024 and 4096 prompt tokens (prefill traced at 128 and 1024)
 """
 
 from __future__ import annotations
@@ -42,7 +43,8 @@ MAX_SEQ_LEN = 2048
 DECODE_TOKENS = 128
 # measured on Blackhole P300x2 (four p300c dies), ttnn 0.79.0, "performance" precision
 MIN_ACCURACY = {"top1": 97.0, "top5": 99.0}  # measured 98.2 / 99.8
-CASES = ("token-accuracy", "perf-batch1", "perf-batch32", "perf-prefill")
+CASES = ("token-accuracy", "token-accuracy-batch32", "perf-batch1", "perf-batch32", "perf-prefill")
+BATCH_USERS = {"token-accuracy-batch32": 32, "perf-batch32": 32}
 
 
 def mesh_parameters() -> dict:
@@ -71,7 +73,8 @@ def _paged_kv(executor, model, mesh_device):
     return kv_cache, page_table.reshape(args.max_batch_size, blocks_per_user)
 
 
-def token_accuracy(model, mesh_device) -> dict:
+def token_accuracy(model, mesh_device, users: int) -> dict:
+    """Every user is fed the reference; each must meet the floor on its own."""
     if not REFERENCE.is_file():
         raise UnsupportedConfiguration(f"reference file not found: {REFERENCE}")
     reference = torch.load(REFERENCE, map_location="cpu", weights_only=False)
@@ -80,17 +83,19 @@ def token_accuracy(model, mesh_device) -> dict:
     kv_cache, page_table = _paged_kv(executor, model, mesh_device)
     result = run_teacher_forcing(
         executor,
-        prompt_tokens=tokens[:prompt_len].unsqueeze(0),
+        prompt_tokens=tokens[:prompt_len].repeat(users, 1),
         reference_tokens=tokens,
         top5_tokens=reference["top5_tokens"],
         kv_cache=kv_cache,
         page_table=page_table,
+        max_batch_size=users,
     )
-    top1, top5 = result.top1_accuracy() * 100, result.top5_accuracy() * 100
-    logger.info(f"token accuracy: top1 {top1:.1f}%, top5 {top5:.1f}%")
-    if top1 < MIN_ACCURACY["top1"] or top5 < MIN_ACCURACY["top5"]:
-        raise AssertionError(f"accuracy top1 {top1:.1f}% / top5 {top5:.1f}% below {MIN_ACCURACY}")
-    return {"top1": top1, "top5": top5}
+    top1 = [result.top1_accuracy(user) * 100 for user in range(users)]
+    top5 = [result.top5_accuracy(user) * 100 for user in range(users)]
+    logger.info(f"token accuracy, {users} users: top1 min {min(top1):.1f}%, top5 min {min(top5):.1f}%")
+    if min(top1) < MIN_ACCURACY["top1"] or min(top5) < MIN_ACCURACY["top5"]:
+        raise AssertionError(f"accuracy top1 {min(top1):.1f}% / top5 {min(top5):.1f}% below {MIN_ACCURACY}")
+    return {"top1": min(top1), "top5": min(top5)}
 
 
 def _traced(model, mesh_device, tokens, lens, sampling):
@@ -153,7 +158,7 @@ def prefill(model, mesh_device) -> dict:
 
 
 def run_case(case: str, mesh_device, optimizations: str = "performance") -> dict:
-    users = 32 if case == "perf-batch32" else 1
+    users = BATCH_USERS.get(case, 1)
     llm = _load_model(
         mesh_device,
         hf_model=os.environ.get("HF_MODEL", DEFAULT_HF_MODEL),
@@ -163,8 +168,8 @@ def run_case(case: str, mesh_device, optimizations: str = "performance") -> dict
         optimizations=optimizations,
     )
     try:
-        if case == "token-accuracy":
-            return token_accuracy(llm.model, mesh_device)
+        if case.startswith("token-accuracy"):
+            return token_accuracy(llm.model, mesh_device, users)
         if case == "perf-prefill":
             return prefill(llm.model, mesh_device)
         return performance(llm.model, mesh_device, users)

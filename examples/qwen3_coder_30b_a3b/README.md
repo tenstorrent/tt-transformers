@@ -21,8 +21,9 @@ The inputs stay as CPU PyTorch tensors; the model handles TT transfers and KV
 storage. `MESH_DEVICE` selects the caller-owned mesh. Configure `TT_CACHE_PATH`
 when using an existing writable TT model cache, as described below.
 
-[`benchmark.py`](benchmark.py) contains the token-accuracy case, the one- and
-32-user performance cases, and TTFT at 128, 1024 and 4096 prompt tokens.
+[`benchmark.py`](benchmark.py) contains token accuracy and performance for one
+and 32 users, and TTFT at 128, 1024 and 4096 prompt tokens. The 32-user accuracy
+case runs the multi-user MoE decode, which one user does not.
 
 <!-- BEGIN GENERATED SUPPORT -->
 
@@ -61,7 +62,7 @@ Only these source-declared rows are candidates. No row has passing hardware evid
 
 - Attention is tensor-parallel over the four devices; the 128 routed experts are expert-parallel, 32 per device.
 - One-user decode runs the fused MoE decode; more users run the routed sparse MoE path.
-- Benchmark cases cover token accuracy and 1- and 32-user performance at max_seq_len 2048.
+- Benchmark cases cover 1- and 32-user token accuracy and performance at max_seq_len 2048.
 - Device sampling: Host and on-device top-k paths exist.
 - Trace support is case/topology-specific; use the exact hardware test parameters rather than extrapolating a generic trace claim.
 
@@ -93,7 +94,7 @@ PYTHONPATH=src MESH_DEVICE=P150x4 pytest --collect-only -q tests/hardware/models
 
 ### Correctness criterion
 
-`token-accuracy` compares teacher-forced predictions with the committed `.refpt` (generated from the pinned checkpoint in bf16) and enforces the source-declared top-1/top-5 floor. Performance cases are observational: they report TTFT and decode throughput without a floor.
+`token-accuracy` and `token-accuracy-batch32` compare teacher-forced predictions with the committed `.refpt` (generated from the pinned checkpoint in bf16) and enforce the source-declared top-1/top-5 floor; with 32 users, every user is fed the reference and must meet it. Performance cases are observational: they report TTFT and decode throughput without a floor.
 
 ### Validation and evidence
 
