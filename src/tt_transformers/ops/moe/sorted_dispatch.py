@@ -3,7 +3,7 @@
 """Expert-sorted MoE prefill bookkeeping: dispatch, gather and un-dispatch of token rows.
 
 For T tokens routed to k experts each, `sorted_dispatch` lays the T * k (token, slot) pairs out expert by expert, each
-expert's rows padded to a multiple of `group` rows, so a grouped matmul can run every group of rows through one expert.
+expert's rows padded to a multiple of 32 rows, so a grouped matmul can run every group of rows through one expert.
 `gather_rows` builds those groups from the token rows and `gather_add_rows` sums each token's k expert outputs back.
 """
 
@@ -19,14 +19,38 @@ MAX_K = 32  # the top-k outputs are read as one tile column
 L1_ALIGN = 32
 BLOCK_L1_BYTES = 1_200_000  # the row-major and tilized blocks of a gather core
 BF16_TILE_BYTES = TILE * TILE * 2
+DISPATCH_L1_BYTES = 1_300_000  # circular buffers of the one dispatch core; kernels and stacks take the rest of the L1
 
 
-def dispatch_rows(tokens: int, k: int, num_experts: int, group: int = GROUP) -> int:
+def dispatch_rows(tokens: int, k: int, num_experts: int) -> int:
     """Rows that hold any routing: the pairs, every expert's last group padded, and the trailing padding group that
     takes the pairs routed off this device."""
     pairs = -(-(tokens * k) // TILE) * TILE
-    expert_padding = -(-((group - 1) * num_experts) // group) * group
-    return pairs + expert_padding + group
+    expert_padding = -(-((GROUP - 1) * num_experts) // GROUP) * GROUP
+    return pairs + expert_padding + GROUP
+
+
+def _dispatch_cb_sizes(tokens: int, k: int, num_experts: int, rows: int, ids_elem: int) -> list[int]:
+    """The dispatch core's circular buffers: every input tile, every output stick and the per-expert counters."""
+    tiles = -(-tokens // TILE)
+    return [
+        _align(size)
+        for size in (
+            tiles * TILE * TILE * ids_elem,
+            tiles * BF16_TILE_BYTES,
+            rows * 4,
+            rows * 2,
+            rows // GROUP * 2,
+            tokens * k * 4,
+            num_experts * 4 * 3,
+        )
+    ]
+
+
+def dispatch_l1_bytes(tokens: int, k: int, num_experts: int, ids_dtype=ttnn.uint32) -> int:
+    """L1 the dispatch of T tokens takes on its one core, with `dispatch_rows` rows; at most DISPATCH_L1_BYTES."""
+    ids_elem = 2 if ids_dtype == ttnn.uint16 else 4
+    return sum(_dispatch_cb_sizes(tokens, k, num_experts, dispatch_rows(tokens, k, num_experts), ids_elem))
 
 
 def _align(n: int) -> int:
@@ -90,27 +114,38 @@ def sorted_dispatch(
     num_experts: int,
     *,
     rows: int,
-    group: int = GROUP,
     pad_group_id: int = PAD_GROUP_ID,
     memory_config=ttnn.DRAM_MEMORY_CONFIG,
 ):
-    """ids [.., T, k] uint16/uint32 and scores [.., T, k] BF16, TILE (the top-k outputs; ids >= num_experts are routed
-    elsewhere and dropped) -> ROW_MAJOR sticks:
+    """ids [1, .., 1, T, k] uint16/uint32 and scores [1, .., 1, T, k] BF16, TILE (the top-k outputs; ids >= num_experts
+    are routed elsewhere and dropped) -> ROW_MAJOR sticks:
 
     - src_tok [1, rows] uint32: the token of each dispatched row (0 on padding rows)
     - weights [1, rows] BF16: its routing weight (0 on padding rows)
-    - group_ids [1, rows / group] uint16: the expert of each group (pad_group_id on padding groups)
+    - group_ids [1, rows / 32] uint16: the expert of each 32-row group (pad_group_id on padding groups)
     - undispatch [1, T * k] uint32: the dispatched row of each (token, slot) pair, token-major
+
+    One core stages every input tile and output stick, so T is bounded by `dispatch_l1_bytes`.
     """
     tokens, k = ids.shape[-2], ids.shape[-1]
     _check(ids.dtype in (ttnn.uint16, ttnn.uint32) and scores.dtype == ttnn.bfloat16, "ids uint16/uint32, scores BF16")
     _check(ids.layout == scores.layout == ttnn.TILE_LAYOUT, "ids and scores must be TILE (the top-k outputs)")
     _check(list(scores.shape)[-2:] == [tokens, k] and 1 <= k <= MAX_K, f"ids and scores must be [.., T, k <= {MAX_K}]")
-    _check(group > 0 and group % TILE == 0 and rows % group == 0, "group and rows must be multiples of 32 and group")
-    _check(rows >= dispatch_rows(tokens, k, num_experts, group), "rows is below the worst-case padded dispatch")
+    _check(
+        all(d == 1 for d in (*ids.shape[:-2], *scores.shape[:-2])),
+        "ids and scores must have singleton leading dims: one dispatch per call",
+    )
+    _check(rows % GROUP == 0, f"rows must be a multiple of {GROUP}")
+    _check(rows >= dispatch_rows(tokens, k, num_experts), "rows is below the worst-case padded dispatch")
+    ids_elem = 2 if ids.dtype == ttnn.uint16 else 4
+    sizes = _dispatch_cb_sizes(tokens, k, num_experts, rows, ids_elem)
+    _check(
+        sum(sizes) <= DISPATCH_L1_BYTES,
+        f"dispatch of {tokens} tokens needs {sum(sizes)} bytes of L1 on one core, over {DISPATCH_L1_BYTES}; split it",
+    )
 
     device = ids.device()
-    pairs, groups = tokens * k, rows // group
+    pairs, groups = tokens * k, rows // GROUP
     outputs = [
         ttnn.empty([1, rows], ttnn.uint32, ttnn.ROW_MAJOR_LAYOUT, device, memory_config),
         ttnn.empty([1, rows], ttnn.bfloat16, ttnn.ROW_MAJOR_LAYOUT, device, memory_config),
@@ -120,16 +155,14 @@ def sorted_dispatch(
     src_tok, weights, group_ids, undispatch = outputs
 
     tiles = -(-tokens // TILE)
-    ids_elem = 2 if ids.dtype == ttnn.uint16 else 4
     ids_page, scores_page = TILE * TILE * ids_elem, BF16_TILE_BYTES
     out_pages = [rows * 4, rows * 2, groups * 2, pairs * 4]
     core = core_range_set([ttnn.CoreCoord(0, 0)])
     names = ["cb_ids", "cb_scores", "cb_src", "cb_w", "cb_gid", "cb_und", "cb_scratch"]
-    sizes = [tiles * ids_page, tiles * scores_page, *out_pages, num_experts * 4 * 3]
     formats = [ttnn.uint32, ttnn.bfloat16, ttnn.uint32, ttnn.bfloat16, ttnn.uint16, ttnn.uint32, ttnn.uint32]
     cbs = [_scratch(core, i, f, s) for i, (f, s) in enumerate(zip(formats, sizes))]
 
-    ct = [pairs, tokens, k, num_experts, group, rows, groups, ids_page, scores_page, *out_pages, tiles, ids_elem]
+    ct = [pairs, tokens, k, num_experts, GROUP, rows, groups, ids_page, scores_page, *out_pages, tiles, ids_elem]
     ct += [pad_group_id] + _accessor_args(ids, scores, *outputs)
     kernel = ttnn.KernelDescriptor(
         kernel_source=str(KERNEL_DIR / "sd_dispatch.cpp"),

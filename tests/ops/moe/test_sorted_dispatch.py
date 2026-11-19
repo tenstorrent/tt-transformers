@@ -3,13 +3,17 @@
 """Expert-sorted dispatch ops (ops/moe/sorted_dispatch.py): the dispatch layout matches a stable counting sort, the
 gather copies each group's token rows, and the un-dispatch sums each token's slots, on device against torch."""
 
+from types import SimpleNamespace
+
 import pytest
 import torch
 import ttnn
 
 from tt_transformers.ops.moe.sorted_dispatch import (
+    DISPATCH_L1_BYTES,
     GROUP,
     PAD_GROUP_ID,
+    dispatch_l1_bytes,
     dispatch_rows,
     gather_add_rows,
     gather_rows,
@@ -74,6 +78,37 @@ def test_dispatch_rows_covers_the_worst_case_padding():
     # every pair, each expert's last group with 31 padding rows, the trailing padding group
     assert dispatch_rows(tokens, k, experts) >= tokens * k + 31 * experts + GROUP
     assert dispatch_rows(tokens, k, experts) % GROUP == 0
+
+
+@pytest.mark.host
+def test_dispatch_l1_bytes_bounds_one_core():
+    # k=8, 32 local experts, uint32 ids: every input tile and output stick staged on the dispatch core
+    assert dispatch_l1_bytes(4096, 8, 32) == 1_122_752 <= DISPATCH_L1_BYTES
+    assert dispatch_l1_bytes(6144, 8, 32) > DISPATCH_L1_BYTES
+
+
+def _host_routing(shape):
+    """Stand-ins for the top-k outputs: the checks read only dtype, layout and shape."""
+    ids = SimpleNamespace(dtype=ttnn.uint16, layout=ttnn.TILE_LAYOUT, shape=shape)
+    scores = SimpleNamespace(dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT, shape=shape)
+    return ids, scores
+
+
+@pytest.mark.host
+@pytest.mark.parametrize(
+    "shape, extra_rows, error",
+    [
+        ((2, 1, 64, 8), 0, "singleton leading dims"),
+        ((1, 1, 64, 8), 16, "multiple of 32"),
+        ((1, 1, 6144, 8), 0, "bytes of L1"),
+    ],
+    ids=["batched", "partial-group", "over-l1"],
+)
+def test_sorted_dispatch_rejects_what_its_kernel_does_not_process(shape, extra_rows, error):
+    ids, scores = _host_routing(shape)
+    rows = dispatch_rows(shape[-2], shape[-1], 32) + extra_rows
+    with pytest.raises(ValueError, match=error):
+        sorted_dispatch(ids, scores, 32, rows=rows)
 
 
 @pytest.mark.parametrize("tokens", [1, 48, 300])
